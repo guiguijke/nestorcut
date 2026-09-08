@@ -1,8 +1,8 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit fb5e184, run 2026-09-06 09:32 UTC — celui du GO
- * L2-quater v2). Extraction : workers/nesting/bench/densities_corpus.py.
+ * Docker PUBLIÉES (commit b0c36f3, run 2026-09-08 14:36 UTC — celui du GO
+ * P5). Extraction : workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
  * multi-tôles, 1 direction –X, fillHoles on, 4 cœurs, budget 90 s), semé
@@ -13,15 +13,15 @@
  */
 export const BENCHMARKS = {
     meta: {
-        runDate: '2026-09-07',
-        // Hash réellement déployé (posé au moment du déploiement phase A,
-        // instruction vérif phase A — valeurs inchangées depuis fb5e184).
-        // Image Docker publiée qui a produit les chiffres (workflow
-        // « Build and publish Docker images »). Régénéré à chaque
-        // livraison moteur (AGENTS.md §6) — valeurs inchangées depuis
-        // fb5e184 : P8 (lot 4 phase A) n'a modifié aucun layout
-        // (densités mesurées identiques, corpus 11/11 bit-identique).
-        version: '45c49f3',
+        runDate: '2026-09-08',
+        // Image Docker PUBLIÉE qui a produit les chiffres (workflow
+        // « Build and publish Docker images »), régénérée à chaque
+        // livraison moteur (AGENTS.md §6). Run du 2026-09-08 sur
+        // ghcr.io/…/nest2d-nesting-worker:b0c36f3 (P5, plateau SPP
+        // calibré) : corpus 11/11 OK, T-A [587, 313] — les onze densités
+        // publiées sont IDENTIQUES au run précédent (fb5e184 puis
+        // 45c49f3), P5 ne change aucun layout BPP du corpus.
+        version: 'b0c36f3',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
