@@ -166,14 +166,14 @@
         &__bar {
             width: 100%;
             height: 4px;
-            border-radius: var(--radius-full);
+            border-radius: var(--radius-s);
             background: var(--fill-secondary, rgba(0, 0, 0, 0.08));
             overflow: hidden;
         }
 
         &__bar-fill {
             height: 100%;
-            border-radius: var(--radius-full);
+            border-radius: var(--radius-s);
             transition: width 0.3s ease;
 
             &--high {

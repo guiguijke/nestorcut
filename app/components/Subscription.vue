@@ -4,7 +4,7 @@
 
         <div v-if="isStripeActive" class="subscription__card">
             <div class="subscription__status">
-                <span class="subscription__badge">{{ statusLabel }}</span>
+                <UiBadge tone="ok" dot>{{ statusLabel }}</UiBadge>
             </div>
             <p v-if="data?.cancelAtPeriodEnd" class="subscription__cancel-notice">
                 {{ t('sub.cancelNotice', { date: formatDate(data?.currentPeriodEnd) }) }}
@@ -26,14 +26,14 @@
 
         <div v-else-if="isGranted" class="subscription__card">
             <div class="subscription__status">
-                <span class="subscription__badge">{{ t('sub.grantActive') }}</span>
+                <UiBadge tone="ok" dot>{{ t('sub.grantActive') }}</UiBadge>
             </div>
             <p class="subscription__desc">{{ t('sub.grantDesc') }}</p>
         </div>
 
         <div v-if="isActive && data?.isPrivacyTier" class="subscription__card">
             <div class="subscription__status">
-                <span class="subscription__badge">{{ t('sub.proPrivacy') }}</span>
+                <UiBadge tone="ok" dot>{{ t('sub.proPrivacy') }}</UiBadge>
             </div>
             <p class="subscription__desc">
                 Maximum compute budget and priority queue are enabled on your
@@ -217,32 +217,27 @@ const cancelSubscription = async () => {
 
 <style lang="scss" scoped>
 .subscription {
+    /* U2-ter : les cartes s'empilent avec un vrai écart (elles se
+       touchaient — « chevauchement » constaté sur un compte granté qui
+       affiche la carte d'état ET la carte Pro) et suivent la largeur de
+       la colonne, plus de bloc centré à 420 px. */
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
+    gap: 16px;
+    width: 100%;
 
     &__title {
-        margin-bottom: 18px;
+        margin-bottom: 2px;
     }
 
     &__card {
-        min-width: 320px;
-        max-width: 420px;
+        min-width: 0;
         padding: 24px 20px;
+        border: 1px solid var(--separator-secondary);
         border-radius: var(--radius-l);
         background: var(--fill-tertiary);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-        text-align: center;
-    }
-
-    &__badge {
-        display: inline-block;
-        padding: 4px 12px;
-        border-radius: var(--radius-full);
-        font-size: var(--fs-13);
-        font-weight: 600;
-        color: var(--background-primary);
-        background-color: var(--accent-primary);
+        text-align: left;
     }
 
     &__desc {
@@ -288,6 +283,7 @@ const cancelSubscription = async () => {
     // specificity enough to win against the child component's own scoped rule.
     &__card &__btn {
         width: 100%;
+        max-width: 280px;
     }
 
     &__btn--cancel {

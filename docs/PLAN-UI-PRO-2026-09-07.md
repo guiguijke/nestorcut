@@ -378,3 +378,77 @@ Retour du propriétaire sur la prod U2 : « je n'aime pas du tout les boutons tr
 
 Une passe, un commit, GO visuel du vérificateur, puis déploiement app.
 
+
+#### U2-ter — livré (08/09), en attente de GO visuel
+
+**1. Zéro pilule hors avatar — 20 occurrences traitées.** `--radius-full`
+(50 %) ne subsiste que dans `tokens.css` (sa définition, commentée
+« avatars ») et dans `Avatar.vue`. Correspondance appliquée : `var(--radius)`
+(4 px) pour ce qui se clique ou se lit comme un contrôle, `var(--radius-s)`
+(2 px) pour les badges et les puces.
+
+| Fichier | Ligne | Élément | Nouveau rayon |
+|---|---|---|---|
+| `components/MainSettings.vue` | 557 | preset de tôle (`.presets__chip`) | `--radius` |
+| `components/MainSettings.vue` | 603 | icône d'aide « ? » | `--radius` |
+| `components/ui/UiSwitch.vue` | 33 | piste (32 × 18 px) | `--radius` |
+| `components/ui/UiSwitch.vue` | 46 | curseur (14 × 14 px) | `--radius-s` |
+| `components/ui/UiButton.vue` | 100 | spinner | `--radius-s` |
+| `components/ui/UiBadge.vue` | 39 | puce d'état (6 px, était `50%`) | `--radius-s` |
+| `components/ResultModal.vue` | 1222 / 1265 / 1279 | bascule de vue / chip stratégie / onglet | `--radius` / `--radius-s` / `--radius` |
+| `components/VaultMenuButton.vue` | 239 / 306 | point d'état / icône d'aide | `--radius-s` / `--radius` |
+| `components/VaultSettings.vue` | 268 | point d'état | `--radius-s` |
+| `components/FileParts.vue` | 71 | pastille de couleur de pièce | `--radius-s` |
+| `components/FreeNestBanner.vue` | 169 / 176 | jauge et son remplissage | `--radius-s` |
+| `components/Subscription.vue` | 241 | badge d'état (supprimé, → `UiBadge`) | — |
+| `pages/benchmarks.vue` | 211 | badge de verdict | `--radius-s` |
+| `pages/changelog.vue` | 112 / 162 | badge de date / puce de liste | `--radius-s` |
+| `pages/plans.vue` | 330 | badge de plan | `--radius-s` |
+| `pages/project/[slug].vue` | 1020 | badge | `--radius-s` |
+| `pages/profile.vue` | 65 | badge « Vérifié » (supprimé, → `UiBadge` contour) | — |
+
+**Écart assumé sur le plan** : le plan laissait `profile.vue` l. 65 dans
+l'exception « avatars ». C'était le badge « Vérifié », pas un avatar — il
+est passé en `UiBadge` contour comme le demande le point 2 du même plan, et
+l'exception se réduit donc à `Avatar.vue` + la définition du jeton.
+
+Verrous (arbre propre, HEAD) :
+
+```
+git grep -n "radius-full" app | grep -v -i avatar          → 0 ligne
+git grep -n -E "border-radius:\s*(999|9999)px|border-radius:\s*50%" app → 0 ligne
+```
+
+**2. Page profil sur la grille de l'accueil.** `pages/profile.vue` passe du
+layout `profile` (colonne centrée à 660 px) au layout `auth` — la grille de
+l'accueil, `240px | 1fr | 260px`, mêmes gouttières, colonnes Projets et
+Résultats des deux côtés. Identité sur une ligne : avatar **64 px**
+(`Avatar.vue`, taille `m` : 140 → 64 ; la taille `s` de l'en-tête est
+inchangée), nom en `--font-display`, badge « Vérifié » en contour,
+**Déconnexion** en `UiButton variant="ghost"` poussé à droite. Ordre :
+identité → Activité (`UserStats`, `UiStat` × 5, déjà partagé avec
+l'accueil) → Abonnement → Code promo → Newsletter → Coffre → Suppression de
+compte. Le bloc coffre, jusqu'ici centré et borné à 520 px, suit la colonne
+et s'aligne à gauche (texte borné à 720 px).
+
+**3. Abonnement.** Les cartes ne se touchent plus : `.subscription` passe en
+`align-items: stretch` + `gap: 16px` (elles étaient empilées sans écart —
+d'où le « chevauchement » vu sur un compte qui affiche la carte d'état ET
+la carte Pro), `max-width: 420px` retiré (la carte suit la colonne),
+contenu aligné à gauche, contour `--separator-secondary` comme les autres
+cartes, bouton borné à 280 px. Le badge en aplat bleu pilule devient
+`UiBadge tone="ok" dot` (contour) aux trois emplacements.
+
+**Verrous rejoués** : `npx vitest run` → **513/513** ; `node
+scripts/ui-contrast-check.mjs` → AA 100 % clair et sombre ; harnais
+navigateur deux configurations (`scripts/qa-e2e-local-2sheets.mjs`,
+sélecteurs `label.size__checkbox` et presets intacts) → space 0,1 :
+900/900, 55,4 %, long task max 73 ms / 57 ms après solve, CLS 0,019 ;
+space 2 : 900/900, 55,4 %, long task max 67 ms / 58 ms après solve, CLS
+0,025.
+
+**Captures** (1440 px, page entière) : `docs/qa/atelier-ui/u2ter-profil-clair.png`,
+`u2ter-profil-sombre.png`, `u2ter-abonnement.png`, `u2ter-reglages.png`
+(presets + interrupteurs). Script : `scripts/u2ter-check.mjs`.
+
+**Aucun déploiement** — attente du GO visuel.

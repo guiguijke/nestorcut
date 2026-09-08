@@ -97,7 +97,7 @@ const onClick = () => {
         height: 14px;
         border: 2px solid currentColor;
         border-top-color: transparent;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         animation: ui-btn-spin 0.7s linear infinite;
     }
 }

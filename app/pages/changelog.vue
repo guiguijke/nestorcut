@@ -109,7 +109,7 @@ onMounted(() => {
     &__date {
         display: inline-block;
         padding: 4px 12px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         background-color: var(--fill-secondary);
         color: var(--accent-primary);
         font-size: var(--fs-12);
@@ -159,7 +159,7 @@ onMounted(() => {
             top: 9px;
             width: 6px;
             height: 6px;
-            border-radius: var(--radius-full);
+            border-radius: var(--radius-s);
             background-color: var(--accent-primary);
         }
     }

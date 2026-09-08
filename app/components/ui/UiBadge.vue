@@ -36,7 +36,8 @@ defineProps({
     &__dot {
         width: 6px;
         height: 6px;
-        border-radius: 50%;
+        /* U2-ter : puce carrée 2 px — le rond 50 % est réservé aux avatars. */
+        border-radius: var(--radius-s);
         background: var(--ui-badge-dot);
         flex-shrink: 0;
     }

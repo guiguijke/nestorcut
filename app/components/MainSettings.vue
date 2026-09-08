@@ -554,7 +554,7 @@ const spacingBelowKerf = computed(() => {
         &__chip {
             padding: 5px 10px;
             border: 1px solid var(--separator-secondary);
-            border-radius: var(--radius-full);
+            border-radius: var(--radius);
             background-color: transparent;
             color: var(--label-secondary);
             font-size: var(--fs-12);
@@ -600,7 +600,7 @@ const spacingBelowKerf = computed(() => {
             width: 16px;
             height: 16px;
             margin-left: 6px;
-            border-radius: var(--radius-full);
+            border-radius: var(--radius);
             border: 1px solid var(--label-tertiary);
             color: var(--label-tertiary);
             font-size: var(--fs-12);

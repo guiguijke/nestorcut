@@ -27,10 +27,12 @@ defineEmits(['update:modelValue'])
 
     input { position: absolute; opacity: 0; }
 
+    /* U2-ter : piste rectangulaire 32 × 18 (4 px) et curseur carré
+       (2 px) — plus d'interrupteur en pilule. */
     &__track {
-        width: 34px;
-        height: 20px;
-        border-radius: var(--radius-full);
+        width: 32px;
+        height: 18px;
+        border-radius: var(--radius);
         background: var(--border-strong);
         position: relative;
         transition: background-color 0.2s;
@@ -41,9 +43,9 @@ defineEmits(['update:modelValue'])
             position: absolute;
             top: 2px;
             left: 2px;
-            width: 16px;
-            height: 16px;
-            border-radius: var(--radius-full);
+            width: 14px;
+            height: 14px;
+            border-radius: var(--radius-s);
             background: var(--surface);
             box-shadow: var(--shadow-s);
             transition: transform 0.2s;

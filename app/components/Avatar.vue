@@ -59,9 +59,11 @@ onBeforeMount(() => {
             width: 40px;
             height: 40px;
         }
+        /* U2-ter : 64 px sur le profil (l'avatar géant de 140 px n'a plus
+           sa place dans la grille pleine largeur). */
         &--size-m {
-            width: 140px;
-            height: 140px;
+            width: 64px;
+            height: 64px;
         }
     }
 

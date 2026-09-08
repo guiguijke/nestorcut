@@ -1219,7 +1219,7 @@ const updatePartPage = (partIndex) => {
 
     &__btn {
         padding: 5px 14px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius);
         border: 1px solid var(--separator-secondary);
         background-color: var(--fill-tertiary);
         color: var(--label-secondary);
@@ -1262,7 +1262,7 @@ const updatePartPage = (partIndex) => {
 
     &__strategy {
         padding: 2px 7px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent);
         color: var(--accent-primary);
         font-size: var(--fs-12);
@@ -1276,7 +1276,7 @@ const updatePartPage = (partIndex) => {
         align-items: center;
         gap: 6px;
         padding: 6px 12px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius);
         border: 1px solid var(--separator-secondary);
         background-color: var(--fill-tertiary);
         color: var(--label-secondary);

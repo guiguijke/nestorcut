@@ -1017,7 +1017,7 @@ const startsNest = () => {
 
     &__badge {
         padding: 2px 9px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         background: var(--accent-primary);
         color: var(--background-primary);
         font-size: var(--fs-12);

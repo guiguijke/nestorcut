@@ -327,7 +327,7 @@ function onTierClick(tier) {
         left: 50%;
         transform: translateX(-50%);
         padding: 4px 14px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         font-size: var(--fs-12);
         font-weight: 700;
         white-space: nowrap;

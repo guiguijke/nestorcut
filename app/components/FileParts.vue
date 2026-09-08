@@ -68,7 +68,7 @@ const partsTitle = computed(() => {
     &__dot {
         width: 9px;
         height: 9px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         flex-shrink: 0;
         box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18);
     }

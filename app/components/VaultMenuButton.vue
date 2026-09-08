@@ -236,7 +236,7 @@ onMounted(refresh)
     &__dot {
         width: 10px;
         height: 10px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         background-color: var(--ok);
         flex-shrink: 0;
 
@@ -303,7 +303,7 @@ onMounted(refresh)
         justify-content: center;
         width: 20px;
         height: 20px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius);
         background-color: var(--fill-tertiary);
         color: var(--label-tertiary);
         font-size: var(--fs-12);

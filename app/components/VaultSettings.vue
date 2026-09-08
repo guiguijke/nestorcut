@@ -225,18 +225,21 @@ onMounted(refresh)
 
 <style lang="scss" scoped>
 .vault {
-    margin-top: 32px;
-    max-width: 520px;
+    /* U2-ter : le profil est passé sur la grille pleine largeur — le bloc
+       coffre suit la colonne et s'aligne à gauche comme les autres
+       sections (le texte reste borné à 720 px pour la lisibilité). */
+    margin-top: 0;
     width: 100%;
 
     &__title {
-        text-align: center;
+        text-align: left;
     }
     &__desc {
         margin-top: 12px;
+        max-width: 720px;
         font-size: var(--fs-14);
         color: var(--label-secondary);
-        text-align: center;
+        text-align: left;
     }
     &__card {
         margin-top: 20px;
@@ -265,7 +268,7 @@ onMounted(refresh)
     &__dot {
         width: 10px;
         height: 10px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         background-color: var(--ok);
         flex-shrink: 0;
 

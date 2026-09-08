@@ -208,7 +208,7 @@ useHead({
     &__badge {
         display: inline-block;
         padding: 2px 9px;
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-s);
         font-size: var(--fs-12);
         font-weight: 700;
         white-space: nowrap;
