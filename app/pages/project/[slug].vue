@@ -187,6 +187,9 @@ const { t, tp, fmtPercent } = useLocale()
 // Part dims arrive in canonical mm; sheet params are display-unit strings —
 // displayToMm normalizes them for the fit check.
 const { unit, unitLabel, fmtLengthValue, displayToMm } = useUnit()
+// P5 / F5 : capturé en setup (contexte Nuxt). Passé au fetch du projet
+// pendant le SSR — sans ça getProject 401 → /home.
+const projectReqHeaders = useRequestHeaders(['cookie'])
 
 const vaultEnabled = computed(() =>
     Boolean(unref(authStore.getters.user)?.encryption?.enabled)
@@ -660,7 +663,10 @@ watch(pageSlug, async (s, prev) => {
         localReveal.value = null
         lastLiveSlug.value = null
     }
-    await getProject(API_ROUTES.PROJECT(s))
+    await getProject(
+        API_ROUTES.PROJECT(s),
+        import.meta.server ? { headers: projectReqHeaders } : {},
+    )
     const pending = consumePendingLocalFiles()
     if (pending.length && filesGetters.projectLocal) {
         await actions.addFiles(pending, s)

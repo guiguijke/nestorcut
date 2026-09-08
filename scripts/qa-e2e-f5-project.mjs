@@ -33,19 +33,14 @@ try {
     const slug = created.body?.slug
     if (!slug) throw new Error('no slug: ' + JSON.stringify(created))
 
-    await page.reload({ waitUntil: 'domcontentloaded' })
-    await page.waitForTimeout(1500)
     const href = `/project/${slug}`
-    await page.locator(`a[href="${href}"]`).first().click({ timeout: 15000 })
-    await page.waitForURL(`**${href}`, { timeout: 15000 })
-    const before = page.url()
-    log('on project', before)
-
-    await page.reload({ waitUntil: 'domcontentloaded', timeout: 30000 })
-    await page.waitForTimeout(2000)
+    // GET direct (équivalent F5 / lien collé) : c'est le chemin SSR
+    // qui 302ait vers /home sans cookies.
+    await page.goto(BASE + href, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await page.waitForTimeout(1500)
     const after = page.url()
     const keeps = after.includes(`/project/${slug}`)
-    log('F5', before, '->', after, 'keeps', keeps)
+    log('GET', href, '->', after, 'keeps', keeps)
     if (!keeps) {
         console.error('FAIL: F5 bounced to', after)
         await browser.close()

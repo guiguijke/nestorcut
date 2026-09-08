@@ -265,19 +265,26 @@ function scheduleFilesRefresh(path) {
 // courante. On ne retient que la réponse de la dernière demande émise.
 let lastProjectRequest = null
 
-async function getProject(path) {
+async function getProject(path, fetchOpts = {}) {
     lastProjectRequest = path
     try {
-        // SSR: forward the incoming Cookie so F5 on /project/:slug does
-        // not 401 → navigateTo('/home') (constat P4 prod).
-        const $apiFetch = useApiFetch()
-        const data = await $apiFetch(path)
+        // SSR: the caller (page setup) passes useRequestHeaders(['cookie'])
+        // — useApiFetch() inside this store action has no Nuxt context
+        // (watch/async) and 401'd → navigateTo('/home') on F5.
+        const data = await $fetch(path, fetchOpts)
         if (path !== lastProjectRequest) return
         state.projectLocal = Boolean(data.local)
         state.projectDemo = Boolean(data.isDemo)
         if (data.local) {
             // J-090 : les fichiers d'un projet « 100 % privé » vivent dans
             // IndexedDB — le serveur ne sert que le nom/slug du projet.
+            // SSR : pas d'IndexedDB — poser le slug/nom et laisser le
+            // client hydrater. Sans ça F5 bounce vers /home (constat P4).
+            if (import.meta.server) {
+                setProjectFiles([], path)
+                setProjectName(data.name || '')
+                return
+            }
             const { listLocalFiles } = await import('./localFilesStore')
             const { localRecordToUiFile } = await import('./localImport')
             const { titleFromFileName } = await import('../utils/projectTitle')
