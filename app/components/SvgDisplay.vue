@@ -1,0 +1,86 @@
+<template>
+    <div
+        :class="dispayClasses"
+        class="dispay"
+    >
+        <img
+            :src="svgDataUri"
+            alt="SVG Image"
+            class="dispay__img"
+            :class="{ 'dispay__img--preserve-colors': preserveColors }"
+        />
+    </div>
+</template>
+
+<script setup>
+import { defaultSizeType } from "~~/constants/size.constants";
+
+const { svgContent, src, size, preserveColors } = defineProps({
+    svgContent: {
+        type: String,
+        default: '',
+    },
+    src: {
+        type: String,
+        default: '',
+    },
+    size: {
+        type: String,
+        default: defaultSizeType,
+    },
+    // Server SVGs are now colored per part at generation time — skip the
+    // legacy contrast filter (it would crush the colors to black/white).
+    preserveColors: {
+        type: Boolean,
+        default: false,
+    },
+});
+
+const svgDataUri = computed(() => {
+    if(Boolean(src)) {
+        return src
+    }
+    const encodedSvg = encodeURIComponent(svgContent)
+    .replace(/'/g, "%27")
+    .replace(/"/g, "%22");
+
+    return `data:image/svg+xml,${encodedSvg}`;
+})
+
+const dispayClasses = computed(() => ({
+    [`dispay--size-${unref(size)}`]: Boolean(unref(size))
+}))
+
+</script>
+<style lang="scss" scoped>
+.dispay {
+    font-size: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &--size-m {
+        padding: 8px;
+        border-radius: var(--radius-l);
+    }
+    &--size-s {
+        padding: 4px;
+        border-radius: var(--radius);
+    }
+    background-color: color-mix(in srgb, var(--accent-primary) 7%, var(--background-primary));
+    &__img {
+        display: block;
+        max-height: 100%;
+        max-width: 100%;
+        width: 100%;
+        // Server SVG previews ship a low-contrast pinkish stroke — force it to
+        // solid black (light theme) / white (dark theme) for readability.
+        filter: var(--primary-svg-filter);
+
+        // Colored server SVGs (per-part colors): rendered as-is.
+        &--preserve-colors {
+            filter: none;
+        }
+    }
+}
+</style>

@@ -1,0 +1,11 @@
+.main {
+    font-size: var(--fs-13);
+    font-family: $font_body;
+    line-height: 1.45;
+}
+
+// NestorCut display typeface for headings.
+h1, h2, h3, .title, .logo__label {
+    font-family: $font_display;
+    letter-spacing: 0.02em;
+}

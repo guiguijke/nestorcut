@@ -1,0 +1,150 @@
+/*
+ * U0 (plan interface 2026-09-07) — jetons de design « atelier ».
+ * SEUL fichier autorisé à porter des hex : les primitives et les écrans
+ * référencent exclusivement ces variables. Le bloc [data-theme="primary"]
+ * (thème sombre) redéfinit UNIQUEMENT les couleurs.
+ *
+ * Direction : marine pour le texte, bleu réservé aux actions primaires et
+ * à la sélection, angles 4 px, Inter + chiffres tabulaires, Poppins pour
+ * les titres de page.
+ */
+
+:root {
+    /* ── Couleurs sémantiques (thème clair) ─────────────────────── */
+    --bg: #f8fbff;            /* mist — fond de page */
+    --surface: #ffffff;       /* cartes, panneaux, modales */
+    --surface-2: #f2f5fa;     /* zones en retrait d'une carte */
+    --border: #e3e8f0;        /* séparateurs discrets */
+    --border-strong: #b9c2d0; /* bordures interactives (champs) */
+    --text: #1a2340;          /* marine — texte principal */
+    --text-2: #4a5270;        /* texte secondaire */
+    --text-3: #6d7590;        /* texte tertiaire, placeholders */
+    --accent: #007bff;        /* bleu — actions primaires et sélection */
+    --accent-hover: #0069d9;
+    --on-accent: #ffffff;     /* texte posé sur l'accent */
+    --ok: #157036;
+    --ok-bg: #e6f4ea;
+    --warn: #b45309;
+    --warn-bg: #fef3e2;
+    --danger: #c80030;
+    --danger-bg: #fdeaef;
+    --info: #0b5cad;
+    --info-bg: #e8f1fb;
+
+    /* ── Espacement (échelle 4 px) ──────────────────────────────── */
+    --sp-1: 4px;
+    --sp-2: 8px;
+    --sp-3: 12px;
+    --sp-4: 16px;
+    --sp-5: 24px;
+    --sp-6: 32px;
+    --sp-7: 48px;
+
+    /* ── Rayons (charte : 4 px) ─────────────────────────────────── */
+    --radius-s: 2px;   /* badges, puces */
+    --radius: 4px;     /* standard — boutons, champs, cartes */
+    --radius-l: 8px;   /* modales, grands panneaux */
+    --radius-full: 50%; /* avatars */
+
+    /* ── Ombres ─────────────────────────────────────────────────── */
+    --shadow-s: 0 1px 2px rgba(26, 35, 64, 0.08);
+    --shadow-m: 0 2px 8px rgba(26, 35, 64, 0.10);
+    --shadow-l: 0 8px 24px rgba(26, 35, 64, 0.16);
+
+    /* ── Z-index ────────────────────────────────────────────────── */
+    --z-header: 100;
+    --z-aside: 200;
+    --z-dialog: 1000;
+    --z-toast: 1100;
+
+    /* ── Typographie ────────────────────────────────────────────── */
+    /* Inter pour tout (chiffres tabulaires), Poppins pour les titres
+       de page. L'échelle est bornée à 7 tailles. */
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-display: 'Poppins', 'Inter', system-ui, sans-serif;
+    --font-num: 'Inter', system-ui, sans-serif; /* font-variant-numeric: tabular-nums */
+
+    --fs-12: 12px;
+    --fs-13: 13px;
+    --fs-14: 14px;
+    --fs-16: 16px;
+    --fs-18: 18px;
+    --fs-22: 22px;
+    --fs-32: 32px;
+
+    --lh-text: 1.5;
+    --lh-title: 1.25;
+
+    --focus-ring: 0 0 0 3px rgba(0, 123, 255, 0.25);
+
+    /* ── Alias des ANCIENS jetons (compatibilité migration U0→U5) ──
+       Tout nouveau code utilise les jetons ci-dessus ; ces alias
+       redirigent l'existant et sont supprimés en U5. */
+    --main-white: #fff;
+    --main-black: #000;
+    --fill-secondary: rgba(26, 35, 64, 0.08);
+    --fill-tertiary: rgba(26, 35, 64, 0.05);
+    --label-primary: var(--text);
+    --label-secondary: #4a5270;
+    --label-tertiary: #767e9a;
+    --accent-primary: var(--accent);
+    --accent-secondary: var(--accent-hover);
+    --background-primary: var(--bg);
+    --background-secondary: #1a2340;
+    --separator-primary: rgba(26, 35, 64, 0.18);
+    --separator-secondary: rgba(26, 35, 64, 0.1);
+    --error-background: var(--danger-bg);
+    --error-border: rgba(200, 0, 48, 0.3);
+    --error-text: var(--danger);
+    --menu-background: rgba(26, 35, 64, 0.7);
+    --footer-bg: #1c2125;
+    --primary-svg-filter: brightness(0) saturate(100%);
+}
+
+/* ── Thème sombre : UNIQUEMENT les couleurs ──────────────────────── */
+[data-theme="primary"] {
+    --bg: #1a2340;           /* marine */
+    --surface: #212b4d;
+    --surface-2: #1a2340;
+    --border: #2e3a61;
+    --border-strong: #4a5878;
+    --text: #f8fbff;         /* mist */
+    --text-2: #b9c2d0;
+    --text-3: #8b93ad;
+    --accent: #00c2ff;       /* cyan */
+    --accent-hover: #33d0ff;
+    --on-accent: #06283a;
+    --ok: #4cc38a;
+    --ok-bg: #12291c;
+    --warn: #f0a35e;
+    --warn-bg: #2e2113;
+    --danger: #ff6e8c;
+    --danger-bg: #33101c;
+    --info: #6cb6ff;
+    --info-bg: #0e2440;
+
+    --shadow-s: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-m: 0 2px 8px rgba(0, 0, 0, 0.35);
+    --shadow-l: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+    --focus-ring: 0 0 0 3px rgba(0, 194, 255, 0.3);
+
+    /* Alias — variantes sombres */
+    --fill-secondary: rgba(248, 251, 255, 0.08);
+    --fill-tertiary: rgba(248, 251, 255, 0.05);
+    --label-primary: var(--text);
+    --label-secondary: #b9c2d0;
+    --label-tertiary: #767e9a;
+    --accent-primary: var(--accent);
+    --accent-secondary: var(--accent-hover);
+    --background-primary: var(--bg);
+    --background-secondary: #f8fbff;
+    --separator-primary: rgba(248, 251, 255, 0.15);
+    --separator-secondary: rgba(248, 251, 255, 0.08);
+    --error-background: var(--danger-bg);
+    --error-border: rgba(255, 110, 140, 0.4);
+    --error-text: var(--danger);
+    --menu-background: rgba(26, 35, 64, 0.85);
+    --footer-bg: #141b33;
+    --primary-svg-filter: brightness(0) saturate(100%) invert(1);
+}

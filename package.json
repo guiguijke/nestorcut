@@ -1,0 +1,44 @@
+{
+  "name": "nestorcut-app",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^24.11.0"
+  },
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "bcryptjs": "^3.0.3",
+    "dxf-viewer": "^1.0.46",
+    "fflate": "^0.8.3",
+    "mongodb": "6.8",
+    "nuxt": "^4.5.1",
+    "standard-slugify": "^4.0.0",
+    "three": "^0.182.0",
+    "tslib": "^2.8.1",
+    "vite": "^6.0.6",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0",
+    "winston": "^3.17.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^24.11.0",
+    "kickstart-scripts": "^1.0.1",
+    "patch-package": "^8.0.0",
+    "postinstall-postinstall": "^2.1.0",
+    "prettier": "3.5.3",
+    "sass": "^1.83.0",
+    "sass-loader": "^16.0.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.4"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0"
+}

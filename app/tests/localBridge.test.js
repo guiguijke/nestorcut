@@ -1,0 +1,653 @@
+import { describe, expect, it } from 'vitest'
+import {
+    normalizeLayouts,
+    sheetDims,
+    layoutTransforms,
+    toServerShapeAlternatives,
+    expandMeta,
+    applyHoleFill,
+    decorateLiveLayout,
+    holesFillCap,
+    perClassCountsMatch,
+    enginePlacedById,
+    layoutsCountByClass,
+} from '../composables/localBridge'
+import { uniquifyDxfHandles } from '../composables/localHydrate'
+
+// Sortie moteur brute (forme jagua) : SPP = solution.layout (singulier),
+// BPP = solution.layouts ; rotations en DEGRÉS (jagua 0.7.x).
+const sppResult = {
+    problem: 'spp',
+    alternatives: [{
+        rank: 0, seed: 42, evaluations: 1234, strip_width: 900, density: 0.61,
+        solution: {
+            strip_width: 900, density: 0.61,
+            layout: {
+                container_id: 0,
+                placed_items: [
+                    { item_id: 0, transformation: { rotation: 90, translation: [10, 20] } },
+                    { item_id: 1, transformation: { rotation: 0, translation: [30.5, 40.25] } },
+                ],
+            },
+        },
+    }],
+}
+
+const bppResult = {
+    problem: 'bpp',
+    alternatives: [{
+        rank: 0, seed: 7, bias: 'left', iterations: 500, cost: 2, density: 0.55,
+        solution: {
+            cost: 2, density: 0.55,
+            layouts: [
+                { container_id: 0, placed_items: [{ item_id: 0, transformation: { rotation: 0, translation: [5, 5] } }] },
+                { container_id: 1, placed_items: [{ item_id: 1, transformation: { rotation: 180, translation: [6, 7] } }] },
+            ],
+        },
+    }],
+}
+
+const payload = {
+    problem: 'spp',
+    instance: {
+        strip_height: 1000,
+        bins: [
+            { id: 0, shape: { data: { outer: [[0, 0], [1500, 0], [1500, 1000], [0, 1000], [0, 0]] } } },
+            { id: 1, shape: { data: { outer: [[0, 0], [2000, 0], [2000, 1200], [0, 1200], [0, 0]] } } },
+        ],
+        items: [{ id: 0, demand: 2 }, { id: 1, demand: 1 }],
+    },
+    engineConfig: { max_strip_width: 3000, min_item_separation: 2 },
+    parts: [
+        { id: 0, file_slug: 'f1', handles: ['A1'], color: '#111111', coords: [[0, 0], [10, 0], [10, 10]], holes: [] },
+        { id: 1, file_slug: 'f2', handles: [], color: null, coords: [[0, 0], [5, 0], [5, 5]], holes: [[[1, 1], [2, 1], [2, 2]]] },
+    ],
+}
+
+describe('normalizeLayouts (SPP singulier / BPP pluriel)', () => {
+    it('SPP : layout unique en tableau', () => {
+        expect(normalizeLayouts(sppResult.alternatives[0].solution)).toHaveLength(1)
+    })
+    it('BPP : layouts conservés', () => {
+        expect(normalizeLayouts(bppResult.alternatives[0].solution)).toHaveLength(2)
+    })
+    it('solution vide ⇒ []', () => {
+        expect(normalizeLayouts(null)).toEqual([])
+        expect(normalizeLayouts({})).toEqual([])
+    })
+})
+
+describe('sheetDims (comme bin_dims côté worker)', () => {
+    it('SPP : max_strip_width × strip_height', () => {
+        const sppPayload = { instance: { strip_height: 1000 }, engineConfig: { max_strip_width: 3000 } }
+        expect(sheetDims(sppPayload, 0)).toEqual([3000, 1000])
+    })
+    it('BPP : bbox de la tôle du container (et repli première tôle)', () => {
+        expect(sheetDims(payload, 0)).toEqual([1500, 1000])
+        expect(sheetDims(payload, 1)).toEqual([2000, 1200])
+        expect(sheetDims(payload, 99)).toEqual([1500, 1000])
+    })
+})
+
+describe('layoutTransforms (piège : degrés → radians)', () => {
+    it('convertit les rotations moteur (degrés) en radians', () => {
+        const partsById = new Map(payload.parts.map((p) => [String(p.id), p]))
+        const t = layoutTransforms(sppResult.alternatives[0].solution.layout, partsById)
+        expect(t[0].angle).toBeCloseTo(Math.PI / 2, 10)
+        expect(t[1].angle).toBe(0)
+        expect(t[0]).toMatchObject({ item_id: '0', file_slug: 'f1', handles: ['A1'], x: 10, y: 20 })
+    })
+    it('pièce inconnue du payload : transform sans métadonnées (jamais de throw)', () => {
+        const t = layoutTransforms({ placed_items: [{ item_id: 99, transformation: { rotation: 45, translation: [1, 2] } }] }, new Map())
+        expect(t[0]).toMatchObject({ item_id: '99', file_slug: '', handles: [], angle: Math.PI / 4 })
+    })
+})
+
+describe('toServerShapeAlternatives (forme consommée par ResultModal)', () => {
+    const artifacts = [{
+        sheets: ['<svg/>'],
+        containers: [{ bin_width: 3000, bin_height: 1000, transforms: [] }],
+        report: {
+            per_sheet: [
+                { index: 0, sheetAreaMm2: 3000000, partsAreaMm2: 100, freeAreaMm2: 2999900, offcut: { widthMm: 500, heightMm: 400, areaMm2: 200000, reusable: true } },
+                { index: 1, sheetAreaMm2: 3000000, partsAreaMm2: 100, freeAreaMm2: 2999900, offcut: { widthMm: 900, heightMm: 800, areaMm2: 720000, reusable: true } },
+            ],
+            totals: { sheetCount: 2, sheetAreaMm2: 6000000, partsAreaMm2: 200, freeAreaMm2: 5999800, densityPct: 0 },
+            verify: { smallestGapMm: 2.0, overlapFree: true, insideSheet: true, spacingOk: true, holesFilled: 1, holesTotal: 1, holesOverflow: 0 },
+        },
+    }]
+
+    it('BPP : strategy=bias, report étalé (verify + champs additifs), meilleur offcut', () => {
+        const alts = toServerShapeAlternatives(bppResult, payload, artifacts)
+        expect(alts).toHaveLength(1)
+        const alt = alts[0]
+        expect(alt.strategy).toBe('left')
+        expect(alt.layoutCount).toBe(2)
+        expect(alt.svgs).toEqual(['<svg/>'])
+        // verify étalé en tête (badges du modal)
+        expect(alt.report.overlapFree).toBe(true)
+        expect(alt.report.holesFilled).toBe(1)
+        // champ additif d57cbea propagé tel quel par l'étalement du verify
+        expect(alt.report.holesOverflow).toBe(0)
+        expect(alt.report.smallestGapMm).toBe(2.0)
+        // champs additifs serveur
+        expect(alt.report.partsAreaMm2).toBe(200)
+        expect(alt.report.iterations).toBe(500)
+        expect(alt.report.vcores).toBe(1)
+        expect(alt.report.sheets).toHaveLength(2)
+        // offcut global = le meilleur (le plus grand) des tôles
+        expect(alt.offcut).toMatchObject({ width: 900, height: 800 })
+        expect(alt.report.offcut.areaMm2).toBe(720000)
+    })
+
+    it('SPP sans bias : strategy balanced ; seed préservé', () => {
+        const alts = toServerShapeAlternatives(sppResult, payload, artifacts)
+        expect(alts[0].strategy).toBe('balanced')
+        expect(alts[0].seed).toBe(42)
+        // AA1 (vérif L1 2026-09-05) : la densité mappée est la MESURÉE
+        // (totals.densityPct / 100, matière / Σ tôles — même définition que
+        // la grille), plus la densité moteur (matière / emprise).
+        expect(alts[0].density).toBeCloseTo(alts[0].report.totals.densityPct / 100)
+    })
+
+    it('artefact manquant ⇒ alternative sautée (jamais de throw)', () => {
+        const alts = toServerShapeAlternatives(bppResult, payload, [null])
+        expect(alts).toEqual([])
+    })
+})
+
+describe('expandMeta (miroir holefill.py, J-085)', () => {
+    // Hôte 100×100 avec trou circulaire approché, posé en (100, 100) rot 0.
+    const ring = Array.from({ length: 8 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 8
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const parts = [
+        { id: 0, coords: [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]], holes: [] },
+        { id: 1, coords: [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]], holes: [ring] },
+    ]
+    const layouts = [{
+        placed_items: [{ item_id: 1, transformation: { rotation: 90, translation: [100, 100] } }],
+    }]
+
+    it('ringRotations validées seulement, entraînées par la rotation de l’hôte', () => {
+        const out = expandMeta(parts, 1, 0, [2], layouts, [[0, 180]])
+        expect(out[0].placed_items).toHaveLength(3)
+        const added = out[0].placed_items.slice(1)
+        // rotations = hrot + frot ; centre du trou entraîné par R(90)·(0,0)+(100,100)
+        expect(added.map((p) => p.transformation.rotation)).toEqual([90, 270])
+        expect(added[0].transformation.translation[0]).toBeCloseTo(100, 10)
+        expect(added[0].transformation.translation[1]).toBeCloseTo(100, 10)
+        // item_id du filler = id d'origine (number)
+        expect(added[0].item_id).toBe(0)
+    })
+
+    it('sans ringRotations (legacy) : pinwheel plein', () => {
+        const out = expandMeta(parts, 1, 0, [4], [{
+            placed_items: [{ item_id: 1, transformation: { rotation: 0, translation: [0, 0] } }],
+        }])
+        expect(out[0].placed_items).toHaveLength(5)
+        expect(out[0].placed_items.slice(1).map((p) => p.transformation.rotation)).toEqual([0, 90, 180, 270])
+    })
+})
+
+describe('decorateLiveLayout (vue live = modal après J-085)', () => {
+    const ring = Array.from({ length: 8 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 8
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const fill = { id: 0, coords: [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]], holes: [] }
+    const host = { id: 1, coords: [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]], holes: [ring] }
+
+    it('rattache les fillers meta sur une frame live (SPP)', () => {
+        const evt = {
+            feasible: true,
+            isSpp: true,
+            sheets: [[200, 200]],
+            items: [[1, 0, 100, 100]],
+        }
+        const out = decorateLiveLayout(evt, {
+            parts: [fill, host],
+            engineConfig: { min_item_separation: 0 },
+            meta: { host: 1, fill: 0, slots: [2], ringRotations: [[0, 180]] },
+        })
+        expect(out.items.length).toBeGreaterThan(evt.items.length)
+        expect(out.holesFilled).toBeGreaterThan(0)
+        expect(out.density).toBeGreaterThan(0)
+        // l'événement moteur n'est pas muté
+        expect(evt.items).toHaveLength(1)
+    })
+
+    it('frame sans pièces / sans parts : renvoyée telle quelle', () => {
+        expect(decorateLiveLayout({ items: [] }, { parts: [fill] })).toEqual({ items: [] })
+        expect(decorateLiveLayout({ items: [[0, 0, 0, 0]] }, { parts: [] }).items).toHaveLength(1)
+    })
+
+    // Densité SPP : pièces/tôle-entière est CONSTANT pour un job donné (ne
+    // dit rien du packing — 55,4 % du cas 100+800 de la panne 2026-08-28).
+    // Sur une bande qui tient dans la tôle, la densité moteur (pièces/bande,
+    // même échelle que le modal) est reprise telle quelle ; le repli
+    // pièces/tôle reste pour les frames hors-tôle et bundles antérieurs.
+    it('densité : bande faisable → densité moteur ; hors-tôle → pièces/tôle', () => {
+        const base = {
+            feasible: true,
+            isSpp: true,
+            sheets: [[1000, 2000]],
+            items: [[1, 0, 100, 100]],
+        }
+        const payload = {
+            parts: [fill, host],
+            engineConfig: { min_item_separation: 0 },
+        }
+        const fits = decorateLiveLayout(
+            { ...base, strip_width: 663, density: 0.94 },
+            payload,
+        )
+        expect(fits.density).toBeCloseTo(0.94, 6)
+        const over = decorateLiveLayout(
+            { ...base, strip_width: 1400, density: 0.44 },
+            payload,
+        )
+        // repli pièces/tôle-entière : indépendant de la bande annoncée
+        expect(over.density).toBeGreaterThan(0)
+        expect(over.density).toBeLessThan(0.94)
+        const noWidth = decorateLiveLayout({ ...base, density: 0.44 }, payload)
+        expect(noWidth.density).toBeCloseTo(over.density, 9)
+    })
+})
+
+describe('uniquifyDxfHandles', () => {
+    it('réécrit les handles 5 en séquence unique', () => {
+        const src = '0\nCIRCLE\n5\n2F\n10\n0\n0\nCIRCLE\n5\n2F\n10\n1\n'
+        const out = uniquifyDxfHandles(src)
+        const handles = []
+        const lines = out.split('\n')
+        for (let i = 0; i < lines.length - 1; i++) {
+            if (lines[i] === '5') handles.push(lines[i + 1])
+        }
+        expect(handles).toEqual(['1', '2'])
+    })
+})
+
+describe('applyHoleFill (exporté pour le live)', () => {
+    it('ne jette jamais sur un layout vide', () => {
+        expect(applyHoleFill([], [{ placed_items: [] }], 2)).toBe(0)
+    })
+})
+
+describe('applyHoleFill — gardes anti double-remplissage (miroir d57cbea)', () => {
+    // Géométrie auto-portée (miroir test_holefill.py) : hôte 100×100 + trou
+    // Ø70 (64-gon), filler secteur r=28 → capacité pinwheel validée 4 à space 2.
+    const circle = (cx, cy, r, n = 64) => {
+        const pts = Array.from({ length: n }, (_, i) => [
+            cx + r * Math.cos((2 * Math.PI * i) / n),
+            cy + r * Math.sin((2 * Math.PI * i) / n),
+        ])
+        pts.push([...pts[0]])
+        return pts
+    }
+    const sector = (() => {
+        const pts = [[2.83, 2.83]]
+        for (let i = 0; i <= 8; i++) {
+            const a = (5 * Math.PI) / 180 + ((80 * Math.PI) / 180) * (i / 8)
+            pts.push([28 * Math.cos(a), 28 * Math.sin(a)])
+        }
+        pts.push([2.83, 2.83])
+        return pts
+    })()
+    const host = (count) => ({
+        id: 0,
+        coords: [[-50, -50], [-50, 50], [50, 50], [50, -50], [-50, -50]],
+        holes: [circle(0, 0, 35)],
+        count,
+    })
+    const fill = (count) => ({ id: 1, coords: sector, holes: [], count, rotations: [0, 90, 180, 270] })
+    const t = (id, rot, x, y) => ({ item_id: id, transformation: { rotation: rot, translation: [x, y] } })
+
+    it('trou plein sans fillers libres : no-op (cas nominal 400 fillers inchangé)', () => {
+        const placed = [
+            t(0, 0, 0, 0),
+            t(1, 0, 0, 0), t(1, 90, 0, 0), t(1, 180, 0, 0), t(1, 270, 0, 0),
+        ]
+        expect(applyHoleFill([host(1), fill(4)], [{ placed_items: placed }], 2)).toBe(0)
+    })
+
+    it('trous à capacité + fillers surnuméraires : aucune téléportation (cas trou600)', () => {
+        // 2 hôtes × capacité validée 4, 10 fillers : 8 pré-nichés sur les
+        // poses canoniques + 2 libres en bande — le post-pass ne doit RIEN
+        // déplacer (0 relocation, aucun jumeau, les 2 libres restent en bande).
+        const placed = [
+            t(0, 0, 0, 0), t(0, 0, 500, 0),
+            t(1, 0, 0, 0), t(1, 90, 0, 0), t(1, 180, 0, 0), t(1, 270, 0, 0),
+            t(1, 0, 500, 0), t(1, 90, 500, 0), t(1, 180, 500, 0), t(1, 270, 500, 0),
+            t(1, 0, 0, 800), t(1, 90, 60, 800),
+        ]
+        const before = JSON.stringify(placed)
+        const rec = applyHoleFill([host(2), fill(10)], [{ placed_items: placed }], 2)
+        expect(rec).toBe(0)
+        expect(JSON.stringify(placed)).toBe(before)
+    })
+
+    it('trou partiel : complète les poses libres sans dupliquer les occupées', () => {
+        // 2 poses canoniques prises (0/180) + 4 fillers libres : le post-pass
+        // complète les 2 poses restantes (90/270) — dropOccupied écarte les
+        // poses déjà occupées (packHole valide contre un trou vide).
+        const placed = [
+            t(0, 0, 0, 0),
+            t(1, 0, 0, 0), t(1, 180, 0, 0),
+            t(1, 0, 0, 800), t(1, 90, 60, 800), t(1, 180, 120, 800), t(1, 270, 180, 800),
+        ]
+        const rec = applyHoleFill([host(1), fill(6)], [{ placed_items: placed }], 2)
+        expect(rec).toBe(2)
+        const inHole = placed.filter((pi) => pi.item_id === 1
+            && Math.hypot(pi.transformation.translation[0], pi.transformation.translation[1]) < 1)
+        expect(inHole).toHaveLength(4)
+        const rots = inHole
+            .map((pi) => ((pi.transformation.rotation % 360) + 360) % 360)
+            .sort((a, b) => a - b)
+        expect(rots).toEqual([0, 90, 180, 270])
+        const keys = new Set(inHole.map((pi) => `${pi.transformation.rotation}|${pi.transformation.translation}`))
+        expect(keys.size).toBe(4) // aucun jumeau
+    })
+})
+
+describe('applyHoleFill BPP — scoping par tôle (miroir test_holefill_bpp.py)', () => {
+    // Constat 2026-09-01 : les layouts BPP partagent le repère de
+    // coordonnées ; pooler trous/libres à travers les tôles téléportait
+    // les fans d'une tôle vers les coordonnées du trou coïncidant d'une
+    // autre (« jumeaux » à pose identique sur le banc 2×1000×1000).
+    const circle = (cx, cy, r, n = 64) => {
+        const pts = Array.from({ length: n }, (_, i) => [
+            cx + r * Math.cos((2 * Math.PI * i) / n),
+            cy + r * Math.sin((2 * Math.PI * i) / n),
+        ])
+        pts.push([...pts[0]])
+        return pts
+    }
+    const sector = (() => {
+        const pts = [[2.83, 2.83]]
+        for (let i = 0; i <= 8; i++) {
+            const a = (5 * Math.PI) / 180 + ((80 * Math.PI) / 180) * (i / 8)
+            pts.push([28 * Math.cos(a), 28 * Math.sin(a)])
+        }
+        pts.push([2.83, 2.83])
+        return pts
+    })()
+    const host = (count) => ({
+        id: 0,
+        coords: [[-50, -50], [-50, 50], [50, 50], [50, -50], [-50, -50]],
+        holes: [circle(0, 0, 35)],
+        count,
+    })
+    const fill = (count) => ({ id: 1, coords: sector, holes: [], count, rotations: [0, 90, 180, 270] })
+    const t = (id, rot, x, y) => ({ item_id: id, transformation: { rotation: rot, translation: [x, y] } })
+    const posesOf = (layout) => layout.placed_items
+        .filter((pi) => pi.item_id === 1)
+        .map((pi) => `${pi.transformation.rotation}|${pi.transformation.translation}`)
+
+    it('trous coïncidants : chaque tôle remplit SON trou avec SES fans, aucun jumeau', () => {
+        const layouts = [
+            { placed_items: [
+                t(0, 0, 500, 500),
+                t(1, 0, 800, 200), t(1, 90, 850, 200), t(1, 180, 900, 200), t(1, 270, 950, 200),
+            ] },
+            { placed_items: [
+                t(0, 0, 500, 500),
+                t(1, 0, 100, 200), t(1, 90, 150, 200), t(1, 180, 200, 200), t(1, 270, 250, 200),
+            ] },
+        ]
+        const rec = applyHoleFill([host(2), fill(8)], layouts, 2)
+        expect(rec).toBe(8)
+        for (const layout of layouts) {
+            const inHole = layout.placed_items.filter((pi) => pi.item_id === 1
+                && Math.hypot(pi.transformation.translation[0] - 500,
+                    pi.transformation.translation[1] - 500) < 1)
+            expect(inHole).toHaveLength(4)
+            expect(new Set(posesOf({ placed_items: inHole })).size).toBe(4) // aucun jumeau
+        }
+    })
+
+    it('pas de téléport : les libres de la tôle 1 ne remplissent pas le trou vide de la tôle 2', () => {
+        const layouts = [
+            { placed_items: [
+                t(0, 0, 500, 500),
+                t(1, 0, 500, 500), t(1, 90, 500, 500), t(1, 180, 500, 500), t(1, 270, 500, 500),
+                t(1, 0, 800, 800), t(1, 90, 850, 800),
+            ] },
+            { placed_items: [t(0, 0, 500, 500)] },
+        ]
+        const before = JSON.stringify(layouts[0].placed_items)
+        const rec = applyHoleFill([host(2), fill(6)], layouts, 2)
+        expect(rec).toBe(0)
+        expect(JSON.stringify(layouts[0].placed_items)).toBe(before)
+        expect(layouts[1].placed_items).toHaveLength(1)
+    })
+})
+
+describe('holesFillCap (miroir verify_layout, d57cbea)', () => {
+    // Mêmes fixtures que test_metrics.py : hôte 40×40 trou [15..25]², filler
+    // 6×6 empilé n fois en (17,17) (centroïde (20,20) dans le trou).
+    const holed = {
+        id: 1,
+        coords: [[0, 0], [40, 0], [40, 40], [0, 40], [0, 0]],
+        holes: [[[15, 15], [25, 15], [25, 25], [15, 25], [15, 15]]],
+    }
+    const filler = { id: 2, coords: [[0, 0], [6, 0], [6, 6], [0, 6], [0, 0]], holes: [] }
+    const partsById = new Map([['1', holed], ['2', filler]])
+    const containers = (n) => [{
+        bin_width: 100,
+        bin_height: 100,
+        transforms: [
+            { item_id: '1', angle: 0, x: 0, y: 0 },
+            ...Array.from({ length: n }, () => ({ item_id: '2', angle: 0, x: 17, y: 17 })),
+        ],
+    }]
+
+    it('holesFilled plafonné à la capacité pinwheel, excédent → holesOverflow', () => {
+        expect(holesFillCap(containers(8), partsById)).toEqual({ filled: 4, overflow: 4 })
+    })
+
+    it('cas nominal : pas d’overflow', () => {
+        expect(holesFillCap(containers(4), partsById)).toEqual({ filled: 4, overflow: 0 })
+    })
+})
+
+describe('packHole / planHoleFills (D-MOT-16)', () => {
+    const hole = Array.from({ length: 32 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 32
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const sector = (() => {
+        const pts = [[2.83, 2.83]]
+        for (let i = 0; i <= 8; i++) {
+            const a = (5 * Math.PI) / 180 + ((80 * Math.PI) / 180) * (i / 8)
+            pts.push([28 * Math.cos(a), 28 * Math.sin(a)])
+        }
+        pts.push([2.83, 2.83])
+        return pts
+    })()
+
+    it('4 secteurs r=28 dans Ø70 à space 2 → 4 poses', async () => {
+        const { packHole } = await import('../composables/localBridge')
+        const area = 28 * 28 * Math.PI / 4
+        const poses = packHole(hole, [{ id: 1, coords: sector, rotations: [0, 90, 180, 270], remaining: 4, area }], 2)
+        expect(poses.length).toBe(4)
+    })
+
+    it('planHoleFills 1 hôte + 4 fillers → 4 fills, repli si vide', async () => {
+        const { planHoleFills } = await import('../composables/localBridge')
+        const host = { id: 0, coords: [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]], holes: [hole], count: 1 }
+        const fill = { id: 1, coords: sector, holes: [], count: 4, rotations: [0, 90, 180, 270] }
+        const packs = planHoleFills([host, fill], 2)
+        expect(packs).toBeTruthy()
+        expect(packs[0].fills.length).toBe(4)
+    })
+})
+
+describe('toServerShapeAlternatives — usedSheetShare local (stats du modal)', () => {
+    it('calcule bbox placée / tôle pour CHAQUE alternative (grille comprise)', () => {
+        const parts = [{ id: 0, coords: [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]], holes: [] }]
+        const mkArt = (n) => ({
+            sheets: [null],
+            containers: [{
+                bin_width: 1000, bin_height: 2000,
+                transforms: [{ item_id: '0', angle: 0, x: 0.1, y: 0.1 },
+                             { item_id: '0', angle: 0, x: 0.1 + (n - 1) * 100.1, y: 0.1 + (n - 1) * 100.1 }],
+            }],
+            report: { per_sheet: [], totals: null, verify: {} },
+        })
+        const result = {
+            alternatives: [
+                { structural: true, solution: { layout: { placed_items: [] }, density: 0.9 } },
+                { bias: 'left', solution: { layout: { placed_items: [] }, density: 0.9 } },
+            ],
+        }
+        const payload = { parts, engineConfig: {} }
+        // 2 carrés en diagonale 100x100 : bbox = 200.2 × 200.2 (100+0.1 pitch)
+        const arts = [mkArt(2), mkArt(2)]
+        const out = toServerShapeAlternatives(result, payload, arts)
+        expect(out).toHaveLength(2)
+        expect(out[0].strategy).toBe('grid')
+        expect(out[0].usedSheetShare).toBeCloseTo((200.1 * 200.1) / (1000 * 2000), 6)
+        expect(out[1].usedSheetShare).toBeCloseTo((200.1 * 200.1) / (1000 * 2000), 6)
+    })
+})
+
+
+describe('perClassCountsMatch (miroir metrics A4, audit 2026-09-03)', () => {
+    const containers = (ids) => [
+        { transforms: ids.map((id) => ({ item_id: String(id), angle: 0, x: 0, y: 0 })) },
+    ]
+
+    it('comptes exacts par classe → true', () => {
+        expect(perClassCountsMatch(containers([0, 0, 1]), new Map([['0', 2], ['1', 1]]))).toBe(true)
+    })
+
+    it('doublon + perte compensée (même total) → false', () => {
+        // item 0 posé 3 fois, item 1 perdu : total 3 = demandé 3.
+        expect(perClassCountsMatch(containers([0, 0, 0]), new Map([['0', 2], ['1', 1]]))).toBe(false)
+    })
+
+    it('classe manquante → false', () => {
+        expect(perClassCountsMatch(containers([7]), new Map([['0', 1]]))).toBe(false)
+    })
+})
+
+// AF6 (L3-bis) : la RÉFÉRENCE de la garde est ce que le moteur a posé
+// (miroir engine_placed_by_id, X2) — une solution partielle sur stock
+// serré passe la garde au lieu d'être écartée en all_alternatives_invalid.
+describe('AF6 — garde par classe sur solution partielle (référence = posé moteur)', () => {
+    const containers = (ids) => [
+        { transforms: ids.map((id) => ({ item_id: String(id), angle: 0, x: 0, y: 0 })) },
+    ]
+    const partialAlt = {
+        solution: {
+            layouts: [
+                { placed_items: [{ item_id: 0 }, { item_id: 0 }] },
+                { placed_items: [{ item_id: 0 }, { item_id: 1 }] },
+            ],
+        },
+    }
+
+    it('enginePlacedById compte les poses moteur par classe', () => {
+        const counts = enginePlacedById(partialAlt)
+        expect(counts.get('0')).toBe(3)
+        expect(counts.get('1')).toBe(1)
+    })
+
+    it('un partiel 4/5 posés passe la garde avec la référence moteur (échouait contre le demandé)', () => {
+        const requested = new Map([['0', 4], ['1', 1]]) // 5 demandés
+        const placed = containers([0, 0, 0, 1]) // moteur a posé 4
+        // Ancienne garde : partiel écarté → all_alternatives_invalid.
+        expect(perClassCountsMatch(placed, requested)).toBe(false)
+        // AF6 : référence = posé moteur → l'alternative est conservée.
+        const enginePlaced = enginePlacedById(partialAlt)
+        const reference = enginePlaced.size ? enginePlaced : requested
+        expect(perClassCountsMatch(placed, reference)).toBe(true)
+    })
+
+    it('solution moteur VIDE → repli sur le demandé (la garde ne devient pas muette)', () => {
+        expect(enginePlacedById({}).size).toBe(0)
+        expect(enginePlacedById(null).size).toBe(0)
+    })
+
+    it('le post-pass qui PERD une pièce moteur est toujours détecté', () => {
+        // Moteur a posé 0×3 + 1×1 ; le post-pass n'a livré que 0×2 + 1×1.
+        const placed = containers([0, 0, 1])
+        const reference = enginePlacedById(partialAlt)
+        expect(perClassCountsMatch(placed, reference)).toBe(false)
+    })
+})
+
+// A2 (lot 4) — garde par classe : la référence est capturée APRÈS
+// l'expansion (fans attendues comprises, miroir X2) et AVANT les passes
+// de déplacement. Le test exécute les passes RÉELLES du post-pass
+// (expandMeta → applyHoleFill → fillResidualBands), construit les
+// containers via layoutTransforms (rien à la main), PUIS INJECTE une
+// perte dans l'état final — ce qu'un post-pass défaillant laisserait —
+// et prouve : la NOUVELLE référence détecte, l'ANCIENNE (recalculée sur
+// l'état final) reste muette.
+describe('A2 — garde par classe, référence avant post-pass (perte injectée)', () => {
+    const ring = Array.from({ length: 8 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 8
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const fan = { id: 0, coords: [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, 5]], holes: [] }
+    // coordonnée dupliquée volontaire corrigée :
+    fan.coords = [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]]
+    const host = { id: 1, coords: [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]], holes: [ring] }
+    const parts = [fan, host]
+    // Moteur : l'hôte seul est posé (l'instance réduite fige les fans).
+    const engineLayouts = () => [{
+        container_id: 0,
+        placed_items: [{
+            item_id: 1,
+            transformation: { rotation: 0, translation: [50, 50] },
+        }],
+    }]
+    const meta = { host: 1, fill: 0, slots: [1], ringRotations: [[0]] }
+
+    it('passes réelles : expansion pose les fans, les comptes capturés les incluent', async () => {
+        const layouts = engineLayouts()
+        expandMeta(parts, meta.host, meta.fill, meta.slots, layouts, meta.ringRotations)
+        const engineCounts = layoutsCountByClass(layouts)
+        expect(engineCounts['1']).toBe(1)
+        expect(Number(engineCounts['0'])).toBeGreaterThan(0)
+    })
+
+    it('une perte injectée APRÈS les passes est détectée par la référence capturée, pas par l’ancienne', async () => {
+        // Chaîne réelle : expansion → hole-fill → résiduel.
+        const layouts = engineLayouts()
+        expandMeta(parts, meta.host, meta.fill, meta.slots, layouts, meta.ringRotations)
+        const engineCounts = layoutsCountByClass(layouts)
+        applyHoleFill(parts, layouts, 0)
+        const { fillResidualBands } = await import('../composables/residualClient')
+        fillResidualBands(parts, layouts, 0, {
+            parts: [], engineConfig: { min_item_separation: 0 },
+            instance: { strip_height: 1000 }, problem: 'spp',
+        }, {}, 'compact')
+
+        // INJECTION : le post-pass perd l'HÔTE (pièce posée par le moteur)
+        // — il disparaît de l'état final, layouts compris.
+        layouts[0].placed_items = layouts[0].placed_items.filter((pi) => pi.item_id !== 1)
+        const partsById = new Map(parts.map((p) => [String(p.id), p]))
+        const containers = [{ transforms: layoutTransforms(layouts[0], partsById) }]
+
+        // Garde A2 : référence capturée AVANT les passes → DÉTECTE.
+        const reference = new Map(Object.entries(engineCounts))
+        expect(perClassCountsMatch(containers, reference)).toBe(false)
+        // Ancienne référence : recalculée sur l'état final (muté) → muette.
+        const afterCounts = layoutsCountByClass(layouts)
+        expect(perClassCountsMatch(containers, new Map(Object.entries(afterCounts)))).toBe(true)
+    })
+
+    it('sans perte : la garde passe (pas de faux positif après les passes réelles)', async () => {
+        const layouts = engineLayouts()
+        expandMeta(parts, meta.host, meta.fill, meta.slots, layouts, meta.ringRotations)
+        const engineCounts = layoutsCountByClass(layouts)
+        applyHoleFill(parts, layouts, 0)
+        const partsById = new Map(parts.map((p) => [String(p.id), p]))
+        const containers = [{ transforms: layoutTransforms(layouts[0], partsById) }]
+        expect(perClassCountsMatch(containers, new Map(Object.entries(engineCounts)))).toBe(true)
+    })
+})

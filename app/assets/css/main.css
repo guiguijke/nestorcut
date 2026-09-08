@@ -1,0 +1,60 @@
+/* U0 : jetons de design « atelier » — l'unique source des couleurs. */
+@import url('./tokens.css');
+
+/* Base reset — the design was built on Tailwind's preflight, which was
+   removed together with Tailwind in the Nuxt 4 migration. */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+ul,
+ol {
+    list-style: none;
+}
+a {
+    color: inherit;
+    text-decoration: none;
+}
+button {
+    background: none;
+    border: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+input,
+textarea,
+select {
+    font: inherit;
+    color: inherit;
+}
+img,
+svg,
+video,
+canvas {
+    display: block;
+    max-width: 100%;
+}
+
+/*
+ * Vault "secure environment" indicator — a thin accent border around the
+ * whole viewport, visible only while the user is working inside an unlocked
+ * zero-knowledge vault. Set as data-vault-active="true" on <html> by the
+ * auth/strip layouts.
+ *
+ * Implementation: a position:fixed pseudo-element pinned to the viewport,
+ * above every layer (z-index: 2147483647) but click-through (pointer-events:
+ * none). A box-shadow on <body> would be hidden by the opaque .main layout
+ * that covers it, so the overlay must live above the DOM tree.
+ */
+html[data-vault-active="true"]::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2147483647;
+    border: 3px solid var(--accent-primary);
+}

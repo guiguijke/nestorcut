@@ -1,0 +1,3092 @@
+//! Post-pass de remplissage 2D (J-092), appliqué APRÈS la gravité.
+//!
+//! La gravité (gravity.rs) est monotone par axe : elle ne remonte jamais une
+//! pièce. Deux symptômes restent donc irréparables par elle :
+//!   - classe « left » : encoches en haut des colonnes de gauche (la pièce
+//!     qui aurait comblé le trou est posée plus bas ailleurs) ;
+//!   - classe « balanced » : |free_top − free_right| élevé — le corridor de
+//!     la phase 2 est une borne max, rien ne force la largeur dedans.
+//!
+//! Ce module déplace des pièces individuelles, chaque candidat étant validé
+//! par la CDE exacte du layout (même pattern que `gravity::pull_axis` :
+//! retrait → sonde → re-placement). Garanties :
+//!   - jamais de collision (toute position acceptée est sondée) ;
+//!   - jamais de dépassement de la tôle (piège #6 fitsSheet) — la classe
+//!     « balanced » peut élargir au-delà de la largeur incumbent (c'est son
+//!     objet : rééquilibrer les chutes), mais jamais au-delà de la tôle ;
+//!   - jamais de régression : chaque sous-passe est snapshotée et restaurée
+//!     indépendamment si les métriques d'entrée reculent (garde granulaire —
+//!     la garde globale unique annulait un tassement réussi à cause d'une
+//!     autre passe, trou interne figé, seed trou100 5594320138289656320) ;
+//!   - déterminisme strict : tris total_cmp + tie-break (item_id, PItemKey),
+//!     aucune transcendantale (piège #14b), séquentiel pur (piège #14c).
+
+use jagua_rs::collision_detection::hazards::filter::NoFilter;
+use jagua_rs::entities::{Instance, Item, PItemKey};
+use jagua_rs::geometry::geo_traits::TransformableFrom;
+use jagua_rs::geometry::primitives::SPolygon;
+use jagua_rs::geometry::{DTransformation, Transformation};
+use jagua_rs::probs::spp::entities::{SPPlacement, SPProblem};
+
+/// Largeur des bandes verticales de la métrique d'escalier — reflète
+/// exactement `bench/grid_metrics.py` (bandes de 100 mm).
+const BAND_W: f32 = 100.0;
+/// Une encoche n'est considérée que si sa profondeur dépasse
+/// max(NOTCH_EPS_MM, NOTCH_EPS_RATIO × hauteur médiane des pièces).
+const NOTCH_EPS_MM: f32 = 20.0;
+const NOTCH_EPS_RATIO: f32 = 0.25;
+/// Le restack colonnes ne se déclenche que si l'escalier dépasse 1 % de la
+/// bbox utilisée (en dessous, le notch-fill suffit ou le gain est négligeable).
+const RESTACK_STAIR_RATIO: f32 = 0.01;
+/// Encoche « une cellule » (clustering x_min, pas les bandes 100 mm —
+/// un carré 100 mm + space 2 chevauche deux bandes et devenait invisible).
+/// Seuil = 0,5 × hauteur médiane + 10 mm (50 mm → 35, 100 mm → 60).
+/// Trou interne dans une colonne : on tasse si le gap dépasse 8 mm
+/// (les 2 mm de space des tests / de la gravité restent intacts).
+const LOOSE_GAP_MM: f32 = 8.0;
+/// Snap des lanes : respiration cible par gap inter-colonnes (mm) et
+/// élargissement total maximal de la bande (mm) — la dérive µm cumulative
+/// des lanes crée des contacts exacts à 2,0000 mm (collision des formes
+/// inflatées) qui verrouillent toute sonde verticale ; réaligner sur une
+/// grille canonique uniforme les supprime (seed sweep_fixed
+/// 1000000000000000010).
+const SNAP_EPS: f32 = 0.005;
+const SNAP_WIDEN_MAX: f32 = 0.004;
+/// Régression de densité tolérée (points) avant restauration du snapshot.
+const DENSITY_TOL: f32 = 0.005;
+/// Pas de la marche ascendante grossière (fraction de la hauteur pièce) et
+/// nombre de pas de bisection de raffinement (comme gravity : contact =
+/// collision dans jagua, on converge vers la position de contact + ε).
+const WALK_STEPS: usize = 8;
+const REFINE_STEPS: usize = 12;
+/// Budget global de sondes CDE du notch-fill (borne le coût pire cas).
+const PROBE_CAP: usize = 200_000;
+
+/// Trace de debug (NEST_DEBUG_CF=1) — diagnostic des passes et des gardes.
+macro_rules! cf_dbg {
+    ($($arg:tt)*) => {
+        if std::env::var_os("NEST_DEBUG_CF").is_some() {
+            eprintln!("[cf] {}", format!($($arg)*));
+        }
+    };
+}
+
+/// État des colonnes pour le diagnostic : tops, gaps internes > 2.5 mm.
+#[allow(dead_code)]
+fn dbg_cols(tag: &str, prob: &SPProblem) {
+    if std::env::var_os("NEST_DEBUG_CF").is_none() {
+        return;
+    }
+    let boxes = placed_boxes(prob);
+    let cols = cluster_columns(&boxes);
+    let mut desc = String::new();
+    for (i, c) in cols.iter().enumerate() {
+        let mut ivals: Vec<(f32, f32)> = c.iter().map(|b| (b.y_min, b.y_max)).collect();
+        ivals.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let gaps: Vec<String> = ivals
+            .windows(2)
+            .filter(|w| w[1].0 - w[0].1 > 2.5)
+            .map(|w| format!("gap {:.1}@[{:.1},{:.1}]", w[1].0 - w[0].1, w[0].1, w[1].0))
+            .collect();
+        desc.push_str(&format!(
+            " c{i}(x0={:.1},n={},top={:.1}{})",
+            col_x0(c),
+            c.len(),
+            col_top(c),
+            if gaps.is_empty() { String::new() } else { format!(" {}", gaps.join(",")) }
+        ));
+    }
+    eprintln!("[cf] {tag}: cols={}{}", cols.len(), desc);
+}
+
+/// Point d'entrée : dispatche par classe directionnelle. Appelé après la
+/// gravité aux mêmes endroits qu'elle (spp.rs). « bottom » n'est jamais
+/// touché (le banc ne montre pas d'escalier sur cette classe).
+pub fn post_pass_for_bias(prob: &mut SPProblem, bias: Option<&str>, max_strip_width: Option<f32>) {
+    if prob.n_placed_items() < 2 {
+        return;
+    }
+    match bias {
+        Some("bottom") => {}
+        Some("balanced") => rebalance_balanced(prob, max_strip_width),
+        // left + défaut (la gravité par défaut est déjà « left », J-088).
+        _ => column_fill_left(prob),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Métriques internes (miroir de bench/grid_metrics.py)
+// ---------------------------------------------------------------------------
+
+/// Instantané géométrique d'un placement (bbox monde + transformation).
+#[derive(Clone, Copy)]
+struct Boxed {
+    pk: PItemKey,
+    item_id: usize,
+    d_transf: DTransformation,
+    x_min: f32,
+    y_min: f32,
+    x_max: f32,
+    y_max: f32,
+}
+
+impl Boxed {
+    fn w(&self) -> f32 {
+        self.x_max - self.x_min
+    }
+    fn h(&self) -> f32 {
+        self.y_max - self.y_min
+    }
+}
+
+/// Collecte déterministe des placements, triée (x_min, y_min, item_id, pk).
+fn placed_boxes(prob: &SPProblem) -> Vec<Boxed> {
+    let mut v: Vec<Boxed> = prob
+        .layout
+        .placed_items
+        .iter()
+        .map(|(pk, pi)| Boxed {
+            pk,
+            item_id: pi.item_id,
+            d_transf: pi.d_transf,
+            x_min: pi.shape.bbox.x_min,
+            y_min: pi.shape.bbox.y_min,
+            x_max: pi.shape.bbox.x_max,
+            y_max: pi.shape.bbox.y_max,
+        })
+        .collect();
+    v.sort_by(|a, b| {
+        a.x_min
+            .total_cmp(&b.x_min)
+            .then(a.y_min.total_cmp(&b.y_min))
+            .then(a.item_id.cmp(&b.item_id))
+            .then(a.pk.cmp(&b.pk))
+    });
+    v
+}
+
+/// Bande i couvrant [i·W, (i+1)·W] — même test d'appartenance que le banc.
+fn band_range(b: &Boxed) -> (usize, usize) {
+    let lo = ((b.x_min + 1e-6) / BAND_W).floor().max(0.0) as usize;
+    let hi = ((b.x_max - 1e-6) / BAND_W).floor().max(0.0) as usize;
+    (lo, hi.max(lo))
+}
+
+/// Sommet par bande occupée (None si bande vide), en partant de x=0.
+fn band_tops(boxes: &[Boxed]) -> Vec<Option<f32>> {
+    let n = boxes
+        .iter()
+        .map(|b| band_range(b).1 + 1)
+        .max()
+        .unwrap_or(0);
+    let mut tops = vec![None; n];
+    for b in boxes {
+        let (lo, hi) = band_range(b);
+        for t in tops.iter_mut().take(hi + 1).skip(lo) {
+            *t = Some(t.map_or(b.y_max, |cur: f32| cur.max(b.y_max)));
+        }
+    }
+    tops
+}
+
+/// Escalier des bandes : aire vide au-dessus des bandes plus courtes que la
+/// plus haute (mm²). 0 = toutes les bandes occupées au même sommet.
+fn band_stair(boxes: &[Boxed]) -> f32 {
+    let tops = band_tops(boxes);
+    let max_top = tops.iter().flatten().copied().fold(0.0f32, f32::max);
+    tops.iter()
+        .flatten()
+        .map(|t| (max_top - t).max(0.0) * BAND_W)
+        .sum()
+}
+
+fn used_width(boxes: &[Boxed]) -> f32 {
+    boxes.iter().map(|b| b.x_max).fold(0.0f32, f32::max)
+}
+
+fn used_height(boxes: &[Boxed]) -> f32 {
+    boxes.iter().map(|b| b.y_max).fold(0.0f32, f32::max)
+}
+
+fn median(values: &mut [f32]) -> f32 {
+    values.sort_by(f32::total_cmp);
+    if values.is_empty() {
+        0.0
+    } else {
+        values[values.len() / 2]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sondes CDE (même pattern que gravity::pull_axis)
+// ---------------------------------------------------------------------------
+
+/// Sonde de placement pour UNE pièce (hors du layout) à rotation figée.
+/// `x`/`y` désignent le coin bas-gauche de la bbox monde visée.
+struct Prober {
+    item: Item,
+    buffer: SPolygon,
+    rotation: f32,
+    x_off: f32, // bbox.x_min - translation.x au moment du retrait
+    y_off: f32, // bbox.y_min - translation.y
+}
+
+impl Prober {
+    fn new(prob: &SPProblem, b: &Boxed) -> Self {
+        let item = prob.instance.item(b.item_id).clone();
+        let t = b.d_transf.translation();
+        let mut buffer = (*item.shape_cd).clone();
+        buffer.surrogate = None; // transform rapide ; la détection utilise le polygone exact
+        Prober {
+            item,
+            buffer,
+            rotation: b.d_transf.rotation(),
+            x_off: b.x_min - t.0,
+            y_off: b.y_min - t.1,
+        }
+    }
+
+    fn valid(&mut self, prob: &SPProblem, x: f32, y: f32) -> bool {
+        let dt = DTransformation::new(self.rotation, (x - self.x_off, y - self.y_off));
+        let transf: Transformation = dt.compose();
+        self.buffer.transform_from(&self.item.shape_cd, &transf);
+        !prob.layout.cde().detect_poly_collision(&self.buffer, &NoFilter)
+    }
+}
+
+/// Plus basse ordonnée valide dans [y_lo, y_hi] pour la pièce sondée à `x`.
+/// Stratégie : y_lo d'abord (optimum), puis marche grossière ascendante —
+/// elle trouve la position tassée juste au-dessus du contact (empilement
+/// serré, capacité maximale des colonnes). Si la marche ne trouve rien, on
+/// sonde y_hi en dernier recours : la fenêtre utile est parfois étroite et
+/// collée au haut de l'intervalle (plancher d'encoche + ε), la marche la
+/// survolerait. Raffinement par bisection n'acceptant que des milieux
+/// valides (sûr même si la faisabilité n'est pas monotone, comme gravity).
+/// None si rien de valide.
+fn settle_vertical(
+    prober: &mut Prober,
+    prob: &SPProblem,
+    x: f32,
+    y_lo: f32,
+    y_hi: f32,
+    step: f32,
+    probes: &mut usize,
+) -> Option<f32> {
+    fn refine(
+        prober: &mut Prober,
+        prob: &SPProblem,
+        x: f32,
+        lo: f32,
+        hi: f32,
+        probes: &mut usize,
+    ) -> f32 {
+        let (mut lo, mut hi) = (lo, hi);
+        for _ in 0..REFINE_STEPS {
+            let mid = (lo + hi) / 2.0;
+            *probes += 1;
+            if prober.valid(prob, x, mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        hi
+    }
+    if y_lo > y_hi + 1e-6 {
+        return None;
+    }
+    *probes += 1;
+    if prober.valid(prob, x, y_lo) {
+        return Some(y_lo);
+    }
+    let mut last_inv = y_lo;
+    let mut y = y_lo + step;
+    while y < y_hi - 1e-6 {
+        *probes += 1;
+        if prober.valid(prob, x, y) {
+            return Some(refine(prober, prob, x, last_inv, y, probes));
+        }
+        last_inv = y;
+        y += step;
+    }
+    *probes += 1;
+    if prober.valid(prob, x, y_hi) {
+        return Some(refine(prober, prob, x, last_inv, y_hi, probes));
+    }
+    None
+}
+
+/// Empreinte stable d'un placement (survit à un retrait/re-pose, contrairement
+/// à la PItemKey que slotmap régénère).
+fn fingerprint(b: &Boxed) -> (usize, u32, u32, u32, u32) {
+    (
+        b.item_id,
+        b.x_min.to_bits(),
+        b.y_min.to_bits(),
+        b.x_max.to_bits(),
+        b.y_max.to_bits(),
+    )
+}
+
+/// Localise un placement par empreinte dans l'état COURANT du layout.
+fn find_by_fingerprint(prob: &SPProblem, fp: &(usize, u32, u32, u32, u32)) -> Option<Boxed> {
+    placed_boxes(prob).into_iter().find(|b| &fingerprint(b) == fp)
+}
+
+/// Pièces « protégées » : bbox strictement contenue dans celle d'une autre
+/// pièce (filler niché dans le trou d'un hôte), ou contenant une autre pièce
+/// (hôte occupé — le déplacer abandonnerait ses fillers). Le trou n'existe
+/// pas côté moteur (piège #5) : la stricte inclusion de bbox est le seul
+/// signal. Les pièces protégées ne sont JAMAIS déplacées.
+fn protected_fingerprints(
+    boxes: &[Boxed],
+) -> std::collections::BTreeSet<(usize, u32, u32, u32, u32)> {
+    let mut out = std::collections::BTreeSet::new();
+    for (i, a) in boxes.iter().enumerate() {
+        for (j, b) in boxes.iter().enumerate() {
+            if i != j
+                && a.x_min > b.x_min + 1e-6
+                && a.y_min > b.y_min + 1e-6
+                && a.x_max < b.x_max - 1e-6
+                && a.y_max < b.y_max - 1e-6
+            {
+                out.insert(fingerprint(a)); // niché
+                out.insert(fingerprint(b)); // hôte occupé
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Replace `b` exactement à sa transformation d'origine (annulation d'un
+/// déplacement refusé). Toujours valide : c'était la position de départ.
+fn restore_item(prob: &mut SPProblem, b: &Boxed) {
+    prob.place_item(SPPlacement {
+        item_id: b.item_id,
+        d_transf: b.d_transf,
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Classe « left » : X- (largeur) d'abord, puis combler les vrais trous
+// ---------------------------------------------------------------------------
+
+fn column_fill_left(prob: &mut SPProblem) {
+    let n = prob.n_placed_items();
+    let width0 = used_width(&placed_boxes(prob));
+    let incumbent_w = prob.strip_width();
+    let strip_h = prob.instance.base_strip.fixed_height;
+
+    cf_dbg!("entry: n={n} width0={width0:.3} density0={:.4} incumbent_w={incumbent_w:.3} strip_h={strip_h:.1}", prob.density());
+    dbg_cols("entry", prob);
+
+    // Garde GRANULAIRE : chaque sous-passe est snapshotée indépendamment et
+    // restaurée si ELLE régresse (largeur utilisée / strip / densité) PAR
+    // RAPPORT À SON ENTRÉE — la garde globale unique annulait un tassement
+    // réussi à cause d'une passe ultérieure, et une référence figée à
+    // l'entrée rejetterait toute passe après un snap légèrement élargissant.
+    // `widen` = élargissement toléré de la passe (0 partout sauf le snap de
+    // lanes, borné à SNAP_WIDEN_MAX — la bande a du mou, cf. piste snap).
+    macro_rules! guarded {
+        ($name:literal, $widen:expr, $pass:expr) => {{
+            let widen: f32 = $widen;
+            let snap = prob.save();
+            let w_pre = used_width(&placed_boxes(prob));
+            let s_pre = prob.strip_width();
+            let d_pre = prob.density();
+            let r = $pass;
+            let w = used_width(&placed_boxes(prob));
+            let regressed = w > w_pre + widen + 1e-3
+                || prob.strip_width() > s_pre + widen + 1e-3
+                || prob.density() < d_pre - DENSITY_TOL
+                || w > incumbent_w + 1e-3; // jamais au-delà de la bande courante
+            if regressed {
+                cf_dbg!(
+                    "{}: GUARD RESTORE (width {:.3}>{:.3}+{}, strip {:.3}>{:.3}, density {:.4}<{:.4})",
+                    $name, w, w_pre, widen, prob.strip_width(), s_pre, prob.density(), d_pre - DENSITY_TOL
+                );
+                prob.restore(&snap);
+                Default::default()
+            } else {
+                cf_dbg!("{}: width={:.3} density={:.4}", $name, w, prob.density());
+                r
+            }
+        }};
+    }
+
+    // 1. Encoches à GAUCHE comblées depuis la droite (X-).
+    let moves = guarded!("notch_fill", 0.0, notch_fill(prob, incumbent_w, strip_h, 2 * n));
+    // 2. Restack seulement si le corps n'est pas déjà une bande X-
+    //    (colonnes gauches alignées + reste à droite). L'égalisation
+    //    4 hautes + 5e courte vole des pièces à gauche et annule le X-.
+    let restacked = !leftover_column_only(prob)
+        && guarded!("restack", 0.0, restack_columns(prob, incumbent_w, strip_h));
+    // 3. Crans internes d'une cellule, donneurs = droite seulement.
+    let filled = guarded!("fill_notches", 0.0, fill_column_notches(prob, incumbent_w, strip_h));
+    // 3b. Réaligne les pièces latéralement décalées sur leur colonne (jitter
+    //     ≥ 1 mm du solveur) — des lignes droites réduisent les verrous
+    //     latéraux pour le tassement qui suit.
+    let realigned = guarded!("realign", 0.0, realign_column_lanes(prob));
+    // 4. Tasser les gaps > space dans chaque colonne (trou interne d'une
+    //    cellule : la pièce au-dessus du trou redescend en cascade).
+    let tightened = guarded!("tighten", 0.0, tighten_loose_gaps(prob, incumbent_w, strip_h));
+    // 5. Consolider les cellules de reste au bord droit (le « L » X-) :
+    //    plus aucune colonne courte au milieu du corps.
+    let consolidated =
+        guarded!("consolidate", 0.0, consolidate_leftover_right(prob, incumbent_w, strip_h));
+    // 5b. FALLBACK : un défaut persiste (trou interne ou inversion) alors que
+    //     tighten/consolidate ont échoué — la dérive µm cumulative des lanes
+    //     a créé des contacts exacts à 2,0000 mm qui verrouillent toute sonde
+    //     (seed sweep_fixed 1000000000000010). Snap des lanes sur une grille
+    //     canonique (élargissement ≤ SNAP_WIDEN_MAX) puis re-tassement. Le
+    //     snap ne se déclenche QU'ICI, en dernier recours : un layout déjà
+    //     propre n'est jamais retouché (no-op).
+    let snapped = has_column_defect(prob)
+        && guarded!("snap", SNAP_WIDEN_MAX, snap_lanes_with_breathing(prob, width0));
+    let (tightened2, consolidated2) = if snapped {
+        (
+            guarded!("tighten2", 0.0, tighten_loose_gaps(prob, incumbent_w, strip_h)),
+            guarded!("consolidate2", 0.0, consolidate_leftover_right(prob, incumbent_w, strip_h)),
+        )
+    } else {
+        (false, false)
+    };
+    // 5c. Grille uniforme : équilibrer les hauteurs des couloirs (moignon
+    //     [19×5+5] → [17×4,16×2]) — le SPP est indifférent à la forme à
+    //     largeur égale, le moignon est un défaut visuel. Append au sommet
+    //     des couloirs courts, piles complètes (hôte + nichés).
+    let balanced = guarded!("balance", 0.0, balance_lane_tops(prob, incumbent_w, strip_h));
+    // 6. Pièce qui dépasse en haut du corps → reste à droite (pas l'inverse).
+    let leveled = guarded!("level", 0.0, level_protrusions(prob, incumbent_w, strip_h));
+    // 7. Vider la colonne droite seulement si ça RÉDUIT la largeur.
+    let collapsed = guarded!("collapse", 0.0, collapse_rightmost(prob, incumbent_w, strip_h));
+
+    if moves == 0
+        && !restacked
+        && !filled
+        && !snapped
+        && !realigned
+        && !tightened
+        && !consolidated
+        && !tightened2
+        && !consolidated2
+        && !balanced
+        && !leveled
+        && !collapsed
+    {
+        cf_dbg!("no moves at all → return unchanged");
+        return;
+    }
+    // Gravité finale best-effort : si elle régressait par rapport à l'état
+    // pré-gravité (elle ne devrait jamais — Left/Down ne font que tasser),
+    // on restaure l'état pré-gravité (les passes, déjà validées, sont
+    // conservées). Référence = pré-gravité (le snap a pu élargir de
+    // SNAP_WIDEN_MAX, c'est voulu et borné).
+    let snap_gravity = prob.save();
+    let w_pre_g = used_width(&placed_boxes(prob));
+    let s_pre_g = prob.strip_width();
+    let d_pre_g = prob.density();
+    crate::gravity::gravity_for_bias(prob, Some("left"), strip_h);
+    let w_g = used_width(&placed_boxes(prob));
+    if w_g > w_pre_g + 1e-3
+        || prob.strip_width() > s_pre_g + 1e-3
+        || prob.density() < d_pre_g - DENSITY_TOL
+    {
+        cf_dbg!("post-gravity regression → restore pre-gravity state");
+        prob.restore(&snap_gravity);
+    }
+    cf_dbg!("COMMIT: width={:.3} density={:.4}", used_width(&placed_boxes(prob)), prob.density());
+    dbg_cols("commit", prob);
+    prob.fit_strip();
+    debug_assert!(prob.layout.is_feasible());
+}
+
+/// Bande X- déjà formée : les colonnes de gauche ont le même sommet
+/// (± une demi-cellule) et seule la dernière est plus courte. Restacker
+/// ça casserait le X- sans gagner de largeur.
+fn leftover_column_only(prob: &SPProblem) -> bool {
+    let boxes = placed_boxes(prob);
+    let cols = cluster_columns(&boxes);
+    if cols.len() < 2 {
+        return false;
+    }
+    // Au moins 3 colonnes de corps + 1 reste. Une protubérance d'une
+    // cellule sur le corps est ignorée (level_protrusions s'en charge).
+    if cols.len() < 4 {
+        return false;
+    }
+    let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+    let cell = median(&mut heights) * 0.5 + 10.0;
+    let body_tops: Vec<f32> = cols[..cols.len() - 1].iter().map(|c| col_top(c)).collect();
+    let mut sorted = body_tops.clone();
+    sorted.sort_by(f32::total_cmp);
+    let med = sorted[sorted.len() / 2];
+    let similar = body_tops.iter().filter(|t| (**t - med).abs() < cell).count();
+    let last = col_top(cols.last().unwrap());
+    similar + 1 >= body_tops.len() && med - last > cell
+}
+
+/// Comble les encoches hautes des bandes de gauche avec des pièces prises
+/// dans les bandes de droite (la plus à droite / en haut d'abord). Retourne
+/// le nombre de déplacements acceptés.
+fn notch_fill(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32, move_cap: usize) -> usize {
+    let mut moves = 0;
+    let mut probes = 0usize;
+    'outer: loop {
+        let boxes = placed_boxes(prob);
+        let protected = protected_fingerprints(&boxes);
+        let tops = band_tops(&boxes);
+        let max_top = tops.iter().flatten().copied().fold(0.0f32, f32::max);
+        let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+        let notch_eps = NOTCH_EPS_MM.max(NOTCH_EPS_RATIO * median(&mut heights));
+        let stair_here = band_stair(&boxes);
+
+        let mut accepted = false;
+        for (bi, top) in tops.iter().enumerate() {
+            let Some(floor) = top else { continue };
+            let floor = *floor;
+            if max_top - floor <= notch_eps {
+                continue; // pas une encoche
+            }
+            // Bord gauche de l'encoche = bord gauche des pièces de la bande.
+            let x0 = boxes
+                .iter()
+                .filter(|b| band_range(b).0 <= bi && bi <= band_range(b).1)
+                .map(|b| b.x_min)
+                .fold(f32::INFINITY, f32::min);
+            // Candidats : pièces n'occupant QUE des bandes à droite de bi,
+            // les plus à droite d'abord, puis les plus hautes. On ne garde
+            // que leur empreinte : un retrait/re-pose (candidat refusé)
+            // régénère les PItemKey — la clé fraîche est résolue au moment
+            // du retrait.
+            let mut cands: Vec<Boxed> = boxes
+                .iter()
+                .copied()
+                .filter(|b| band_range(b).0 > bi && !protected.contains(&fingerprint(b)))
+                .collect();
+            cands.sort_by(|a, b| {
+                band_range(b)
+                    .0
+                    .cmp(&band_range(a).0)
+                    .then(b.y_max.total_cmp(&a.y_max))
+                    .then(a.item_id.cmp(&b.item_id))
+                    .then(a.pk.cmp(&b.pk))
+            });
+            let cand_fps: Vec<_> = cands.iter().map(fingerprint).collect();
+            for fp in cand_fps {
+                if moves >= move_cap || probes > PROBE_CAP {
+                    break 'outer;
+                }
+                let Some(cand) = find_by_fingerprint(prob, &fp) else {
+                    continue;
+                };
+                let (h, step) = (cand.h(), (cand.h() / WALK_STEPS as f32).max(1.0));
+                if h > max_top - floor + 1e-3 {
+                    continue; // la forme ne tient pas dans l'encoche
+                }
+                let y_hi = (max_top - h).min(strip_h - h);
+                if y_hi < floor - 1e-3 {
+                    continue;
+                }
+                prob.remove_item(cand.pk);
+                let mut prober = Prober::new(prob, &cand);
+                let mut target = None;
+                for dx in [0.0f32, 1.0, 2.0, 5.0, 10.0] {
+                    if let Some(y) =
+                        settle_vertical(&mut prober, prob, x0 + dx, floor, y_hi, step, &mut probes)
+                    {
+                        target = Some((x0 + dx, y));
+                        break;
+                    }
+                }
+                let ok = if let Some((x, y)) = target {
+                    let dt = DTransformation::new(
+                        prober.rotation,
+                        (x - prober.x_off, y - prober.y_off),
+                    );
+                    let new_pk = prob.place_item(SPPlacement {
+                        item_id: cand.item_id,
+                        d_transf: dt,
+                    });
+                    let after = placed_boxes(prob);
+                    let fits = used_width(&after) <= incumbent_w + 1e-3
+                        && band_stair(&after) < stair_here - 1e-3;
+                    if !fits {
+                        prob.remove_item(new_pk);
+                    }
+                    fits
+                } else {
+                    false
+                };
+                if ok {
+                    moves += 1;
+                    accepted = true;
+                    break; // encoche comblée : recalcul complet
+                }
+                // Refusé : remettre la pièce exactement où elle était.
+                restore_item(prob, &cand);
+            }
+            if accepted {
+                continue 'outer;
+            }
+        }
+        if !accepted {
+            break;
+        }
+    }
+    moves
+}
+
+/// Re-constructif borné : si l'escalier reste élevé (layout en colonnes
+/// « brique » figé par l'emboîtement des pointes — la gravité ne peut pas en
+/// sortir), on reconstruit les colonnes de gauche à droite en posant chaque
+/// pièce au sommet de la colonne la plus basse (settle vertical sondé CDE).
+/// Restaure le snapshot d'entrée si le résultat n'améliore pas l'escalier.
+/// Retourne true si le layout a changé.
+fn restack_columns(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    let boxes = placed_boxes(prob);
+    let n = boxes.len();
+    if n < 4 {
+        return false;
+    }
+    let stair0 = band_stair(&boxes);
+    let imbalance0 = column_imbalance(&boxes);
+    let mut heights0: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+    let cell = median(&mut heights0) * 0.5 + 10.0;
+    let bbox_area = used_width(&boxes) * used_height(&boxes);
+    // band_stair rate le cran 100+2 mm (chevauchement de bandes). L'écart
+    // de sommets par clustering x_min le voit : 4 colonnes pleines + une
+    // courte à droite (capture utilisateur 2026-08-18).
+    if stair0 <= RESTACK_STAIR_RATIO * bbox_area && imbalance0 < cell {
+        return false;
+    }
+    // Nichage (fillers dans des trous d'hôtes) : reconstruire éjecterait les
+    // fillers — le restack est forclos dès qu'une pièce est protégée.
+    if !protected_fingerprints(&boxes).is_empty() {
+        return false;
+    }
+    // Colonnes visuelles : clustering sur x_min (seuil = demi-largeur
+    // médiane — l'emboîtement brique décale légèrement les x_min d'une même
+    // colonne, le chevauchement simple fusionnerait tout).
+    let mut widths: Vec<f32> = boxes.iter().map(|b| b.w()).collect();
+    let threshold = median(&mut widths) / 2.0;
+    let mut col_x: Vec<f32> = Vec::new(); // x_min mini de chaque colonne
+    let mut prev_x_min = f32::NEG_INFINITY;
+    for b in &boxes {
+        if b.x_min - prev_x_min > threshold {
+            col_x.push(b.x_min);
+        }
+        prev_x_min = b.x_min;
+    }
+    if col_x.len() < 2 {
+        return false;
+    }
+
+    let snapshot = prob.save();
+    let density0 = prob.density();
+    // Plafond = largeur déjà utilisée, PAS l'alignement sur 100 mm.
+    // floor(used_w/100)*100 coupe la dernière colonne d'une grille
+    // 100+2 mm (used_w=510 → cap=500, pièce à x=410 refusée) et le
+    // restack restaurait le cran.
+    let width_cap = used_width(&boxes);
+
+    // Ordre de pose : bas-haut, gauche-droite, tie-breaks déterministes.
+    let mut order = boxes.clone();
+    order.sort_by(|a, b| {
+        a.y_min
+            .total_cmp(&b.y_min)
+            .then(a.x_min.total_cmp(&b.x_min))
+            .then(a.item_id.cmp(&b.item_id))
+            .then(a.pk.cmp(&b.pk))
+    });
+    for b in &boxes {
+        prob.remove_item(b.pk);
+    }
+
+    let mut col_tops = vec![0.0f32; col_x.len()];
+    let mut probes = 0usize;
+    let mut failed = false;
+    for b in &order {
+        let h = b.h();
+        let step = (h / WALK_STEPS as f32).max(1.0);
+        let y_hi = strip_h - h;
+        // Colonne la plus basse d'abord (égalise les sommets), gauche en
+        // cas d'égalité — c'est ce qui supprime l'escalier.
+        let mut cols: Vec<usize> = (0..col_x.len()).collect();
+        cols.sort_by(|&a, &b| col_tops[a].total_cmp(&col_tops[b]).then(a.cmp(&b)));
+        let mut placed = false;
+        'cols: for c in cols {
+            if col_tops[c] > y_hi + 1e-3 {
+                continue; // colonne pleine
+            }
+            // Liberté en x DANS la colonne : l'emboîtement brique exige un
+            // décalage variable pour que les pointes manquent les voisins
+            // (le layout d'origine montre ±13 mm de dispersion intra-colonne).
+            // On garde le (dx, y) de plus BAS y (ordre de la ladder en
+            // tie-break, déterministe).
+            let mut prober = Prober::new(prob, b);
+            let mut best: Option<(f32, f32)> = None; // (y, x)
+            for dx in [0.0f32, 2.0, -2.0, 4.0, -4.0, 6.0, -6.0, 8.0, -8.0, 12.0, -12.0] {
+                let x = col_x[c] + dx;
+                if x < 0.0 || x + b.w() > width_cap + 1e-3 {
+                    continue;
+                }
+                if let Some(y) = settle_vertical(
+                    &mut prober,
+                    prob,
+                    x,
+                    col_tops[c],
+                    y_hi,
+                    step,
+                    &mut probes,
+                ) && best.is_none_or(|(by, _)| y < by - 1e-6)
+                {
+                    best = Some((y, x));
+                }
+            }
+            if let Some((y, x)) = best {
+                let dt = DTransformation::new(
+                    prober.rotation,
+                    (x - prober.x_off, y - prober.y_off),
+                );
+                let pk = prob.place_item(SPPlacement {
+                    item_id: b.item_id,
+                    d_transf: dt,
+                });
+                col_tops[c] = prob.layout.placed_items.get(pk).map_or(y + h, |pi| {
+                    pi.shape.bbox.y_max
+                });
+                placed = true;
+                break 'cols;
+            }
+        }
+        if !placed {
+            failed = true;
+            break;
+        }
+    }
+
+    if !failed {
+        prob.fit_strip();
+        let after = placed_boxes(prob);
+        let stair1 = band_stair(&after);
+        let imbalance1 = column_imbalance(&after);
+        // La métrique (sommets) est aveugle aux trous INTERNES : un restack
+        // qui « égalise » en posant des pièces décalées de ±2 mm (ladder dx
+        // sur une grille tassée au contact) crée des trous d'une cellule et
+        // des pièces hors colonne (seed trou100 8578442985024929247). On
+        // exige des colonnes compactes pour accepter.
+        let compact = cluster_columns(&after).iter().all(|c| {
+            let mut ys: Vec<(f32, f32)> = c.iter().map(|b| (b.y_min, b.y_max)).collect();
+            ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+            ys.windows(2).all(|w| w[1].0 - w[0].1 < LOOSE_GAP_MM)
+        });
+        if compact
+            && (stair1 < stair0 - 1e-3 || imbalance1 < imbalance0 - 1.0)
+            && prob.strip_width() <= incumbent_w + 1e-3
+            && prob.density() >= density0 - DENSITY_TOL
+        {
+            return true;
+        }
+        cf_dbg!("restack: rejeté (stair {stair1:.0} vs {stair0:.0}, imb {imbalance1:.1} vs {imbalance0:.1}, compact={compact})");
+    }
+    prob.restore(&snapshot);
+    false
+}
+
+/// Colonnes visuelles : même clustering que `restack_columns` (x_min, seuil
+/// = demi-largeur médiane). `boxes` doit être trié par x_min.
+fn cluster_columns(boxes: &[Boxed]) -> Vec<Vec<Boxed>> {
+    if boxes.is_empty() {
+        return Vec::new();
+    }
+    let mut widths: Vec<f32> = boxes.iter().map(|b| b.w()).collect();
+    let threshold = (median(&mut widths) / 2.0).max(1.0);
+    let mut cols: Vec<Vec<Boxed>> = Vec::new();
+    let mut prev = f32::NEG_INFINITY;
+    for b in boxes {
+        if cols.is_empty() || b.x_min - prev > threshold {
+            cols.push(vec![*b]);
+        } else {
+            cols.last_mut().unwrap().push(*b);
+        }
+        prev = b.x_min;
+    }
+    cols
+}
+
+fn col_top(col: &[Boxed]) -> f32 {
+    col.iter().map(|b| b.y_max).fold(0.0f32, f32::max)
+}
+
+fn col_x0(col: &[Boxed]) -> f32 {
+    col.iter().map(|b| b.x_min).fold(f32::INFINITY, f32::min)
+}
+
+/// Écart de hauteur entre la colonne la plus haute et la plus basse
+/// (clustering x_min). 0 = rectangle parfait. C'est la métrique qui
+/// voit le cran du cas 100 mm + space 2 — `band_stair` le manque
+/// (chaque pièce chevauche deux bandes de 100 mm).
+fn column_imbalance(boxes: &[Boxed]) -> f32 {
+    let cols = cluster_columns(boxes);
+    if cols.len() < 2 {
+        return 0.0;
+    }
+    let mut max_t = 0.0f32;
+    let mut min_t = f32::INFINITY;
+    for c in &cols {
+        let t = col_top(c);
+        max_t = max_t.max(t);
+        min_t = min_t.min(t);
+    }
+    (max_t - min_t).max(0.0)
+}
+
+/// Rebouche les crans d'une cellule : une colonne plus basse que ses
+/// voisines de droite récupère la pièce la plus haute à droite.
+/// Clustering x_min (pas les bandes 100 mm) — c'est le cran visible sur
+/// la grille régulière 100 mm + 2 mm d'écart.
+fn fill_column_notches(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    let mut any = false;
+    let mut probes = 0usize;
+    loop {
+        let boxes = placed_boxes(prob);
+        if boxes.len() < 3 {
+            break;
+        }
+        let protected = protected_fingerprints(&boxes);
+        let cols = cluster_columns(&boxes);
+        if cols.len() < 2 {
+            break;
+        }
+        let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+        let cell = median(&mut heights) * 0.5 + 10.0;
+        let tops: Vec<f32> = cols.iter().map(|c| col_top(c)).collect();
+        let max_top = tops.iter().copied().fold(0.0f32, f32::max);
+        let imb_before = column_imbalance(&boxes);
+
+        let mut moved = false;
+        'cols: for (i, col) in cols.iter().enumerate() {
+            if max_top - tops[i] < cell {
+                continue;
+            }
+            let x0 = col_x0(col);
+            let floor = tops[i];
+            // Donneurs à DROITE seulement (X-) : on ne vole pas le corps
+            // gauche pour gonfler la colonne de reste.
+            let mut donors: Vec<Boxed> = cols[i + 1..]
+                .iter()
+                .flatten()
+                .copied()
+                .filter(|b| !protected.contains(&fingerprint(b)))
+                .collect();
+            donors.sort_by(|a, b| {
+                b.y_max
+                    .total_cmp(&a.y_max)
+                    .then(b.x_min.total_cmp(&a.x_min))
+                    .then(a.item_id.cmp(&b.item_id))
+            });
+            for donor in donors {
+                if probes > PROBE_CAP {
+                    return any;
+                }
+                if donor.h() > max_top - floor + 1e-3 {
+                    continue;
+                }
+                let y_hi = (max_top - donor.h()).min(strip_h - donor.h());
+                if y_hi < floor - 1e-3 {
+                    continue;
+                }
+                let Some(live) = find_by_fingerprint(prob, &fingerprint(&donor)) else {
+                    continue;
+                };
+                prob.remove_item(live.pk);
+                let mut prober = Prober::new(prob, &live);
+                let mut target = None;
+                for dx in [0.0f32, 1.0, 2.0, -1.0, 4.0, -2.0, 8.0] {
+                    let x = x0 + dx;
+                    if x < 0.0 {
+                        continue;
+                    }
+                    if let Some(y) =
+                        settle_vertical(&mut prober, prob, x, floor, y_hi, (donor.h() / WALK_STEPS as f32).max(1.0), &mut probes)
+                    {
+                        target = Some((x, y));
+                        break;
+                    }
+                }
+                let ok = if let Some((x, y)) = target {
+                    let dt = DTransformation::new(
+                        prober.rotation,
+                        (x - prober.x_off, y - prober.y_off),
+                    );
+                    let new_pk = prob.place_item(SPPlacement {
+                        item_id: live.item_id,
+                        d_transf: dt,
+                    });
+                    let after = placed_boxes(prob);
+                    let cols_after = cluster_columns(&after);
+                    let dest_top = cols_after.get(i).map(|c| col_top(c)).unwrap_or(0.0);
+                    let imb1 = column_imbalance(&after);
+                    let fits = used_width(&after) <= incumbent_w + 1e-3
+                        && dest_top > floor + 1.0
+                        && imb1 < imb_before - 1.0;
+                    if !fits {
+                        prob.remove_item(new_pk);
+                    }
+                    fits
+                } else {
+                    false
+                };
+                if ok {
+                    any = true;
+                    moved = true;
+                    break 'cols;
+                }
+                restore_item(prob, &live);
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    any
+}
+
+/// Fenêtre horizontale exacte pour une pièce verrouillée latéralement par le
+/// jitter sub-mm des colonnes voisines : sur des grilles tassées au contact
+/// (gap réel = space ± 0,01 mm), une voisine peut laisser un gap de 1,998 mm
+/// < space → les formes inflatées se chevauchent de 0,002 mm et TOUTE descente
+/// à x fixe collisionne (trou interne d'une cellule figé, seed trou100
+/// 5594320138289656320). La fenêtre [L, R−w] pour x_min est calculée depuis
+/// les bboxes inflatées des voisins qui recouvrent la plage y traversée
+/// ([y_lo, y_hi + h]), RELATIVEMENT au span de destination [x0, x0 + w] (PAS
+/// à la position d'origine de la pièce — un donneur venu d'une autre colonne
+/// classerait ses anciennes voisines) : L = max(x_max) des voisins à gauche,
+/// R = min(x_min) des voisins à droite. Sans voisin d'un côté (colonne de
+/// bord) : corridor ± w/2 autour de x0, et toujours borné par la largeur
+/// utilisée courante (jamais d'élargissement). Candidats déterministes avec
+/// marge anti-contact : x0 clampé (déplacement minimal), puis le centre de
+/// la fenêtre (dégagement maximal). Vide si un chevauchant (« brique »)
+/// interdit toute garantie — la CDE reste l'arbitre final, ces candidats ne
+/// sont que des sondes.
+fn lateral_window_candidates(
+    prob: &SPProblem,
+    live: &Boxed,
+    y_lo: f32,
+    y_hi: f32,
+    x0: f32,
+) -> Vec<f32> {
+    let (w, h) = (live.w(), live.h());
+    let y_top = y_hi + h; // union des spans sondés : [y_lo, y_hi + h]
+    let tol = w / 2.0; // même esprit que le clustering (demi-largeur)
+    let mut l = f32::NEG_INFINITY;
+    let mut r = f32::INFINITY;
+    for b in &placed_boxes(prob) {
+        // Recouvrement vertical strict avec la plage traversée : les pièces
+        // de la propre colonne (en dessous de y_lo / au-dessus de y_hi + h)
+        // sont exclues — le contact vertical est l'objet même du settle.
+        if b.y_min >= y_top - 1e-3 || b.y_max <= y_lo + 1e-3 {
+            continue;
+        }
+        if b.x_max <= x0 + tol {
+            l = l.max(b.x_max); // voisin à gauche de la destination
+        } else if b.x_min >= x0 + w - tol {
+            r = r.min(b.x_min); // voisin à droite de la destination
+        } else {
+            return Vec::new(); // chevauchant : pas de fenêtre sûre
+        }
+    }
+    // Borne droite : voisin, corridor, et ne jamais dépasser la largeur
+    // d'entrée (garde granulaire) — la pièce peut toujours revenir à x0.
+    let w_now = used_width(&placed_boxes(prob));
+    let x_cap = w_now.max(live.x_max) + 1e-3 - w;
+    let l_bound = l.max(x0 - tol);
+    let r_bound = (if r.is_finite() { r - w } else { f32::INFINITY })
+        .min(x0 + tol)
+        .min(x_cap);
+    // Les deux côtés doivent contraindre (sinon le blocage n'est pas
+    // latéral) et la fenêtre doit être strictement positive (un ajustement
+    // exact = contact pile = collision coin-sur-arête).
+    if l_bound + 1e-9 >= r_bound {
+        return Vec::new();
+    }
+    // Marge anti-contact : jamais de sonde pile au bord de la fenêtre.
+    let shrink = ((r_bound - l_bound) / 4.0).min(1e-3);
+    let (lo, hi) = (l_bound + shrink, r_bound - shrink);
+    let (lo, hi) = if lo <= hi { (lo, hi) } else { let c = (l_bound + r_bound) / 2.0; (c, c) };
+    // x0 clampé d'abord (déplacement minimal, reste dans la colonne), puis
+    // le centre de la fenêtre (dégagement maximal).
+    let clamped = x0.clamp(lo, hi);
+    let center = (lo + hi) / 2.0;
+    let mut out = vec![clamped];
+    if (center - clamped).abs() > 1e-9 {
+        out.push(center);
+    }
+    out
+}
+
+/// Settle vertical à x0, puis (si échec OU gain insuffisant) sondes DIRECTES
+/// aux x de la fenêtre latérale exacte. Un candidat n'est retenu que s'il
+/// descend sous `y_accept` (sinon la sonde à x fixe « réussirait » à la
+/// position d'origine et le trou resterait figé).
+///
+/// Le repli fenêtre NE passe PAS par la marche de `settle_vertical` : les
+/// déplacements du post-pass sont des téléportations (retrait → pose), seule
+/// la position FINALE doit être valide. Sous une chicane de jitter (deux
+/// voisines dont les fenêtres ligne à ligne sont disjointes), la bande valide
+/// au contact peut faire < 1 mm — la marche (pas h/8) la survole toujours.
+/// On sonde donc y_lo + ε avec ε croissant, la CDE arbitre.
+fn settle_with_lateral_window(
+    prober: &mut Prober,
+    prob: &SPProblem,
+    live: &Boxed,
+    x0: f32,
+    y_lo: f32,
+    y_hi: f32,
+    step: f32,
+    probes: &mut usize,
+    y_accept: f32,
+) -> Option<(f32, f32)> {
+    if let Some(y) = settle_vertical(prober, prob, x0, y_lo, y_hi, step, probes) {
+        if y < y_accept {
+            return Some((x0, y));
+        }
+    }
+    // Cible = au plus près de y_lo (c'est là que le trou se ferme). La
+    // fenêtre est calculée sur le span final MINIMAL [y_lo, y_lo + h] —
+    // l'élargir à y_lo + LOOSE_GAP_MM + h inclurait les voisines de la
+    // rangée AU-DESSUS du trou (jamais chevauchées par la pose à y_lo + ε),
+    // ce qui viderait la fenêtre (chicane, seed prod-like 8578442985024929237).
+    // Les sondes ε > 0 sont arbitrées par la CDE de toute façon.
+    let y_cap = y_hi.min(y_lo + LOOSE_GAP_MM);
+    if y_lo > y_cap + 1e-6 {
+        return None;
+    }
+    for x in lateral_window_candidates(prob, live, y_lo, y_lo, x0) {
+        for eps in [0.001f32, 0.01, 0.1, 0.5, 2.0, 8.0] {
+            if *probes > PROBE_CAP {
+                return None;
+            }
+            let y = y_lo + eps;
+            if y > y_cap + 1e-6 || y >= y_accept {
+                break;
+            }
+            *probes += 1;
+            if prober.valid(prob, x, y) {
+                cf_dbg!("settle: x0={x0:.3} bloqué, fenêtre latérale → x={x:.4} y={y:.3}");
+                return Some((x, y));
+            }
+        }
+    }
+    None
+}
+
+/// Défaut de structure colonnes : trou interne (> LOOSE_GAP_MM) ou
+/// inversion de sommets (colonne courte à gauche d'une plus haute).
+/// Condition d'activation du snap des lanes (dernier recours) — un layout
+/// sans défaut n'est jamais retouché (no-op).
+fn has_column_defect(prob: &SPProblem) -> bool {
+    let boxes = placed_boxes(prob);
+    let cols = cluster_columns(&boxes);
+    let has_hole = cols.iter().any(|c| {
+        let mut ys: Vec<(f32, f32)> = c.iter().map(|b| (b.y_min, b.y_max)).collect();
+        ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+        ys.windows(2).any(|w| w[1].0 - w[0].1 > LOOSE_GAP_MM)
+    });
+    if has_hole {
+        return true;
+    }
+    let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+    let cell = median(&mut heights) * 0.5 + 10.0;
+    let tops: Vec<f32> = cols.iter().map(|c| col_top(c)).collect();
+    (0..cols.len()).any(|i| (i + 1..cols.len()).any(|j| tops[i] < tops[j] - cell))
+}
+
+/// Snap des lanes avec respiration : réaligne TOUTES les pièces sur une
+/// grille canonique x_k = lane0 + k × step (step = pitch moyen + ε borné),
+/// atomiquement — si une seule pièce ne sonde pas valide à sa cible, le
+/// layout d'entrée est restauré intégralement.
+///
+/// Pourquoi : la dérive µm cumulative des colonnes (pitch 102,0000 →
+/// 102,0024 mm) laisse des gaps réels tombant à 2,0000 mm pile — contact
+/// exact des formes inflatées = collision — et la fenêtre latérale de
+/// `tighten_loose_gaps` devient vide ou sub-µm (trou interne figé, seed
+/// sweep_fixed 1000000000000000010). Après snap, chaque gap inter-lane
+/// vaut step − w > 0 uniformément : les sondes ont des µm de marge.
+///
+/// Conditionné à un défaut réel (trou interne > LOOSE_GAP_MM ou inversion
+/// de sommets) — un layout propre n'est pas touché (no-op). Jamais de
+/// pièce protégée déplacée (le snap est forclos dès qu'une existe).
+/// Élargissement borné à SNAP_WIDEN_MAX via le cap sur step. y figés,
+/// déterministe (ordre fixe), aucune transcendantale.
+fn snap_lanes_with_breathing(prob: &mut SPProblem, width0: f32) -> bool {
+    let boxes = placed_boxes(prob);
+    if boxes.len() < 3 {
+        return false;
+    }
+    let cols = cluster_columns(&boxes);
+    let ncols = cols.len();
+    if ncols < 2 {
+        return false;
+    }
+    // Conditionné à un défaut réel (déjà vérifié par l'appelant en pratique
+    // via has_column_defect — revérifié ici pour un usage direct).
+    if !has_column_defect(prob) {
+        return false;
+    }
+    if !protected_fingerprints(&boxes).is_empty() {
+        cf_dbg!("snap: pièces protégées → skip");
+        return false;
+    }
+
+    let lanes: Vec<f32> = cols
+        .iter()
+        .map(|c| {
+            let mut xs: Vec<f32> = c.iter().map(|b| b.x_min).collect();
+            median(&mut xs)
+        })
+        .collect();
+    let lane0 = lanes[0];
+    let mut widths: Vec<f32> = boxes.iter().map(|b| b.w()).collect();
+    let w = median(&mut widths);
+    let pitch = (lanes[ncols - 1] - lane0) / (ncols - 1) as f32;
+    // Cap : ne jamais dépasser width0 + SNAP_WIDEN_MAX au total.
+    let cap_breathe = (width0 + SNAP_WIDEN_MAX - lane0 - w) / (ncols - 1) as f32;
+    // Grille déjà respirante (margins > 0,5 µm) → réaligner SANS élargir
+    // (step = pitch conserve la dernière lane à sa position exacte) — le
+    // snap supprime la dérive µm, c'est tout ce qu'il faut. La respiration
+    // (+ε par gap) n'est engagée que si le pitch moyen est quasi au contact.
+    let mut step = if pitch > w + 5e-4 {
+        pitch
+    } else {
+        (pitch + SNAP_EPS).min(cap_breathe)
+    };
+    if step < pitch {
+        step = pitch; // jamais de compression sous le pitch courant
+    }
+    if step > cap_breathe {
+        step = cap_breathe;
+    }
+    if step < w + 1e-4 {
+        cf_dbg!("snap: pas de place pour une grille uniforme (step={step:.4} < w={w:.2}) → skip");
+        return false;
+    }
+
+    let snapshot = prob.save();
+    // Phase 1 : poser toutes les pièces à leur cible (x = lane0 + k×step,
+    // y inchangé). Colonnes gauche→droite, pièces bas→haut (déterministe).
+    let mut placed_new: Vec<PItemKey> = Vec::with_capacity(boxes.len());
+    for (k, col) in cols.iter().enumerate() {
+        let target = lane0 + k as f32 * step;
+        let mut ordered = col.clone();
+        ordered.sort_by(|a, b| {
+            a.y_min
+                .total_cmp(&b.y_min)
+                .then(a.item_id.cmp(&b.item_id))
+                .then(a.pk.cmp(&b.pk))
+        });
+        for b in ordered {
+            let Some(live) = find_by_fingerprint(prob, &fingerprint(&b)) else {
+                prob.restore(&snapshot);
+                return false;
+            };
+            prob.remove_item(live.pk);
+            let prober = Prober::new(prob, &live);
+            let dt = DTransformation::new(
+                prober.rotation,
+                (target - prober.x_off, live.y_min - prober.y_off),
+            );
+            let pk = prob.place_item(SPPlacement {
+                item_id: live.item_id,
+                d_transf: dt,
+            });
+            placed_new.push(pk);
+        }
+    }
+    // Phase 2 : validation CDE de chaque pièce à sa cible (atomique).
+    for &pk in &placed_new {
+        let Some(pi) = prob.layout.placed_items.get(pk) else {
+            prob.restore(&snapshot);
+            return false;
+        };
+        let b = Boxed {
+            pk,
+            item_id: pi.item_id,
+            d_transf: pi.d_transf,
+            x_min: pi.shape.bbox.x_min,
+            y_min: pi.shape.bbox.y_min,
+            x_max: pi.shape.bbox.x_max,
+            y_max: pi.shape.bbox.y_max,
+        };
+        prob.remove_item(pk);
+        let mut prober = Prober::new(prob, &b);
+        let ok = prober.valid(prob, b.x_min, b.y_min);
+        // Re-pose systématique (la restore globale gère l'échec).
+        prob.place_item(SPPlacement {
+            item_id: b.item_id,
+            d_transf: b.d_transf,
+        });
+        if !ok {
+            cf_dbg!("snap: sonde invalide à ({:.4}, {:.4}) → restore global", b.x_min, b.y_min);
+            prob.restore(&snapshot);
+            return false;
+        }
+    }
+    cf_dbg!("snap: {} colonnes réalignées (pitch {pitch:.4} → step {step:.4})", ncols);
+    true
+}
+
+/// Réaligne sur leur colonne les pièces décalées latéralement (jitter ≥ 1 mm
+/// laissé par le solveur, ex. rangée du bas posée à +1,02 mm — « escalier
+/// 9 colonnes » du seed trou100 2806985829419873653, qui ÉLARGIT aussi la
+/// bande d'autant). Seul x change (y figé) : sonde CDE directe à la x de
+/// référence (médiane des x_min de la colonne, robuste aux quelques pièces
+/// décalées). Jamais d'élargissement ; le jitter < 0,05 mm n'est pas touché
+/// (no-op sur une grille propre).
+fn realign_column_lanes(prob: &mut SPProblem) -> bool {
+    /// Déviation minimale traitée (le jitter sub-mm du solveur reste en place).
+    const DEV_MIN: f32 = 0.05;
+    let boxes = placed_boxes(prob);
+    if boxes.len() < 3 {
+        return false;
+    }
+    let protected = protected_fingerprints(&boxes);
+    let cols = cluster_columns(&boxes);
+    let w_now = used_width(&boxes);
+    let mut any = false;
+    let mut probes = 0usize;
+    for col in cols {
+        if col.len() < 2 {
+            continue;
+        }
+        let mut xs: Vec<f32> = col.iter().map(|b| b.x_min).collect();
+        let lane = median(&mut xs);
+        let mut ordered = col;
+        ordered.sort_by(|a, b| a.y_min.total_cmp(&b.y_min).then(a.item_id.cmp(&b.item_id)));
+        for b in ordered {
+            if probes > PROBE_CAP {
+                return any;
+            }
+            if (b.x_min - lane).abs() <= DEV_MIN {
+                continue;
+            }
+            if protected.contains(&fingerprint(&b)) {
+                continue;
+            }
+            let Some(live) = find_by_fingerprint(prob, &fingerprint(&b)) else {
+                continue;
+            };
+            // Jamais d'élargissement : la cible reste sous la largeur courante
+            // (la pièce peut toujours revenir à sa position d'origine).
+            if lane + live.w() > w_now.max(live.x_max) + 1e-3 {
+                cf_dbg!("realign: piece x {:.3} → lane {:.3} SKIP (width cap)", live.x_min, lane);
+                continue;
+            }
+            prob.remove_item(live.pk);
+            let mut prober = Prober::new(prob, &live);
+            probes += 1;
+            // Sonde à y inchangé d'abord ; micro-soulèvement en repli : la
+            // gravité laisse certaines pièces au contact EXACT d'un bord de
+            // tôle (hazard Exterior inflaté — collision formelle à y_min =
+            // 1.0 pile), le réalignement est alors impossible à y constant.
+            // ε limité au µm/mm : au-delà la pièce du dessus (posée à
+            // contact + ~0,002 mm) entrerait en collision.
+            let mut target_y = None;
+            for dy in [0.0f32, 0.001, 0.01] {
+                if probes > PROBE_CAP {
+                    break;
+                }
+                let y = live.y_min + dy;
+                if prober.valid(prob, lane, y) {
+                    target_y = Some(y);
+                    break;
+                }
+            }
+            if let Some(y) = target_y {
+                cf_dbg!("realign: piece x {:.3} → lane {:.3} (y {:.3} → {:.3})", live.x_min, lane, live.y_min, y);
+                let dt = DTransformation::new(
+                    prober.rotation,
+                    (lane - prober.x_off, y - prober.y_off),
+                );
+                prob.place_item(SPPlacement {
+                    item_id: live.item_id,
+                    d_transf: dt,
+                });
+                any = true;
+            } else {
+                cf_dbg!("realign: piece x {:.3} → lane {:.3} PROBE FAILED (y={:.2})", live.x_min, lane, live.y_min);
+                restore_item(prob, &live);
+            }
+        }
+    }
+    any
+}
+
+/// Tasse les gaps internes d'une colonne (> LOOSE_GAP_MM). La gravité
+/// Down peut rester bloquée par un décalage X / emboîtement — et par le
+/// jitter sub-mm des colonnes voisines (fenêtre latérale, voir
+/// `lateral_window_candidates`). Cascade vers le bas jusqu'au point fixe
+/// (chaque pièce tassée réduit le gap de la suivante, traitée juste après).
+fn tighten_loose_gaps(prob: &mut SPProblem, incumbent_w: f32, _strip_h: f32) -> bool {
+    let boxes = placed_boxes(prob);
+    if boxes.len() < 2 {
+        return false;
+    }
+    let cols = cluster_columns(&boxes);
+    let snapshot = prob.save();
+    let w0 = incumbent_w;
+    let mut any = false;
+    let mut probes = 0usize;
+    'cols: for col in cols {
+        if col.len() < 2 {
+            continue;
+        }
+        let mut ordered = col;
+        ordered.sort_by(|a, b| {
+            a.y_min
+                .total_cmp(&b.y_min)
+                .then(a.item_id.cmp(&b.item_id))
+        });
+        let protected = protected_fingerprints(&boxes);
+        for i in 1..ordered.len() {
+            if probes > PROBE_CAP {
+                break 'cols;
+            }
+            let gap = ordered[i].y_min - ordered[i - 1].y_max;
+            if gap < LOOSE_GAP_MM {
+                continue;
+            }
+            if protected.contains(&fingerprint(&ordered[i])) {
+                cf_dbg!("tighten: col x0={:.1} i={} gap={:.1} → PROTECTED, skip", col_x0(&ordered), i, gap);
+                continue;
+            }
+            let Some(live) = find_by_fingerprint(prob, &fingerprint(&ordered[i])) else {
+                cf_dbg!("tighten: col x0={:.1} i={} gap={:.1} → fingerprint not found", col_x0(&ordered), i, gap);
+                continue;
+            };
+            let floor = ordered[i - 1].y_max;
+            let x0 = live.x_min;
+            prob.remove_item(live.pk);
+            let mut prober = Prober::new(prob, &live);
+            let step = (live.h() / WALK_STEPS as f32).max(1.0);
+            let target = settle_with_lateral_window(
+                &mut prober,
+                prob,
+                &live,
+                x0,
+                floor,
+                live.y_min,
+                step,
+                &mut probes,
+                live.y_min - 0.5,
+            );
+            cf_dbg!(
+                "tighten: col x0={:.1} i={} gap={:.1} floor={:.2} x0={:.2} y_min={:.2} → settle={:?}",
+                col_x0(&ordered), i, gap, floor, x0, live.y_min, target
+            );
+            if let Some((x, y)) = target {
+                let dt = DTransformation::new(
+                    prober.rotation,
+                    (x - prober.x_off, y - prober.y_off),
+                );
+                let pk = prob.place_item(SPPlacement {
+                    item_id: live.item_id,
+                    d_transf: dt,
+                });
+                if let Some(pi) = prob.layout.placed_items.get(pk) {
+                    ordered[i].y_min = pi.shape.bbox.y_min;
+                    ordered[i].y_max = pi.shape.bbox.y_max;
+                    ordered[i].pk = pk;
+                }
+                any = true;
+                continue;
+            }
+            restore_item(prob, &live);
+        }
+    }
+    if any && used_width(&placed_boxes(prob)) > w0 + 1e-3 {
+        prob.restore(&snapshot);
+        return false;
+    }
+    any
+}
+
+/// Consolide les cellules de reste au bord droit (le « L » X-) : tant qu'une
+/// colonne i est plus courte qu'une colonne j > i (inversion de sommets, à
+/// l'échelle d'une cellule), le sommet de la colonne j la plus à droite
+/// parmi les plus hautes est déplacé sur le sommet de i (settle sondé CDE).
+/// Après compactage, c'est ce qui transforme des créneaux au milieu du corps
+/// en reste adjacent au bord droit — sans jamais élargir la bande.
+///
+/// Terminaison garantie : chaque déplacement accepté fait STRICTEMENT
+/// décroître le nombre d'inversions (sinon annulation immédiate), borné par
+/// n placements et PROBE_CAP sondes. No-op sur un layout déjà consolidé
+/// (tops non décroissants gauche→droite à ± une cellule).
+fn consolidate_leftover_right(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    /// Nombre d'inversions : paires (i < j) avec top_i < top_j − cell.
+    fn inversions(tops: &[f32], cell: f32) -> usize {
+        let mut cnt = 0;
+        for i in 0..tops.len() {
+            for j in i + 1..tops.len() {
+                if tops[i] < tops[j] - cell {
+                    cnt += 1;
+                }
+            }
+        }
+        cnt
+    }
+
+    let n0 = prob.n_placed_items();
+    let mut any = false;
+    let mut probes = 0usize;
+    let mut moves = 0usize;
+    loop {
+        let boxes = placed_boxes(prob);
+        if boxes.len() < 3 || moves >= n0 || probes > PROBE_CAP {
+            break;
+        }
+        let protected = protected_fingerprints(&boxes);
+        let cols = cluster_columns(&boxes);
+        if cols.len() < 2 {
+            break;
+        }
+        // Ne consolider que des colonnes compactes : déplacer le sommet d'une
+        // colonne trouée exposerait le trou (tighten_loose_gaps, qui tourne
+        // avant, est le seul pass chargé des gaps internes).
+        let compact = cols.iter().all(|c| {
+            let mut ys: Vec<(f32, f32)> = c.iter().map(|b| (b.y_min, b.y_max)).collect();
+            ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+            ys.windows(2).all(|w| {
+                let ok = w[1].0 - w[0].1 < LOOSE_GAP_MM;
+                if !ok {
+                    cf_dbg!(
+                        "consolidate: col x0={:.1} gap interne {:.2}@[{:.2},{:.2}]",
+                        col_x0(c),
+                        w[1].0 - w[0].1,
+                        w[0].1,
+                        w[1].0
+                    );
+                }
+                ok
+            })
+        });
+        if !compact {
+            cf_dbg!("consolidate: colonnes non compactes → skip");
+            break;
+        }
+        let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+        let cell = median(&mut heights) * 0.5 + 10.0;
+        let tops: Vec<f32> = cols.iter().map(|c| col_top(c)).collect();
+        let inv0 = inversions(&tops, cell);
+        if inv0 == 0 {
+            break;
+        }
+        // i = colonne la plus à gauche en inversion ; j = colonne la plus à
+        // droite parmi les plus hautes à droite de i.
+        let Some(i) = (0..tops.len())
+            .find(|&i| (i + 1..tops.len()).any(|j| tops[i] < tops[j] - cell))
+        else {
+            break;
+        };
+        let j = (i + 1..tops.len())
+            .max_by(|&a, &b| tops[a].total_cmp(&tops[b]).then(a.cmp(&b)))
+            .unwrap();
+        let floor = tops[i];
+        let x0 = col_x0(&cols[i]);
+        // Donneur = sommet de la colonne j.
+        let mut tops_j: Vec<Boxed> = cols[j]
+            .iter()
+            .copied()
+            .filter(|b| !protected.contains(&fingerprint(b)))
+            .collect();
+        tops_j.sort_by(|a, b| {
+            b.y_max
+                .total_cmp(&a.y_max)
+                .then(a.item_id.cmp(&b.item_id))
+                .then(a.pk.cmp(&b.pk))
+        });
+        let mut accepted = false;
+        for donor in tops_j {
+            if probes > PROBE_CAP {
+                break;
+            }
+            if floor + donor.h() > strip_h + 1e-3 {
+                continue; // dépasserait la hauteur de tôle
+            }
+            let Some(live) = find_by_fingerprint(prob, &fingerprint(&donor)) else {
+                continue;
+            };
+            prob.remove_item(live.pk);
+            let mut prober = Prober::new(prob, &live);
+            let step = (live.h() / WALK_STEPS as f32).max(1.0);
+            // La pose doit atterrir SUR le sommet de la colonne i : sans ce
+            // plafond, la marche ascendante pourrait se poser une cellule
+            // entière au-dessus (x0 latéralement verrouillé sur toute la
+            // hauteur) et créer un trou interne neuf.
+            let y_hi = (strip_h - live.h()).min(floor + LOOSE_GAP_MM);
+            let target = settle_with_lateral_window(
+                &mut prober, prob, &live, x0, floor, y_hi, step, &mut probes,
+                y_hi + 1.0, // toute position valide dans la fenêtre est candidate
+            );
+            let ok = if let Some((x, y)) = target {
+                let dt =
+                    DTransformation::new(prober.rotation, (x - prober.x_off, y - prober.y_off));
+                let new_pk = prob.place_item(SPPlacement {
+                    item_id: live.item_id,
+                    d_transf: dt,
+                });
+                let after = placed_boxes(prob);
+                let tops_after: Vec<f32> =
+                    cluster_columns(&after).iter().map(|c| col_top(c)).collect();
+                let fits = used_width(&after) <= incumbent_w + 1e-3
+                    && inversions(&tops_after, cell) < inv0;
+                if !fits {
+                    prob.remove_item(new_pk);
+                }
+                fits
+            } else {
+                false
+            };
+            if ok {
+                cf_dbg!("consolidate: col {j} top → col {i} (inv {inv0} → …)");
+                accepted = true;
+                any = true;
+                moves += 1;
+                break;
+            }
+            restore_item(prob, &live);
+        }
+        if !accepted {
+            break; // aucun donneur valide pour cette inversion : point fixe
+        }
+    }
+    any
+}
+
+// ---------------------------------------------------------------------------
+// Équilibrage des couloirs sur grille uniforme (balance_lane_tops)
+// ---------------------------------------------------------------------------
+
+/// Tolérance d'uniformité de la grille (mm) : pitch inter-lanes, taille des
+/// cellules, spread intra-colonne.
+const GRID_TOL: f32 = 0.1;
+
+/// Grille uniforme détectée : lanes équidistantes, cellules identiques,
+/// colonnes compactes. Les pièces nichées (filler dans la cavité d'un hôte,
+/// méta-pièces J-085) ne comptent PAS comme des cellules — elles suivent
+/// leur hôte lors d'un déplacement (pile complète, même delta).
+struct UniformGrid {
+    lanes: Vec<f32>,        // x de référence par colonne (médiane des racines)
+    roots: Vec<Vec<Boxed>>, // racines par colonne, triées bas → haut
+    counts: Vec<usize>,     // racines (cellules) par colonne
+}
+
+/// bbox de `b` strictement contenue dans celle d'une autre pièce (même test
+/// que `protected_fingerprints`).
+fn is_nested(b: &Boxed, boxes: &[Boxed]) -> bool {
+    boxes.iter().any(|o| {
+        o.pk != b.pk
+            && b.x_min > o.x_min + 1e-6
+            && b.y_min > o.y_min + 1e-6
+            && b.x_max < o.x_max - 1e-6
+            && b.y_max < o.y_max - 1e-6
+    })
+}
+
+/// Détecte une grille uniforme : toutes colonnes compactes, racines à la
+/// même x (±GRID_TOL), cellules de même taille, lanes équidistantes. Toute
+/// config irrégulière → None (la passe est alors un no-op conservateur).
+fn detect_uniform_grid(prob: &SPProblem) -> Option<UniformGrid> {
+    let boxes = placed_boxes(prob);
+    if boxes.len() < 3 {
+        return None;
+    }
+    let cols = cluster_columns(&boxes);
+    if cols.len() < 2 {
+        return None;
+    }
+    let mut roots: Vec<Vec<Boxed>> = Vec::with_capacity(cols.len());
+    let mut lanes: Vec<f32> = Vec::with_capacity(cols.len());
+    let mut sizes: Vec<(f32, f32)> = Vec::new();
+    for col in &cols {
+        let mut rs: Vec<Boxed> = col.iter().copied().filter(|b| !is_nested(b, &boxes)).collect();
+        if rs.is_empty() {
+            return None;
+        }
+        rs.sort_by(|a, b| {
+            a.y_min
+                .total_cmp(&b.y_min)
+                .then(a.item_id.cmp(&b.item_id))
+                .then(a.pk.cmp(&b.pk))
+        });
+        let mut xs: Vec<f32> = rs.iter().map(|b| b.x_min).collect();
+        let lane = median(&mut xs);
+        if rs.iter().any(|b| (b.x_min - lane).abs() > GRID_TOL) {
+            return None;
+        }
+        for w in rs.windows(2) {
+            if w[1].y_min - w[0].y_max > LOOSE_GAP_MM {
+                return None; // colonne non compacte : tighten d'abord
+            }
+        }
+        for b in &rs {
+            sizes.push((b.w(), b.h()));
+        }
+        lanes.push(lane);
+        roots.push(rs);
+    }
+    let mut ws: Vec<f32> = sizes.iter().map(|s| s.0).collect();
+    let mut hs: Vec<f32> = sizes.iter().map(|s| s.1).collect();
+    let (mw, mh) = (median(&mut ws), median(&mut hs));
+    if sizes
+        .iter()
+        .any(|s| (s.0 - mw).abs() > GRID_TOL || (s.1 - mh).abs() > GRID_TOL)
+    {
+        return None;
+    }
+    let pitch = (lanes[lanes.len() - 1] - lanes[0]) / (lanes.len() - 1) as f32;
+    if pitch < mw - GRID_TOL {
+        return None; // lanes qui se chevauchent : pas une grille
+    }
+    for k in 1..lanes.len() {
+        if ((lanes[k] - lanes[k - 1]) - pitch).abs() > GRID_TOL {
+            return None;
+        }
+    }
+    let counts = roots.iter().map(|r| r.len()).collect();
+    Some(UniformGrid { lanes, roots, counts })
+}
+
+/// Déplace la racine au sommet de `from_roots` (avec ses éventuelles pièces
+/// nichées, déplacées du même delta — la pile complète) au sommet de la
+/// colonne de lane `dest_x` / top `dest_floor`. Append AU-DESSUS du top
+/// uniquement, jamais d'insertion au milieu. Garde granulaire : tout échec
+/// restaure l'état d'avant CE déplacement (les précédents sont conservés).
+fn try_move_top_stack(
+    prob: &mut SPProblem,
+    from_roots: &[Boxed],
+    dest_x: f32,
+    dest_floor: f32,
+    strip_h: f32,
+    incumbent_w: f32,
+    probes: &mut usize,
+) -> bool {
+    // Racine au sommet : y_max max, tie-breaks déterministes.
+    let mut sorted: Vec<Boxed> = from_roots.to_vec();
+    sorted.sort_by(|a, b| {
+        b.y_max
+            .total_cmp(&a.y_max)
+            .then(a.item_id.cmp(&b.item_id))
+            .then(a.pk.cmp(&b.pk))
+    });
+    let root = sorted[0];
+    let h = root.h();
+    if dest_floor + h > strip_h + 1e-3 {
+        return false; // la colonne destination dépasserait la tôle
+    }
+    let boxes = placed_boxes(prob);
+    let mut nested: Vec<Boxed> = boxes
+        .iter()
+        .copied()
+        .filter(|b| {
+            b.pk != root.pk
+                && b.x_min > root.x_min + 1e-6
+                && b.y_min > root.y_min + 1e-6
+                && b.x_max < root.x_max - 1e-6
+                && b.y_max < root.y_max - 1e-6
+        })
+        .collect();
+    nested.sort_by(|a, b| {
+        a.y_min
+            .total_cmp(&b.y_min)
+            .then(a.x_min.total_cmp(&b.x_min))
+            .then(a.item_id.cmp(&b.item_id))
+            .then(a.pk.cmp(&b.pk))
+    });
+
+    let snapshot = prob.save();
+    // Retirer les nichés puis l'hôte, sonder l'hôte à la cible.
+    for b in &nested {
+        let Some(live) = find_by_fingerprint(prob, &fingerprint(b)) else {
+            prob.restore(&snapshot);
+            return false;
+        };
+        prob.remove_item(live.pk);
+    }
+    let Some(live) = find_by_fingerprint(prob, &fingerprint(&root)) else {
+        prob.restore(&snapshot);
+        return false;
+    };
+    prob.remove_item(live.pk);
+    let mut prober = Prober::new(prob, &live);
+    let step = (h / WALK_STEPS as f32).max(1.0);
+    let y_hi = (strip_h - h).min(dest_floor + LOOSE_GAP_MM);
+    let target = settle_with_lateral_window(
+        &mut prober, prob, &live, dest_x, dest_floor, y_hi, step, probes, y_hi + 1.0,
+    );
+    let Some((x, y)) = target else {
+        prob.restore(&snapshot);
+        return false;
+    };
+    let dt = DTransformation::new(prober.rotation, (x - prober.x_off, y - prober.y_off));
+    prob.place_item(SPPlacement {
+        item_id: live.item_id,
+        d_transf: dt,
+    });
+    // Re-pose des nichés au même delta (position relative dans la cavité
+    // préservée à l'identique → holesFilled intact).
+    let (dx, dy) = (x - live.x_min, y - live.y_min);
+    for b in &nested {
+        if *probes > PROBE_CAP {
+            prob.restore(&snapshot);
+            return false;
+        }
+        let mut p2 = Prober::new(prob, b);
+        *probes += 1;
+        if !p2.valid(prob, b.x_min + dx, b.y_min + dy) {
+            prob.restore(&snapshot);
+            return false;
+        }
+        let dt2 = DTransformation::new(
+            p2.rotation,
+            (b.x_min + dx - p2.x_off, b.y_min + dy - p2.y_off),
+        );
+        prob.place_item(SPPlacement {
+            item_id: b.item_id,
+            d_transf: dt2,
+        });
+    }
+    // fitsSheet : jamais au-delà de la bande courante (x des lanes inchangé,
+    // donc jamais d'élargissement en pratique — garde-fou).
+    if used_width(&placed_boxes(prob)) > incumbent_w + 1e-3 {
+        prob.restore(&snapshot);
+        return false;
+    }
+    true
+}
+
+/// Équilibre les couloirs d'une grille uniforme : déplace des piles depuis
+/// le SOMMET des couloirs les plus longs vers le SOMMET des plus courts
+/// (append au-dessus du top destination uniquement), jusqu'à la cible
+/// canonique — comptages base/base+1, couloirs les plus longs à gauche (X-).
+/// Motif prod : [19,19,19,19,19,5] → [17,17,17,17,16,16] (le solveur SPP ne
+/// voit pas la différence de forme : les deux atteignent le plancher de
+/// largeur ; le moignon est un défaut visuel, pas métrique).
+///
+/// Acceptation en CELLULES entières (comptages de racines par colonne) :
+/// chaque déplacement réduit strictement la distance L1 aux comptages cibles
+/// (−2), donc terminaison bornée à n déplacements. No-op sur toute config
+/// non uniforme (détection stricte) ou déjà équilibrée.
+fn balance_lane_tops(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    let Some(grid0) = detect_uniform_grid(prob) else {
+        return false;
+    };
+    let ncols = grid0.counts.len();
+    let n: usize = grid0.counts.iter().sum();
+    let (base, rem) = (n / ncols, n % ncols);
+    // Cible canonique déterministe : les `rem` couloirs les plus à gauche
+    // reçoivent la cellule supplémentaire.
+    let target: Vec<usize> = (0..ncols).map(|i| base + usize::from(i < rem)).collect();
+    // Ne se déclenche que si l'écart dépasse UNE cellule : un comptage déjà
+    // à ±1 est considéré équilibré (sinon la passe réécrirait sans gain des
+    // layouts propres comme [1,2] — no-op requis, test J-092).
+    let (cmin, cmax) = (
+        grid0.counts.iter().copied().min().unwrap(),
+        grid0.counts.iter().copied().max().unwrap(),
+    );
+    if cmax - cmin <= 1 {
+        return false;
+    }
+    debug_assert!(grid0.counts != target);
+
+    let mut moves = 0usize;
+    let mut probes = 0usize;
+    loop {
+        if moves >= n || probes > PROBE_CAP {
+            break;
+        }
+        let Some(grid) = detect_uniform_grid(prob) else {
+            break; // la grille a perdu son uniformité : stop (jamais vu)
+        };
+        // Destination = couloir le plus à GAUCHE sous sa cible ; donneur =
+        // couloir le plus à DROITE au-dessus de sa cible.
+        let Some(dest) = (0..ncols).find(|&i| grid.counts[i] < target[i]) else {
+            break;
+        };
+        let Some(donor) = (0..ncols).rev().find(|&j| grid.counts[j] > target[j]) else {
+            break;
+        };
+        let dest_floor = col_top(&grid.roots[dest]);
+        if try_move_top_stack(
+            prob,
+            &grid.roots[donor],
+            grid.lanes[dest],
+            dest_floor,
+            strip_h,
+            incumbent_w,
+            &mut probes,
+        ) {
+            moves += 1;
+            cf_dbg!("balance: col {donor} top → col {dest} (counts {:?} → cible {:?})", grid.counts, target);
+        } else {
+            break; // échec géométrique : les moves réussis sont conservés
+        }
+    }
+    moves > 0
+}
+
+/// Une colonne du corps dépasse ses voisines d'une cellule (pièce isolée
+/// en haut, capture 2026-08-18) : on la pose sur le reste à droite, pas
+/// l'inverse — le X- (bande gauche compacte) est conservé.
+fn level_protrusions(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    let mut any = false;
+    let mut probes = 0usize;
+    loop {
+        let boxes = placed_boxes(prob);
+        if boxes.len() < 3 {
+            break;
+        }
+        let protected = protected_fingerprints(&boxes);
+        let cols = cluster_columns(&boxes);
+        if cols.len() < 2 {
+            break;
+        }
+        let mut heights: Vec<f32> = boxes.iter().map(|b| b.h()).collect();
+        let cell = median(&mut heights) * 0.5 + 10.0;
+        let last = cols.len() - 1;
+        let body_tops: Vec<f32> = cols[..last].iter().map(|c| col_top(c)).collect();
+        let mut sorted_tops = body_tops.clone();
+        sorted_tops.sort_by(f32::total_cmp);
+        let median_top = sorted_tops[sorted_tops.len() / 2];
+        let dest_x = col_x0(&cols[last]);
+        let dest_floor = col_top(&cols[last]);
+
+        let mut moved = false;
+        for (i, col) in cols[..last].iter().enumerate() {
+            if body_tops[i] < median_top + cell {
+                continue;
+            }
+            let mut tops: Vec<Boxed> = col
+                .iter()
+                .copied()
+                .filter(|b| !protected.contains(&fingerprint(b)))
+                .collect();
+            if tops.is_empty() {
+                continue;
+            }
+            tops.sort_by(|a, b| b.y_max.total_cmp(&a.y_max).then(a.item_id.cmp(&b.item_id)));
+            let donor = tops[0];
+            if donor.h() > strip_h - dest_floor + 1e-3 {
+                continue;
+            }
+            let Some(live) = find_by_fingerprint(prob, &fingerprint(&donor)) else {
+                continue;
+            };
+            let y_hi = strip_h - live.h();
+            if dest_floor > y_hi + 1e-3 {
+                continue;
+            }
+            let w0 = used_width(&boxes);
+            prob.remove_item(live.pk);
+            let mut prober = Prober::new(prob, &live);
+            let mut target = None;
+            let step = (live.h() / WALK_STEPS as f32).max(1.0);
+            for dx in [0.0f32, 1.0, 2.0, -1.0, 4.0, -2.0, 8.0] {
+                let x = dest_x + dx;
+                if x < 0.0 {
+                    continue;
+                }
+                if let Some(y) =
+                    settle_vertical(&mut prober, prob, x, dest_floor, y_hi, step, &mut probes)
+                {
+                    target = Some((x, y));
+                    break;
+                }
+            }
+            let ok = if let Some((x, y)) = target {
+                let dt = DTransformation::new(
+                    prober.rotation,
+                    (x - prober.x_off, y - prober.y_off),
+                );
+                let new_pk = prob.place_item(SPPlacement {
+                    item_id: live.item_id,
+                    d_transf: dt,
+                });
+                let after = placed_boxes(prob);
+                let fits = used_width(&after) <= w0 + 1e-3
+                    && used_width(&after) <= incumbent_w + 1e-3;
+                if !fits {
+                    prob.remove_item(new_pk);
+                }
+                fits
+            } else {
+                false
+            };
+            if ok {
+                any = true;
+                moved = true;
+                break;
+            }
+            restore_item(prob, &live);
+        }
+        if !moved {
+            break;
+        }
+    }
+    any
+}
+
+/// Vide la colonne la plus à droite sur le sommet des colonnes de gauche
+/// tant qu'il reste de la place (SPP left = minimiser la largeur). Sans
+/// ça, un reste de 5-6 pièces reste collé en bas à droite alors que les
+/// colonnes de gauche ont encore de la tête (capture 2026-08-18).
+fn collapse_rightmost(prob: &mut SPProblem, incumbent_w: f32, strip_h: f32) -> bool {
+    let mut any = false;
+    let mut probes = 0usize;
+    loop {
+        let boxes = placed_boxes(prob);
+        if boxes.len() < 3 {
+            break;
+        }
+        let protected = protected_fingerprints(&boxes);
+        let cols = cluster_columns(&boxes);
+        if cols.len() < 2 {
+            break;
+        }
+        let last = cols.len() - 1;
+        let mut donors: Vec<Boxed> = cols[last]
+            .iter()
+            .copied()
+            .filter(|b| !protected.contains(&fingerprint(b)))
+            .collect();
+        if donors.is_empty() {
+            break;
+        }
+        donors.sort_by(|a, b| {
+            b.y_max
+                .total_cmp(&a.y_max)
+                .then(a.item_id.cmp(&b.item_id))
+        });
+        let donor = donors[0];
+        let w0 = used_width(&boxes);
+        let mut dests: Vec<(usize, f32, f32)> = cols
+            .iter()
+            .enumerate()
+            .take(last)
+            .map(|(i, c)| (i, col_x0(c), col_top(c)))
+            .collect();
+        dests.sort_by(|a, b| a.2.total_cmp(&b.2).then(a.0.cmp(&b.0)));
+
+        let Some(live) = find_by_fingerprint(prob, &fingerprint(&donor)) else {
+            break;
+        };
+        let y_hi = strip_h - live.h();
+        prob.remove_item(live.pk);
+        let mut prober = Prober::new(prob, &live);
+        let mut target = None;
+        let step = (live.h() / WALK_STEPS as f32).max(1.0);
+        'dests: for (_, x0, floor) in dests {
+            if floor > y_hi + 1e-3 {
+                continue;
+            }
+            for dx in [0.0f32, 1.0, 2.0, -1.0, 4.0, -2.0] {
+                let x = x0 + dx;
+                if x < 0.0 {
+                    continue;
+                }
+                if let Some(y) =
+                    settle_vertical(&mut prober, prob, x, floor, y_hi, step, &mut probes)
+                {
+                    target = Some((x, y));
+                    break 'dests;
+                }
+            }
+        }
+        let ok = if let Some((x, y)) = target {
+            let dt = DTransformation::new(
+                prober.rotation,
+                (x - prober.x_off, y - prober.y_off),
+            );
+            let new_pk = prob.place_item(SPPlacement {
+                item_id: live.item_id,
+                d_transf: dt,
+            });
+            let after = placed_boxes(prob);
+            let fits = used_width(&after) <= w0 + 1e-3
+                && used_width(&after) <= incumbent_w + 1e-3
+                && (used_width(&after) < w0 - 1.0 || column_imbalance(&after) < column_imbalance(&boxes) - 1.0);
+            if !fits {
+                prob.remove_item(new_pk);
+            }
+            fits
+        } else {
+            false
+        };
+        if ok {
+            any = true;
+            continue;
+        }
+        restore_item(prob, &live);
+        break;
+    }
+    any
+}
+
+// ---------------------------------------------------------------------------
+// Classe « balanced » : réduire |free_top − free_right|
+// ---------------------------------------------------------------------------
+
+/// Déplace des pièces vers la chute libre (droite si le layout est trop
+/// étroit/haut, haut s'il est trop large/bas), CDE-validé, sans jamais
+/// dépasser `max_strip_width` (fitsSheet, piège #6).
+///
+/// J-092 suite : l'élargissement était borné par une garde densité (−1 pt) —
+/// la densité strip (aire/(w×H)) chutant dès qu'on élargit, le plafond
+/// n'autorisait que ~+1,4 % de la largeur (~+9 mm au banc capsules) alors
+/// qu'une pièce fait ~200 mm : AUCUN déplacement n'était possible et
+/// |delta| restait ~140 mm. La borne est désormais purement PHYSIQUE : la
+/// largeur de tôle, jamais au-delà. Le corridor de la phase 2 n'est pas
+/// repris ici : il est saturé par construction (mesuré au banc : used_w
+/// 681,7 mm pour un corridor de 683 mm) — un plafond corridor serait un
+/// no-op. L'acceptation reste stricte : |delta| doit décroître à chaque
+/// déplacement ET à l'issue, sinon restore du snapshot d'entrée.
+fn rebalance_balanced(prob: &mut SPProblem, max_strip_width: Option<f32>) {
+    let Some(sheet_w) = max_strip_width else {
+        return; // pas de borne tôle : les directions n'ont pas de sens
+    };
+    let strip_h = prob.instance.base_strip.fixed_height;
+    let snapshot = prob.save();
+    let incumbent_w = prob.strip_width();
+    let w_cap = sheet_w;
+    let delta = |boxes: &[Boxed]| {
+        let free_top = strip_h - used_height(boxes);
+        let free_right = sheet_w - used_width(boxes);
+        (free_top - free_right).abs()
+    };
+    let delta0 = delta(&placed_boxes(prob));
+    let entry_used_w = used_width(&placed_boxes(prob));
+    let entry_used_h = used_height(&placed_boxes(prob));
+    let n = prob.n_placed_items();
+    let mut moves = 0;
+    let mut probes = 0usize;
+
+    let boxes0 = placed_boxes(prob);
+    let free_top0 = strip_h - used_height(&boxes0);
+    let free_right0 = sheet_w - used_width(&boxes0);
+
+    if free_right0 > free_top0 && w_cap > entry_used_w + 1.0 {
+        // Trop étroit/haut : déplacer les pièces du haut vers la bande
+        // libre de droite (élargir, raccourcir).
+        prob.change_strip_width(w_cap); // ouvre le couloir droit à la CDE
+        'outer: loop {
+            let boxes = placed_boxes(prob);
+            let protected = protected_fingerprints(&boxes);
+            let delta_here = delta(&boxes);
+            let mut cands: Vec<Boxed> = boxes
+                .iter()
+                .copied()
+                .filter(|b| !protected.contains(&fingerprint(b)))
+                .collect();
+            // Les plus hautes d'abord : ce sont elles qui font used_h.
+            cands.sort_by(|a, b| {
+                b.y_min
+                    .total_cmp(&a.y_min)
+                    .then(a.x_min.total_cmp(&b.x_min))
+                    .then(a.item_id.cmp(&b.item_id))
+                    .then(a.pk.cmp(&b.pk))
+            });
+            let mut accepted = false;
+            for cand in cands {
+                if moves >= 2 * n || probes > PROBE_CAP {
+                    break 'outer;
+                }
+                let (w, h) = (cand.w(), cand.h());
+                let step = (h / WALK_STEPS as f32).max(1.0);
+                // Extrêmes sans le candidat (son retrait peut abaisser le
+                // sommet / le bord droit) — base du delta PRÉDIT.
+                let cand_fp = fingerprint(&cand);
+                let mut uw_rem = 0.0f32;
+                let mut uh_rem = 0.0f32;
+                for b in &boxes {
+                    if fingerprint(b) != cand_fp {
+                        uw_rem = uw_rem.max(b.x_max);
+                        uh_rem = uh_rem.max(b.y_max);
+                    }
+                }
+                prob.remove_item(cand.pk);
+                let mut prober = Prober::new(prob, &cand);
+                // Meilleure cible de la ladder au delta prédit. Itération dx
+                // croissant + amélioration stricte ⇒ tie-break au plus petit
+                // dx (moins d'élargissement, densité préservée).
+                let mut best: Option<(f32, f32, f32)> = None; // (delta, x, y)
+                for dx in [0.0f32, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0] {
+                    let x = entry_used_w + dx;
+                    if x + w > w_cap + 1e-3 {
+                        break;
+                    }
+                    // (a) tasser au bas de la bande libre.
+                    if let Some(y) = settle_vertical(
+                        &mut prober, prob, x, 0.0, strip_h - h, step, &mut probes,
+                    ) {
+                        let d = ((strip_h - uh_rem.max(y + h))
+                            - (sheet_w - uw_rem.max(x + w)))
+                        .abs();
+                        if best.is_none_or(|(bd, _, _)| d < bd - 1e-6) {
+                            best = Some((d, x, y));
+                        }
+                    }
+                    // (b) viser l'équilibre : la pièce devient le sommet avec
+                    // free_top == free_right (chutes équilibrées à epsilon).
+                    let fr = sheet_w - uw_rem.max(x + w);
+                    let y_bal = strip_h - fr - h;
+                    if y_bal >= 0.0 && y_bal + h > uh_rem + 1e-6 {
+                        probes += 1;
+                        if prober.valid(prob, x, y_bal) {
+                            let d = ((strip_h - (y_bal + h)) - fr).abs();
+                            if best.is_none_or(|(bd, _, _)| d < bd - 1e-6) {
+                                best = Some((d, x, y_bal));
+                            }
+                        }
+                    }
+                }
+                // Pas d'amélioration stricte prédite : inutile de poser.
+                let ok = match best {
+                    Some((d, x, y)) if d < delta_here - 1e-3 => {
+                        let dt = DTransformation::new(
+                            prober.rotation,
+                            (x - prober.x_off, y - prober.y_off),
+                        );
+                        let new_pk = prob.place_item(SPPlacement {
+                            item_id: cand.item_id,
+                            d_transf: dt,
+                        });
+                        // Le delta RÉEL (post-pose) fait foi — la prédiction
+                        // ne sert qu'à choisir la cible.
+                        let fits = delta(&placed_boxes(prob)) < delta_here - 1e-3;
+                        if !fits {
+                            prob.remove_item(new_pk);
+                        }
+                        fits
+                    }
+                    _ => false,
+                };
+                if ok {
+                    moves += 1;
+                    accepted = true;
+                    break;
+                }
+                restore_item(prob, &cand);
+            }
+            if !accepted {
+                break;
+            }
+        }
+    } else if free_top0 > free_right0 {
+        // Trop large/bas : déplacer les pièces les plus à droite au-dessus
+        // du blob (raccourcir, allonger), sans dépasser la hauteur de tôle.
+        'outer: loop {
+            let boxes = placed_boxes(prob);
+            let protected = protected_fingerprints(&boxes);
+            let delta_here = delta(&boxes);
+            let mut cands: Vec<Boxed> = boxes
+                .iter()
+                .copied()
+                .filter(|b| !protected.contains(&fingerprint(b)))
+                .collect();
+            cands.sort_by(|a, b| {
+                b.x_max
+                    .total_cmp(&a.x_max)
+                    .then(a.y_min.total_cmp(&b.y_min))
+                    .then(a.item_id.cmp(&b.item_id))
+                    .then(a.pk.cmp(&b.pk))
+            });
+            let mut accepted = false;
+            for cand in cands {
+                if moves >= 2 * n || probes > PROBE_CAP {
+                    break 'outer;
+                }
+                let h = cand.h();
+                let cand_fp = fingerprint(&cand);
+                let mut uw_rem = 0.0f32;
+                let mut uh_rem = 0.0f32;
+                for b in &boxes {
+                    if fingerprint(b) != cand_fp {
+                        uw_rem = uw_rem.max(b.x_max);
+                        uh_rem = uh_rem.max(b.y_max);
+                    }
+                }
+                // La pièce garde son x : la largeur utilisée ne change pas.
+                let uw2 = uw_rem.max(cand.x_max);
+                prob.remove_item(cand.pk);
+                let mut prober = Prober::new(prob, &cand);
+                let mut best: Option<(f32, f32)> = None; // (delta, y)
+                for dy in [0.0f32, 1.0, 2.0, 4.0, 8.0, 16.0, 32.0] {
+                    let y = entry_used_h + dy;
+                    if y + h > strip_h - 1e-3 {
+                        break;
+                    }
+                    // (a) poser juste au-dessus du blob.
+                    probes += 1;
+                    if prober.valid(prob, cand.x_min, y) {
+                        let d = ((strip_h - uh_rem.max(y + h)) - (sheet_w - uw2)).abs();
+                        if best.is_none_or(|(bd, _)| d < bd - 1e-6) {
+                            best = Some((d, y));
+                        }
+                    }
+                    // (b) viser l'équilibre free_top == free_right.
+                    let fr = sheet_w - uw2;
+                    let y_bal = strip_h - fr - h;
+                    if y_bal >= 0.0 && y_bal + h > uh_rem + 1e-6 {
+                        probes += 1;
+                        if prober.valid(prob, cand.x_min, y_bal) {
+                            let d = ((strip_h - (y_bal + h)) - fr).abs();
+                            if best.is_none_or(|(bd, _)| d < bd - 1e-6) {
+                                best = Some((d, y_bal));
+                            }
+                        }
+                    }
+                }
+                let ok = match best {
+                    Some((d, y)) if d < delta_here - 1e-3 => {
+                        let dt = DTransformation::new(
+                            prober.rotation,
+                            (cand.x_min - prober.x_off, y - prober.y_off),
+                        );
+                        let new_pk = prob.place_item(SPPlacement {
+                            item_id: cand.item_id,
+                            d_transf: dt,
+                        });
+                        let after = placed_boxes(prob);
+                        let fits = used_width(&after) <= incumbent_w + 1e-3
+                            && delta(&after) < delta_here - 1e-3;
+                        if !fits {
+                            prob.remove_item(new_pk);
+                        }
+                        fits
+                    }
+                    _ => false,
+                };
+                if ok {
+                    moves += 1;
+                    accepted = true;
+                    break;
+                }
+                restore_item(prob, &cand);
+            }
+            if !accepted {
+                break;
+            }
+        }
+    }
+
+    if moves == 0 {
+        prob.restore(&snapshot); // annule aussi l'éventuel change_strip_width
+        return;
+    }
+    prob.fit_strip();
+    let delta1 = delta(&placed_boxes(prob));
+    if delta1 >= delta0 - 1e-3 || prob.strip_width() > w_cap + 1e-3 {
+        prob.restore(&snapshot);
+    }
+    debug_assert!(prob.layout.is_feasible());
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jagua_rs::io::import::Importer;
+    use jagua_rs::probs::spp::io::ext_repr::ExtSPInstance;
+    use jagua_rs::probs::spp::io::import_instance;
+
+    /// Instance mono-type rectangle `w`×`h`, demande `n`.
+    fn rect_instance_sep(
+        w: f32,
+        h: f32,
+        demand: usize,
+        strip_h: f32,
+        sep: Option<f32>,
+    ) -> jagua_rs::probs::spp::entities::SPInstance {
+        let json = serde_json::json!({
+            "name": "column-fill-test",
+            "strip_height": strip_h,
+            "items": [{
+                "id": 0,
+                "demand": demand,
+                "allowed_orientations": [0.0],
+                "shape": {"type": "simple_polygon", "data": [[0,0],[w,0],[w,h],[0,h],[0,0]]}
+            }]
+        });
+        let ext: ExtSPInstance = serde_json::from_value(json).unwrap();
+        let importer = Importer::new(
+            sparrow::config::DEFAULT_SPARROW_CONFIG.cde_config,
+            Some(0.001),
+            sep,
+            Some((0.01, 0.01)),
+        );
+        import_instance(&importer, &ext).unwrap()
+    }
+
+    fn rect_instance(w: f32, h: f32, demand: usize, strip_h: f32) -> jagua_rs::probs::spp::entities::SPInstance {
+        rect_instance_sep(w, h, demand, strip_h, None)
+    }
+
+    /// Pose une pièce en visant le coin bas-gauche (x, y) de sa bbox monde —
+    /// jagua centre les shapes sur la translation à l'import.
+    fn place(prob: &mut SPProblem, w: f32, h: f32, x: f32, y: f32) {
+        prob.place_item(SPPlacement {
+            item_id: 0,
+            d_transf: DTransformation::new(0.0, (x + w / 2.0, y + h / 2.0)),
+        });
+    }
+
+    fn feasibility_ok(prob: &SPProblem) -> bool {
+        prob.layout.is_feasible()
+    }
+
+    /// Encoche à gauche comblée par une pièce de droite : l'escalier doit
+    /// décroître, la largeur ne doit pas bouger, le layout reste faisable.
+    #[test]
+    fn notch_fill_reduces_stair() {
+        // Rects 100×50. Col A (bandes 0-1) : 1 pièce, top 52.5.
+        // Col B (bandes 2-3) : 3 pièces, top 156.5 → encoche de 104 ≥ eps.
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 4, 1000.0));
+        prob.change_strip_width(600.0);
+        place(&mut prob, w_, h_, 2.5, 2.5);
+        place(&mut prob, w_, h_, 204.5, 2.5);
+        place(&mut prob, w_, h_, 204.5, 54.5);
+        place(&mut prob, w_, h_, 204.5, 106.5);
+        assert!(feasibility_ok(&prob));
+        let stair0 = band_stair(&placed_boxes(&prob));
+        assert!(stair0 > 20_000.0, "stair initial {stair0}");
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let stair1 = band_stair(&placed_boxes(&prob));
+        assert!(stair1 < 1_000.0, "stair {stair0} -> {stair1}");
+        assert!(prob.strip_width() <= 600.0 + 1e-3);
+        assert!(feasibility_ok(&prob));
+    }
+
+    /// Layout déjà propre : le post-pass ne doit rien changer (restore à
+    /// l'identique — jamais de dégradation).
+    #[test]
+    fn clean_layout_is_untouched() {
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 2, 1000.0));
+        prob.change_strip_width(600.0);
+        place(&mut prob, w_, h_, 2.5, 2.5);
+        place(&mut prob, w_, h_, 104.5, 2.5);
+        let stair0 = band_stair(&placed_boxes(&prob));
+        let w0 = prob.strip_width();
+        let boxes0 = placed_boxes(&prob);
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        assert_eq!(band_stair(&placed_boxes(&prob)), stair0);
+        assert_eq!(prob.strip_width(), w0);
+        let boxes1 = placed_boxes(&prob);
+        for (a, b) in boxes0.iter().zip(boxes1.iter()) {
+            assert_eq!(a.d_transf.translation(), b.d_transf.translation());
+        }
+    }
+
+    /// Encoche trop petite pour la seule forme dispo : aucun déplacement,
+    /// et le restack (qui empirerait ici) doit restaurer le snapshot.
+    #[test]
+    fn no_move_when_nothing_fits_and_restack_restores() {
+        // Col A : 1 pièce flottante top 74.5. Col B : tops 52.5 et 104.5.
+        // Encoche bande 0-1 : profondeur 30 ≥ eps(20) mais < h(50) → pas de
+        // candidat. Le restack produirait des colonnes 100/50 (pire) → restore.
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 3, 1000.0));
+        prob.change_strip_width(600.0);
+        place(&mut prob, w_, h_, 2.5, 24.5);
+        place(&mut prob, w_, h_, 204.5, 2.5);
+        place(&mut prob, w_, h_, 204.5, 54.5);
+        assert!(feasibility_ok(&prob));
+        let stair0 = band_stair(&placed_boxes(&prob));
+        assert!((6_000.0..7_000.0).contains(&stair0), "stair {stair0}");
+        let w0 = prob.strip_width();
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        assert_eq!(band_stair(&placed_boxes(&prob)), stair0);
+        assert_eq!(prob.strip_width(), w0);
+        assert!(feasibility_ok(&prob));
+    }
+
+    /// Colonnes brique déséquilibrées (sommets 104.5 / 156.5 / 52.5) :
+    /// le restack égalise les sommets et l'escalier s'effondre.
+    #[test]
+    fn restack_equalizes_column_tops() {
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 6, 1000.0));
+        prob.change_strip_width(600.0);
+        place(&mut prob, w_, h_, 2.5, 2.5);
+        place(&mut prob, w_, h_, 2.5, 54.5);
+        place(&mut prob, w_, h_, 104.5, 2.5);
+        place(&mut prob, w_, h_, 104.5, 54.5);
+        place(&mut prob, w_, h_, 104.5, 106.5);
+        place(&mut prob, w_, h_, 206.5, 2.5);
+        assert!(feasibility_ok(&prob));
+        let stair0 = band_stair(&placed_boxes(&prob));
+        assert!(stair0 > 15_000.0, "stair {stair0}");
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let boxes = placed_boxes(&prob);
+        let stair1 = band_stair(&boxes);
+        assert_eq!(boxes.len(), 6);
+        assert!(stair1 < 1_000.0, "stair {stair0} -> {stair1}");
+        assert!(prob.strip_width() <= 600.0 + 1e-3);
+        assert!(feasibility_ok(&prob));
+    }
+
+    /// Balanced : pile étroite et haute dans une tôle large — le rééquilibrage
+    /// déplace des pièces vers la droite et |delta| diminue, sans jamais
+    /// dépasser la tôle. (J-092 suite : la garde densité a été remplacée par
+    /// la borne physique — l'élargissement rogne la densité strip par
+    /// construction, c'est le prix assumé de l'équilibre des chutes.)
+    #[test]
+    fn rebalance_balanced_reduces_delta() {
+        // Rects 50×50 empilés x∈[2.5,52.5], 4 hauteurs → used_h ≈ 200.
+        let (w_, h_) = (50.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 4, 400.0));
+        prob.change_strip_width(100.0);
+        place(&mut prob, w_, h_, 2.5, 2.5);
+        place(&mut prob, w_, h_, 2.5, 54.5);
+        place(&mut prob, w_, h_, 2.5, 106.5);
+        place(&mut prob, w_, h_, 2.5, 158.5);
+        assert!(feasibility_ok(&prob));
+        let delta0 = {
+            let b = placed_boxes(&prob);
+            ((400.0 - used_height(&b)) - (600.0 - used_width(&b))).abs()
+        };
+        assert!(delta0 > 300.0, "delta0 {delta0}");
+
+        post_pass_for_bias(&mut prob, Some("balanced"), Some(600.0));
+
+        let b = placed_boxes(&prob);
+        let delta1 = ((400.0 - used_height(&b)) - (600.0 - used_width(&b))).abs();
+        assert!(delta1 < delta0 - 50.0, "delta {delta0} -> {delta1}");
+        assert!(prob.strip_width() <= 600.0 + 1e-3);
+        assert!(feasibility_ok(&prob));
+    }
+
+    /// J-092 suite : le spread n'est plus bridé par la garde densité. Pièces
+    /// de 200×100 empilées (colonne de 16, used_w ≈ 202 mm) : l'ancienne
+    /// borne (densité −1 pt) plafonnait l'élargissement à ~+1,4 % (~213 mm)
+    /// — moins qu'UNE largeur de pièce, zéro déplacement possible. La borne
+    /// physique (tôle 1000 mm) laisse le spread déplacer des pièces de la
+    /// bande haute vers la chute de droite jusqu'à l'équilibre des chutes.
+    #[test]
+    fn rebalance_balanced_spreads_up_to_sheet() {
+        let (w_, h_) = (200.0, 100.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 16, 2000.0));
+        prob.change_strip_width(210.0);
+        for i in 0..16 {
+            place(&mut prob, w_, h_, 2.5, 2.5 + i as f32 * 102.0);
+        }
+        assert!(feasibility_ok(&prob));
+        let boxes0 = placed_boxes(&prob);
+        let used_w0 = used_width(&boxes0);
+        let delta0 = ((2000.0 - used_height(&boxes0)) - (1000.0 - used_w0)).abs();
+        assert!(delta0 > 400.0, "delta0 {delta0}");
+        // Ancien plafond (garde densité −1 pt) : ~1,014 × 210 ≈ 213 mm —
+        // documente ce que le test verrouille (le spread va bien au-delà).
+        let d0 = prob.density();
+        let old_cap = 1000.0f32.min(210.0 * d0 / (d0 - 0.01));
+        assert!(old_cap < 220.0, "old_cap {old_cap}");
+
+        post_pass_for_bias(&mut prob, Some("balanced"), Some(1000.0));
+
+        let b = placed_boxes(&prob);
+        let delta1 = ((2000.0 - used_height(&b)) - (1000.0 - used_width(&b))).abs();
+        assert!(delta1 < delta0 - 300.0, "delta {delta0} -> {delta1}");
+        assert!(
+            used_width(&b) > old_cap + 100.0,
+            "le spread dépasse l'ancienne borne : used_w {}",
+            used_width(&b)
+        );
+        assert!(prob.strip_width() <= 1000.0 + 1e-3, "fitsSheet");
+        assert!(feasibility_ok(&prob));
+    }
+
+    /// Cran d'une cellule sur une grille régulière (colonne du milieu plus
+    /// courte, pièce isolée à droite) : les bandes 100 mm ne le voient pas
+    /// (pièce 100 mm + space 2 chevauche deux bandes). Le clustering x_min
+    /// doit reboucher le cran.
+    #[test]
+    fn one_cell_notch_on_regular_grid_is_filled() {
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 12, 1000.0));
+        prob.change_strip_width(600.0);
+        // 4 colonnes × 3, sauf col 1 à 2 pièces ; + 1 pièce isolée à droite.
+        for (x, ys) in [
+            (2.5, &[2.5, 54.5, 106.5][..]),
+            (104.5, &[2.5, 54.5][..]),
+            (206.5, &[2.5, 54.5, 106.5][..]),
+            (308.5, &[2.5, 54.5, 106.5][..]),
+        ] {
+            for &y in ys {
+                place(&mut prob, w_, h_, x, y);
+            }
+        }
+        place(&mut prob, w_, h_, 410.5, 106.5);
+        assert!(feasibility_ok(&prob));
+        let cols0 = cluster_columns(&placed_boxes(&prob));
+        assert_eq!(cols0.len(), 5);
+        assert_eq!(cols0[1].len(), 2, "notch setup");
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let cols1 = cluster_columns(&placed_boxes(&prob));
+        assert!(feasibility_ok(&prob));
+        assert!(prob.strip_width() <= 600.0 + 1e-3);
+        // La colonne 1 a récupéré la pièce isolée (plus de cran d'une cellule).
+        assert!(
+            cols1.get(1).map(|c| c.len()).unwrap_or(0) >= 3,
+            "col1 still short: {:?}",
+            cols1.iter().map(|c| c.len()).collect::<Vec<_>>()
+        );
+    }
+
+    /// X- : 4 colonnes hautes + reste à droite + une pièce qui dépasse
+    /// en haut. On garde la bande gauche (pas d'égalisation) et on
+    /// redescend / décale la protubérance. Largeur non accrue.
+    #[test]
+    fn left_pack_keeps_width_and_levels_protrusion() {
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 15, 1000.0));
+        prob.change_strip_width(600.0);
+        for x in [2.5, 104.5, 206.5, 308.5] {
+            for y in [2.5, 54.5, 106.5] {
+                place(&mut prob, w_, h_, x, y);
+            }
+        }
+        // reste X- en bas à droite
+        place(&mut prob, w_, h_, 410.5, 2.5);
+        place(&mut prob, w_, h_, 410.5, 54.5);
+        // protubérance en haut de la 3e colonne (capture utilisateur)
+        place(&mut prob, w_, h_, 206.5, 158.5);
+        assert!(feasibility_ok(&prob));
+        let w0 = used_width(&placed_boxes(&prob));
+        let top0 = used_height(&placed_boxes(&prob));
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let after = placed_boxes(&prob);
+        let cols = cluster_columns(&after);
+        let counts: Vec<usize> = cols.iter().map(|c| c.len()).collect();
+        assert!(feasibility_ok(&prob));
+        assert_eq!(after.len(), 15);
+        assert!(
+            used_width(&after) <= w0 + 1e-3,
+            "X- regress: {} -> {}",
+            w0,
+            used_width(&after)
+        );
+        // La protubérance a disparu : plus de colonne du corps plus haute
+        // d'une cellule que la médiane.
+        let body_tops: Vec<f32> = cols[..cols.len().saturating_sub(1)]
+            .iter()
+            .map(|c| col_top(c))
+            .collect();
+        if body_tops.len() >= 2 {
+            let mut t = body_tops.clone();
+            t.sort_by(f32::total_cmp);
+            let med = t[t.len() / 2];
+            let max_t = t.iter().copied().fold(0.0f32, f32::max);
+            assert!(
+                max_t - med < 40.0,
+                "protrusion remains: max={max_t} med={med} counts={counts:?} top0={top0}"
+            );
+        }
+        // Gaps internes ≤ 8 mm (space de pose 2 mm).
+        for col in &cols {
+            let mut ys: Vec<(f32, f32)> = col.iter().map(|b| (b.y_min, b.y_max)).collect();
+            ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for w in ys.windows(2) {
+                let gap = w[1].0 - w[0].1;
+                assert!(
+                    gap < LOOSE_GAP_MM,
+                    "internal gap {gap} in col counts={counts:?}"
+                );
+            }
+        }
+    }
+
+
+
+    /// La classe bottom n'est jamais touchée par le post-pass.
+    #[test]
+    fn bottom_is_never_touched() {
+        let (w_, h_) = (100.0, 50.0);
+        let mut prob = SPProblem::new(rect_instance(w_, h_, 3, 1000.0));
+        prob.change_strip_width(600.0);
+        place(&mut prob, w_, h_, 2.5, 2.5);
+        place(&mut prob, w_, h_, 204.5, 2.5);
+        place(&mut prob, w_, h_, 204.5, 54.5);
+        let boxes0 = placed_boxes(&prob);
+
+        post_pass_for_bias(&mut prob, Some("bottom"), Some(600.0));
+
+        let boxes1 = placed_boxes(&prob);
+        for (a, b) in boxes0.iter().zip(boxes1.iter()) {
+            assert_eq!(a.d_transf.translation(), b.d_transf.translation());
+        }
+    }
+
+    /// Un filler niché dans la bbox d'un hôte (cavité) et l'hôte occupé sont
+    /// protégés : sans protection, le notch-fill déplacerait le filler dans
+    /// l'encoche de la bande 0 (stair 15000 -> 10000) et viderait la cavité.
+    #[test]
+    fn nested_items_are_never_moved() {
+        // Hôte en U : bbox 200×200, cavité x[50,150] × y[100,200] ouverte en
+        // haut (le moteur ne connaît pas les trous fermés — piège #5).
+        let json = serde_json::json!({
+            "name": "nested-test",
+            "strip_height": 1000.0,
+            "items": [
+                {"id": 0, "demand": 1, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [
+                    [0,0],[200,0],[200,200],[150,200],[150,100],[50,100],[50,200],[0,200],[0,0]]}},
+                {"id": 1, "demand": 2, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [[0,0],[50,0],[50,50],[0,50],[0,0]]}}
+            ]
+        });
+        let ext: ExtSPInstance = serde_json::from_value(json).unwrap();
+        let importer = Importer::new(
+            sparrow::config::DEFAULT_SPARROW_CONFIG.cde_config,
+            Some(0.001),
+            None,
+            Some((0.01, 0.01)),
+        );
+        let mut prob = SPProblem::new(import_instance(&importer, &ext).unwrap());
+        prob.change_strip_width(600.0);
+        // Bande 0 : filler seul (top 52.5) → encoche de 150 mm.
+        // (rect : la translation est le centre de la bbox, vérifié plus haut)
+        prob.place_item(SPPlacement {
+            item_id: 1,
+            d_transf: DTransformation::new(0.0, (27.5, 27.5)),
+        });
+        // Hôte en bandes 2-4, puis filler niché dans sa cavité.
+        let pk_host = prob.place_item(SPPlacement {
+            item_id: 0,
+            d_transf: DTransformation::new(0.0, (304.5, 102.5)),
+        });
+        let hb = prob.layout.placed_items.get(pk_host).unwrap().shape.bbox;
+        // Cavité monde : x [hb.x_min+50, hb.x_min+150], y [hb.y_min+100, ...].
+        // Filler 50×50 à +60/+110 (marges 10 mm partout).
+        let pk_fill = prob.place_item(SPPlacement {
+            item_id: 1,
+            d_transf: DTransformation::new(0.0, (hb.x_min + 85.0, hb.y_min + 135.0)),
+        });
+        let fb = prob.layout.placed_items.get(pk_fill).unwrap().shape.bbox;
+        assert!(feasibility_ok(&prob));
+        // Le filler est strictement contenu dans la bbox de l'hôte.
+        assert!(fb.x_min > hb.x_min && fb.x_max < hb.x_max && fb.y_min > hb.y_min && fb.y_max < hb.y_max);
+        let boxes0 = placed_boxes(&prob);
+        let protected = protected_fingerprints(&boxes0);
+        assert_eq!(protected.len(), 2, "hôte + filler protégés");
+        let stair0 = band_stair(&boxes0);
+        assert!(stair0 > 10_000.0, "stair {stair0}");
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let boxes1 = placed_boxes(&prob);
+        assert_eq!(band_stair(&boxes1), stair0, "aucun déplacement accepté");
+        for (a, b) in boxes0.iter().zip(boxes1.iter()) {
+            assert_eq!(a.d_transf.translation(), b.d_transf.translation());
+        }
+    }
+
+    /// Trou interne d'une cellule au milieu d'une colonne, AVEC inflation
+    /// (2 mm — sans elle des sondes qui échouent en prod passeraient ici,
+    /// mémo §4.5). Le pas est 102.1 et non 102.0 pile : au contact exact
+    /// (gap réel = space), les coins inflatés touchent les arêtes voisines
+    /// (collision), le layout de départ serait infaisable. Origine à 2.1 :
+    /// l'inflation déflate aussi la tôle (marge space/2 = 1 mm de chaque
+    /// côté). Le restack est volontairement neutralisé (corps aligné + reste
+    /// court à droite ⇒ `leftover_column_only`) : c'est bien
+    /// `tighten_loose_gaps` qui doit fermer le trou, en cascade.
+    #[test]
+    fn internal_cell_hole_is_closed() {
+        let (w_, h_) = (100.0, 100.0);
+        let pitch = 102.1;
+        let mut prob = SPProblem::new(rect_instance_sep(w_, h_, 22, 800.0, Some(2.0)));
+        prob.change_strip_width(600.0);
+        let xs = [2.1, 104.2, 206.3, 308.4, 410.5];
+        let y = |r: usize| 2.1 + r as f32 * pitch;
+        // Corps : c0..c3. Trou interne en c2 (3e pièce absente), la pièce du
+        // trou est posée en haut de c1 (6 pièces). Reste court en c4.
+        for r in 0..5 {
+            place(&mut prob, w_, h_, xs[0], y(r));
+        }
+        for r in 0..6 {
+            place(&mut prob, w_, h_, xs[1], y(r));
+        }
+        for &r in &[0usize, 1, 3, 4] {
+            place(&mut prob, w_, h_, xs[2], y(r));
+        }
+        for r in 0..5 {
+            place(&mut prob, w_, h_, xs[3], y(r));
+        }
+        for r in 0..2 {
+            place(&mut prob, w_, h_, xs[4], y(r));
+        }
+        assert!(feasibility_ok(&prob));
+        let w0 = used_width(&placed_boxes(&prob));
+        let cols0 = cluster_columns(&placed_boxes(&prob));
+        assert_eq!(cols0.len(), 5);
+        assert_eq!(cols0[2].len(), 4, "trou interne en place");
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let after = placed_boxes(&prob);
+        assert!(feasibility_ok(&prob));
+        assert_eq!(after.len(), 22);
+        assert!(
+            used_width(&after) <= w0 + 1e-3,
+            "X- regress: {} -> {}",
+            w0,
+            used_width(&after)
+        );
+        // Toutes les colonnes sont compactes (gaps internes ≤ space + marge).
+        let cols = cluster_columns(&after);
+        for col in &cols {
+            let mut ys: Vec<(f32, f32)> = col.iter().map(|b| (b.y_min, b.y_max)).collect();
+            ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for w in ys.windows(2) {
+                let gap = w[1].0 - w[0].1;
+                assert!(
+                    gap <= 2.5,
+                    "internal gap {gap} in col counts={:?}",
+                    cols.iter().map(|c| c.len()).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    /// Créneaux (colonnes hautes/basses alternées) : les cellules de reste
+    /// doivent être consolidées au bord droit — plus aucune inversion de
+    /// sommets (une colonne courte n'a de colonnes plus hautes qu'à sa
+    /// gauche). AVEC inflation 2 mm.
+    #[test]
+    fn leftover_cells_consolidate_right() {
+        let (w_, h_) = (100.0, 100.0);
+        let pitch = 102.1;
+        let mut prob = SPProblem::new(rect_instance_sep(w_, h_, 18, 800.0, Some(2.0)));
+        prob.change_strip_width(600.0);
+        for (c, &rows) in [5usize, 4, 5, 4].iter().enumerate() {
+            for r in 0..rows {
+                place(&mut prob, w_, h_, 2.1 + c as f32 * pitch, 2.1 + r as f32 * pitch);
+            }
+        }
+        assert!(feasibility_ok(&prob));
+        let w0 = used_width(&placed_boxes(&prob));
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let after = placed_boxes(&prob);
+        assert!(feasibility_ok(&prob));
+        assert_eq!(after.len(), 18);
+        assert!(
+            used_width(&after) <= w0 + 1e-3,
+            "X- regress: {} -> {}",
+            w0,
+            used_width(&after)
+        );
+        let cols = cluster_columns(&after);
+        let tops: Vec<f32> = cols.iter().map(|c| col_top(c)).collect();
+        for i in 0..tops.len() {
+            for j in i + 1..tops.len() {
+                assert!(
+                    tops[i] >= tops[j] - 1.0,
+                    "inversion: tops[{i}]={} < tops[{j}]={} (tops={tops:?})",
+                    tops[i],
+                    tops[j]
+                );
+            }
+        }
+    }
+
+    /// Grille parfaite AVEC inflation : le post-pass est un no-op strict
+    /// (translations à l'identique — verrou pixel-identical).
+    #[test]
+    fn perfect_grid_with_inflation_is_untouched() {
+        let (w_, h_) = (100.0, 100.0);
+        let pitch = 102.1;
+        let mut prob = SPProblem::new(rect_instance_sep(w_, h_, 20, 800.0, Some(2.0)));
+        prob.change_strip_width(600.0);
+        for c in 0..4 {
+            for r in 0..5 {
+                place(&mut prob, w_, h_, 2.1 + c as f32 * pitch, 2.1 + r as f32 * pitch);
+            }
+        }
+        assert!(feasibility_ok(&prob));
+        let boxes0 = placed_boxes(&prob);
+        let w0 = prob.strip_width();
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        assert_eq!(prob.strip_width(), w0);
+        let boxes1 = placed_boxes(&prob);
+        assert_eq!(boxes0.len(), boxes1.len());
+        for (a, b) in boxes0.iter().zip(boxes1.iter()) {
+            assert_eq!(a.d_transf.translation(), b.d_transf.translation());
+        }
+    }
+
+    /// Survivant sweep_fixed seed 1000000000000000010 : la dérive µm
+    /// cumulative des lanes crée un gap réel < 2,000 mm entre la cellule du
+    /// trou et sa voisine de gauche (contact/overlap des formes inflatées) —
+    /// la fenêtre latérale est VIDE (L > R−w) et tighten échoue à x fixe.
+    /// Le snap des lanes (pitch uniforme, sans élargir) doit déverrouiller
+    /// la cascade. Setup : 5 colonnes au pitch 102,0008, trou interne dans
+    /// la colonne 2, voisine de gauche protrudante (+2,4 µm) qui vide la
+    /// fenêtre (R−w < L).
+    #[test]
+    fn lane_drift_exact_contact_hole_is_closed() {
+        let (w_, h_) = (100.0, 100.0);
+        let pitch = 102.0008;
+        let mut prob = SPProblem::new(rect_instance_sep(w_, h_, 18, 800.0, Some(2.0)));
+        prob.change_strip_width(600.0);
+        let lane = |c: usize| 2.1 + c as f32 * pitch;
+        let yrow = |r: usize| 2.1 + r as f32 * pitch;
+        // c0 : 5 pièces (accueille la pièce du trou, corps aligné + reste).
+        for r in 0..5 {
+            place(&mut prob, w_, h_, lane(0), yrow(r));
+        }
+        // c1 : 4 pièces, celle de la rangée 2 protrude de +2,4 µm vers le
+        // trou (gap réel 2,0008 − 0,0024 < 2,000 → verrou latéral).
+        for r in 0..4 {
+            let x = if r == 2 { lane(1) + 0.0024 } else { lane(1) };
+            place(&mut prob, w_, h_, x, yrow(r));
+        }
+        // c2 : trou interne à la rangée 2 (pièces rangées 0,1,3).
+        for &r in &[0usize, 1, 3] {
+            place(&mut prob, w_, h_, lane(2), yrow(r));
+        }
+        // c3 : 4 pièces.
+        for r in 0..4 {
+            place(&mut prob, w_, h_, lane(3), yrow(r));
+        }
+        // c4 : reste court à droite (2 pièces) — restack neutralisé
+        // (leftover_column_only).
+        for r in 0..2 {
+            place(&mut prob, w_, h_, lane(4), yrow(r));
+        }
+        assert!(feasibility_ok(&prob));
+        let w0 = used_width(&placed_boxes(&prob));
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let after = placed_boxes(&prob);
+        assert!(feasibility_ok(&prob));
+        assert_eq!(after.len(), 18);
+        // Le snap peut élargir d'au plus SNAP_WIDEN_MAX.
+        assert!(
+            used_width(&after) <= w0 + SNAP_WIDEN_MAX + 1e-3,
+            "X- regress: {} -> {}",
+            w0,
+            used_width(&after)
+        );
+        // Toutes les colonnes sont compactes : le trou est fermé.
+        let cols = cluster_columns(&after);
+        for col in &cols {
+            let mut ys: Vec<(f32, f32)> = col.iter().map(|b| (b.y_min, b.y_max)).collect();
+            ys.sort_by(|a, b| a.0.total_cmp(&b.0));
+            for w in ys.windows(2) {
+                let gap = w[1].0 - w[0].1;
+                assert!(
+                    gap <= 2.5,
+                    "internal gap {gap} in col counts={:?}",
+                    cols.iter().map(|c| c.len()).collect::<Vec<_>>()
+                );
+            }
+        }
+        // Plus aucune inversion de sommets.
+        let tops: Vec<f32> = cols.iter().map(|c| col_top(c)).collect();
+        for i in 0..tops.len() {
+            for j in i + 1..tops.len() {
+                assert!(
+                    tops[i] >= tops[j] - 1.0,
+                    "inversion: tops[{i}]={} < tops[{j}]={}",
+                    tops[i],
+                    tops[j]
+                );
+            }
+        }
+    }
+
+    /// Moignon prod : [19,19,19,19,19,5] sur grille uniforme (inflation 2).
+    /// Le solveur SPP est indifférent à la forme à largeur égale — la passe
+    /// d'équilibrage doit produire la cible canonique [17,17,17,17,16,16]
+    /// (cellules supplémentaires à gauche), sans élargir, faisable.
+    #[test]
+    fn balanced_lane_stump_equalizes() {
+        let (w_, h_) = (100.0, 100.0);
+        let pitch = 102.1;
+        let mut prob = SPProblem::new(rect_instance_sep(w_, h_, 100, 2000.0, Some(2.0)));
+        prob.change_strip_width(620.0);
+        for c in 0..5 {
+            for r in 0..19 {
+                place(&mut prob, w_, h_, 2.1 + c as f32 * pitch, 2.1 + r as f32 * pitch);
+            }
+        }
+        for r in 0..5 {
+            place(&mut prob, w_, h_, 2.1 + 5.0 * pitch, 2.1 + r as f32 * pitch);
+        }
+        assert!(feasibility_ok(&prob));
+        let w0 = used_width(&placed_boxes(&prob));
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(620.0));
+
+        let after = placed_boxes(&prob);
+        assert!(feasibility_ok(&prob));
+        assert_eq!(after.len(), 100);
+        assert!(
+            used_width(&after) <= w0 + 1e-3,
+            "X- regress: {} -> {}",
+            w0,
+            used_width(&after)
+        );
+        let cols = cluster_columns(&after);
+        let counts: Vec<usize> = cols.iter().map(|c| c.len()).collect();
+        assert_eq!(counts, vec![17, 17, 17, 17, 16, 16], "counts={counts:?}");
+    }
+
+    /// Grille NON uniforme (deux tailles de pièces) : la passe d'équilibrage
+    /// ne doit pas se déclencher — no-op strict sur les translations.
+    #[test]
+    fn non_uniform_grid_is_untouched() {
+        let json = serde_json::json!({
+            "name": "non-uniform-test",
+            "strip_height": 340.0,
+            "items": [
+                {"id": 0, "demand": 9, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [[0,0],[100,0],[100,100],[0,100],[0,0]]}},
+                {"id": 1, "demand": 1, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [[0,0],[100,0],[100,50],[0,50],[0,0]]}}
+            ]
+        });
+        let ext: ExtSPInstance = serde_json::from_value(json).unwrap();
+        let importer = Importer::new(
+            sparrow::config::DEFAULT_SPARROW_CONFIG.cde_config,
+            Some(0.001),
+            Some(2.0),
+            Some((0.01, 0.01)),
+        );
+        let mut prob = SPProblem::new(import_instance(&importer, &ext).unwrap());
+        prob.change_strip_width(600.0);
+        // 3 colonnes de 3 grandes + 1 petite seule à droite (reste X-).
+        let pitch = 102.1;
+        for c in 0..3 {
+            for r in 0..3 {
+                place(&mut prob, 100.0, 100.0, 2.1 + c as f32 * pitch, 2.1 + r as f32 * pitch);
+            }
+        }
+        prob.place_item(SPPlacement {
+            item_id: 1,
+            d_transf: DTransformation::new(0.0, (2.1 + 3.0 * pitch + 50.0, 2.1 + 25.0)),
+        });
+        assert!(feasibility_ok(&prob));
+        let boxes0 = placed_boxes(&prob);
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(600.0));
+
+        let boxes1 = placed_boxes(&prob);
+        assert_eq!(boxes0.len(), boxes1.len());
+        for (a, b) in boxes0.iter().zip(boxes1.iter()) {
+            assert_eq!(a.d_transf.translation(), b.d_transf.translation());
+        }
+    }
+
+    /// Pile complète (J-085) : un hôte avec filler niché dans sa cavité est
+    /// déplacé avec ses nichés au MÊME delta — la position relative est
+    /// préservée, holesFilled intact. Grille uniforme d'hôtes en U [3,2,1]
+    /// → [2,2,2] (le hôte du sommet de c0 migre vers c2 avec son filler).
+    #[test]
+    fn nested_stack_moves_as_unit() {
+        let json = serde_json::json!({
+            "name": "stack-balance-test",
+            "strip_height": 800.0,
+            "items": [
+                {"id": 0, "demand": 6, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [
+                    [0,0],[200,0],[200,200],[150,200],[150,100],[50,100],[50,200],[0,200],[0,0]]}},
+                {"id": 1, "demand": 6, "allowed_orientations": [0.0],
+                 "shape": {"type": "simple_polygon", "data": [[0,0],[50,0],[50,50],[0,50],[0,0]]}}
+            ]
+        });
+        let ext: ExtSPInstance = serde_json::from_value(json).unwrap();
+        let importer = Importer::new(
+            sparrow::config::DEFAULT_SPARROW_CONFIG.cde_config,
+            Some(0.001),
+            Some(2.0),
+            Some((0.01, 0.01)),
+        );
+        let mut prob = SPProblem::new(import_instance(&importer, &ext).unwrap());
+        prob.change_strip_width(700.0);
+        // 3 lanes d'hôtes au pas 202.1, comptages [3,2,1] ; chaque hôte porte
+        // un filler dans sa cavité. jagua centre les shapes sur leur
+        // CENTROÏDE (pas le centre de bbox) : on relit la bbox posée pour
+        // placer le filler dans la cavité (marges ~7 mm avec l'inflation).
+        let pitch = 202.1;
+        for (c, &rows) in [3usize, 2, 1].iter().enumerate() {
+            for r in 0..rows {
+                let (hx, hy) = (2.1 + c as f32 * pitch, 2.1 + r as f32 * pitch);
+                let pk_h = prob.place_item(SPPlacement {
+                    item_id: 0,
+                    d_transf: DTransformation::new(0.0, (hx + 100.0, hy + 100.0)),
+                });
+                let hb = prob.layout.placed_items.get(pk_h).unwrap().shape.bbox;
+                prob.place_item(SPPlacement {
+                    item_id: 1,
+                    d_transf: DTransformation::new(0.0, (hb.x_min + 85.0, hb.y_min + 135.0)),
+                });
+            }
+        }
+        assert!(feasibility_ok(&prob));
+        // Offsets relatifs filler→hôte avant la passe (multiset trié).
+        // Chaque filler doit être strictement niché dans la bbox d'un hôte.
+        let nested_count = |prob: &SPProblem| -> usize {
+            let boxes = placed_boxes(prob);
+            let hosts: Vec<&Boxed> = boxes.iter().filter(|b| b.item_id == 0).collect();
+            boxes
+                .iter()
+                .filter(|b| b.item_id == 1)
+                .filter(|f| {
+                    hosts.iter().any(|h| {
+                        f.x_min > h.x_min && f.y_min > h.y_min && f.x_max < h.x_max && f.y_max < h.y_max
+                    })
+                })
+                .count()
+        };
+        assert_eq!(nested_count(&prob), 6, "setup : tous les fillers nichés");
+        let w0 = used_width(&placed_boxes(&prob));
+
+        post_pass_for_bias(&mut prob, Some("left"), Some(700.0));
+
+        let after = placed_boxes(&prob);
+        assert!(feasibility_ok(&prob));
+        assert!(used_width(&after) <= w0 + 1e-3);
+        // Grille équilibrée : 3 colonnes de 2 hôtes.
+        let hosts_only: Vec<Boxed> = after.iter().copied().filter(|b| b.item_id == 0).collect();
+        let cols = cluster_columns(&hosts_only);
+        let mut counts: Vec<usize> = cols.iter().map(|c| c.len()).collect();
+        counts.sort();
+        assert_eq!(counts, vec![2, 2, 2], "counts={counts:?}");
+        // La pile complète a été déplacée : chaque filler est TOUJOURS niché
+        // dans un hôte (holesFilled intact — jamais détaché par le move).
+        assert_eq!(nested_count(&prob), 6, "un filler a été détaché de son hôte");
+    }
+}

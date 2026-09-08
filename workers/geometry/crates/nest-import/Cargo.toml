@@ -1,0 +1,29 @@
+[package]
+name = "nest-import"
+version = "0.1.0"
+edition = "2024"
+license = "PolyForm-Noncommercial-1.0.0"
+description = "DXF import to polygon parts (canonical mm) — dual-target (native lib + wasm32), bit-exact against the Python pipeline (see docs/PIPELINE-MAP.md)"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+libm = { workspace = true }
+wasm-bindgen = { workspace = true, optional = true }
+roxmltree = { version = "0.20", optional = true }
+
+[features]
+default = ["svg"]
+wasm = ["dep:wasm-bindgen"]
+# SVG import (réplique svgelements maison — PAS usvg : les arcs doivent
+# rester des arcs pour la parité bit-exacte, cf. journal J-064).
+# Natif/CLI : défaut. wasm : opt-in (--features wasm,svg) pour garder le
+# bundle DXF-only léger (mission v2 PR2 — poids mesurés au rapport).
+svg = ["dep:roxmltree"]
+
+[[bin]]
+name = "nest-import-cli"
+path = "src/main.rs"

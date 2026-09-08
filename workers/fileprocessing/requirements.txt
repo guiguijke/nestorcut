@@ -1,0 +1,6 @@
+ezdxf==1.4.4
+pymongo==4.17.0
+shapely==2.1.2
+python-dotenv==1.2.3
+svgelements==1.9.6
+cryptography>=44,<51

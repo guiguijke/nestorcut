@@ -1,0 +1,144 @@
+name: Build and publish Docker images
+
+# Builds the main app and the 4 worker images and pushes them to the GitHub
+# Container Registry (ghcr.io) under the repository owner's namespace.
+#
+# On the homelab you then just run:
+#   docker compose pull && docker compose up -d
+#
+# Images are tagged with:
+#   - :latest        (mutable, always the most recent build of main)
+#   - :<git-sha>     (immutable, pinned to the exact commit)
+#
+# Notes:
+#  - The nesting worker builds the nest-engine Rust workspace (workers/nesting/engine),
+#    no external submodule required.
+#  - The strip-nesting worker pulls spyrrow wheels that only ship for linux/amd64,
+#    so the whole matrix runs on amd64 runners.
+
+on:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch: {}
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  tests:
+    name: nest-engine + worker tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: workers/nesting
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            workers/nesting/engine/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('workers/nesting/engine/Cargo.lock') }}
+
+      - name: Build nest-engine
+        run: cargo build --release --manifest-path engine/Cargo.toml
+
+      - name: Rust tests
+        run: cargo test --release --manifest-path engine/Cargo.toml
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        # worker_common (workers/common) holds the shared plumbing imported by
+        # all workers; both requirement sets pin the same pymongo, so they can
+        # be installed together without the old grep workaround.
+        run: |
+          pip install -e ../common
+          pip install -r requirements.txt pytest
+          pip install -r ../fileprocessing/requirements.txt
+
+      - name: Worker tests (unit + integration with the real engine)
+        env:
+          NEST_ENGINE_BIN: ${{ github.workspace }}/workers/nesting/engine/target/release/nest-engine
+        run: python -m pytest tests/ -m "not slow" -q
+
+  build-and-push:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-24.04
+    needs: tests
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      # Worker images build with ./workers as context so they can COPY the
+      # shared common/ package (worker_common) into the image.
+      matrix:
+        include:
+          - image: nest2d-app
+            context: .
+            file: ./Dockerfile
+          - image: nest2d-admin
+            context: ./admin
+            file: ./admin/Dockerfile
+          - image: nest2d-user-file-processing-worker
+            context: ./workers
+            file: ./workers/fileprocessing/Dockerfile
+          - image: nest2d-nesting-worker
+            context: ./workers
+            file: ./workers/nesting/Dockerfile
+          - image: nest2d-strip-file-processing-worker
+            context: ./workers
+            file: ./workers/stripfileprocessing/Dockerfile
+          - image: nest2d-strip-nesting-worker
+            context: ./workers
+            file: ./workers/stripnesting/Dockerfile
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        # The GHA cache backend requires the docker-container buildx driver,
+        # not the default 'docker' driver.
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract lowercase image owner
+        id: owner
+        run: echo "name=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          # spyrrow ships linux/amd64 wheels only — force amd64 for the whole matrix.
+          platforms: linux/amd64
+          tags: |
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:latest
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:${{ github.sha }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

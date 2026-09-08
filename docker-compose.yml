@@ -1,0 +1,278 @@
+# =============================================================================
+# NestorCut — self-hosted deployment for a homelab.
+#
+# Requirements:
+#   1. A populated `.env` next to this file (copy from .env.example).
+#   2. The Docker images published by GitHub Actions at ghcr.io/guiguijke/*.
+#      Until the first CI build completes, set APP_BUILD_LOCAL=true below to
+#      build the app from source instead of pulling it.
+#   3. A reverse proxy in front (e.g. Nginx Proxy Manager) pointing to
+#      http://<host>:7100 with TLS for https://app.nestorcut.com
+#
+# Usage:
+#   docker compose pull        # refresh images after a CI build
+#   docker compose up -d       # start everything
+#   docker compose logs -f app # tail the app logs
+# =============================================================================
+
+services:
+  app:
+    # By default we pull the prebuilt image from GHCR. To build locally instead
+    # (e.g. before the first CI run), uncomment the two `build:` lines and
+    # comment the `image:` line.
+    image: ghcr.io/guiguijke/nest2d-app:latest
+    # build:
+    #   context: .
+    # Expose only on localhost so the public ingress is your reverse proxy.
+    # Port 7100 on the host -> 3000 inside the container (Nuxt's default).
+    ports:
+      - 0.0.0.0:7100:3000
+    # Inject every variable from .env into the container. This is more robust
+    # than relying solely on ${VAR:-} substitution: env_file is read directly
+    # by Compose regardless of the launching shell, so secrets like
+    # NUXT_STRIPE_SECRET_KEY always reach the app. Explicit `environment:`
+    # entries below take precedence and override anything in the file.
+    env_file: .env
+    environment:
+      NUXT_PUBLIC_BASE_URL: ${NUXT_PUBLIC_BASE_URL}
+      NUXT_MONGO_URI: mongodb://mongo:27017/nest2d
+      NUXT_PUBLIC_GOOGLE_CLIENT_ID: ${NUXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+      NUXT_GOOGLE_CLIENT_SECRET: ${NUXT_GOOGLE_CLIENT_SECRET:-}
+      NUXT_PUBLIC_LOCAL_AUTH_ENABLED: ${NUXT_PUBLIC_LOCAL_AUTH_ENABLED:-true}
+      NUXT_STRIPE_SECRET_KEY: ${NUXT_STRIPE_SECRET_KEY:-}
+      NUXT_RESEND_TOKEN: ${NUXT_RESEND_TOKEN:-}
+      NUXT_RESEND_FROM: ${NUXT_RESEND_FROM:-onboarding@resend.dev}
+      NUXT_LISTMONK_URL: ${NUXT_LISTMONK_URL:-}
+      NUXT_LISTMONK_USER: ${NUXT_LISTMONK_USER:-}
+      NUXT_LISTMONK_PASSWORD: ${NUXT_LISTMONK_PASSWORD:-}
+      NUXT_LISTMONK_LIST_ID: ${NUXT_LISTMONK_LIST_ID:-}
+      NUXT_PUBLIC_CLARITY_ID: ${NUXT_PUBLIC_CLARITY_ID:-}
+      NUXT_PUBLIC_STRIP_ENABLED: ${NUXT_PUBLIC_STRIP_ENABLED:-false}
+      # Master switch for imperial units (inches) — ships dark.
+      NUXT_PUBLIC_UNIT_SWITCH_ENABLED: ${NUXT_PUBLIC_UNIT_SWITCH_ENABLED:-false}
+      # Mode Local (calcul navigateur) — ships dark; staging/prod l'activent
+      # explicitement (PR5). Ne change rien tant que false.
+      NUXT_PUBLIC_LOCAL_COMPUTE_ENABLED: ${NUXT_PUBLIC_LOCAL_COMPUTE_ENABLED:-false}
+      # J-090 : import 100 % client (projets « 100 % privés », fichiers
+      # jamais uploadés). Exige LOCAL_COMPUTE. OFF tant que non vérifié en prod.
+      NUXT_PUBLIC_LOCAL_IMPORT_ENABLED: ${NUXT_PUBLIC_LOCAL_IMPORT_ENABLED:-false}
+      NUXT_PUBLIC_SUPPORT_EMAIL: ${NUXT_PUBLIC_SUPPORT_EMAIL:-support@example.com}
+      NUXT_PUBLIC_GITHUB_REPO: ${NUXT_PUBLIC_GITHUB_REPO:-https://github.com/guiguijke/nestorcut}
+      NUXT_PUBLIC_COPYRIGHT_YEAR: ${NUXT_PUBLIC_COPYRIGHT_YEAR:-}
+      NUXT_BLOCKED_COUNTRIES: ${NUXT_BLOCKED_COUNTRIES:-}
+      # Destination for instant signup notifications (sent by the app).
+      NUXT_ADMIN_NOTIFY_EMAIL: ${NUXT_ADMIN_NOTIFY_EMAIL:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  # -----------------------------------------------------------------------------
+  # Admin panel — a SEPARATE Nuxt app (./admin) with its OWN authentication
+  # (collection `admins`), sharing the same MongoDB over the internal network.
+  #
+  # Binding: 0.0.0.0:7200 -> reachable from any machine on the LAN ("réseau
+  # local"), but NOT reachable from the Internet as long as you do NOT create a
+  # reverse-proxy rule for it in Nginx Proxy Manager. To restrict it to the host
+  # machine only, replace 0.0.0.0 with 127.0.0.1.
+  #
+  # First run — create your admin account from the in-app setup page:
+  #   1. docker compose logs admin | grep -A12 "FIRST-TIME SETUP"  (grab the token)
+  #   2. open http://localhost:7200/setup and paste the token + credentials
+  # -----------------------------------------------------------------------------
+  admin:
+    # Pull from GHCR (built by the CI, image nest2d-admin). To build locally
+    # instead (e.g. before the first CI run), uncomment the `build:` lines and
+    # comment the `image:` line.
+    image: ghcr.io/guiguijke/nest2d-admin:latest
+    # build:
+    #   context: ./admin
+    # LAN-accessible by default; switch to 127.0.0.1 for host-only access.
+    ports:
+      - 0.0.0.0:7200:3000
+    env_file: .env
+    environment:
+      NUXT_ADMIN_MONGO_URI: mongodb://mongo:27017/nest2d
+      NUXT_ADMIN_SESSION_SECRET: ${NUXT_ADMIN_SESSION_SECRET:-}
+      NUXT_ADMIN_NOTIFY_EMAIL: ${NUXT_ADMIN_NOTIFY_EMAIL:-}
+      NUXT_ADMIN_BASE_URL: ${NUXT_ADMIN_BASE_URL:-http://localhost:7200}
+      NUXT_ADMIN_LAN_OPEN: ${NUXT_ADMIN_LAN_OPEN:-false}
+      # Miroir PUBLIC de la clé ci-dessus (le garde-route client lit
+      # public.adminLanOpen) — les deux doivent rester égaux.
+      NUXT_PUBLIC_ADMIN_LAN_OPEN: ${NUXT_ADMIN_LAN_OPEN:-false}
+      NUXT_PUBLIC_BASE_URL: ${NUXT_PUBLIC_BASE_URL}
+      NUXT_STRIPE_SECRET_KEY: ${NUXT_STRIPE_SECRET_KEY:-}
+      NUXT_RESEND_TOKEN: ${NUXT_RESEND_TOKEN:-}
+      NUXT_RESEND_FROM: ${NUXT_RESEND_FROM:-onboarding@resend.dev}
+      NUXT_LISTMONK_URL: ${NUXT_LISTMONK_URL:-}
+      NUXT_LISTMONK_USER: ${NUXT_LISTMONK_USER:-}
+      NUXT_LISTMONK_PASSWORD: ${NUXT_LISTMONK_PASSWORD:-}
+      NUXT_LISTMONK_LIST_ID: ${NUXT_LISTMONK_LIST_ID:-}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    # No host port needed: the app and workers reach it over the internal
+    # network. Uncomment the next two lines if you want to inspect the DB from
+    # the host (e.g. with mongosh / a GUI).
+    # ports:
+    #   - "127.0.0.1:27017:27017"
+    # Auth is OFF by default (internal docker net only). Turning it on
+    # requires creating users on an existing volume — do not flip this in
+    # production without a migration (pentest H-1). See .env.example.
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - db.adminCommand('ping')
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  # ---------------------------------------------------------------------------
+  # One-shot index migration. Creates the MongoDB indexes required for login
+  # lookups, the Stripe webhook, and admin log queries (see
+  # scripts/mongo-indexes.mongo.js for the rationale). createIndex is
+  # idempotent, so this runs on every `docker compose up` and is a no-op once
+  # the indexes exist. It exits 0 once done and does not block the app/admin
+  # (they only wait for `mongo` to be healthy, not for this service). If a
+  # unique index cannot be built because of duplicate data, the error is
+  # printed in `docker compose logs mongo-init` and the script still exits
+  # cleanly — de-duplicate the data, then the index builds on the next run.
+  # ---------------------------------------------------------------------------
+  mongo-init:
+    image: mongo:7
+    # Mount the migration script read-only. --quiet keeps the output to just
+    # our own print() lines.
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["mongosh"]
+    command: ["--quiet", "mongodb://mongo:27017/nest2d", "/scripts/mongo-indexes.mongo.js"]
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - nest2d
+
+  user-file-processing-worker:
+    image: ghcr.io/guiguijke/nest2d-user-file-processing-worker:latest
+    # Worker images build with ./workers as context (shared worker_common package).
+    # build:
+    #   context: ./workers
+    #   dockerfile: fileprocessing/Dockerfile
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/nest2d
+      # D-PRV-7 : livraison de la DEK vault par job via l'app (ECDH éphémère).
+      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
+      WORKER_TAG: normal
+      MAX_ENTITY_LIMIT: 999
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 512
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  nesting-worker:
+    image: ghcr.io/guiguijke/nest2d-nesting-worker:latest
+    # build:
+    #   context: ./workers
+    #   dockerfile: nesting/Dockerfile
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/nest2d
+      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
+      # Shared vcore budget across ALL nesting-worker replicas (see
+      # worker_common/compute_tokens.py — tiered compute: free 1, standard
+      # 4, privacy 8). Replicas > 1 lets small jobs run concurrently while
+      # the token pool caps total parallelism.
+      NEST_COMPUTE_TOKENS: ${NEST_COMPUTE_TOKENS:-16}
+      # Phase B (verrou 15 s) : sondage de la file — 1 s (défaut code).
+      NEST_WORKER_POLL_SEC: ${NEST_WORKER_POLL_SEC:-1}
+    deploy:
+      replicas: ${NEST_WORKER_REPLICAS:-2}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 512
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  strip-file-processing-worker:
+    image: ghcr.io/guiguijke/nest2d-strip-file-processing-worker:latest
+    # build:
+    #   context: ./workers
+    #   dockerfile: stripfileprocessing/Dockerfile
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/nest2d
+      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 512
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+  strip-nesting-worker:
+    image: ghcr.io/guiguijke/nest2d-strip-nesting-worker:latest
+    # build:
+    #   context: ./workers
+    #   dockerfile: stripnesting/Dockerfile
+    env_file: .env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/nest2d
+      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 2g
+    pids_limit: 512
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nest2d
+
+volumes:
+  mongo-data:
+
+networks:
+  nest2d:
