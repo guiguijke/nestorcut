@@ -468,6 +468,44 @@ try {
             log('UI download saved:', p)
         } catch (e) { log('UI download skipped:', String(e).slice(0, 200)) }
     }
+    // U3 passe 1 : etat de la modale AU MOMENT de la capture — le diff
+    // pixel a montre un decalage, il faut savoir si le conteneur est
+    // scrolle ou si des elements ne sont plus rendus.
+    const modalState = await page.evaluate(() => {
+        const body = document.querySelector('.modal-body')
+        const inner = document.querySelector('.modal-body .modal')
+        const close = document.querySelector('.modal-body__close')
+        const tabs = document.querySelectorAll('.alts__tab')
+        const r = (el) => (el ? Math.round(el.getBoundingClientRect().top) : null)
+        return {
+            alts: tabs.length,
+            bodyScrollTop: body ? Math.round(body.scrollTop) : null,
+            bodyScrollHeight: body ? Math.round(body.scrollHeight) : null,
+            bodyClientHeight: body ? Math.round(body.clientHeight) : null,
+            innerPaddingTop: inner ? getComputedStyle(inner).paddingTop : null,
+            closeTop: r(close),
+            firstTabTop: r(tabs[0]),
+            focused: document.activeElement
+                ? (document.activeElement.tagName + '.' + document.activeElement.className).slice(0, 70)
+                : null,
+        }
+    })
+    log('MODAL STATE:', JSON.stringify(modalState))
+    // U3 passe 1 : 06-modal-final.png doit etre REPRODUCTIBLE. Le clic sur
+    // le bouton de telechargement ci-dessus le focalise, et le navigateur
+    // fait defiler .modal-body (1071 px de contenu pour 940 px de hauteur)
+    // pour l'amener a l'ecran — mais seulement quand le telechargement
+    // aboutit. Deux runs du MEME code donnaient donc deux images a 131 px
+    // d'ecart (~270 000 pixels), ce qui rend tout diff « avant / apres »
+    // ininterpretable. On remet la modale en haut et on relache le focus
+    // avant la capture.
+    await page.evaluate(() => {
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur()
+        const body = document.querySelector('.modal-body')
+        if (body) body.scrollTop = 0
+    })
+    await page.waitForTimeout(300)
+    fs.writeFileSync(path.join(OUT, 'modal-state.json'), JSON.stringify(modalState, null, 1))
     await shot('06-modal-final.png')
 } catch (e) {
     failed = e

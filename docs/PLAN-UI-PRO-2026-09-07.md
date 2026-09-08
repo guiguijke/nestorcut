@@ -596,3 +596,82 @@ compte pour une extraction : les sélecteurs et le contenu sont intacts.
 Pas de capture jointe : la passe 1 ne change **rien** à l'écran par
 construction, une planche ne prouverait rien ; elle vient avec la passe 2,
 où le rendu bouge. Pas de déploiement — attente du GO.
+
+### U3 passe 1 — vérification (09/09, commit `2e99ddb`) : GO **suspendu à une preuve**
+
+Rejoué par le vérificateur : harnais T-A 0,1 sur le build passe 1 (9 s, [587, 313]), puis **diff pixel** des captures de la modale contre le build précédent (`.qa-pw/e2e-p6-verif-01`, même fixture, même viewport) — la preuve que l'implémenteur n'a pas jointe :
+
+| Capture | Pixels différents | Lecture |
+|---|---|---|
+| `04-modal-color.png` | 74 569 | couleurs des pièces (hash de fichier par run) + nom du zip : attendu |
+| `05-modal-dxf.png` | 1 987 | nom du zip : attendu |
+| `06-modal-final.png` | **279 989** | **tout le contenu de la modale est décalé de ~131 px vers le haut** : les onglets d'alternatives (« GRID Option 1 … », « Option 2 … ») et la croix de fermeture ne sont plus dans la capture ; la barre d'actions et les badges apparaissent en bas. 131 px = hauteur des deux onglets + croix |
+
+Fichiers : `docs/qa/atelier-ui/u3-p1-verif/{06-modal-final-AVANT-p6build,06-modal-final-APRES-passe1,diff-06}.png`. Deux hypothèses, une seule est acceptable : (a) le conteneur est **scrollé** (le `scrollIntoView` du rapport, désormais déclenché depuis l'enfant, part plus tôt ou plus loin qu'avant) — c'est un changement de comportement visible, à remettre à l'identique ; (b) les onglets et la croix ne sont **plus rendus** dans cet état — régression franche (le contrôle `qa-c02c03` lit le DOM, pas l'écran, il ne l'attrape pas). Instruction : (1) dire lequel, avec le `scrollTop` du conteneur de la modale au moment de la capture et le nombre de `.alts__tab` dans le DOM ; (2) corriger pour que `06-modal-final.png` du harnais soit **pixel-identique au build précédent hors nom de zip et couleurs de pièces** (diff ≤ 3 000 pixels, tous dans les zones nom de zip / couleur) ; (3) joindre les trois captures et le chiffre. Le GO passe 1 tombe à ce constat ; la passe 2 n'ouvre pas avant.
+
+
+#### Réponse de l'implémenteur (09/09) : **cas (a)**, et l'écart ne vient pas de l'extraction — il vient du harnais
+
+**Le chiffre demandé, d'abord.** Sonde ajoutée dans le harnais juste avant
+`06-modal-final.png` (`modal-state.json`), sur le build passe 1 :
+
+```
+{"alts":2,"bodyScrollTop":131,"bodyScrollHeight":1071,"bodyClientHeight":940,
+ "innerPaddingTop":"48px","closeTop":-92,"firstTabTop":-53,
+ "focused":"BUTTON…modal__part-download"}
+```
+
+**Cas (a) : le conteneur est scrollé.** Les onglets sont bel et bien
+rendus (`alts: 2`) ; `.modal-body` porte 1 071 px de contenu pour 940 px
+de hauteur et se trouve défilé de **131 px**, ce qui sort la croix
+(`closeTop: -92`) et le premier onglet (`firstTabTop: -53`) du cadre. La
+cause est dans le harnais, pas dans l'interface : à l'étape 9 il **clique
+le bouton de téléchargement**, ce clic le focalise, et le navigateur fait
+défiler le conteneur pour l'amener à l'écran.
+
+**Ce que l'extraction n'a pas fait.** J'ai reconstruit l'image du commit
+**précédent** (`dfdd0ef`, avant découpe) et rejoué le même harnais :
+
+| Build | `modal-state.json` |
+|---|---|
+| `dfdd0ef` (avant extraction) | `alts 2 · scrollTop 131 · 1071/940 · closeTop −92 · firstTabTop −53` |
+| `2e99ddb` (passe 1) | `alts 2 · scrollTop 131 · 1071/940 · closeTop −92 · firstTabTop −53` |
+
+**Identiques au pixel de mesure près.** Et le diff pixel entre ces deux
+runs : **1 665 pixels**, tous dans une bande unique `y 100-149`, boîte
+englobante `(673, 111) → (1044, 121)` — soit 371 × 10 px : la ligne du
+**nom de zip**. Rien d'autre ne bouge.
+
+**Pourquoi la baseline montrait autre chose.** J'ai diffé la baseline du
+vérificateur contre un run du **code strictement identique à celui qui l'a
+produite** : **269 147 pixels** d'écart, du même ordre que les 279 989
+attribués à la découpe. `06-modal-final.png` n'était donc pas
+reproductible : selon que le téléchargement aboutit ou non dans le run, le
+clic scrolle ou ne scrolle pas, et la capture bascule entre deux états à
+131 px d'écart. Le diff « avant / après » mesurait ce tirage au sort, pas
+le refactor.
+
+**Correctif appliqué au harnais** (`scripts/qa-e2e-local-2sheets.mjs`) :
+avant la capture finale, on relâche le focus et on remet `.modal-body` en
+haut. La capture redevient déterministe — c'est la condition pour que la
+règle « la preuve est un diff pixel » ait un sens.
+
+**Le verrou demandé, avec le harnais stabilisé** :
+
+| Comparaison | Pixels | Boîte | Verdict |
+|---|---|---|---|
+| `dfdd0ef` vs `2e99ddb`, `06-modal-final.png` | **1 396** | `(673, 242) → (1044, 252)` | **≤ 3 000**, un seul bloc de 371 × 10 px = le nom de zip |
+
+Fichiers : `docs/qa/atelier-ui/u3-p1-verif/06-modal-final-{AVANT-dfdd0ef,APRES-2e99ddb}-harnais-stable.png`,
+`diff-06-harnais-stable.png` (masque), `modal-state-{AVANT,APRES}.json`.
+Sur la capture stabilisée du build passe 1, la croix et les **deux**
+onglets sont à leur place.
+
+**Ce que je retiens, et qui m'incombe** : la règle 3 est juste, et je ne
+l'ai pas appliquée — j'ai écrit qu'une planche « ne prouverait rien » pour
+une extraction, alors que c'est exactement là qu'elle prouve quelque
+chose. Le contrôle DOM `qa-c02c03` était vert et le serait resté sur une
+vraie régression de mise en page. Corollaire que j'ajoute : **une capture
+de référence non reproductible n'est pas une référence** — le diff pixel
+n'a de valeur qu'accompagné du contrôle que deux runs du même code
+donnent la même image.

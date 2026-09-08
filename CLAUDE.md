@@ -12,6 +12,11 @@
 - **Pièges techniques** : `AGENTS.md` §2, à lire avant de toucher au moteur,
   au worker Python, au miroir JS du post-pass ou au visualizer.
 - **Discipline de mesure** : `assert_images_head.sh` OK avant tout banc ;
+  workers locaux recréés sur l'image reconstruite (`docker compose up -d
+  --force-recreate nesting-worker`) ; temps navigateur mesurés **au repos**
+  (aucun build, agent à l'arrêt), `QA_OUT` hors OneDrive, valeur = durée de
+  calcul du harnais et non `solveDoneAt` ; répartitions BPP du corpus =
+  bruit run-to-run, deux passages avant de conclure ;
   harnais navigateur `scripts/qa-e2e-local-2sheets.mjs` dans ses deux
   configurations ; rapport constat par constat, non-faits énoncés.
 - **Déploiement** : `AGENTS.md` §6 — un déploiement worker ou moteur se

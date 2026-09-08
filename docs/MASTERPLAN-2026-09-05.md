@@ -54,56 +54,59 @@ ces outils.
 | Temps job T-A | **6-9 s navigateur** contre 19-29 s serveur (file + post-pass Python) | — le navigateur bat déjà le serveur sur le cas standard |
 | Preuve | /benchmarks publié (chiffres images publiées) | pas de colonne navigateur |
 
-## 1. Où nous en sommes (2026-09-05)
+## 1. Où nous en sommes (revue du 2026-09-09)
 
-**Moteur & produit [prod]**
-- Alternatives Grille/Compaction multi-tôles homogènes (grille
-  bit-déterministe [587,313] space 0,1), chutes par tôle, trou-filling
-  pinwheel, corpus de torture T-A..T-K 11/11.
-- Pré-contrôle de faisabilité en millisecondes avec 3 leviers chiffrés +
-  solutions partielles guidées (refus 4 mm détecté en 2,2 s, jamais facturé).
-- Mode Local 100 % privé (import wasm, solve navigateur, IndexedDB),
-  purge serveur 24 h, vault ZK tous plans.
-- Rapport matière mesuré (« computed, never declared »), densité unifiée
-  matière/Σ tôles sur toutes les options (L1-bis).
+**En production (app `7f2d682`+, workers et homelab au moteur P5 `b0c36f3`)**
+- Chemin navigateur = chemin principal : import wasm, solve wasm 8 walks
+  (pool 1/4/8 par tier), post-pass JS miroir, finalisation dans un Web
+  Worker (P4), plateau SPP calibré (P5), résultats IndexedDB. Cas de
+  référence T-A (900 pièces, 2 tôles) : **9 s de calcul au repos** au tier
+  standard, 21 s sur poste chargé ; long task après solve 70-82 ms ;
+  mono-tôle 300 pièces 12,5 s (largeur 600,6 mm, hauteur −200 mm depuis P5).
+- Serveur (débordement) : job T-A 15-16 s, corpus T-A..T-K 11/11 en
+  continu, physique 0 chevauchement, benchmarks publics régénérés sur
+  l'image déployée (version affichée = commit déployé).
+- Parité navigateur ≡ serveur : **grille bit-identique** ; post-pass encore
+  double (Python + JS) — objet du lot 5-moteur.
+- Interface « atelier » : U0 jetons + primitives, U1 coquille et accueil,
+  U2 page projet, U2-ter (4 px partout, profil pleine largeur) — en prod.
+  U3 (espace de résultat) cadré en deux passes, U4-U5 à venir.
+- Compte : inscription vérifiée visible et testée, un seul e-mail
+  administrateur, newsletter re-proposée tous les 90 j (lot C1, clos
+  08/09 sur constat prod).
+- Dépôt : re-créé le 08/09 à historique neuf, PolyForm Noncommercial sur
+  les apports, notices tiers complètes, documents internes hors public ;
+  ancien dépôt privé archivé.
 
-**Performance & UX (plan PERF-UX, 6 lots)**
-- **L1 + L1-bis DÉPLOYÉS prod 05/09** (627b1ac) : gel navigateur
-  5,7 s → 0,26-0,47 s, densité homogène, annulation qui rend la main,
-  badges verdict, couleur d'erreur, rate-limit sur échecs. CPU décorateur
-  serveur 0,5 s/51 s.
-- **Lot 2 en cours** : journée de mesure P3 FAITE (224 walks × 3
-  espacements — `MESURE-P3-2026-09-05.md`) : **aucun job ne perd ni tôle
-  ni pièce à l'arrêt par itérations, même à k=1**. Réserve du vérificateur :
-  la chute de la dernière tôle n'était pas dans les évènements mesurés —
-  la validation finale se fait sur le banc de compaction à space 2 lors de
-  l'implémentation. Reco vérificateur : **k=3, plancher 30 itérations, sans
-  plancher de temps** (un plancher en secondes casserait le déterminisme
-  natif/wasm que P3 apporte). Instrumentation commitée (c2aaeaa).
-- Post-pass Python après le moteur : 5,8-9,4 s CPU mesurés (P8 promu au
-  lot 2 ou 4 — deviendra un tiers du job après P3).
-- Lots 3-6 cadrés (UX 2.1.4→2.3, compte 3.x, P4-P11) — non entamés.
+**Ce qui n'est pas fait (et compte pour « le meilleur outil »)**
+- **Robustesse d'import** (3.2) : la phase C du lot 4 (corpus ≥ 30 DXF
+  réels, classement des échecs, spécification du rapport de réparation)
+  **n'a pas été produite** — aucun rapport dans `docs/qa/`. C'est le
+  chantier n° 1 de valeur utilisateur et il n'a pas commencé.
+- **Un seul post-pass** (lot 5-moteur) : la mesure du corpus est sans
+  appel — sur 11 cas, `merge` et `compact` ne déplacent rien sauf T-K
+  (128 et 372 pièces) ; T-A finit en rollback de compaction. Le post-pass
+  résiduel coûte 1,2-1,5 s par job pour un gain rare. La fusion
+  inter-tôles appartient au constructif BPP.
+- **Trous** : banc `seed_holes` à 20/40 par classe (avant et après P5) —
+  la cible 40/40 d'AGENTS date d'une autre grille ; à re-cibler au lot
+  5-moteur.
+- **Colonne navigateur de /benchmarks** (0,5 j) : non faite.
+- **Business** : chiffres du 28/08 (43 inscrits, 0 payant, rétention 7 %)
+  jamais re-mesurés ; **webhook Stripe live : statut inconnu du
+  vérificateur** ; jalon utilisateurs (5 entretiens + campagne) non
+  démarré — l'ordre T3-T5 reste une hypothèse.
 
-**Business (réalité à intégrer)**
-- 43 inscrits, **0 payant**, rétention S1 7 % (2026-08-28 — à re-mesurer).
-- Site marketing à jour (faisabilité, 2 styles, FAQ, 2 articles) — publié.
-- **⚠ URGENT : webhook Stripe LIVE** — endpoint corrigé transmis le
-  31/08, confirmation jamais reçue, auto-coupure annoncée ~4-6 sept.
-  **À vérifier AVANT toute autre action** (une session Stripe admin
-  suffit ; sans webhook actif, aucun paiement récurrent ne survit).
-- Campagne feedback FR rédigée non envoyée ; recommandation infra split
-  (workers au homelab) en attente de décision.
-
-## 2. Cette semaine (filet + décisions)
+## 2. Cette semaine (revue du 09/09)
 
 | # | Action | Type |
 |---|---|---|
-| 1 | **Vérifier le webhook Stripe live** (URL = `app.nestorcut.com`, secret mono-endpoint, un événement test livré) | Ops critique |
-| 1bis | **Mettre à jour les 3 workers overflow du homelab** (image du 31/08 : sans `residual.py` ni `capacity.py`, moteur pré-P3 — ils traitent des jobs de prod chaque jour) : `docker compose pull && up -d --force-recreate` dans `/containers/nestorcut-overflow`, puis `assert_overflow_head.py` ; règle gravée : chaque déploiement worker se termine sur le homelab (`AGENTS.md` §6bis) | Ops critique |
-| 2 | **Décision k** : arrêt BPP par itérations — reco vérificateur **k=3, plancher 30 itérations, pas de plancher de temps** (mesure : 0 job perdu en tôles/pièces, même à k=1 ; chute à valider au banc space 2) | Décision owner |
-| 3 | **Décision SAMPLE_CFG** — reco vérificateur : **inchangé** (600/200/3 : +0,01 remnant pour +47 % de temps ; 150/50/3 : −0,006 pour −23 %) ; à rouvrir seulement si les cibles de temps sont manquées après P3 | Décision owner |
-| 3bis | ~~Basculer vers le dépôt propre~~ **FAIT 08/09** : `guiguijke/nestorcut` re-créé (3051dc6 + 02326bd), PolyForm Noncommercial 1.0.0 sur les apports, ancien dépôt `nestorcut-archive` privé archivé, build 34207049708 5/5, 4 images ghcr publiées ; validé par le vérificateur (rapport privé `specs/infra/nouveau-depot/RAPPORT-BASCULE-2026-09-08.md`) | Ops owner |
-| 4 | Envoyer la campagne feedback FR (intérêt légitime, 0 promo, désinscription) | Growth |
+| 1 | **Webhook Stripe live** : confirmer par une session Stripe (événement test livré) et l'écrire dans le registre — sans lui, aucun paiement récurrent ne survit | Ops critique (owner) |
+| 2 | **Jalon utilisateurs** : envoyer la campagne feedback FR, caler 5 entretiens d'atelier (guide `JALON-UTILISATEURS-T1-2026-09-06.md`) ; re-mesurer inscrits / payants / rétention | Owner |
+| 3 | Homelab : recréer **à froid** le conteneur WireGuard tiré le 08/09 (hors déploiement moteur, les trois workers derrière lui), contrôle tunnel + `assert_overflow_head.py` | Ops (agent, sur feu vert owner) |
+| 4 | Retouche badge « Démo » puis **U3 passe 1** (extraction pure, GO vérificateur) puis passe 2 (espace de résultat) ; socle P6 déployé avec la passe 2 | Implémenteur |
+| 5 | **Phase C import** ouverte en parallèle du jalon : constituer le corpus de 30 DXF réels (dont ceux des entretiens), classer les échecs sur l'importeur wasm d'abord — aucune ligne de code produit | Implémenteur / owner (fichiers) |
+| 6 | Colonne navigateur de /benchmarks : méthode figée (machine datée, au repos, `QA_OUT` hors OneDrive, temps = calcul du harnais, pas `solveDoneAt`) | Implémenteur, 0,5 j |
 
 ## 3. Les features « n°1 » (analyse auditeur, ordre de valeur)
 
@@ -291,10 +294,10 @@ import wasm robuste, export Rust unique, benchmarks navigateur.
 | **T0 (semaine en cours)** | ~~décision k + SAMPLE_CFG~~ **FAIT 05/09** (k=3/plancher 30/sans plancher temps ; SAMPLE_CFG inchangé) ; ~~lot 2 (P3 + P7)~~ LIVRÉ, corrigé L2-bis et **DÉPLOYÉ prod 06/09 ~04h30 UTC** (743aa1d — GO du vérificateur ; images publiées assert OK, corpus 11/11 sur bits publiés, md5 moteur prod=publié ; job standard 19-29 s, navigateur 6-9 s, gel < 0,3 s). **L2-ter LIVRÉ 06/09 (non déployé)** : cause = pass résiduel (l'expansion pinwheel est ÉCARTÉE par l'attribution à étages AC1 ; snapshots moteur/expansion propres) — correctif = ceinture exacte différentielle intra-tôle dans fill_residual_bands (Python+JS) : **30 bancs → 0 écartée, 1 ceinturée** (récidive convertie en alternative valide). Puis L2-quater v2 (cascade + re-relay batch) **validé et DÉPLOYÉ prod 06/09 11h35 UTC** (fb5e184 — FUSION 5/8→6/8 chez le vérificateur, 0 écartée 0 ceinturée, gel 339-372 ms ; résidus diag → P8) (`RAPPORT-PERF-UX-L2-QUATER-2026-09-06.md`). **Prochaine étape : lot 3 en T1** (UX 2.1.4-2.1.9, compte 3.1.3-3.1.6, kerf explicite, benchmarks publics) — jalon utilisateurs (user gate) à la fin de T1 ; webhook Stripe **TOUJOURS À VÉRIFIER** ; campagne feedback à envoyer | Job standard ≤ 25 s ✓ ; paiements vivants ⏳ |
 | **T1 (TERMINÉ 06/09)** | ~~Lot 3 + L3-bis~~ **LIVRÉS ET DÉPLOYÉS prod 06/09** (c47b2d2 puis 87b8bae — GO du vérificateur à chaque étape ; vitest 480/480, corpus 11/11 bits publiés, grilles bit-identiques, partiels navigateur livrés avec leviers) : UX 2.1.4-2.1.9 (refus capacité panneau unique ancré sous Nest + levier masqué < 0,5 mm + zéro carte fantôme ; « pièces · fichiers » ; glossaire tôle/vouvoiement + Intl.NumberFormat + test d'unicité i18n — doublons réels corrigés ; état « autre appareil » ; ligne d'état de calcul complète + cœurs locaux corrigés ; sens par bord + défaut 2 mm ; vue live ≡ option 1 avec poussée stage final), compte 3.1.3-3.1.6 (codes d'erreur stables + validation client + œil + CGU ; DialogWrapper a11y role/focus trap/restitution ; bannière e-mail non vérifié + badge ; middleware auth-optional /plans+changelog ; auth_error Google), **3.10 kerf explicite** (deux champs kerf/sécurité, règle affichée, migration sans changement, défaut usine 2 mm, zéro diff runtime), **3.9 benchmarks publics** (/benchmarks, chiffres du run images publiées fb5e184, méthode + honnêteté). Vitest 476/476, pytest 224+2 (3 errors préexistantes image publiée), e2e 7/7 (`RAPPORT-PERF-UX-L3-2026-09-06.md` + captures l3-verif). Verif L3 : GO avec L3-bis obligatoire → **L3-bis livré puis DÉPLOYÉ 87b8bae** (partiels navigateur 892/900 + leviers, message de refus unique, harnais bit-identique ; résidu garde-avant-post-pass → lot 4 — `RAPPORT-PERF-UX-L3-BIS-2026-09-06.md`). **Prochaine étape : JALON UTILISATEURS fin T1** (5 entretiens d'atelier + dépouillement campagne — livrable propriétaire) ; webhook Stripe **TOUJOURS À VÉRIFIER** ; campagne feedback à envoyer | Parcours nesting sans bloquant ✓ ; page /benchmarks ✓ ; jalon utilisateurs ⏳ |
 | **Porte utilisateurs (fin T1)** | Campagne feedback dépouillée + 5 entretiens d'atelier (import, export, chutes, amorce) — **avant d'engager T3-T5** : l'ordre 3.2 → 3.7 est une hypothèse de l'auditeur, pas une donnée | Liste des 3 irritants réels ; ordre T3-T5 confirmé ou corrigé |
-| **T2 / lot 4 (VALIDÉ — fiche `FICHE-LOT4-T2-2026-09-06.md`, phase par phase)** | Chantiers SANS REGRET, jalon utilisateurs en parallèle : **A. dette ~1/3** — P8 post-pass Python (STRtree + mesure par étape, il pèse la moitié du job serveur), garde par classe AVANT post-pass (résidu L3-bis), expiration des `awaiting_local` orphelins (10 min → cancelled + carte) ; **B. perf** — P4 worker finalisation navigateur, P5 plateau SPP calibré, P6 zones grille // ; **C. robustesse import DIAGNOSTIC SEUL** (corpus ~30 DXF réels, échecs classés, spécif du rapport de réparation — aucun changement produit avant le jalon). **Rust/Python TRANCHÉ (fiche validée)** : pas de réécriture au lot 4 (option c) — le lot 4 PRODUIT LA MESURE (gain/temps/taux de rollback par passe et par cas, corpus × 3 espacements) ; le **lot 5 retire les passes sans gain (> 80 % de runs annulés) dans les deux langues à la fois** et intègre la fusion inter-tôles au MOTEUR (constructif BPP) ; export DXF en Rust (écrivain natif+wasm existant) au chantier calques si le jalon le retient. Calques+identifiants, chutes, amorce, contraintes tôle, coupe commune → **attendent le verdict du jalon** (grille du guide). **Recentrage 06/09 (s'impose aux phases B et C)** : la phase B se mesure **dans le navigateur** (harnais `scripts/qa-e2e-local-2sheets.mjs` deux configurations + observateur long tasks), le banc serveur n'est qu'un contrôle de non-régression — P4 long task max < 100 ms après solve ; P5 mono 300 pièces en wasm, mesuré au tier du harnais (standard, concurrence 4) **et** au tier Free (concurrence 1, 8 walks en série) : 20-40 s au tier standard, largeur ± 0,5 mm, temps Free rapporté ; P6 zones réparties sur le **pool du tier** (jamais `hardwareConcurrency`), résultat bit-identique quelle que soit la taille du pool, donc Free (1 walk) reste séquentiel et identique ; **colonne navigateur sur /benchmarks** (0,5 j) ; phase C classe les échecs **sur l'importeur wasm d'abord**, ezdxf en second, écarts entre les deux listés. **Phase B : P4 et P5 DÉPLOYÉS prod 08/09** (`faa6485`, chaîne moteur complète AGENTS §6 — app + wasm + worker Hetzner + 3 workers overflow homelab au même digest, `assert_overflow_head.py` OK, `/benchmarks` régénéré sur l'image publiée `b0c36f3` : 11/11 OK, densités inchangées) ; reste P6 | Navigateur : T-A ≤ 10 s, mono-tôle 300 pièces 95-145 → 20-40 s (±0,5 mm), long task < 100 ms ; serveur T-A < 15 s ; corpus import (wasm + ezdxf) + échecs classés ; plus d'orphelins |
+| **T2 / lot 4 — CLOS le 09/09 sauf phase C** | Phase A (dette : P8, gardes, orphelins) **déployée** ; phase B **déployée** : P4 worker de finalisation (après-solve 70-82 ms au repos), P5 plateau SPP calibré (mono 300 : largeur identique 600,6 mm, hauteur −200 mm, 12,5 s ; corpus 11/11 ×2 ; benchmarks régénérés), P6 **clos sur le socle** (plus aucun sous-solve moteur dans le pass grille depuis la compression analytique — rien à paralléliser ; socle bit-identique par pool, part avec U3). Lots UI U0-U2-ter et C1 déployés dans la même fenêtre. **Phase C (diagnostic import) NON FAITE** → reportée en tête de T3 avec 3.2. Leçons gravées : mesures de temps au repos seulement, `QA_OUT` hors OneDrive, répartitions BPP du corpus = bruit run-to-run (deux passages avant de conclure) | Navigateur T-A 9 s ✓, long task < 100 ms ✓, mono 300 ≤ 40 s ✓ ; serveur T-A ≤ 16 s ✓ ; import : ✗ non mesuré |
 | **Lot UI « atelier » (démarre à la clôture de P9, en parallèle de la phase B — plan `PLAN-UI-PRO-2026-09-07.md`)** | Six lots : U0 jetons + primitives (0 hex en dur, 1 bouton, 1 champ), U1 coquille et accueil, U2 page projet (carte pré-vol par le pré-contrôle navigateur, canvas héros, réglages en sections), U3 espace de résultat deux volets (après P4), U4 états et a11y, U5 pages secondaires + `DESIGN-SYSTEM.md`. Charte du site (marine / bleu réservé / 4 px), Inter tabulaire pour les chiffres, icônes SVG inline, aucune dépendance. GO visuel du vérificateur par lot sur planche de captures — **U0, U1, U2 : GO (08/09)** ; **U2 déployé prod 08/09** (`c6c7a43`, app seule, aucun worker) ; C1 inscription livré, déployé et **clos** 08/09 (constat prod propriétaire : 1 e-mail admin) ; U3 après P4 | 12 écrans × 2 thèmes × 2 largeurs ; axe 0 sérieuse ; harnais et scripts QA verts sur `data-testid` |
 | **Lot C1 « inscription » (après GO U1 passe 2, avant U2 — plan `PLAN-COMPTE-INSCRIPTION-2026-09-07.md`)** | Vérification d'e-mail rendue visible et testée (aide sous le champ, adresse sur check-email, e-mail bilingue, TTL jetons, tests chemin heureux + refus `assertCanNest`) ; un seul e-mail administrateur par inscription (`adminNotifiedAt` + filtre du digest) ; carte newsletter tous les 90 j (fonction pure partagée, PATCH `newsletterAsked`) ; bienvenue hors handler | vitest +≥ 10 ; 1 e-mail admin reçu en prod (constat propriétaire) ; captures formulaire FR/EN × 2 thèmes, check-email avec adresse, carte 90 j ; harnais inchangé |
-| **T3 (+4-6 sem.)** | **Lot 5-moteur « un seul post-pass »** (le chantier n° 1 du recentrage) : à partir de la mesure P8 par passe, retrait des passes sans gain dans les deux langues à la fois, fusion inter-tôles puis compaction de la dernière tôle **dans le moteur** (constructif BPP, donc natif ≡ wasm) — critère : résultat navigateur ≡ serveur **bit-identique** sur le corpus × 3 espacements (vrai aujourd'hui pour la grille seulement) ; Lot 5 (accessibilité, plan & quota, coffre ; fix erreur 400 tracking du harnais e2e — présente depuis le lot 2, inscrite par la vérif phase A) ; **3.2 robustesse import (fin, importeur wasm d'abord)** ; **3.3 bibliothèque de chutes v1 (rectangulaire)** ; rapport imprimable ; **AF3 (vérif L3-bis, au plus tard)** : découchage de la tôle portrait à l'affichage (2.1.8 — l'ambiguïté « Bord bas pointe à gauche » est aujourd'hui levée par les axes + flèches, le rendu reste couché) | Import sans réparation manuelle ≥ 95 % ; « your offcuts are sheets » |
+| **T3 (démarre après U3, ~4-6 sem.)** | **1. Phase C + 3.2 robustesse import** (corpus 30 DXF réels, classement sur l'importeur wasm, rapport de réparation côté client, ezdxf en second) — c'est la première cause d'abandon, rien n'est mesuré aujourd'hui ; **2. Lot 5-moteur « un seul post-pass »** : retirer `merge`/`compact` du post-pass des deux langues (mesure corpus : 0 pièce déplacée sur 10 cas sur 11), porter la fusion inter-tôles et la compaction de la dernière tôle dans le constructif BPP (natif ≡ wasm), re-cibler le banc trous (20/40 aujourd'hui) — critère : navigateur ≡ serveur **bit-identique** sur le corpus × 3 espacements ; **3. 3.3 bibliothèque de chutes v1** (rectangulaire) ; **4. U4-U5** (états, a11y, pages secondaires, `DESIGN-SYSTEM.md`) ; rapport imprimable ; AF3 tôle portrait. Ordre 1-2-3 confirmé ou corrigé par le jalon utilisateurs | Import sans réparation manuelle ≥ 95 % sur le corpus ; parité post-pass bit-identique ; « your offcuts are sheets » |
 | **T4 (+7-9 sem.)** | Lot 6 (profil cible, transverse, ~~P9~~ — **P9 avancé en phase B du lot 4 sur instruction du vérificateur** : cache de tôle saturée du constructif, bit-identique, wasm rebuildé) ; **3.4 contraintes tôle** ; **3.5 réserve d'amorce** | Grain/zones interdites ; lead-in marqué à l'export |
 | **T5 (+10-12 sem.)** | **3.6 remplissage** ; **3.7 coupe commune** (selon son plan) ; décision **API/batch 3.8** (nouveau chantier + pricing) | Clusters à arêtes communes ; GO/NO-GO API |
 | Continu | Infra : **homelab overflow = même image que Hetzner à chaque déploiement worker** (contrôle `assert_overflow_head.py`) ; décision split workers homelab (avant T4 — la perf P3 réduit la pression) ; re-mesure business mensuelle (inscrits → payants, rétention) | — |
@@ -316,15 +319,13 @@ utilisateurs prime.
 | Décision | Reco | Statut |
 |---|---|---|
 | Arbitrages techniques du lot 4 et du plan UI | — | **Délégués au vérificateur** (propriétaire, 07/09) : il tranche et informe |
-| Constante d'arrêt BPP par itérations | k=3, plancher 30 itérations, sans plancher de temps (vérificateur) ; chute validée au banc space 2 | **En attente** (mesure faite) |
-| SAMPLE_CFG (qualité vs temps) | Inchangé ; rouvrir si cibles de temps manquées après P3 | **En attente** (peut être tranchée maintenant) |
-| Webhook Stripe live | Vérifier l'URL immédiatement | **Critique** |
-| Infra split (workers homelab) | Reco du 30/08 ; la pression baisse après P3 | Ouverte |
-| **Overflow homelab périmé** | Mettre à jour maintenant ; `assert_overflow_head.py` à chaque déploiement worker | **Critique** |
+| Webhook Stripe live | Confirmer par une session Stripe, écrire la date ici | **Critique — statut inconnu au 09/09** |
+| Infra homelab | Recréer à froid le conteneur WireGuard tiré le 08/09 ; split workers reporté (la perf P3-P5 a réduit la pression) | Ouverte (op à froid) |
 | **Verrou job T-A** (phase B) | Essai plancher P3 20 **manqué** (chute compaction 0,1 : 606,5 contre 520,7 ; temps inchangé) → plancher 30 gardé, **verrou écrit ≤ 16 s** | **Clos 07/09** (vérificateur, arbitrage délégué) |
 | **Lot C1 inscription** (vérification visible, doublon admin, newsletter 90 j) | Décisions D1-D8 du plan (mécanisme inchangé ; carte, jamais modale répétée ; 90 j ; `adminNotifiedAt`) | **Tranché 07/09** (vérificateur, arbitrage délégué) — à implémenter après U1 passe 2 |
 | **Licence du dépôt public** (`AUDIT-LICENCE-DEPOT-2026-09-07.md`) | Option A + dépôt neuf à historique unique, ancien dépôt privé archivé | **Clos 08/09** — bascule faite et validée (GO vérificateur) ; reste : relecture juridique d'une heure avant communication publique ; page /licences visible au prochain déploiement app |
 | **P6 zones grille en parallèle** | Clos sur le socle (graines par index, spéculation, bit-identique par pool) : sur le corpus le pass grille ne fait plus aucun sous-solve moteur depuis la compression analytique du 29/08 — rien à paralléliser ; sonde `__zoneDiag` conservée, réouverture si `calls > 0` apparaît | **Clos 08/09** (vérificateur) — budget versé au lot 5-moteur ; ordre U3 → colonne navigateur /benchmarks → lot 5-moteur. **Mesure au repos faite (fiche §12.5 bis)** : après-solve 75 / 82 / 70 ms (verrou P4 < 100 ms tenu ×3), aucun timeout sur six passages, solve P6 28-33 s contre P5 32-38 s — socle **déployable avec U3** |
+| **Phase C import non produite au lot 4** | En tête de T3 avec 3.2 ; corpus alimenté par les entretiens du jalon | **Décision vérificateur 09/09** — à confirmer par l'owner si le jalon dit autre chose |
 | API/batch (3.8) | GO après lots 2-4, pricing à l'usage | Non tranchée |
 | Turbo hybride Pro | Reporté (Phase 3 STRATEGY) | Dormante |
 
@@ -337,25 +338,28 @@ utilisateurs prime.
   qualité — règle gravée §5 STRATEGY).
 - DXF simplifié/anonymisé : écarté (casserait le produit).
 
-## 7. Métriques de succès
+## 7. Métriques de succès (revue du 09/09)
 
-- **Navigateur (référence)** : T-A ≤ 10 s au tier standard (mesuré 6-9 s),
-  temps Free mesuré et publié ; mono-tôle 300 pièces ≤ 40 s au tier standard ; long task max < 100 ms ; parité navigateur/serveur
-  bit-identique (grille aujourd'hui, post-pass après le lot 5-moteur) ;
-  import wasm sans réparation manuelle ≥ 95 % ; /benchmarks avec colonne
-  navigateur.
-- **Technique (serveur, débordement)** : job T-A création → fin **≤ 16 s** (verrou clos 07/09 : médiane 15-16 s à vide, plancher P3 30 confirmé par l'essai à 20) ;
-  gel < 0,5 s (atteint) ; corpus 11/11 en continu ; physique
-  0 chevauchement ; homelab = image Hetzner.
-- **Produit** : taux d'import sans réparation manuelle ≥ 95 % (post-3.2) ;
-  jobs utilisant une chute sauvegardée (post-3.3) ; export : golden par
-  entité vert sur les deux chemins (arcs déjà natifs), calques par nature
-  présents (post-3.1).
-- **Business** : premier payant (le webhook vivant est le prérequis) ;
-  rétention S1 > 25 % à 3 mois ; conversions Free→Unlimited après
-  activation du 10e nesting réussi.
-- **Confiance** : page benchmarks publiée, chiffres reproductibles,
-  thread communauté actif.
+- **Navigateur (référence)** : T-A (900 pièces, 2 tôles) **9 s de calcul**
+  au tier standard au repos (mesuré 08/09, 21 s sur poste chargé — toute
+  mesure se fait au repos, `QA_OUT` hors OneDrive, temps = calcul du
+  harnais et non `solveDoneAt`) ; mono-tôle 300 pièces **12,5 s** ; long
+  task après solve **70-82 ms** (< 100) ; CLS < 0,03 ; grille bit-identique
+  navigateur ≡ serveur ✓ ; post-pass bit-identique **après le lot
+  5-moteur** ; import wasm sans réparation manuelle ≥ 95 % **(non mesuré,
+  phase C)** ; /benchmarks avec colonne navigateur **(à faire)**.
+- **Serveur (débordement)** : job T-A ≤ 16 s ✓ ; corpus 11/11 en continu
+  ✓ ; physique 0 chevauchement ✓ ; homelab = image Hetzner ✓ (contrôlé à
+  chaque déploiement).
+- **Produit** : import ≥ 95 % (post-3.2) ; jobs utilisant une chute
+  sauvegardée (post-3.3) ; export golden par entité sur les deux chemins ;
+  calques par nature (post-3.1).
+- **Business** : premier payant (webhook vivant = prérequis) ; rétention
+  S1 > 25 % à 3 mois ; conversions Free→Unlimited après le 10e nesting
+  réussi — **aucun de ces chiffres n'a été re-mesuré depuis le 28/08**.
+- **Confiance** : /benchmarks publiée et régénérée à chaque moteur ✓ ;
+  dépôt lisible sous licence non commerciale ✓ ; thread communauté (à
+  ouvrir après le jalon).
 
 ## 8. Forme des instructions à l'implémenteur (GLM 5.3 Max)
 
@@ -380,6 +384,13 @@ exception :
    `createdAt ≥ SINCE` posée au début de la série, et le rapport donne la
    requête — jamais « tout ce qu'il y a en base » (P9 : deux écartées de
    la veille prises pour des écartées du jour).
+3ter. **Mesures de temps navigateur** : poste au repos (aucun build,
+   aucun autre harnais, agent à l'arrêt), `QA_OUT` hors OneDrive, valeur
+   = durée de calcul du harnais (« done (N s) »), jamais `solveDoneAt`
+   (qui inclut chargement et import) ; trois passages, les trois valeurs
+   dans le rapport. Les répartitions BPP du corpus serveur varient d'un
+   passage à l'autre (recuit à température sur le temps) : deux passages
+   avant de parler de régression.
 4. **Rapport constat par constat** : pour chaque verrou, la valeur mesurée
    et la commande ; les non-faits énoncés ; hashes de commits réels ;
    aucune interprétation (« variance », « tolérance ») à la place d'une

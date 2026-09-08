@@ -728,7 +728,9 @@ docker run --rm -i --network nest2d_nest2d \
 
 - `seed_job.py` : cas croix (3+3+50, tôle 1500×1000), asserte 3 alternatives
 - `seed_holes.py` : cas trous (10 hôtes r=35 + 41 secteurs, 1000×2000),
-  imprime `holesFilled` par classe (cible : 40/40 partout)
+  imprime `holesFilled` par classe (mesuré 08/09 : 20/40 par classe,
+  identique avant et après P5 — la cible 40/40 date d'une autre grille ;
+  re-ciblage au lot 5-moteur)
 - `seed_nestforge.py` : rejoue les pièces démo du concurrent depuis son DXF
 - `repro_pipeline.py` : exécute `nesting_process` in-process avec espion
   (dump instance/config moteur pour replay manuel)
@@ -748,9 +750,9 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (≈480 au 2026-09-06)
-cd workers/nesting/engine && cargo test --release -p nest-engine   # 72 + 1 ignore (dont le verrou bpp_live_frame)
-cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # ≈233 + 1 skip (dans l'image docker : les deps ne sont pas installées sur le poste)
+npx vitest run                                             # app+server (517 au 2026-09-09)
+cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
+cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # ≈233 + 1 skip (≈233 au 06/09 ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 48 (image docker)
 cd workers/fileprocessing && python -m pytest tests/ -q    # 33 (+2 skipped) (image docker)
 python workers/nesting/bench/determinism_lock.py           # natif ≡ wasm, SHA identiques
