@@ -475,8 +475,21 @@ Captures publiques : `docs/qa/atelier-ui/u2ter-prod-public-plans.png`
 (badges de plan carrés), `u2ter-prod-public-changelog.png`,
 `u2ter-prod-public-benchmarks.png`.
 
-**Restent à produire** : `u2ter-prod-projet.png` (presets +
-interrupteurs) et `u2ter-prod-profil.png` — pages authentifiées, elles
-demandent une session prod (compte `qa-agent@nestorcut.com`, dont
-l'implémenteur n'a pas le mot de passe ; aucune modification de
-l'authentification de production n'a été faite pour y accéder).
+**Pages authentifiées — arbitrage propriétaire (08/09)** : plutôt que de
+toucher à l'authentification de production, les captures des deux pages
+authentifiées sont prises sur le **build local Docker du même commit**,
+avec un compte créé pour l'occasion par le script
+`scripts/u2ter-fresh-account.mjs` (inscription autonome, aucun compte de
+production modifié) :
+
+- `u2ter-projet.png` — page projet complète : presets de tôle à 4 px,
+  interrupteurs rectangulaires, badge « DEMO » du bandeau en contour 2 px ;
+- `u2ter-profil-compte-neuf.png` — profil pleine largeur d'un compte neuf
+  (bandeau e-mail non vérifié, donc PAS de badge « Vérifié » : le badge
+  suit bien `emailVerified`) ;
+- `u2ter-compte-neuf-accueil.png` — accueil du même compte.
+
+Le build déployé, lui, est attesté côté prod par le contrôle du CSS servi
+et les trois captures publiques ci-dessus. **Résidu confirmé à l'œil sur
+`u2ter-projet.png`** : dans la colonne Projets, « Demo — Marine sheet
+metal » affiche un badge tronqué « ● D » — porté dans les verrous d'U4.
