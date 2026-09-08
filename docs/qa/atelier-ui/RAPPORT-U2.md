@@ -3,7 +3,7 @@
 Plan `docs/PLAN-UI-PRO-2026-09-07.md` §U2 + retouche §7, puis
 **passe GO partiel** (cinq retouches, commit unique).
 
-Hash : **`e1c1ed0`** (`fix(ui): passe U2 GO partiel`).
+Hash : **`0bf868c`** (`fix(ui): passe U2 GO partiel`).
 Vitest **510/510**. Pas de déploiement U2 — GO visuel final requis.
 
 ## Passe GO partiel (cinq retouches)
