@@ -176,3 +176,5 @@ Rejoué par le vérificateur : diff complet relu, `npx vitest run` vert au compt
 
 **Retouche C1-b-bis, avant déploiement** : fenêtre de course entre la notification immédiate et le digest. Le digest examine `createdAt > curseur` jusqu'à l'instant présent ; un inscrit créé quelques secondes avant un tick, dont l'envoi Resend est encore en vol (marqueur pas encore posé), est envoyé deux fois. Correction : borne haute de grâce dans `digestScanQuery(cursor, now)` → `{ createdAt: { $gt: cursor, $lte: new Date(now − 120 000) } }` (2 min, l'envoi immédiat prend ~1 s), le curseur n'avance jamais au-delà de cette borne ; un test dans `server/tests/signupDigest.test.js` (inscrit à now − 30 s : hors lot ; à now − 3 min : dans le lot). Rapport : ajouter la ligne au tableau des verrous, hash, `npx vitest run`. Puis déploiement app + admin, constat prod « 1 e-mail » par le propriétaire à +10 min.
 
+**Constat prod (propriétaire, 08/09)** : une inscription de test après le déploiement de C1-b-bis → **1 e-mail administrateur reçu**. Verrou « un seul e-mail par inscription » **clos**. Lot C1 terminé.
+
