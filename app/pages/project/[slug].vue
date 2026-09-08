@@ -23,8 +23,11 @@
             <p v-if="demoUnlimited" class="demo-banner__remaining">{{ t('demo.unlimitedLocal') }}</p>
             <p v-else class="demo-banner__remaining">{{ t('demo.remaining', { n: demoRemaining, total: DEMO_LIMIT }) }}</p>
         </div>
+        <p v-if="preflightLine" class="content__preflight" data-testid="project-preflight">
+            {{ preflightLine }}
+        </p>
         <section ref="liveSection" class="atelier">
-            <div class="atelier__stage stage">
+            <div class="atelier__stage stage" :class="{ 'stage--live': stageLive }">
                 <div class="stage__head">
                     <h2 class="stage__title">
                         {{ stageHeading }}
@@ -88,6 +91,7 @@
             </div>
             <aside class="atelier__params">
                 <MainSettings />
+                <div class="atelier__cta">
                 <MainButton
                     :theme="themeType.primary"
                     :label="btnLabel"
@@ -101,60 +105,15 @@
                         {{ t('nest.computing') }}
                     </template>
                 </MainButton>
-                <!-- Z1/C04 : refus capacité (422 API ou refus navigateur) —
-                     UN SEUL panneau, ancré sous le bouton Nest qui a déclenché
-                     l'action (plus un scrollIntoView pour l'amener à l'écran
-                     sur petit viewport). -->
-                <div
-                    v-if="capacityPanel"
-                    ref="capacityPanelEl"
-                    class="capacity-panel"
-                    data-testid="capacity-panel"
-                >
-                    <div class="capacity-panel__title">{{ t('nest.capacity.title') }}</div>
-                    <p class="capacity-panel__refunded">{{ t('nest.capacity.refunded') }}</p>
-                    <ul class="capacity-panel__levers">
-                        <li v-if="capacityPanel.levers.sheetsNeeded">
-                            {{ t('report.unfit.sheetsNeeded', { n: capacityPanel.levers.sheetsNeeded }) }}
-                        </li>
-                        <li v-if="capacityPanel.levers.maxParts != null">
-                            {{ t('report.unfit.maxParts', { n: capacityPanel.levers.maxParts }) }}
-                        </li>
-                        <li v-if="capacityPanel.levers.maxSpacingMm != null">
-                            {{ t('report.unfit.maxSpacing', { v: capacityPanel.levers.maxSpacingMm }) }}
-                        </li>
-                    </ul>
-                    <!-- C04 : espacement déjà au plancher (≤ 0,5 mm) ou kerf
-                         bloquant — le levier est masqué, la phrase dit
-                         pourquoi. -->
-                    <p v-if="capacityPanel.noSpacingGain" class="capacity-panel__floor">
-                        {{ t('nest.capacity.noSpacingGain') }}
-                    </p>
-                    <div class="capacity-panel__actions">
-                        <MainButton
-                            v-if="capacityPanel.nextSheets"
-                            :label="t('report.unfit.addSheet')"
-                            :size="sizeType.s"
-                            :theme="themeType.primary"
-                            data-testid="capacity-add-sheet"
-                            @click="onCapacityAddSheet"
-                        />
-                        <MainButton
-                            v-if="capacityPanel.reduceSpacingToMm != null"
-                            :label="t('report.unfit.reduceSpacing', { v: capacityPanel.reduceSpacingToMm })"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            data-testid="capacity-reduce-spacing"
-                            @click="onCapacityReduceSpacing"
-                        />
-                        <MainButton
-                            :label="t('nest.capacity.retry')"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            data-testid="capacity-retry"
-                            @click="startsNest"
-                        />
-                    </div>
+                <p v-if="ctaHint" class="atelier__cta-hint">{{ ctaHint }}</p>
+                </div>
+                <div v-if="capacityPanel" ref="capacityPanelEl">
+                <CapacityPanel
+                    :panel="capacityPanel"
+                    @add-sheet="onCapacityAddSheet"
+                    @reduce-spacing="onCapacityReduceSpacing"
+                    @retry="startsNest"
+                />
                 </div>
                 <FreeNestBanner v-if="!isDemo" />
             </aside>
@@ -201,9 +160,10 @@
 
 <script setup>
 import { themeType } from "~~/constants/theme.constants";
-import { sizeType } from "~~/constants/size.constants";
+
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { capacityPanelModel } from "~/utils/capacityPanel";
+import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
 import { isLocalComputeEnabled } from "~/composables/localCompute";
 import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
@@ -216,7 +176,7 @@ import {
     DEMO_SPACE_MM,
 } from "~~/shared/constants/demo.constants";
 import { sheetDisplaySize, sheetLandscapeTransform } from "~/utils/sheetView";
-import { PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
+import { PRIVACY_CHIP_KEY, PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
 
 definePageMeta({
     layout: "auth",
@@ -446,6 +406,54 @@ const { setProjectFiles, setProjectName, nest, getProject, consumePendingLocalFi
 const filesCount = computed(() => filesGetters.filesCount);
 // C06 : « 900 pièces · 2 fichiers » — les deux compteurs honnêtes.
 const projectFilesCount = computed(() => (filesGetters.projectFiles || []).length);
+const partCoords = (p) => p.coordinates ?? p.coords ?? (
+    p.width && p.height
+        ? [[0, 0], [p.width, 0], [p.width, p.height], [0, p.height], [0, 0]]
+        : []
+)
+const preflightReport = computed(() => {
+    const files = projectFiles.value || []
+    if (!unref(filesCount) || !files.length) return null
+    const parts = []
+    for (const f of files) {
+        const count = Number(f.count) || 0
+        if (!count) continue
+        for (const p of f.parts || []) parts.push({ coords: partCoords(p), count })
+    }
+    const p = unref(params)
+    const sheets = unref(currentSheets).map((s) => ({
+        width: displayToMm(Number(String(s.width).replace(',', '.')) || 0),
+        height: displayToMm(Number(String(s.height).replace(',', '.')) || 0),
+        count: Number(s.count) || 1,
+    }))
+    return capacityReport(
+        parts,
+        sheets,
+        displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0),
+    )
+})
+// U2 : carte pré-vol — réponse avant le calcul, recalculée à chaque réglage.
+const preflightLine = computed(() => {
+    const files = projectFiles.value || []
+    const nParts = unref(filesCount)
+    if (!nParts || !files.length) return ''
+    const report = preflightReport.value
+    const areaM2 = report ? (report.totalInflatedMm2 / 1e6).toFixed(2) : '—'
+    return t('project.preflight', {
+        parts: nParts,
+        files: files.length,
+        area: areaM2,
+        sheets: report?.sheetsNeeded ?? 1,
+        pct: Math.round((REFERENCE_PACKING || 0.85) * 100),
+    })
+})
+const ctaHint = computed(() => {
+    if (!unref(filesCount)) return ''
+    const n = preflightReport.value?.sheetsNeeded ?? 1
+    const modeKey = PRIVACY_CHIP_KEY[privacyMode.value]
+    const mode = modeKey ? t(modeKey) : ''
+    return t('nest.ctaHint', { n, mode })
+})
 const isNewParams = computed(() => filesGetters.isNewParams);
 const nestRequestError = computed(() => filesGetters.nestRequestError);
 // R-2 (audit 2026-08-31 §R-1) : erreur de soumission (409 concurrent_limit,
@@ -773,6 +781,17 @@ const startsNest = () => {
         flex-shrink: 0;
     }
 
+    &__preflight {
+        margin: 0 0 12px;
+        padding: 10px 14px;
+        font-size: var(--fs-13);
+        line-height: 1.45;
+        color: var(--label-secondary);
+        background: var(--fill-tertiary);
+        border-radius: var(--radius);
+        font-variant-numeric: tabular-nums;
+    }
+
     &__files {
         margin-top: 28px;
         margin-bottom: 24px;
@@ -863,6 +882,21 @@ const startsNest = () => {
             width: 100%;
         }
     }
+
+    &__cta {
+        position: sticky;
+        bottom: 0;
+        padding-top: 8px;
+        background: var(--background-primary);
+        z-index: 2;
+    }
+
+    &__cta-hint {
+        margin: 6px 0 0;
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
+        text-align: center;
+    }
 }
 
 .stage {
@@ -903,13 +937,21 @@ const startsNest = () => {
         gap: 8px;
     }
 
+    &--live {
+        min-height: 60vh;
+
+        :deep(.live) {
+            min-height: 60vh;
+        }
+    }
+
     &__sheet {
         width: 100%;
         min-height: 280px;
         max-height: min(52vh, 560px);
         border: 1px solid var(--border);
         border-radius: var(--radius-l);
-        background: var(--surface-2);
+        background: var(--surface);
     }
 
     &__sheet-bg {

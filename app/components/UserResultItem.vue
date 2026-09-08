@@ -37,27 +37,22 @@
             </UiButton>
         </template>
         <template v-else>
-            <!-- C09 (lot 3) : un refus capacité (unfit reason=capacity) est
-                 une VÉRITÉ produit, pas un « Nesting failed » fantôme — la
-                 carte dit « ne tient pas », le panneau de la page porte les
-                 leviers chiffrés. -->
+            <!-- U2 : le titre n'est plus un bloc gris bordé (ça ressemblait
+                 à un bouton). Miniature muette ; un seul libellé d'état
+                 (le badge) + le titre en texte simple. -->
             <div
                 v-if="isResultFailed"
-                class="result__placeholder"
+                class="result__placeholder result__placeholder--silent"
                 :title="isCapacityRefusal ? t('nest.capacity.title') : (result.information || undefined)"
-            >
-                {{ failureTitle }}
-            </div>
+            />
             <template v-else>
                 <!-- C05 : job localOnly calculé sur un autre appareil —
                      aperçu explicite, pas une rangée vide. -->
                 <div
                     v-if="result.localElsewhere"
-                    class="result__placeholder result__placeholder--elsewhere"
+                    class="result__placeholder result__placeholder--elsewhere result__placeholder--silent"
                     :title="t('results.otherDeviceHint')"
-                >
-                    {{ t('results.otherDevice.short') }}
-                </div>
+                />
                 <div
                     v-else-if="!result.purgedAt"
                     :class="svgRowClasses"
@@ -348,12 +343,12 @@ const stateLabel = computed(() => {
 
 const resultTitle = computed(() => {
     if (isResultFailed.value) {
-        // A3 : orphelin expiré — la cause et la marche à suivre.
+        // U2 : le badge porte déjà « Échec » — le titre dit la CAUSE,
+        // jamais un second « Échec du nesting ».
         if (isOrphanExpired.value) return t('results.orphanExpired')
-        // C09 : un seul titre + LA cause — refus capacité disait
-        // « Nesting failed » sans raison.
         if (isCapacityRefusal.value) return t('nest.capacity.title')
-        return isNoFit.value ? t('result.failed.nofitHint') : t('result.failed')
+        if (isNoFit.value) return t('result.failed.nofitHint')
+        return projectName.value || t('result.failed.nofitHint')
     }
     // C05 (lot 3) : job calculé dans le navigateur d'un AUTRE appareil —
     // la géométrie n'existe pas ici : message explicite, pas « 0 tôles ».
@@ -505,6 +500,20 @@ const onDownload = () => {
         background-color: var(--fill-tertiary);
         border-color: var(--separator-secondary);
         font-weight: 600;
+    }
+
+    /* U2 : miniature muette — plus de texte dans un bloc bordé. */
+    &__placeholder--silent {
+        width: 64px;
+        height: 36px;
+        min-width: 64px;
+        max-width: 64px;
+        min-height: 36px;
+        padding: 0;
+        font-size: 0;
+        font-weight: 400;
+        border-color: var(--separator-secondary);
+        background-color: var(--fill-tertiary);
     }
 
     &__name {

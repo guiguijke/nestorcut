@@ -1,11 +1,9 @@
 <template>
     <div class="settings">
-        <MainTitle
-            :label="t('settings.nesting')"
-            class="settings__title"
-        />
         <div class="settings__content content">
             <div class="content__size size">
+                <section class="settings__section" data-testid="settings-sheets">
+                    <h3 class="settings__h">{{ t('settings.section.sheets') }}</h3>
                 <div
                     v-for="(sheet, index) in sheets"
                     :key="index"
@@ -69,21 +67,26 @@
                 >
                     {{ t('settings.addSheet') }}
                 </button>
+                </section>
                 <!-- B.4 / masterplan 3.10 : l'espacement se règle par ses deux
                      causes — kerf (largeur de coupe) et sécurité (marge par
                      pièce). L'espacement effectif (clé moteur `space`) vaut
                      toujours kerf + 2 × sécurité, règle affichée dessous. -->
+                <section class="settings__section" data-testid="settings-spacing">
+                    <h3 class="settings__h">{{ t('settings.section.spacing') }}</h3>
                 <InputField
                     :prefix="t('settings.kerf')"
                     :suffix="unitLabel"
                     v-model="localKerf"
                     class="size__input"
+                    data-testid="settings-kerf"
                 />
                 <InputField
                     :prefix="t('settings.safety')"
                     :suffix="unitLabel"
                     v-model="localSafety"
                     class="size__input"
+                    data-testid="settings-safety"
                 />
                 <p class="size__rule">{{ spacingRule }}</p>
                 <!-- W10 (vérif 2026-09-04) : espacement sous le kerf laser —
@@ -102,7 +105,16 @@
                 >
                     {{ t('settings.spacingHolesDisabled') }}
                 </div>
+                </section>
+                <section class="settings__section" data-testid="settings-rotations">
+                    <h3 class="settings__h">{{ t('settings.section.rotations') }}</h3>
                 <div class="size__rotations rotations">
+                    <UiSegmented
+                        v-model="rotationSeg"
+                        :options="rotationSegOptions"
+                        :label="t('settings.rotations')"
+                        class="rotations__seg"
+                    />
                     <InputField
                         :prefix="t('settings.rotations')"
                         :suffix="t('settings.steps')"
@@ -111,6 +123,9 @@
                     />
                     <p class="rotations__hint">{{ rotationHint }}</p>
                 </div>
+                </section>
+                <section class="settings__section" data-testid="settings-directions">
+                    <h3 class="settings__h">{{ t('settings.section.directions') }}</h3>
                 <div class="size__compute compute">
                     <span class="compute__label">
                         {{ t('settings.directions') }}
@@ -131,7 +146,7 @@
                             :title="option.hint"
                             @click="toggleDirection(option.value)"
                         >
-                            <span class="compute__arrow">{{ option.arrow }}</span>
+                            <UiIcon :name="option.icon" :size="14" class="compute__arrow" />
                             {{ option.label }}
                         </button>
                     </div>
@@ -163,20 +178,22 @@
                     </div>
                     <p class="compute__hint">{{ t('settings.demoPower.hint') }}</p>
                 </div>
-                <label class="size__checkbox" :title="t('settings.addOutShapeHint')">
-                    <input
-                        type="checkbox"
-                        v-model="localAddOutShape"
-                    />
-                    {{ t('settings.addOutShape') }}
-                </label>
-                <label class="size__checkbox" :title="t('settings.fillHolesHint')">
-                    <input
-                        type="checkbox"
-                        v-model="localFillHoles"
-                    />
-                    {{ t('settings.fillHoles') }}
-                </label>
+                </section>
+                <section class="settings__section" data-testid="settings-options">
+                    <h3 class="settings__h">{{ t('settings.section.options') }}</h3>
+                <UiSwitch
+                    v-model="localAddOutShape"
+                    class="size__checkbox"
+                    :title="t('settings.addOutShapeHint')"
+                    :label="t('settings.addOutShape')"
+                />
+                <UiSwitch
+                    v-model="localFillHoles"
+                    class="size__checkbox"
+                    :title="t('settings.fillHolesHint')"
+                    :label="t('settings.fillHoles')"
+                />
+                </section>
             </div>
         </div>
     </div>
@@ -299,15 +316,37 @@
             height: Number(String(s.height).replace(',', '.')) || 0,
         }
     })
+    const DIRECTION_ICONS = { left: 'arrowLeft', bottom: 'arrowDown', balanced: 'layers' }
     const directionOptions = computed(() =>
         DIRECTION_ORDER.map((value) => ({
             value,
+            icon: DIRECTION_ICONS[value] || 'arrowLeft',
             arrow: displayDirectionArrow(value, firstSheet.value.width, firstSheet.value.height),
             label: t(`settings.directions.${value}`),
             hint: t(`settings.directions.${value}Hint`),
             active: localDirections.value.includes(value),
         }))
     )
+    const ROT_PRESETS = [1, 2, 4, 8]
+    const rotationSegOptions = computed(() => [
+        ...ROT_PRESETS.map((n) => ({ value: n, label: String(n) })),
+        { value: 'other', label: t('settings.rotation.other') },
+    ])
+    const rotationSeg = computed({
+        get() {
+            const n = Math.min(360, Math.max(1, Math.floor(Number(unref(params).rotationCount) || 4)))
+            return ROT_PRESETS.includes(n) ? n : 'other'
+        },
+        set(v) {
+            if (v === 'other') {
+                const cur = Math.floor(Number(unref(params).rotationCount) || 4)
+                if (!ROT_PRESETS.includes(cur)) return
+                updateParams({ rotationCount: 3 })
+            } else {
+                updateParams({ rotationCount: v })
+            }
+        },
+    })
     const directionsHint = computed(() =>
         maxDirections.value === 1
             ? t('settings.directions.freeHint')
@@ -367,6 +406,27 @@ const spacingBelowKerf = computed(() => {
 
         &__content {
             width: 100%;
+        }
+
+        &__section {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--separator-secondary);
+
+            &:last-child {
+                border-bottom: none;
+                margin-bottom: 0;
+                padding-bottom: 0;
+            }
+        }
+
+        &__h {
+            margin: 0 0 8px;
+            font-size: var(--fs-12);
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--label-secondary);
         }
     }
 
