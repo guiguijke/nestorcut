@@ -39,7 +39,7 @@ import { ZONE_CANCELLED } from './structureClient'
  * alternative moteur-shaped {structural: true} si elle reste à STRUCT_TOL
  * de la meilleure moteur.
  */
-async function buildGridAlternative(jobSlug, payload, result, { onZone } = {}) {
+async function buildGridAlternative(jobSlug, payload, result, { onZone, concurrency } = {}) {
     if ((result?.problem || payload?.problem) !== 'spp') return null
     const instance = payload?.instance || {}
     const items = instance.items || []
@@ -132,10 +132,25 @@ async function buildGridAlternative(jobSlug, payload, result, { onZone } = {}) {
     if (!caseInfo) return null
 
     const masterSeed = String(payload?.engineConfig?.prng_seed ?? '0')
-    let zoneIdx = 0
+    // P6 : la graine d'un sous-solve de zone ne vient plus d'un compteur
+    // mutable (l'ordre d'exécution deviendrait observable dès que deux
+    // tronçons tournent en parallèle) mais d'un INDEX fourni par
+    // structureClient — celui qu'aurait consommé le parcours séquentiel.
+    // Même index ⇒ même graine ⇒ même géométrie, quelle que soit la
+    // taille du pool.
     const smallId = caseInfo.small.id
     const smallRotations = rotationsByOrig.get(smallId) || [0, 90, 180, 270]
-    const solveZone = async (count, stripH, maxW, budgetSec, transposed = false) => {
+    const solveZone = async (count, stripH, maxW, budgetSec, transposed = false, seedIdx = 0) => {
+        // P6 : sonde de mesure — combien de sous-solves moteur, et combien
+        // de temps cumule/mur (le verrou du chantier est le rapport entre
+        // les deux quand le pool s'elargit).
+        const zoneT0 = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+        if (typeof window !== 'undefined') {
+            const d = window.__zoneDiag || (window.__zoneDiag = { calls: 0, cpuMs: 0, inFlight: 0, maxInFlight: 0, wallMs: 0, t0: zoneT0 })
+            d.calls += 1
+            d.inFlight += 1
+            d.maxInFlight = Math.max(d.maxInFlight, d.inFlight)
+        }
         const smallPart = partsById.get(Number(smallId))
         if (!smallPart) return null
         const coords = smallPart.coords || []
@@ -165,11 +180,18 @@ async function buildGridAlternative(jobSlug, payload, result, { onZone } = {}) {
                 live_events: false,
                 browser_walks: 1,
                 browser_concurrency: 1,
-                prng_seed: deriveSeed(masterSeed, 1000 + zoneIdx++).toString(),
+                prng_seed: deriveSeed(masterSeed, 1000 + seedIdx).toString(),
             },
         }
-        const outcome = await runPool(`${jobSlug}-zone${zoneIdx}`, zonePayload,
+        const outcome = await runPool(`${jobSlug}-zone${seedIdx + 1}`, zonePayload,
             { walks: 1, concurrency: 1 })
+        if (typeof window !== 'undefined' && window.__zoneDiag) {
+            const d = window.__zoneDiag
+            const now = (typeof performance !== 'undefined' ? performance.now() : Date.now())
+            d.inFlight -= 1
+            d.cpuMs += now - zoneT0
+            d.wallMs = now - d.t0
+        }
         if (!outcome.ok) {
             // Annulation : les pools de zones sont tués par préfixe
             // (cancelPool) — propager la sentinelle, ne PAS retry.
@@ -219,7 +241,10 @@ async function buildGridAlternative(jobSlug, payload, result, { onZone } = {}) {
         holePlan
             ? (hostId, fillId, slots, layouts) => expandMeta(
                 parts, hostId, fillId, slots, layouts, holeRotations)
-            : null)
+            : null,
+        // P6 : les tronçons d'une zone tournent sur le POOL DU TIER
+        // (1 / 4 / 8 — jamais navigator.hardwareConcurrency).
+        { concurrency })
     if (!struct) return null
     // Garde anti-perte (miroir du part-loss guard serveur) : un layout
     // structurel incomplet ne doit JAMAIS remplacer le résultat moteur
@@ -499,6 +524,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     try {
         const struct = await buildGridAlternative(jobSlug, payload, result, {
             onZone: (z) => onLive && onLive({ type: 'zone', ...z }),
+            concurrency: poolConc,
         })
         if (typeof window !== 'undefined') {
             // Fusion et non écrasement : le second write détruisait le

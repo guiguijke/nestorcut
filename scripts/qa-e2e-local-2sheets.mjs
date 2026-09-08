@@ -344,6 +344,11 @@ try {
     }
     const structMulti = await page.evaluate(() => window.__structMultiDiag || null)
     log('STRUCT MULTI DIAG:', JSON.stringify(structMulti))
+    // P6 : sous-solves de zone — nombre, temps cumule (cpuMs) contre temps
+    // mur (wallMs) et parallelisme reellement atteint (maxInFlight).
+    const zoneDiag = await page.evaluate(() => window.__zoneDiag || null)
+    log('ZONE DIAG:', JSON.stringify(zoneDiag))
+    fs.writeFileSync(path.join(OUT, 'zone-diag.json'), JSON.stringify(zoneDiag, null, 1))
 
     // ---------- 8. Dump IndexedDB (record riche : report + dxfs + liveLayout) ----------
     const idb = await page.evaluate(async () => {

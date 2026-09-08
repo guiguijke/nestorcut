@@ -702,9 +702,18 @@ export function planLattice(caseInfo, sheetW, sheetH, space, objective = 'x') {
  * l'appelant la traduit en sortie propre (jamais de local-fail ensuite). */
 export const ZONE_CANCELLED = Symbol('zone-cancelled')
 
+/**
+ * P6 : `seed0` = index du PREMIER appel moteur de ce tronçon dans l'ordre
+ * séquentiel (l'index qu'aurait consommé le compteur d'origine) ; chaque
+ * tentative suivante consomme seed0 + 1, + 2… `pre` = résultat déjà calculé
+ * spéculativement pour la tentative 0 — utilisé UNIQUEMENT si son `count`
+ * est celui que cette tentative allait demander. Retourne aussi le nombre
+ * d'appels moteur consommés : c'est lui qui fait avancer le compteur de
+ * graines de l'appelant.
+ */
 async function zoneSolve(zone, small, space, want, solveFn, budgetSec,
                          transposed = false, onZone = null, zoneLabel = '',
-                         step = 0, steps = 0) {
+                         step = 0, steps = 0, seed0 = 0, pre = null) {
     // Encadrement « compacter encore et encore » (miroir exact de
     // structure.py::_zone_solve) : shrink ×0,6 à l'échec, regonfler +15 %
     // au succès, bissection — ≤ ZONE_MAX_ATTEMPTS runs moteur.
@@ -713,16 +722,20 @@ async function zoneSolve(zone, small, space, want, solveFn, budgetSec,
     // (x, y) → (zone_w − y, x), rotation inchangée.
     const [x0, y0, x1, y1] = zone
     const zw = x1 - x0, zh = y1 - y0
-    if (zw <= 0 || zh <= 0 || want <= 0) return []
+    if (zw <= 0 || zh <= 0 || want <= 0) return { placements: [], calls: 0 }
     const solveH = transposed ? zw : zh
     const solveW = transposed ? zh : zw
     let best = null
     let hi = null
     let n = want
+    let calls = 0
     for (let attempt = 0; attempt < ZONE_MAX_ATTEMPTS; attempt++) {
         if (onZone) onZone({ zone: zoneLabel, attempt: attempt + 1, attempts: ZONE_MAX_ATTEMPTS,
                              count: n, step, steps })
-        const placements = await solveFn(n, solveH, solveW, budgetSec, transposed)
+        const placements = (attempt === 0 && pre && pre.count === n)
+            ? pre.placements
+            : await solveFn(n, solveH, solveW, budgetSec, transposed, seed0 + calls)
+        calls += 1
         let usedW = 0
         let leftW = 0
         if (placements && placements.length) {
@@ -749,10 +762,10 @@ async function zoneSolve(zone, small, space, want, solveFn, budgetSec,
         } else {
             hi = hi == null ? n : Math.min(hi, n)
             if (best == null) {
-                if (n <= 1) return []
+                if (n <= 1) return { placements: [], calls }
                 n = Math.max(1, Math.floor(n * 0.6))
                 if (hi != null && hi > 1) n = Math.min(n, hi - 1)
-                if (n < 1) return []
+                if (n < 1) return { placements: [], calls }
             } else {
                 const gap = hi - best.length
                 if (gap <= Math.max(1, Math.floor(best.length * 0.06))) break
@@ -760,18 +773,45 @@ async function zoneSolve(zone, small, space, want, solveFn, budgetSec,
             }
         }
     }
-    if (!best) return []
-    return best.map((p) => {
-        const [tx, ty] = p.transformation.translation
-        const [sx, sy] = transposed ? [x0 + (zw - ty), y0 + tx] : [x0 + tx, y0 + ty]
-        return {
-            item_id: small.id,
-            transformation: {
-                rotation: p.transformation.rotation,
-                translation: [sx, sy],
-            },
+    if (!best) return { placements: [], calls }
+    return {
+        calls,
+        placements: best.map((p) => {
+            const [tx, ty] = p.transformation.translation
+            const [sx, sy] = transposed ? [x0 + (zw - ty), y0 + tx] : [x0 + tx, y0 + ty]
+            return {
+                item_id: small.id,
+                transformation: {
+                    rotation: p.transformation.rotation,
+                    translation: [sx, sy],
+                },
+            }
+        }),
+    }
+}
+
+/**
+ * P6 — exécute `fn` sur chaque élément avec au plus `limit` tâches en vol,
+ * et rend les résultats DANS L'ORDRE DES ENTRÉES (l'ordre d'achèvement ne
+ * doit jamais transparaître). limit ≤ 1 ⇒ strictement séquentiel.
+ */
+export async function mapLimit(items, limit, fn) {
+    const out = new Array(items.length)
+    const width = Math.max(1, Math.trunc(Number(limit) || 1))
+    if (width === 1) {
+        for (let i = 0; i < items.length; i++) out[i] = await fn(items[i], i)
+        return out
+    }
+    let next = 0
+    const runners = Array.from({ length: Math.min(width, items.length) }, async () => {
+        for (;;) {
+            const i = next++
+            if (i >= items.length) return
+            out[i] = await fn(items[i], i)
         }
     })
+    await Promise.all(runners)
+    return out
 }
 
 /** Découpe la zone en rectangles successifs le long de son grand axe
@@ -811,7 +851,11 @@ export function zoneSteps(zone) {
 export async function buildStructuralLayout(instanceItems, geomBy, sheetW, sheetH,
                                              space, solveFn, objective = 'x',
                                              onZone = null, holePlan = null,
-                                             expandHoles = null) {
+                                             expandHoles = null, opts = {}) {
+    // P6 : largeur d'execution des sous-solves de zone = pool du TIER
+    // (1 / 4 / 8), jamais navigator.hardwareConcurrency. 1 => parcours
+    // strictement sequentiel, a l'octet pres comme avant P6.
+    const zoneWidth = Math.max(1, Math.trunc(Number(opts?.concurrency) || 1))
     let totalArea = 0
     for (const it of instanceItems) {
         const geom = geomBy(it.id)
@@ -839,8 +883,15 @@ export async function buildStructuralLayout(instanceItems, geomBy, sheetW, sheet
     ].filter((z) => z.zone)
     const steps = plan.length
 
-    const fillZone = async (z, want, stepIdx) => {
-        if (!z.zone || want <= 0) return 0
+    // P6 - capacite d'un troncon (identique a l'ancien calcul en ligne).
+    const rectCap = (rect) => {
+        const [rx0, ry0, rx1, ry1] = rect
+        return Math.floor((rx1 - rx0) * (ry1 - ry0) * ZONE_A_DENSITY
+            / Math.max(caseInfo.small.area, 1e-6))
+    }
+
+    const fillZone = async (z, want, stepIdx, seedBase) => {
+        if (!z.zone || want <= 0) return { got: 0, calls: 0 }
         // LATTICE ANALYTIQUE d'abord (« compression finale », user
         // 2026-08-29) : déterministe, instantané, ~67 % en bande étroite
         // (vs 38-57 % moteur) ; tronçons moteur pour le surplus ou repli
@@ -855,33 +906,82 @@ export async function buildStructuralLayout(instanceItems, geomBy, sheetW, sheet
                 // déjà posées — 300/231 mesuré 2026-08-29).
                 const take = lat.slice(0, want)
                 placements.push(...take)
-                return take.length
+                return { got: take.length, calls: 0 }
             }
         }
         // Rectangles successifs pleins (miroir de structure.py::fill_zone)
         const rects = zoneSteps(z.zone)
+
+        // P6 - SPECULATION : le parcours sequentiel demande a chaque troncon
+        // min(reste, capacite) et n'y consacre qu'UN appel moteur quand il
+        // reussit du premier coup (cas de tres loin le plus frequent). On
+        // predit donc cet enchainement, on lance les troncons predits EN
+        // PARALLELE sur le pool du tier, puis on rejoue la boucle
+        // sequentielle en reutilisant la speculation TANT QU'ELLE COINCIDE
+        // (meme quantite demandee, meme index de graine). Au premier ecart
+        // la speculation est jetee et la fin de zone se deroule
+        // sequentiellement : le resultat est celui du sequentiel, a l'octet
+        // pres, quelle que soit la largeur du pool.
+        const predWant = []
+        const predSeed = []
+        let predRemaining = want
+        let predCalls = 0
+        for (let i = 0; i < rects.length; i++) {
+            const w = predRemaining > 0
+                ? Math.min(predRemaining, Math.max(0, rectCap(rects[i])))
+                : 0
+            predWant.push(w)
+            predSeed.push(w ? predCalls : -1)
+            if (w) predCalls += 1
+            predRemaining -= w
+        }
+        const spec = zoneWidth > 1
+            ? await mapLimit(rects, zoneWidth, async (rect, i) => {
+                if (!predWant[i]) return null
+                const [rx0, ry0, rx1, ry1] = rect
+                const rw = rx1 - rx0
+                const rh = ry1 - ry0
+                const solveH = z.transposed ? rw : rh
+                const solveW = z.transposed ? rh : rw
+                const out = await solveFn(predWant[i], solveH, solveW,
+                    z.budget, z.transposed, seedBase + predSeed[i])
+                return { count: predWant[i], placements: out }
+            })
+            : rects.map(() => null)
+
+        let calls = 0
+        let speculationHolds = zoneWidth > 1
         for (let i = 0; i < rects.length; i++) {
             if (gotTotal >= want) break
-            const [zx0, zy0, zx1, zy1] = rects[i]
-            const cap = Math.floor((zx1 - zx0) * (zy1 - zy0) * ZONE_A_DENSITY
-                / Math.max(caseInfo.small.area, 1e-6))
-            const wantStep = Math.min(want - gotTotal, Math.max(0, cap))
+            const wantStep = Math.min(want - gotTotal, Math.max(0, rectCap(rects[i])))
             if (!wantStep) continue
-            const got = await zoneSolve(rects[i], smallSolve, space, wantStep,
-                solveFn, z.budget, z.transposed, onZone, z.key, stepIdx, steps)
-            placements.push(...got)
-            gotTotal += got.length
-            if (got.length < wantStep * ZONE_STEP_BREAK) break
+            const usable = speculationHolds && spec[i]
+                && predSeed[i] === calls && spec[i].count === wantStep
+            if (!usable) speculationHolds = false
+            const out = await zoneSolve(rects[i], smallSolve, space, wantStep,
+                solveFn, z.budget, z.transposed, onZone, z.key, stepIdx, steps,
+                seedBase + calls, usable ? spec[i] : null)
+            if (out.calls !== 1) speculationHolds = false
+            calls += out.calls
+            placements.push(...out.placements)
+            gotTotal += out.placements.length
+            if (out.placements.length < wantStep * ZONE_STEP_BREAK) break
         }
-        return gotTotal
+        return { got: gotTotal, calls }
     }
 
     let used = 0
     let stepIdx = 0
+    // P6 : compteur de graines = nombre d'appels moteur deja consommes dans
+    // l'ordre sequentiel canonique (A, C, puis B) - il reproduit exactement
+    // l'ancien compteur zoneIdx++ de localJobPrivate.
+    let seedCounter = 0
     for (const z of plan) {
         stepIdx += 1
         if (z.key === 'B') break // dernier réservoir, traité après les trous
-        used += await fillZone(z, nSmall - used, stepIdx)
+        const r = await fillZone(z, nSmall - used, stepIdx, seedCounter)
+        used += r.got
+        seedCounter += r.calls
     }
 
     // Trous des hôtes posés : capacity = Σ rotations validées par anneau ×
@@ -929,8 +1029,11 @@ export async function buildStructuralLayout(instanceItems, geomBy, sheetW, sheet
             if (latB && latB.length >= left) got = latB
         }
         if (!got.length) {
-            got = await zoneSolve(bZone.zone, smallSolve, space, left,
-                solveFn, bZone.budget, bZone.transposed, onZone, 'B', steps, steps)
+            const outB = await zoneSolve(bZone.zone, smallSolve, space, left,
+                solveFn, bZone.budget, bZone.transposed, onZone, 'B', steps, steps,
+                seedCounter)
+            seedCounter += outB.calls
+            got = outB.placements
         }
         if (!got.length || nSmall - used - got.length > 0) return null
         placements.push(...got)

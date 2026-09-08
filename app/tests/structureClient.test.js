@@ -536,3 +536,101 @@ describe('latticeRotated ancré à gauche (P2, audit 2026-09-03)', () => {
         expect(minX).toBeLessThanOrEqual(rect[0] + 1e-6)
     })
 })
+
+
+// ---------------------------------------------------------------------------
+// P6 — sous-solves de zone sur le pool du tier.
+//
+// Le contrat n'est PAS « aller plus vite » : c'est « le résultat ne dépend
+// pas de la largeur du pool ». Les graines viennent d'un index calculé
+// (l'index qu'aurait consommé le parcours séquentiel), jamais d'un compteur
+// mutable — sinon l'ordre d'achèvement des tâches devient observable.
+// ---------------------------------------------------------------------------
+describe('mapLimit — ordre des entrées, largeur bornée', () => {
+    it('rend dans l\'ordre des entrées quel que soit l\'ordre d\'achèvement', async () => {
+        const { mapLimit } = await import('../composables/structureClient')
+        const delays = [30, 1, 20, 2, 10]
+        const out = await mapLimit(delays, 3, async (d, i) => {
+            await new Promise((r) => setTimeout(r, d))
+            return i
+        })
+        expect(out).toEqual([0, 1, 2, 3, 4])
+    })
+
+    it('ne dépasse jamais la largeur demandée ; largeur 1 = séquentiel', async () => {
+        const { mapLimit } = await import('../composables/structureClient')
+        let inFlight = 0
+        let peak = 0
+        const run = async (width) => {
+            inFlight = 0
+            peak = 0
+            await mapLimit([1, 2, 3, 4, 5, 6], width, async () => {
+                inFlight += 1
+                peak = Math.max(peak, inFlight)
+                await new Promise((r) => setTimeout(r, 5))
+                inFlight -= 1
+            })
+            return peak
+        }
+        expect(await run(1)).toBe(1)
+        expect(await run(3)).toBeLessThanOrEqual(3)
+        expect(await run(3)).toBeGreaterThan(1)
+    })
+})
+
+describe('P6 — résultat indépendant de la taille du pool', () => {
+    // Objectif −Y : la zone B' est TRANSPOSÉE, donc hors du lattice
+    // analytique — elle passe réellement par le moteur (sinon le test
+    // serait vide : sur le cas de référence −X, le lattice couvre tout et
+    // AUCUN sous-solve n'est émis).
+    const items = [{ id: 0, demand: 100 }, { id: 1, demand: 400 }]
+    const geoms = { 0: geom(SQUARE), 1: geom(FAN) }
+    const geomOf = (i) => geoms[i]
+
+    const runWith = async (concurrency) => {
+        const { buildStructuralLayout } = await import('../composables/structureClient')
+        const seen = []
+        // Solve déterministe : ne dépend QUE de ses arguments, jamais de
+        // l'ordre d'appel — c'est ce qui rend l'écart observable si les
+        // graines venaient d'un compteur mutable.
+        const solve = async (count, stripH, maxW, budgetSec, transposed, seedIdx) => {
+            seen.push({ count, maxW: Math.round(maxW), seedIdx })
+            const rows = Math.max(1, Math.floor((stripH - 44) / 31))
+            const cols = Math.max(1, Math.ceil(count / rows))
+            const pitchX = cols > 1 ? (maxW - 42) / (cols - 1) : 0
+            if (pitchX < 0) return null
+            return Array.from({ length: count }, (_, k) => ({
+                item_id: 1,
+                transformation: {
+                    rotation: 0,
+                    translation: [22 + pitchX * Math.floor(k / rows), 22 + 31 * (k % rows)],
+                },
+            }))
+        }
+        const out = await buildStructuralLayout(items, geomOf, 1000, 2000, 0.1,
+            solve, 'y', null, null, null, { concurrency })
+        return { out, seen }
+    }
+
+    it('pool 1, 4 et 8 : placements bit-identiques et mêmes index de graine', async () => {
+        const a = await runWith(1)
+        const b = await runWith(4)
+        const c = await runWith(8)
+        // Le test n'a de valeur que si le moteur a bien été sollicité.
+        expect(a.seen.length).toBeGreaterThan(0)
+        expect(JSON.stringify(b.out)).toBe(JSON.stringify(a.out))
+        expect(JSON.stringify(c.out)).toBe(JSON.stringify(a.out))
+        const idx = (r) => r.seen.map((x) => x.seedIdx)
+        // Les index consommés forment la suite 0, 1, 2… du parcours
+        // séquentiel, à l'identique quelle que soit la largeur du pool.
+        expect(idx(a)).toEqual(idx(a).map((_, i) => i))
+        expect(idx(b)).toEqual(idx(a))
+        expect(idx(c)).toEqual(idx(a))
+    })
+
+    it('un sous-solve ne reçoit jamais deux fois le même index de graine', async () => {
+        const { seen } = await runWith(4)
+        expect(seen.length).toBeGreaterThan(0)
+        expect(new Set(seen.map((x) => x.seedIdx)).size).toBe(seen.length)
+    })
+})
