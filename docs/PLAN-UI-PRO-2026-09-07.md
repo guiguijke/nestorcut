@@ -452,3 +452,25 @@ space 2 : 900/900, 55,4 %, long task max 67 ms / 58 ms après solve, CLS
 (presets + interrupteurs). Script : `scripts/u2ter-check.mjs`.
 
 **Aucun déploiement** — attente du GO visuel.
+
+### U2-ter — GO (vérificateur, 08/09, commit `7f2d682`)
+
+Verrous rejoués : `git grep radius-full app` hors avatars et `tokens.css` = 0 ; aucun `border-radius` 999px/50 % hors avatar ; `UiSwitch` piste 4 px / curseur 2 px, `UiBadge` 2 px, presets de tôle 4 px (capture réglages) ; profil sur la grille pleine largeur, badge « Vérifié » contour, abonnement sans chevauchement. L'écart assumé (badge Vérifié de `profile.vue` l. 65 passé en contour) est conforme au point 2. **GO déploiement app.** Résidu pour U4 : dans la liste des projets, le badge « Démo » est tronqué (« D ») quand le nom est long — le badge ne doit pas se compresser (min-width, nom en ellipse).
+
+
+**Déployé prod 08/09** : app seule, `ghcr.io/guiguijke/nest2d-app:latest`
+digest `sha256:8d44bf54f3c7ae2a…`, `NUXT_PUBLIC_GIT_COMMIT_SHA=7f2d682ddd6b9934…`,
+app recréée 2026-09-08T19:08:30Z ; `nesting-worker` **inchangé**
+(2026-09-08T14:50:28Z, P5). Contrôle non invasif sur le CSS réellement
+servi (68 feuilles, 262 122 octets, pages publiques `/plans`,
+`/changelog`, `/benchmarks`) : **0** `border-radius: 50%`, **0**
+`border-radius: 999px`, `var(--radius-full)` uniquement pour l'avatar.
+Captures publiques : `docs/qa/atelier-ui/u2ter-prod-public-plans.png`
+(badges de plan carrés), `u2ter-prod-public-changelog.png`,
+`u2ter-prod-public-benchmarks.png`.
+
+**Restent à produire** : `u2ter-prod-projet.png` (presets +
+interrupteurs) et `u2ter-prod-profil.png` — pages authentifiées, elles
+demandent une session prod (compte `qa-agent@nestorcut.com`, dont
+l'implémenteur n'a pas le mot de passe ; aucune modification de
+l'authentification de production n'a été faite pour y accéder).
