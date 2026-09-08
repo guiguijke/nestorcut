@@ -453,6 +453,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     if (onLive) {
         try { onLive({ stage: 'finalizing' }) } catch { /* */ }
     }
+    // Two rAF: let Vue paint « Finalisation… » before the (possibly
+    // synchronous) post-pass starts. Without this the champion lock and a
+    // fast worker collapse the stage into `final` in the same tick.
+    if (typeof requestAnimationFrame === 'function') {
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+    }
     // AC6 (L2-ter) : miroir minimal de l'observabilité serveur — les
     // alternatives écartées laissent un diagnostic (raison + stratégie),
     // jamais une perte silencieuse. Portée FONCTION : le return et le

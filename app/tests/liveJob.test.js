@@ -6,6 +6,7 @@ import {
     pickRunningJob,
     frameFitsSheet,
     frameIsBetter,
+    resolveLiveStage,
 } from '../utils/liveJob'
 
 const aLive = { slug: 'jA', projectSlug: 'pA', status: 'awaiting_local', isInProgress: true, liveLayout: { stage: 'x' } }
@@ -100,5 +101,23 @@ describe('frameIsBetter — ordre de qualité du champion', () => {
     it('hors-tôle jamais champion contre une frame qui tient', () => {
         expect(frameIsBetter(spp({ strip_width: 3100 }), spp())).toBe(false)
         expect(frameIsBetter(spp(), spp({ strip_width: 3100 }))).toBe(true)
+    })
+})
+
+describe('resolveLiveStage — P4 Finalisation visible malgré le champion', () => {
+    it('finalizing gagne sur le stage champion `final`', () => {
+        expect(resolveLiveStage(
+            { progress: { stage: 'finalizing' }, liveLayout: { stage: 'finalizing' } },
+            'final',
+        )).toBe('finalizing')
+        expect(resolveLiveStage(
+            { liveLayout: { stage: 'finalizing' } },
+            'final',
+        )).toBe('finalizing')
+    })
+    it('sans finalizing, le champion reste la source', () => {
+        expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, 'final')).toBe('final')
+        expect(resolveLiveStage({}, 'compress')).toBe('compress')
+        expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, null)).toBe('explore')
     })
 })

@@ -160,7 +160,7 @@ import {
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
-import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter } from '~/utils/liveJob';
+import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage } from '~/utils/liveJob';
 
 const props = defineProps({
     result: { type: Object, required: true },
@@ -551,7 +551,7 @@ const scoreLabel = computed(() => {
 // non crédible comme indicateur) sont retirés de l'en-tête.
 
 const stageLabel = computed(() => {
-    const stage = props.result?.progress?.stage || best.value?.stage;
+    const stage = resolveLiveStage(props.result, best.value?.stage);
     if (!stage) return t('results.nesting');
     const key = `progress.stage.${stage}`;
     const translated = t(key);

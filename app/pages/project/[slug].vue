@@ -304,7 +304,16 @@ const localLive = computed(() => {
     return {
         ...localLiveFrame.value,
         compute: { vcores: localWalks.value },
-        progress: { evals: localEvals.value, elapsed_sec: localElapsed.value },
+        progress: {
+            evals: localEvals.value,
+            elapsed_sec: localElapsed.value,
+            // P4 : le champion lock ignore une frame `finalizing` (même
+            // géométrie) — porter le stage ici pour que LiveNestingView
+            // affiche « Finalisation… » pendant le worker.
+            ...(localLiveFrame.value.liveLayout?.stage === 'finalizing'
+                ? { stage: 'finalizing' }
+                : {}),
+        },
     };
 });
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —

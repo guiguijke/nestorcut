@@ -103,3 +103,15 @@ export function frameIsBetter(a, b) {
     // l'incumbent (stabilité du corridor phase 2).
     return a.isSpp === false && b.isSpp === false
 }
+
+/**
+ * Stage shown in the live header. P4's `finalizing` frame is the same
+ * geometry as the champion (the post-pass has not produced a new layout
+ * yet), so offerChampion keeps the engine's last `final` — without this
+ * override the user never sees « Finalisation… ».
+ */
+export function resolveLiveStage(result, championStage) {
+    const incoming = result?.progress?.stage || result?.liveLayout?.stage
+    if (incoming === 'finalizing') return 'finalizing'
+    return championStage || incoming || null
+}
