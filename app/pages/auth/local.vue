@@ -31,9 +31,19 @@
                 :placeholder="t('auth.email')"
                 :is-error="!!emailError"
                 :aria-invalid="emailError ? 'true' : undefined"
-                aria-describedby="local-auth-email-error"
+                :aria-describedby="isRegister ? 'local-auth-email-hint local-auth-email-error' : 'local-auth-email-error'"
                 class="local-auth__field"
             />
+            <!-- C1-a : la vérification d'e-mail est annoncée au formulaire
+                 (mode inscription seulement) ; l'aide reste affichée en cas
+                 d'erreur, au-dessus du message. -->
+            <p
+                v-if="isRegister"
+                id="local-auth-email-hint"
+                class="local-auth__hint"
+            >
+                {{ t('auth.emailHint') }}
+            </p>
             <p v-if="emailError" id="local-auth-email-error" class="local-auth__fielderror">
                 {{ emailError }}
             </p>
@@ -259,6 +269,19 @@ onMounted(async () => {
         margin: -4px 0 4px;
         text-align: left;
         width: 100%;
+    }
+
+    // C1-a : aide « nous enverrons un lien » — le plan demandait
+    // --label-tertiary « comme &__legal », mais ce gris donne 3,87 : 1 sur
+    // le fond de la page d'auth : le VERROU du plan (contraste ≥ 4,5)
+    // l'emporte — secondaire (7,4 : 1).
+    &__hint {
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
+        margin: -4px 0 4px;
+        text-align: left;
+        width: 100%;
+        line-height: 1.5;
     }
 
     &__password {

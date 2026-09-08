@@ -92,11 +92,11 @@ export default defineEventHandler(async (event) => {
         })
     }
 
-    try {
-        await sendWelcomeMessage(userId)
-    } catch (err) {
+    // D7 (C1-b) : fire-and-forget — les 3 s d'écriture du message de
+    // bienvenue ne tiennent plus la réponse d'inscription.
+    sendWelcomeMessage(userId).catch((err) => {
         logger.warn('Error sending welcome message', err)
-    }
+    })
 
     // Best-effort admin notification (never blocks registration).
     notifyAdminNewUser(event, { id: userId, email, name, provider: 'local' }).catch((err) => {
@@ -104,5 +104,7 @@ export default defineEventHandler(async (event) => {
     })
 
     setSessionCookie(event, session)
-    return { ok: true, needsVerification: true }
+    // C1-a : l'e-mail revient avec la réponse — la page check-email
+    // l'affiche (faute de frappe visible immédiatement).
+    return { ok: true, needsVerification: true, email }
 })

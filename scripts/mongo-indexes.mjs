@@ -55,6 +55,12 @@ const indexes = [
   ['tracking', { timestamp: -1 }, { name: 'timestamp_desc' }],
   ['http', { timestamp: -1 }, { name: 'timestamp_desc' }],
 
+  // ── email verification (C1-a) ──
+  // TTL: expired tokens are purged by Mongo (sweep every ~60 s). The
+  // read-time expiry check in consumeVerificationToken stays — a token can
+  // be read up to a minute past its expiry before the TTL collector runs.
+  ['emailVerifications', { expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl.expiresAt' }],
+
   // ── support ──
   ['supportMessages', { userId: 1, createdAt: -1 }, { name: 'user_recent' }],
   ['supportMessages', { sender: 1 }, { sparse: true, name: 'sender' }],

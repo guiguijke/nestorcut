@@ -7,11 +7,13 @@ const VALID_UNITS = ['mm', 'inch']
 /**
  * PATCH /api/user/preferences — per-user preferences.
  * Body: { preferredUnit?: 'mm' | 'inch', newsletterOptIn?: boolean,
- *         turboHybrid?: boolean }
+ *         newsletterAsked?: true, turboHybrid?: boolean }
  *
  * newsletterOptIn also syncs with listmonk (subscribe / blocklist) and is
  * always written — including `false`, so a declined first-login prompt is
- * remembered and never shown again.
+ * remembered and never shown again. It also stamps newsletterAskedAt (any
+ * answer counts as a ask for the 90-day card clock, D6).
+ * newsletterAsked (C1-c) is the card's "Not now": only the clock moves.
  * turboHybrid (Chantier B, J-093 suite) : réservé aux tiers payants (P3) et
  * inerte tant que la course client+serveur n'est pas livrée — le bouton est
  * flag-gated dev (NUXT_PUBLIC_TURBO_ENABLED).
@@ -35,6 +37,15 @@ export default defineEventHandler(async (event) => {
     if (typeof body?.newsletterOptIn === 'boolean') {
         $set.newsletterOptIn = body.newsletterOptIn
         $set.newsletterOptInAt = new Date()
+        // C1-c (D6) : une réponse à la newsletter compte comme une demande —
+        // la carte 90 jours ne revient pas juste après un « Pas maintenant ».
+        $set.newsletterAskedAt = new Date()
+    }
+
+    // C1-c : la carte « Pas maintenant » / sa croix ne pose QUE l'horloge —
+    // newsletterOptIn n'est pas touché (il reste null/false tel quel).
+    if (body?.newsletterAsked === true) {
+        $set.newsletterAskedAt = new Date()
     }
 
     if (typeof body?.turboHybrid === 'boolean') {

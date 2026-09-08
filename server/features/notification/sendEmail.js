@@ -101,8 +101,16 @@ export async function sendPasswordResetEmail(email, resetUrl) {
 }
 
 export async function sendVerificationEmail(email, verifyUrl) {
-  const emailSubject = 'Verify your NestorCut account';
+  // D3 (C1-a) : bilingue dans le même corps — pas de plomberie de langue à
+  // l'inscription, FR puis EN, un seul lien.
+  const emailSubject = 'Confirmez votre adresse · Verify your email — NestorCut';
   const emailBody = `
+    <p>Bonjour,</p>
+    <p>Merci de créer votre compte NestorCut. Confirmez votre adresse e-mail pour commencer à imbriquer :</p>
+    <p><a href="${verifyUrl}">Confirmer mon adresse e-mail</a></p>
+    <p>Ce lien est valable 24 heures. Si vous n'êtes pas à l'origine de cette inscription, vous pouvez ignorer cet e-mail.</p>
+    <p>Cordialement, <br> NestorCut</p>
+    <hr style="border:none;border-top:1px solid #ddd;margin:20px 0">
     <p>Hello,</p>
     <p>Thanks for creating your NestorCut account. Please confirm your email address to start nesting:</p>
     <p><a href="${verifyUrl}">Verify my email address</a></p>

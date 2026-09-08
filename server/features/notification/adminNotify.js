@@ -1,4 +1,5 @@
 import { COUNTRY_HEADER_NAME } from '../../tracking/const'
+import { connectDB } from '../../db/mongo'
 import logger from '../../utils/logger'
 
 // Notifies the platform administrator (by email) when a new user signs up.
@@ -7,9 +8,15 @@ import logger from '../../utils/logger'
 // (the admin panel's periodic digest is the safety net that catches any signup
 // missed here, e.g. when Resend was unreachable at signup time).
 //
-// This is fire-and-forget from the caller's perspective: a failure to send the
-// notification must never block registration. Country/IP are derived from the
-// Cloudflare cf-ipcountry header (best-effort; null behind a non-Cloudflare proxy).
+// D4 (C1-b): after a SUCCESSFUL send, the user doc is stamped with
+// `adminNotifiedAt` — the admin digest filters on its absence, so each
+// signup reaches the admin exactly once (the digest truly becomes the
+// safety net it claims to be). A failed send leaves no marker on purpose:
+// the digest will pick that signup up.
+//
+// This is fire-and-forget from the caller's perspective: a failure to send
+// the notification must never block registration. Country/IP are derived from
+// the Cloudflare cf-ipcountry header (best-effort; null behind a non-Cloudflare proxy).
 export async function notifyAdminNewUser(event, { id, email, name, provider }) {
   const config = useRuntimeConfig(event)
   const notifyEmail = config.adminNotifyEmail
@@ -50,6 +57,11 @@ export async function notifyAdminNewUser(event, { id, email, name, provider }) {
         html,
       },
     })
+    // D4 (C1-b) : envoi réussi → marqueur. Le digest filtre sur son
+    // absence ; un échec ci-dessous (Resend KO) ne pose RIEN et le digest
+    // reprendra cet inscrit.
+    const db = await connectDB()
+    await db.collection('users').updateOne({ id }, { $set: { adminNotifiedAt: new Date() } })
   } catch (err) {
     // Swallow — the periodic digest in the admin panel covers missed signups.
     logger.warn('Failed to notify admin of new signup', { id, err: String(err) })

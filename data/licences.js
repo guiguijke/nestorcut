@@ -37,7 +37,6 @@ export const groups = [
             { name: "matplotlib", version: "3.10.5", license: "Matplotlib (PSF-based)" },
             { name: "cryptography", version: "—", license: "Apache-2.0 OR BSD-3-Clause" },
             { name: "python-dotenv", version: "1.1.1", license: "BSD-3-Clause" },
-            { name: "spyrrow", version: "0.9.0", license: "MIT" },
         ],
     },
     {

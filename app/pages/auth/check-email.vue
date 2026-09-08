@@ -2,8 +2,12 @@
     <div class="check-email">
         <img src="/brand/n-mark.png" alt="NestorCut" class="check-email__logo" />
         <MainTitle :label="t('auth.checkEmail.title')" class="check-email__title" />
+        <!-- C1-a : l'adresse est affichée (une faute de frappe à
+             l'inscription devient visible immédiatement). L'utilisateur est
+             déjà connecté à ce point — le cache user porte l'e-mail ;
+             repli sur l'ancien texte si l'adresse manque. -->
         <p class="check-email__text">
-            {{ t('auth.checkEmail.text') }}
+            {{ email ? t('auth.checkEmail.textWithEmail', { email }) : t('auth.checkEmail.text') }}
         </p>
         <MainButton
             :theme="themeType.primary"
@@ -30,6 +34,11 @@ definePageMeta({
 const { t } = useLocale()
 const resent = ref(false)
 const loading = ref(false)
+
+// C1-a : l'e-mail du compte connecté (le register pose le cookie de
+// session avant la redirection ici).
+const { data: cachedUser } = useNuxtData('user')
+const email = computed(() => unref(cachedUser)?.email || '')
 
 const resend = async () => {
     loading.value = true

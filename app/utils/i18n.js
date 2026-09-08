@@ -72,6 +72,10 @@ const dict = {
         'newsletter.promptText': 'Want to receive NestorCut updates by email? New features, nesting tips, product news. No spam — unsubscribe anytime from your profile.',
         'newsletter.yes': 'Yes, keep me informed',
         'newsletter.no': 'No thanks',
+        // C1-c : carte de re-demande discrète (90 jours).
+        'newsletter.cardTitle': 'NestorCut news by email?',
+        'newsletter.cardText': 'Want to receive NestorCut updates by email? New features, nesting tips, product news. No spam — unsubscribe anytime from your profile.',
+        'newsletter.later': 'Not now',
 
         'sub.active': 'Active',
         'sub.grantActive': 'Unlimited (test grant)',
@@ -596,6 +600,8 @@ const dict = {
         'auth.loginEmail': 'Login with email',
         'auth.or': 'or',
         'auth.signUpHint': 'Sign up to start nesting your DXF files.',
+        // C1-a : la vérification d'e-mail est annoncée AU formulaire.
+        'auth.emailHint': "We'll send a confirmation link to this address. Nesting unlocks once you click it.",
         'auth.welcomeBack': 'Welcome back.',
         'auth.namePlaceholder': 'Your name',
         'auth.passwordPlaceholder': 'Password',
@@ -639,6 +645,8 @@ const dict = {
         'auth.newsletterOptIn': 'Keep me informed about NestorCut news and updates (optional newsletter, unsubscribe anytime).',
         'auth.checkEmail.title': 'Check your inbox',
         'auth.checkEmail.text': 'We sent you a verification link. Click it to activate your account and start nesting. The link is valid for 24 hours — check your spam folder if needed.',
+        // C1-a : variante avec l'adresse (faute de frappe visible tout de suite).
+        'auth.checkEmail.textWithEmail': 'We sent a verification link to {email}. Click it to activate your account and start nesting. The link is valid for 24 hours — check your spam folder if needed.',
         'auth.checkEmail.resend': 'Resend the verification email',
         'auth.checkEmail.resent': 'Email sent again ✓',
         'auth.checkEmail.skip': 'I\'ll do it later, take me to the app',
@@ -743,6 +751,9 @@ const dict = {
         'newsletter.promptText': 'Souhaitez-vous recevoir les actualités de NestorCut par email ? Nouvelles fonctionnalités, conseils nesting, nouveautés produit. Pas de spam — désinscription à tout moment depuis votre profil.',
         'newsletter.yes': 'Oui, me tenir informé',
         'newsletter.no': 'Non merci',
+        'newsletter.cardTitle': 'Les nouveautés NestorCut par e-mail ?',
+        'newsletter.cardText': 'Souhaitez-vous recevoir les actualités de NestorCut par email ? Nouvelles fonctionnalités, conseils nesting, nouveautés produit. Pas de spam — désinscription à tout moment depuis votre profil.',
+        'newsletter.later': 'Pas maintenant',
 
         'sub.active': 'Actif',
         'sub.grantActive': 'Illimité (accès de test)',
@@ -1268,6 +1279,7 @@ const dict = {
         'auth.loginEmail': 'Connexion avec e-mail',
         'auth.or': 'ou',
         'auth.signUpHint': 'Inscrivez-vous pour commencer à imbriquer vos fichiers DXF.',
+        'auth.emailHint': "Nous enverrons un lien de confirmation à cette adresse. L'imbrication s'ouvre après le clic.",
         'auth.welcomeBack': 'Bon retour.',
         'auth.namePlaceholder': 'Votre nom',
         'auth.passwordPlaceholder': 'Mot de passe',
@@ -1310,6 +1322,7 @@ const dict = {
         'auth.newsletterOptIn': 'Je veux être tenu informé des nouveautés de NestorCut (newsletter facultative, désinscription à tout moment).',
         'auth.checkEmail.title': 'Vérifiez votre boîte mail',
         'auth.checkEmail.text': 'Nous vous avons envoyé un lien de vérification. Cliquez dessus pour activer votre compte et commencer à imbriquer. Le lien est valable 24 h — pensez à vérifier vos spams.',
+        'auth.checkEmail.textWithEmail': 'Nous avons envoyé un lien de vérification à {email}. Cliquez dessus pour activer votre compte et commencer à imbriquer. Le lien est valable 24 h — pensez à vérifier vos spams.',
         'auth.checkEmail.resend': 'Renvoyer l\'email de vérification',
         'auth.checkEmail.resent': 'Email renvoyé ✓',
         'auth.checkEmail.skip': 'Je le ferai plus tard, aller à l\'app',

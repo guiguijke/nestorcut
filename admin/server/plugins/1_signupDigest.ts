@@ -1,12 +1,20 @@
 import { connectDB, COL } from '../db/mongo'
+import { digestScanQuery, digestProjection, filterUnreported, advanceCursor } from '../utils/signupDigest'
 
 // Safety-net digest: periodically notifies the admin of any signups that were
 // NOT already reported by the main app's instant notification (e.g. because
 // Resend was unreachable at signup time).
 //
+// D4 (C1-b): the instant notification stamps `adminNotifiedAt` on the user
+// after a successful send; only UNMARKED signups are emailed here, so the
+// admin receives each signup exactly once. The cursor advances over every
+// EXAMINED signup (marked or not) — see utils/signupDigest.ts — so a fully
+// filtered batch still moves the cursor forward.
+//
 // Maintains a cursor in a dedicated `app_meta` collection so it only ever
 // reports each user once. Runs every 5 minutes. Best-effort: any failure is
-// logged and retried next cycle.
+// logged and retried next cycle (the cursor only advances AFTER a
+// successful send).
 //
 // IMPORTANT: the cursor MUST NOT live in the `admins` collection. Storing it
 // there with an empty-filter upsert created a phantom admin doc on first run
@@ -76,21 +84,27 @@ export default defineNitroPlugin((nitro) => {
       const metaDoc = await meta.findOne({ _id: META_DOC_ID }, { projection: { digestCursor: 1 } })
       const cursor = metaDoc?.digestCursor ? new Date(metaDoc.digestCursor) : new Date(0)
 
-      // Find users created after the cursor, newest first, capped to a batch.
-      const fresh = await db
+      // Examined batch: every signup after the cursor, marked or not — the
+      // cursor must be able to advance past already-reported signups.
+      const examined = await db
         .collection(COL.users)
-        .find({ createdAt: { $gt: cursor } })
+        .find(digestScanQuery(cursor))
         .sort({ createdAt: 1 })
         .limit(200)
-        .project({ _id: 0, id: 1, email: 1, name: 1, provider: 1, signupCountry: 1, createdAt: 1 })
+        .project(digestProjection)
         .toArray()
 
-      if (!fresh.length) return
+      if (!examined.length) return
 
-      await sendDigestEmail(to, fresh)
+      // D4 (C1-b): email only the signups the instant notification missed.
+      const fresh = filterUnreported(examined)
+      if (fresh.length) {
+        await sendDigestEmail(to, fresh)
+      }
 
-      // Advance the cursor to the newest signup we just reported.
-      const newest = fresh.reduce((m, u) => (u.createdAt > m ? u.createdAt : m), cursor)
+      // Advance the cursor to the newest signup we just EXAMINED (sent or
+      // already-reported) — never re-read the same range.
+      const newest = advanceCursor(examined, cursor)
       await meta.updateOne(
         { _id: META_DOC_ID },
         { $set: { digestCursor: newest } },

@@ -2,6 +2,8 @@
     <div class="home">
         <!-- 3.1.5 : bannière e-mail non vérifié (comptes locaux). -->
         <VerifyEmailBanner />
+        <!-- C1-c : carte de re-demande newsletter (90 jours, discrète). -->
+        <NewsletterCard />
         <!-- Account summary -->
         <!-- U1 : accueil sobre — h1 Poppins, plus d'avatar géant ni
              d'emoji ; le lien de compte reste en discret. -->

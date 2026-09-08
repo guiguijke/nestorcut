@@ -42,6 +42,11 @@ export default defineEventHandler(async (event) => {
         unitsEnabled,
         // null = never asked (first-login prompt eligible), true/false = answered.
         newsletterOptIn: user.newsletterOptIn ?? null,
+        // C1-c : horloge de la re-demande (carte discrète tous les 90 j) —
+        // ajout de champs, rien retiré.
+        newsletterAskedAt: user.newsletterAskedAt ?? null,
+        newsletterOptInAt: user.newsletterOptInAt ?? null,
+        createdAt: user.createdAt ?? null,
         // Chantier B (à venir) : préférence turbo hybride client+serveur —
         // réservée aux payants à l'écriture (P3), inerte aujourd'hui.
         turboHybrid: user.turboHybrid === true,

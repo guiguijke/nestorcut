@@ -58,6 +58,12 @@ const indexes = [
   // with a duplicate key error instead of pushing a duplicate receipt.
   ['accounting_entries', { stripeInvoiceId: 1 }, { unique: true, name: 'uniq.stripeInvoiceId' }],
 
+  // ── email verification (C1-a) ──
+  // TTL: expired tokens are purged by Mongo (sweep every ~60 s). The
+  // read-time expiry check in consumeVerificationToken stays — a token can
+  // be read up to a minute past its expiry before the TTL collector runs.
+  ['emailVerifications', { expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl.expiresAt' }],
+
   // ── payment failures (invoice.payment_failed webhook) ──
   // One doc per (invoice, retry attempt); upsert idempotency for webhook
   // redeliveries.

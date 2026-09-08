@@ -25,10 +25,13 @@
 
 <script setup>
 import { themeType } from '~~/constants/theme.constants'
+import { shouldAskNewsletter } from '~~/shared/newsletterAsk'
 
 // One-time newsletter prompt shown to users who never answered (Google
 // signups don't see the local-form checkbox). The PATCH writes true OR
 // false — either way the field is set and the prompt never shows again.
+// C1-c : quand la CARTE 90 jours s'affiche (compte ancien jamais sollicité),
+// la modale se tait — une seule sollicitation à l'écran.
 const { t } = useLocale()
 const { getters } = authStore
 
@@ -37,7 +40,10 @@ const { getters } = authStore
 const dismissed = ref(false)
 
 const isOpen = computed({
-    get: () => !unref(dismissed) && unref(getters.userIsSet) && unref(getters.user)?.newsletterOptIn == null,
+    get: () => !unref(dismissed)
+        && unref(getters.userIsSet)
+        && unref(getters.user)?.newsletterOptIn == null
+        && !shouldAskNewsletter(unref(getters.user) || {}, Date.now()),
     set: (v) => {
         if (!v) dismissed.value = true
     },

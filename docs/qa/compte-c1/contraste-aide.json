@@ -1,0 +1,34 @@
+[
+  {
+    "name": "formulaire-fr-clair",
+    "color": "rgb(74, 82, 112)",
+    "fontSize": "12px",
+    "bg": "rgb(248, 251, 255)",
+    "text": "Nous enverrons un lien de confirmation à cette adresse. L'imbrication s'ouvre après le clic.",
+    "ratio": 7.41
+  },
+  {
+    "name": "formulaire-fr-sombre",
+    "color": "rgb(185, 194, 208)",
+    "fontSize": "12px",
+    "bg": "rgb(26, 35, 64)",
+    "text": "Nous enverrons un lien de confirmation à cette adresse. L'imbrication s'ouvre après le clic.",
+    "ratio": 8.61
+  },
+  {
+    "name": "formulaire-en-clair",
+    "color": "rgb(74, 82, 112)",
+    "fontSize": "12px",
+    "bg": "rgb(248, 251, 255)",
+    "text": "We'll send a confirmation link to this address. Nesting unlocks once you click it.",
+    "ratio": 7.41
+  },
+  {
+    "name": "formulaire-en-sombre",
+    "color": "rgb(185, 194, 208)",
+    "fontSize": "12px",
+    "bg": "rgb(26, 35, 64)",
+    "text": "We'll send a confirmation link to this address. Nesting unlocks once you click it.",
+    "ratio": 8.61
+  }
+]
