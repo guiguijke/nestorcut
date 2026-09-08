@@ -237,6 +237,12 @@ thèmes) ; navigation clavier complète du parcours « déposer → régler →
 imbriquer → ouvrir le résultat → télécharger » enregistrée en vidéo
 Playwright ; captures §4.
 
+**Reporté d'U2-ter (constat vérificateur 08/09)** : dans la liste des
+projets, le badge « Démo » se tronque en « D » quand le nom du projet est
+long — le badge ne doit pas se compresser (`min-width` + `flex-shrink: 0`
+sur le badge, ellipse sur le NOM, jamais l'inverse). Verrou : capture de
+la colonne Projets avec un nom long, badge « Démo » entier.
+
 ### U5 — Pages secondaires et nettoyage (1,5 j)
 
 - Auth, compte, plans, changelog, licences, légal : jetons et primitives,
