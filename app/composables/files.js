@@ -268,7 +268,10 @@ let lastProjectRequest = null
 async function getProject(path) {
     lastProjectRequest = path
     try {
-        const data = await $fetch(path)
+        // SSR: forward the incoming Cookie so F5 on /project/:slug does
+        // not 401 → navigateTo('/home') (constat P4 prod).
+        const $apiFetch = useApiFetch()
+        const data = await $apiFetch(path)
         if (path !== lastProjectRequest) return
         state.projectLocal = Boolean(data.local)
         state.projectDemo = Boolean(data.isDemo)

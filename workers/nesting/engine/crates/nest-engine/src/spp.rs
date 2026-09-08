@@ -277,13 +277,24 @@ pub fn run_spp_mem(
     ));
 
     let max_width = config.max_strip_width;
-    let (b1, b2) = if two_phase {
-        (
-            budget.mul_f32(config.phase1_ratio()),
-            budget.mul_f32(1.0 - config.phase1_ratio()),
-        )
+    // P5: an explicit phase1_ratio (retry_overshoot 0.98) keeps the historical
+    // split. Default = give phase 1 the full envelope; phase 2 starts at the
+    // phase-1 plateau and inherits the leftover wall time.
+    let leftover_phase2 = two_phase && config.explicit_phase1_ratio().is_none();
+    let (b1, b2_fixed) = if two_phase {
+        match config.explicit_phase1_ratio() {
+            Some(r) => (budget.mul_f32(r), budget.mul_f32(1.0 - r)),
+            None => (budget, Duration::ZERO),
+        }
     } else {
         (budget, Duration::ZERO)
+    };
+    let phase2_budget = || {
+        if leftover_phase2 {
+            budget.saturating_sub(started.elapsed())
+        } else {
+            b2_fixed
+        }
     };
 
     // ================= Directions mode (tiered compute) =================
@@ -349,7 +360,7 @@ sink,
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
                         let (s2, s2_evals) = optimize_one(
-                            &t_instance, &sparrow_config, b2, explore,
+                            &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             Some(MapBack::new(corridor, ext_instance.strip_height)), plateau,
                             Some(bias.as_str()),
@@ -419,7 +430,7 @@ sink,
                         let inst2 =
                             jagua_rs::probs::spp::io::import_instance(&importer, &ext2).ok()?;
                         let (s2, s2_evals) = optimize_one(
-                            &inst2, &sparrow_config, b2, explore,
+                            &inst2, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             None, plateau,
                             Some(bias.as_str()),
@@ -491,7 +502,7 @@ sink,
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
                         let (s2, s2_evals) = optimize_one(
-                            &t_instance, &sparrow_config, b2, explore,
+                            &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             Some(MapBack::new(corridor, ext_instance.strip_height)), plateau,
                             Some(bias.as_str()),
@@ -686,7 +697,7 @@ sink,
                 let runs2 = optimize_multi(
                     &t_instance,
                     &sparrow_config,
-                    b2,
+                    phase2_budget(),
                     config.explore_ratio,
                     config.prng_seed,
                     10_000,

@@ -132,6 +132,13 @@ impl EngineConfig {
     pub fn phase1_ratio(&self) -> f32 {
         self.phase1_ratio.unwrap_or(0.6).clamp(0.1, 0.9)
     }
+
+    /// P5: `Some` only when the caller set `phase1_ratio` explicitly
+    /// (retry_overshoot 0.98). `None` = start phase 2 at the phase-1 plateau
+    /// and give it the leftover wall time, instead of the 0.6/0.4 split.
+    pub fn explicit_phase1_ratio(&self) -> Option<f32> {
+        self.phase1_ratio.map(|r| r.clamp(0.1, 0.9))
+    }
     pub fn phase2_slack_mm(&self) -> f32 {
         self.phase2_slack_mm.unwrap_or(1.0).max(0.0)
     }

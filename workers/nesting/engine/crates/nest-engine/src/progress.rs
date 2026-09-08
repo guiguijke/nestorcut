@@ -22,25 +22,58 @@ pub fn stdout_sink() -> EventSink {
     })
 }
 
+/// Shared improvement clock: first and last *genuine* global improvements
+/// (ExplFeas / CmprFeas). P5 calibrates patience from the span.
+#[derive(Clone, Copy, Debug)]
+pub struct ImprovementClock {
+    pub first: Option<Instant>,
+    pub last: Instant,
+}
+
+impl ImprovementClock {
+    pub fn new() -> Self {
+        Self { first: None, last: Instant::now() }
+    }
+
+    pub fn bump(&mut self) {
+        let now = Instant::now();
+        if self.first.is_none() {
+            self.first = Some(now);
+        }
+        self.last = now;
+    }
+}
+
+/// P5: patience = max(2 s, 4 × (last − first)), capped by the adaptive
+/// (or explicit) plateau_patience_sec. A cap below the 2 s floor (tests,
+/// retry_overshoot 0.5 s) stays the cap.
+pub fn calibrated_patience(span: Duration, cap: Duration) -> Duration {
+    const FLOOR: Duration = Duration::from_secs(2);
+    let fourx = span.saturating_mul(4);
+    let paced = if fourx > FLOOR { fourx } else { FLOOR };
+    if paced > cap { cap } else { paced }
+}
+
 /// Wall-clock timeout + plateau patience for sparrow runs: kills the run
-/// when the incumbent has not improved for `patience`. The improvement clock
-/// is shared with the ProgressListener, which bumps it on GENUINE global
-/// improvements only: a new best width (ExplFeas) or a successful
-/// compression (CmprFeas). Working states (ExplImproving / ExplInfeas while
-/// separating at an over-shrunk width) deliberately do NOT reset the clock —
-/// that grinding is exactly what the plateau stop is meant to cut.
+/// when the incumbent has not improved for the *calibrated* patience. The
+/// improvement clock is shared with the ProgressListener, which bumps it on
+/// GENUINE global improvements only: a new best width (ExplFeas) or a
+/// successful compression (CmprFeas). Working states (ExplImproving /
+/// ExplInfeas while separating at an over-shrunk width) deliberately do
+/// NOT reset the clock — that grinding is exactly what the plateau stop is
+/// meant to cut.
 pub struct PlateauTerminator {
     timeout: Option<Instant>,
-    last_improvement: Arc<Mutex<Instant>>,
-    patience: Option<Duration>,
+    clock: Arc<Mutex<ImprovementClock>>,
+    cap: Option<Duration>,
 }
 
 impl PlateauTerminator {
-    pub fn new(last_improvement: Arc<Mutex<Instant>>, patience: Option<Duration>) -> Self {
+    pub fn new(clock: Arc<Mutex<ImprovementClock>>, cap: Option<Duration>) -> Self {
         Self {
             timeout: None,
-            last_improvement,
-            patience,
+            clock,
+            cap,
         }
     }
 }
@@ -50,14 +83,17 @@ impl Terminator for PlateauTerminator {
         if self.timeout.is_some_and(|t| Instant::now() > t) {
             return true;
         }
-        if let Some(patience) = self.patience {
-            return self
-                .last_improvement
-                .lock()
-                .map(|t| t.elapsed() >= patience)
-                .unwrap_or(false);
+        let Some(cap) = self.cap else { return false; };
+        let Ok(c) = self.clock.lock() else { return false; };
+        match c.first {
+            // No genuine improvement yet: keep the historical cap-from-start
+            // (retry_overshoot 0.5 s must still cut a stalled phase).
+            None => c.last.elapsed() >= cap,
+            Some(first) => {
+                let span = c.last.duration_since(first);
+                c.last.elapsed() >= calibrated_patience(span, cap)
+            }
         }
-        false
     }
 
     fn new_timeout(&mut self, timeout: Duration) {
@@ -104,8 +140,8 @@ pub struct ProgressListener {
     /// emit_layout) so the visualizer always shows the real sheet.
     map_back: Option<MapBack>,
     /// Improvement clock shared with the PlateauTerminator: bumped on every
-    /// progress report (the run is demonstrably not converged).
-    last_improvement: Arc<Mutex<Instant>>,
+    /// genuine global improvement (ExplFeas / CmprFeas).
+    last_improvement: Arc<Mutex<ImprovementClock>>,
     /// Separate 1 Hz slot for the live evals counter (so it never starves
     /// the scalar progress events of their own slot).
     last_evals_emit: Instant,
@@ -141,7 +177,7 @@ impl ProgressListener {
             live: false,
             last_layout_emit: armed,
             map_back: None,
-            last_improvement: Arc::new(Mutex::new(Instant::now())),
+            last_improvement: Arc::new(Mutex::new(ImprovementClock::new())),
             last_evals_emit: armed,
             bias: None,
             sink: stdout_sink(),
@@ -149,7 +185,7 @@ impl ProgressListener {
     }
 
     /// The improvement clock to hand to the PlateauTerminator of this run.
-    pub fn improvement_clock(&self) -> Arc<Mutex<Instant>> {
+    pub fn improvement_clock(&self) -> Arc<Mutex<ImprovementClock>> {
         Arc::clone(&self.last_improvement)
     }
 
@@ -315,7 +351,7 @@ impl SolutionListener for ProgressListener {
         // over-shrunk width is what the plateau stop is meant to cut.
         if matches!(report, ReportType::ExplFeas | ReportType::CmprFeas) {
             if let Ok(mut t) = self.last_improvement.lock() {
-                *t = Instant::now();
+                t.bump();
             }
         }
 
@@ -346,6 +382,40 @@ impl SolutionListener for ProgressListener {
 mod tests {
     use super::*;
     use jagua_rs::geometry::DTransformation;
+
+    #[test]
+    fn calibrated_patience_floor_two_seconds() {
+        let cap = Duration::from_secs(30);
+        assert_eq!(calibrated_patience(Duration::ZERO, cap), Duration::from_secs(2));
+        assert_eq!(calibrated_patience(Duration::from_millis(400), cap), Duration::from_secs(2));
+    }
+
+    #[test]
+    fn calibrated_patience_four_times_span() {
+        let cap = Duration::from_secs(30);
+        assert_eq!(
+            calibrated_patience(Duration::from_secs(1), cap),
+            Duration::from_secs(4)
+        );
+        assert_eq!(
+            calibrated_patience(Duration::from_millis(2500), cap),
+            Duration::from_secs(10)
+        );
+    }
+
+    #[test]
+    fn calibrated_patience_capped() {
+        let cap = Duration::from_secs(5);
+        assert_eq!(
+            calibrated_patience(Duration::from_secs(8), cap),
+            cap
+        );
+        // Explicit cap below the 2 s floor (retry_overshoot 0.5 s) stays the cap.
+        let tight = Duration::from_millis(500);
+        assert_eq!(calibrated_patience(Duration::ZERO, tight), tight);
+        assert_eq!(calibrated_patience(Duration::from_secs(10), tight), tight);
+    }
+
     use jagua_rs::io::import::Importer;
     use jagua_rs::probs::spp::entities::{SPPlacement, SPProblem};
     use jagua_rs::probs::spp::io::ext_repr::ExtSPInstance;

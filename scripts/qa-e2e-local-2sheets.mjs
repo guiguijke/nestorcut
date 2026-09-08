@@ -45,6 +45,21 @@ await ctx.addInitScript(() => {
     } catch { /* layout-shift indisponible */ }
 })
 const page = await ctx.newPage()
+// P5 : forcer la concurrence du pool (1 = Free, 4 = standard) sans changer
+// le compte de walks. Défaut = profil serveur du compte.
+const FORCE_CONC = process.env.QA_CONCURRENCY
+if (FORCE_CONC) {
+    const n = Math.max(1, Number(FORCE_CONC) || 1)
+    await page.route('**/local-payload', async (route) => {
+        const res = await route.fetch()
+        const json = await res.json()
+        if (json?.localConfig) {
+            json.localConfig = { ...json.localConfig, concurrency: n, vcores: n }
+        }
+        await route.fulfill({ response: res, json })
+    })
+    log('QA_CONCURRENCY', n)
+}
 page.on('console', (m) => { const t = m.type(); if (t === 'error' || t === 'warning') log(`[console:${t}]`, m.text().slice(0, 500)) })
 page.on('pageerror', (e) => log('[pageerror]', String(e).slice(0, 800)))
 page.on('response', (r) => { if (r.status() >= 400) log(`[http ${r.status()}]`, r.url()) })
