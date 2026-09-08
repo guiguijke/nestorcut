@@ -54,7 +54,7 @@ ci-dessous ont été mesurés sur cet arbre, `npx vitest run` **507/507**.
 | Carte newsletter | compte `c1carte@local.dev` vieilli J-100 ; `carte-90j.png` / `carte-90j-apres.png` / `modale.png` | 3 constats : carte visible ; Google-like (`optIn` null) → **modale**, pas la carte ; après « Pas maintenant » : carte absente, `newsletterAskedAt` = 2026-09-08T09:30:03Z, `newsletterOptIn` resté false | `0c44248` |
 | E-mail bilingue | corps dans `sendEmail.js` `sendVerificationEmail` (ci-dessous) | sujet `Confirmez votre adresse · Verify your email — NestorCut` ; FR puis `<hr>` puis EN ; un lien | `0c44248` |
 | Harnais | `QA_SPACE=0.1 QA_OUT=.qa-pw/e2e-local-c1-01` et `QA_SPACE=2 QA_OUT=.qa-pw/e2e-local-c1-02` `node scripts/qa-e2e-local-2sheets.mjs` | **verts**, inchangés : @0,1 **[587,313]** 900/900 overlap-free gap ≥ 0,1 ; @2 **[573,327]** 900/900 overlap-free gap ≥ 2. `data-testid="newsletter-card"` n'a pas décalé les sélecteurs | `0c44248` |
-| C1-b-bis grâce 2 min | `npx vitest run` | `digestScanQuery(cursor, now)` borne `$lte: now − 120 s` ; inscrit à now − 30 s **hors lot**, à now − 3 min **dans le lot** ; `advanceCursor(..., now)` ne dépasse pas la borne. Suites **509/509** (+2). | (commit C1-b-bis) |
+| C1-b-bis grâce 2 min | `npx vitest run` | `digestScanQuery(cursor, now)` borne `$lte: now − 120 s` ; inscrit à now − 30 s **hors lot**, à now − 3 min **dans le lot** ; `advanceCursor(..., now)` ne dépasse pas la borne. Suites **509/509** (+2). | `40b28fc` |
 
 Tests C1 nommés (les +22) :
 - `app/tests/newsletterAsk.test.js` (7)
