@@ -1,79 +1,37 @@
 <template>
-    <DialogWrapper trackingTag="result">
-        <div class="modal">
-            <ResultAlternatives :d="bundle" @select="selectAlt" />
-            <div
-                v-if="resultModalData.isMultiSheet && !isHaveError"
-                class="modal__list-sheets list-sheets"
-            >
-                <MainButton
-                    :theme="themeType.primary"
-                    :icon="iconType.arrowPrev"
-                    :isLabelShow=false
-                    :size="sizeType.s"
-                    trackingTag="result_part_prev"
-                    @click="updatePartPage(activePart - 1)"
-                    :isDisable="activePart === 0"
-                    label="prev"
-                    class="controls__prev"
-                />
-                <MainButton
-                    :label="t('result.sheet', { n: activePart + 1, total: currentDxfs.length })"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    isNotClickable
-                    class="list-sheets__item"
-                />
-                <MainButton
-                    :theme="themeType.primary"
-                    :icon="iconType.arrowNext"
-                    :size="sizeType.s"
-                    :isLabelShow=false
-                    :isDisable="activePart === currentDxfs.length - 1"
-                    trackingTag="result_part_next"
-                    @click="updatePartPage(activePart + 1)"
-                    label="next"
-                    class="controls__next"
-                />
-            </div>
-            <div
-                v-if="!isHaveError"
-                class="modal__headline headline"
-            >
-                <p class="headline__title">{{ headlineTitle }}</p>
-                <!-- C02 : sous-titre explicatif de la méthode d'agencement
-                     (Grille vs Compaction). -->
-                <p v-if="activeStrategyExplain" class="headline__explain">
-                    {{ activeStrategyExplain }}
-                </p>
-                <p class="headline__slug" :title="t('result.copySlug')">{{ name }}</p>
-            </div>
-            <div
-                v-if="!isHaveError && activeReport && densityPct != null"
-                class="modal__summary summary"
-            >
-                <span class="summary__label">{{ t('result.densityFull') }}</span>
-                <div class="summary__bar">
-                    <div class="summary__bar-fill" :style="{ width: `${densityPct}%` }" />
-                </div>
-                <span class="summary__value">{{ fmtPercent(densityPct) }}</span>
-            </div>
-            <ResultViewer
+    <!-- U3 passe 2 : espace de resultat plein ecran (24 px de marge) —
+         onglets d'alternatives en haut, visionneuse 2/3 a gauche, rapport
+         1/3 a droite (le rapport defile, jamais le dialogue). Sous 768 px
+         les deux volets s'empilent, visionneuse d'abord. -->
+    <DialogWrapper trackingTag="result" fullscreen>
+        <div class="modal result-space" data-testid="result-space">
+            <ResultAlternatives
+                class="result-space__alts"
                 :d="bundle"
-                @view-mode="selectViewMode"
-                @toggle-fullscreen="updateFullScreen"
-                @download-sheet="downloadLocalSheet"
+                @select="selectAlt"
             />
-            <ResultReport
-                ref="reportChild"
-                :d="bundle"
-                @unfit-add-sheet="$emit('unfit-add-sheet')"
-                @unfit-reduce-spacing="$emit('unfit-reduce-spacing', $event)"
-                @export="onExportIntent"
-                @download-all="downloadLocalAll"
-                @download-single="downloadLocalSingle"
-                @close="resultDialog = false"
-            />
+            <div class="result-space__panes">
+                <ResultViewer
+                    class="result-space__viewer"
+                    :d="bundle"
+                    @view-mode="selectViewMode"
+                    @toggle-fullscreen="updateFullScreen"
+                    @download-sheet="downloadLocalSheet"
+                    @part="updatePartPage"
+                />
+                <ResultReport
+                    ref="reportChild"
+                    class="result-space__report"
+                    :d="bundle"
+                    @unfit-add-sheet="$emit('unfit-add-sheet')"
+                    @unfit-reduce-spacing="$emit('unfit-reduce-spacing', $event)"
+                    @export="onExportIntent"
+                    @download-all="downloadLocalAll"
+                    @download-single="downloadLocalSingle"
+                    @copy-slug="copySlug"
+                    @close="resultDialog = false"
+                />
+            </div>
         </div>
     </DialogWrapper>
 </template>
@@ -685,7 +643,28 @@ const bundle = computed(() => ({
     altTitle,
     strategyLabel,
     altQualityLine,
+    headlineTitle: unref(headlineTitle),
+    activeStrategyExplain: unref(activeStrategyExplain),
+    name: unref(name),
 }))
+
+// U3 passe 2 : le slug n'est plus une ligne morte — il se copie.
+const { show: showToast } = useToast()
+const copySlug = async () => {
+    const slug = String(unref(resultModalData).slug || '')
+    try {
+        await navigator.clipboard.writeText(slug)
+    } catch {
+        const ta = document.createElement('textarea')
+        ta.value = slug
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+    }
+    showToast(t('result.slugCopied'))
+    trackEvent('result_slug_copied')
+}
 
 // L'enfant n'exprime qu'une INTENTION d'export ; la politique (paywall
 // D-RAP-11) reste ici, ou elle a toujours ete.
@@ -695,103 +674,65 @@ const onExportIntent = ({ action, trackingTag }) => {
 </script>
 
 <style lang="scss" scoped>
-.modal {
-    padding: 48px 24px 24px;
-
-    max-width: 368px;
-    @media (min-width: 567px) {
-        max-width: initial;
-        min-width: 368px;
-        // Roomy enough for the per-sheet quoting table (7 columns with
-        // in2 + ft2 areas) without a horizontal scrollbar.
-        width: min(800px, 94vw);
-    }
-
-    &__headline {
-        margin: 0 auto 10px;
-        text-align: center;
-    }
-
-    &__summary {
-        margin: 0 auto 12px;
-        max-width: 520px;
-    }
-
-    &__list-sheets {
-        margin: 10px auto 8px;
-    }
-}
-
-.list-sheets {
+/* U3 passe 2 — l'espace de resultat. Le dialogue est plein ecran ; c'est
+   le volet rapport qui defile, jamais la boite. */
+.result-space {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding: 44px var(--sp-4) var(--sp-4);
+    height: 100%;
+    min-height: 0;
+    box-sizing: border-box;
 
-    &__item {
-        margin-left: 10px;
-        margin-right: 10px;
-    }
-}
-
-.headline {
-    &__title {
-        margin: 0;
-        font-size: var(--fs-16);
-        font-weight: 700;
-        color: var(--label-primary);
+    &__alts {
+        flex: 0 0 auto;
     }
 
-    &__slug {
-        margin: 4px 0 0;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-        word-break: break-all;
-        font-family: $sf_mono;
+    /* Sous 768 px : les deux volets s'EMPILENT (visionneuse d'abord) et
+       c'est la colonne qui defile — surtout pas deux zones de defilement
+       imbriquees, ni une grille a hauteur fixe (le rapport se peignait
+       par-dessus la visionneuse). */
+    &__panes {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-3);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+
+        @media (min-width: 768px) {
+            display: grid;
+            grid-template-columns: 2fr minmax(320px, 1fr);
+            grid-template-rows: minmax(0, 1fr);
+            overflow: hidden;
+        }
     }
-}
 
+    &__viewer {
+        min-width: 0;
+        min-height: 55vh;
 
-.summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: var(--fs-13);
-
-    &__label {
-        flex-shrink: 0;
-        font-weight: 600;
-        color: var(--label-primary);
+        @media (min-width: 768px) {
+            min-height: 0;
+        }
     }
 
-    &__bar {
-        flex: 1;
-        height: 6px;
-        border-radius: var(--radius-s);
+    &__report {
+        min-width: 0;
+        flex: 0 0 auto;
+        border: 1px solid var(--separator-secondary);
+        border-radius: var(--radius-l);
+        padding: var(--sp-3);
         background-color: var(--fill-tertiary);
-        overflow: hidden;
-    }
 
-    &__bar-fill {
-        height: 100%;
-        border-radius: var(--radius-s);
-        background-color: var(--accent-primary);
+        /* Volet droit : c'est LUI qui defile en deux colonnes. */
+        @media (min-width: 768px) {
+            min-height: 0;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
     }
-
-    &__value {
-        flex-shrink: 0;
-        font-weight: 700;
-        color: var(--label-primary);
-        font-variant-numeric: tabular-nums;
-    }
-}
-
-/* C02 (audit UX 2026-09-05) : sous-titre explicatif de la methode
-   d'agencement sous le titre de l'option. */
-.headline__explain {
-    margin: 2px 0 0;
-    font-size: var(--fs-12);
-    color: var(--label-tertiary);
-    text-align: center;
 }
 </style>

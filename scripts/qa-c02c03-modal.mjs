@@ -57,7 +57,7 @@ try {
         const errTxt = (await page.locator('.content__error').allInnerTexts().catch(() => [])).join(' ')
         if (errTxt) { outcome = 'page-error: ' + errTxt; break }
         const stageRunning = await page.locator('.stage__status').count()
-        const doneBtn = await page.locator('.controls__report').count()
+        const doneBtn = await page.locator('[data-testid="result-report-btn"]').count()
         if (doneBtn && !stageRunning) { outcome = 'done'; break }
     }
     log('compute outcome:', outcome, `(${((Date.now() - t0) / 1000).toFixed(0)}s)`)
@@ -65,7 +65,7 @@ try {
     await page.waitForTimeout(1500)
 
     // ouvre le modal du dernier résultat
-    await page.locator('.controls__report').first().click()
+    await page.locator('[data-testid="result-report-btn"]').first().click()
     await page.waitForSelector('.modal', { timeout: 15000 })
     await page.waitForTimeout(1000)
 
@@ -75,13 +75,13 @@ try {
     }
 
     // --- C02 : ligne qualité unique dans l'onglet actif ---
-    const tabText = (await page.locator('.alts__tab--active').innerText().catch(() => '')) || ''
+    const tabText = (await page.locator('[data-testid="alt-tab"][data-active="true"]').innerText().catch(() => '')) || ''
     await check('onglet actif porte la densité matière', /material/i.test(tabText), JSON.stringify(tabText.replace(/\s+/g, ' ').slice(0, 90)))
     await check('onglet actif ne dit plus "% used"', !/used/i.test(tabText))
 
     // --- C02/AA1 : densités MESURÉES identiques entre options (mêmes
     // pièces, mêmes tôles → Σ pièces / Σ tôles) à 0,1 pt près ---
-    const tabTexts = await page.locator('.alts__tab').allInnerTexts()
+    const tabTexts = await page.locator('[data-testid="alt-tab"]').allInnerTexts()
     const tabDensity = tabTexts.map((t) => {
         const m = t.match(/([\d.]+)% material/i)
         return m ? parseFloat(m[1]) : null
@@ -95,7 +95,7 @@ try {
 
     // --- C02/AA1 : whyFirst VRAI — « plus grande chute » seulement si la
     // chute du rang 0 est bien maximale (aire des chutes des onglets) ---
-    const whyEl = page.locator('.alts__why')
+    const whyEl = page.locator('[data-testid="alts-why"]')
     const whyText = await whyEl.count() ? (await whyEl.first().innerText()).trim() : ''
     const tabOffcutArea = tabTexts.map((t) => {
         const m = t.match(/offcut ([\d.]+) mm × ([\d.]+) mm/i)
@@ -110,23 +110,23 @@ try {
     await check('ligne « proposée en premier » présente (rang 0)', await whyEl.count() === 1, whyText)
 
     // --- C02 : sous-titre méthode grille ---
-    const explain = await page.locator('.headline__explain').innerText().catch(() => '')
+    const explain = await page.locator('[data-testid="result-explain"]').innerText().catch(() => '')
     await check('sous-titre explicatif Grille', /regular rows/i.test(explain), explain.slice(0, 80))
 
     // --- C02 : la barre unique est la densité (plus de Sheet utilization) ---
-    const summaryLabel = await page.locator('.summary__label').innerText().catch(() => '')
+    const summaryLabel = await page.locator('[data-testid="result-density"] .summary__label').innerText().catch(() => '')
     await check('barre sommaire = Material density', /material density/i.test(summaryLabel), summaryLabel)
     const modalText = await page.locator('.modal').last().innerText()
     await check('« Sheet utilization » absent du modal', !/sheet utilization/i.test(modalText))
 
     // --- C02 : headline avec densité + chute ---
-    const headline = await page.locator('.headline__title').innerText().catch(() => '')
+    const headline = await page.locator('[data-testid="result-headline"]').innerText().catch(() => '')
     await check('headline porte densité matière + chute', /material density/i.test(headline) && /offcut/i.test(headline), headline.replace(/\s+/g, ' ').slice(0, 100))
 
     // --- C03 : badges sans post-pass ; rouge seulement pour un vrai KO ---
-    const badges = await page.locator('.report__badges .report__badge').allInnerTexts()
+    const badges = await page.locator('[data-testid="report-badge"]').allInnerTexts()
     await check('aucun badge « Post-pass »', !badges.some((b) => /post-pass/i.test(b)), JSON.stringify(badges))
-    const koBadges = await page.locator('.report__badges .report__badge--ko').allInnerTexts().catch(() => [])
+    const koBadges = await page.locator('[data-testid="report-badge"][data-ok="false"]').allInnerTexts().catch(() => [])
     log('badges KO:', JSON.stringify(koBadges))
 
     // --- C03 : détails techniques repliés, contenant seed/itérations ---
@@ -136,15 +136,15 @@ try {
     await check('détails fermés par défaut', closed)
     await tech.locator('summary').click()
     await page.waitForTimeout(300)
-    const engineLine = await page.locator('.report__engine').innerText().catch(() => '')
+    const engineLine = await page.locator('[data-testid="report-engine"]').innerText().catch(() => '')
     // Grille : ni seed ni itérations (générée, pas moteur) → masqués (C03)
     await check('ligne moteur propre (absents masqués, pas de « seed — »)', /nest-engine/i.test(engineLine) && !/—|null|undefined/.test(engineLine), engineLine.replace(/\s+/g, ' ').slice(0, 90))
     await check('plus de « combinations tested »', !/combinations tested/i.test(engineLine))
 
     // Option 2 (moteur) : le post-pass vit DANS les détails, pas en badge
-    await page.locator('.alts__tab').nth(1).click()
+    await page.locator('[data-testid="alt-tab"]').nth(1).click()
     await page.waitForTimeout(600)
-    const badges2 = await page.locator('.report__badges .report__badge').allInnerTexts()
+    const badges2 = await page.locator('[data-testid="report-badge"]').allInnerTexts()
     await check('option 2 : aucun badge « Post-pass »', !badges2.some((b) => /post-pass/i.test(b)), JSON.stringify(badges2))
     const tech2 = page.locator('[data-testid="report-tech"]')
     if (await tech2.count()) {
@@ -152,7 +152,7 @@ try {
         await page.waitForTimeout(300)
         const lines2 = await page.locator('.report__tech-line').allInnerTexts().catch(() => [])
         log('lignes post-pass option 2 :', JSON.stringify(lines2))
-        await check('option 2 : ligne « proposée en premier » absente (rang 1)', (await page.locator('.alts__why').count()) === 0)
+        await check('option 2 : ligne « proposée en premier » absente (rang 1)', (await page.locator('[data-testid="alts-why"]').count()) === 0)
     } else {
         log('option 2 : pas de détails techniques (rien à montrer)')
     }
@@ -160,7 +160,7 @@ try {
     // --- AA1 : la carte de l'aside n'affiche plus « % used » ---
     await page.keyboard.press('Escape').catch(() => {})
     await page.waitForTimeout(600)
-    const cardTitle = await page.locator('.result__name').first().innerText().catch(() => '')
+    const cardTitle = await page.locator('[data-testid="result-name"]').first().innerText().catch(() => '')
     await check('carte résultat : densité matière, plus jamais « % used »', /% material/i.test(cardTitle) && !/% used/i.test(cardTitle), cardTitle.trim().slice(0, 60))
 
     console.log('C02/C03 OK — modal : densité mesurée homogène, whyFirst vrai, indicateur qualité unique, badges verdict, détails repliés')

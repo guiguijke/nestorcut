@@ -506,6 +506,8 @@ const dict = {
         'result.sheetCount': '{n} sheets',
         'result.sheetCountOne': '1 sheet',
         'result.copySlug': 'Copy file name',
+        'result.copyId': 'Copy identifier',
+        'result.slugCopied': 'Identifier copied',
         'results.cancelling': 'Cancelling…',
 
         'vault.title': 'Zero-knowledge vault',
@@ -1206,6 +1208,8 @@ const dict = {
         'result.sheetCount': '{n} tôles',
         'result.sheetCountOne': '1 tôle',
         'result.copySlug': 'Copier le nom de fichier',
+        "result.copyId": "Copier l'identifiant",
+        'result.slugCopied': 'Identifiant copié',
         'results.cancelling': 'Annulation…',
 
         'vault.title': 'Coffre-fort zero-knowledge',

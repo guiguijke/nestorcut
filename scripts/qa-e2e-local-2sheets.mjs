@@ -290,14 +290,14 @@ try {
     if (outcome !== 'done') throw new Error('compute did not complete: ' + outcome)
 
     // ---------- 7. Modal résultat : rapport ----------
-    await page.locator('.results__item .result__area').first().click()
+    await page.locator('[data-testid="result-area"]').first().click()
     await page.waitForSelector('.modal', { timeout: 30000 })
     await page.waitForTimeout(1500)
     await shot('04-modal-color.png')
 
     const info = await page.locator('.modal__info .info__label').allInnerTexts()
-    const badges = await page.locator('.report__badges .report__badge').allInnerTexts()
-    const badgeClasses = await page.locator('.report__badges .report__badge').evaluateAll(
+    const badges = await page.locator('[data-testid="report-badge"]').allInnerTexts()
+    const badgeClasses = await page.locator('[data-testid="report-badge"]').evaluateAll(
         (els) => els.map((e) => e.className),
     )
     const detailRows = await page.locator('.modal__report .report__row--detail').allInnerTexts()
@@ -316,7 +316,7 @@ try {
     fs.writeFileSync(path.join(OUT, 'modal-report.json'), JSON.stringify(report, null, 1))
 
     // Vue DXF (toggle) + screenshot
-    const dxfToggle = page.locator('.view-toggle__btn', { hasText: 'DXF' }).first()
+    const dxfToggle = page.locator('[data-testid="view-mode-dxf"]').first()
     if (await dxfToggle.count()) {
         await dxfToggle.click()
         await page.waitForTimeout(2500)
@@ -326,18 +326,22 @@ try {
     // ---------- 7b. Partie 2 : les DEUX alternatives homogènes ----------
     // Sélecteur à deux options (Grille + moteur), captures des deux tôles
     // pour chacune, diagnostic du pass grille multi-tôles.
-    const altTabs = page.locator('.alts__tab')
+    const altTabs = page.locator('[data-testid="alt-tab"]')
     const nAlts = await altTabs.count()
     log('ALT TABS:', nAlts, JSON.stringify((await altTabs.allInnerTexts()).map((s) => s.trim())))
     for (let a = 0; a < nAlts; a++) {
         await altTabs.nth(a).click()
         await page.waitForTimeout(1200)
         await shot(`06-alt${a}-sheet1.png`)
-        // Multi-tôles : flèche « suivante » = dernier bouton de .list-sheets.
-        const navButtons = page.locator('.list-sheets .button')
-        const nNav = await navButtons.count()
-        for (let s = 1; s < nNav; s++) {
-            await navButtons.last().click().catch(() => {})
+        // Multi-tôles : on avance avec la flèche « suivante » de la barre
+        // d'outils de la visionneuse tant qu'elle reste active (U3 : le
+        // pager a migré dans la visionneuse, les boutons portent des
+        // data-testid).
+        const nextBtn = page.locator('[data-testid="sheet-next"]').first()
+        for (let s = 1; s < 8; s++) {
+            if (!(await nextBtn.count())) break
+            if (await nextBtn.isDisabled().catch(() => true)) break
+            await nextBtn.click().catch(() => {})
             await page.waitForTimeout(600)
             await shot(`06-alt${a}-sheet${s + 1}.png`)
         }
@@ -507,6 +511,37 @@ try {
     await page.waitForTimeout(300)
     fs.writeFileSync(path.join(OUT, 'modal-state.json'), JSON.stringify(modalState, null, 1))
     await shot('06-modal-final.png')
+
+    // ---------- 10. U3 : planche de l'espace de resultat ----------
+    // Modale entiere en clair puis en sombre, volet rapport seul, et la
+    // version mobile (volets empiles, visionneuse d'abord). Le bouton de
+    // theme est SOUS l'overlay du dialogue : on bascule l'attribut
+    // data-theme comme le fait themeStore, plutot que de cliquer.
+    try {
+        const modalBody = page.locator('.modal-body').first()
+        await modalBody.screenshot({ path: path.join(OUT, 'u3-modal-clair.png') })
+        const reportPane = page.locator('.result-space__report').first()
+        if (await reportPane.count()) {
+            await reportPane.screenshot({ path: path.join(OUT, 'u3-rapport.png') })
+        }
+        const setTheme = (t) => page.evaluate((v) => {
+            document.documentElement.setAttribute('data-theme', v)
+        }, t)
+        const before = await page.evaluate(() => document.documentElement.getAttribute('data-theme'))
+        await setTheme('primary')
+        await page.waitForTimeout(600)
+        await modalBody.screenshot({ path: path.join(OUT, 'u3-modal-sombre.png') })
+        await setTheme(before || 'secondary')
+        await page.waitForTimeout(400)
+        await page.setViewportSize({ width: 390, height: 844 })
+        await page.waitForTimeout(900)
+        await page.screenshot({ path: path.join(OUT, 'u3-modal-mobile.png') })
+        await page.setViewportSize({ width: 1680, height: 1000 })
+        await page.waitForTimeout(400)
+        log('U3 : planche capturee')
+    } catch (e) {
+        log('U3 : planche incomplete —', String(e).slice(0, 200))
+    }
 } catch (e) {
     failed = e
     log('FATAL', String(e && e.stack || e).slice(0, 1500))

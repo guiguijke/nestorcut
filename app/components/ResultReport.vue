@@ -8,6 +8,41 @@
 -->
 <template>
     <div class="result-report">
+        <!-- U3 passe 2 : l'en-tete du rapport porte l'identite du resultat
+             (methode, explication, identifiant copiable) et la densite en
+             grand — elle etait au-dessus du dialogue, elle appartient au
+             volet rapport. -->
+        <header
+            v-if="!isHaveError"
+            class="result-report__head headline"
+        >
+            <p class="headline__title" data-testid="result-headline">{{ headlineTitle }}</p>
+            <p
+                v-if="activeStrategyExplain"
+                class="headline__explain"
+                data-testid="result-explain"
+            >
+                {{ activeStrategyExplain }}
+            </p>
+            <button
+                type="button"
+                class="result-report__slug headline__slug"
+                data-testid="copy-id"
+                :title="t('result.copyId')"
+                @click="$emit('copy-slug')"
+            >{{ name }}</button>
+            <div
+                v-if="activeReport && densityPct != null"
+                class="modal__summary summary"
+                data-testid="result-density"
+            >
+                <span class="summary__label">{{ t('result.densityFull') }}</span>
+                <span class="summary__value num" data-testid="result-density-value">{{ fmtPercent(densityPct) }}</span>
+                <div class="summary__bar">
+                    <div class="summary__bar-fill" :style="{ width: `${densityPct}%` }" />
+                </div>
+            </div>
+        </header>
             <div v-if="isHaveError" class="modal__name modal__info info">
                 <span class="info__label">
                     {{ t('result.noSolution') }}
@@ -46,16 +81,8 @@
                 ref="reportEl"
                 class="modal__report report"
             >
-                <div class="report__row">
-                    <span class="report__label">{{ t('result.densityFull') }}</span>
-                    <div class="report__bar">
-                        <div
-                            class="report__bar-fill"
-                            :style="{ width: `${densityPct != null ? densityPct : 0}%` }"
-                        />
-                    </div>
-                    <span class="report__value">{{ densityPct != null ? fmtPercent(densityPct) : '—' }}</span>
-                </div>
+                <!-- U3 passe 2 : la densite vit dans l'en-tete du volet
+                     (grand chiffre) — la repeter ici faisait doublon. -->
                 <div class="report__row report__row--detail">
                     <span>{{ t('report.areas', { parts: fmtArea(activeReport.partsAreaMm2), free: fmtArea(freeAreaMm2) }) }}</span>
                     <span v-if="activeReportOffcut" class="report__offcut">
@@ -95,7 +122,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="s in reportSheets" :key="s.index">
+                            <tr v-for="s in reportSheets" :key="s.index" data-testid="report-row">
                                 <td>{{ s.index + 1 }}</td>
                                 <td>{{ fmtLength(s.widthMm) }} × {{ fmtLength(s.heightMm) }}</td>
                                 <td>{{ s.partCount }}</td>
@@ -212,12 +239,14 @@
                         />
                     </div>
                 </div>
-                <div class="report__badges">
+                <div class="report__badges" data-testid="report-badges">
                     <span
                         v-for="badge in reportBadges"
                         :key="badge.label"
                         class="report__badge"
                         :class="{ 'report__badge--ko': badge.ok === false }"
+                        data-testid="report-badge"
+                        :data-ok="badge.ok === false ? 'false' : 'true'"
                     >
                         {{ badge.ok === false ? '✗' : '✓' }} {{ badge.label }}
                     </span>
@@ -236,7 +265,7 @@
                     <p v-if="discardedCount" class="report__tech-line" data-testid="report-discarded">
                         {{ t('report.discarded', { n: discardedCount }) }}
                     </p>
-                    <div class="report__engine">
+                    <div class="report__engine" data-testid="report-engine">
                         nest-engine<template v-if="activeAltSeed"> · seed {{ activeAltSeed }}</template>
                         <template v-if="activeReport.iterations"> · {{ activeReport.iterations === 1 ? t('report.iterationsOne') : t('report.iterations', { n: activeReport.iterations }) }}</template>
                         <template v-if="activeReport.vcores"> · {{ activeReport.vcores === 1 ? t('report.coresOne') : t('report.cores', { n: activeReport.vcores }) }}</template>
@@ -246,7 +275,7 @@
                     </p>
                 </details>
             </div>
-            <div class="controls">
+            <div class="controls" data-testid="report-actions">
                 <MainButton
                     v-if="reportSheets.length"
                     :label="exportLocked ? t('report.exportLocked') : (copied ? t('report.copied') : t('report.copy'))"
@@ -323,7 +352,7 @@ import { themeType } from '~~/constants/theme.constants'
 const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
-    'download-single', 'close',
+    'download-single', 'close', 'copy-slug',
 ])
 
 const t = (...a) => props.d.t(...a)
@@ -355,6 +384,9 @@ const postPassLines = computed(() => props.d.postPassLines)
 const hasTechDetails = computed(() => props.d.hasTechDetails)
 const discardedCount = computed(() => props.d.discardedCount)
 const currentDxfs = computed(() => props.d.currentDxfs)
+const headlineTitle = computed(() => props.d.headlineTitle)
+const activeStrategyExplain = computed(() => props.d.activeStrategyExplain)
+const name = computed(() => props.d.name)
 const exportLocked = computed(() => props.d.exportLocked)
 const exportDisabled = computed(() => props.d.exportDisabled)
 const copied = computed(() => props.d.copied)
@@ -373,6 +405,104 @@ defineExpose({ reportEl })
 </script>
 
 <style lang="scss" scoped>
+/* U3 passe 2 : le volet rapport. Il defile seul (le dialogue ne bouge
+   pas) et son en-tete porte l'identite du resultat. */
+.result-report {
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+
+    &__head {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-bottom: var(--sp-2);
+        border-bottom: 1px solid var(--separator-secondary);
+        text-align: left;
+    }
+
+    /* Le slug etait une ligne morte : c'est un bouton « Copier
+       l'identifiant » (toast a la copie). */
+    &__slug {
+        align-self: flex-start;
+        max-width: 100%;
+        padding: 2px 0;
+        border: 0;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+        word-break: break-all;
+
+        @media (hover: hover) {
+            &:hover {
+                color: var(--accent-primary);
+                text-decoration: underline;
+            }
+        }
+    }
+}
+
+.headline {
+    &__title {
+        margin: 0;
+        font-size: var(--fs-16);
+        font-weight: 700;
+        color: var(--label-primary);
+    }
+
+    &__slug {
+        margin: 4px 0 0;
+        font-size: var(--fs-12);
+        color: var(--label-tertiary);
+        word-break: break-all;
+        font-family: $sf_mono;
+    }
+
+    &__explain {
+        margin: 2px 0 0;
+        font-size: var(--fs-12);
+        color: var(--label-tertiary);
+    }
+}
+
+.summary {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 4px var(--sp-2);
+    margin-top: var(--sp-2);
+    font-size: var(--fs-13);
+
+    &__label {
+        flex-shrink: 0;
+        font-weight: 600;
+        color: var(--label-primary);
+    }
+
+    /* En-tete de densite : le grand chiffre du plan. */
+    &__value {
+        flex-shrink: 0;
+        font-size: var(--fs-32);
+        font-weight: 800;
+        line-height: 1;
+        color: var(--label-primary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__bar {
+        flex: 1 1 100%;
+        height: 6px;
+        border-radius: var(--radius-s);
+        background-color: var(--fill-tertiary);
+        overflow: hidden;
+    }
+
+    &__bar-fill {
+        height: 100%;
+        border-radius: var(--radius-s);
+        background-color: var(--accent-primary);
+    }
+}
 .report__unfit {
     grid-column: 1 / -1;
     border: 1px solid var(--danger);
@@ -556,6 +686,10 @@ defineExpose({ reportEl })
 
     &__table {
         width: 100%;
+        /* U3 passe 2 : dans le volet 1/3 le tableau a 7 colonnes ne tient
+           pas — il DEFILE dans son conteneur (report__table-wrap) au lieu
+           d'etre rogne a droite. */
+        min-width: 620px;
         border-collapse: collapse;
         font-size: var(--fs-13);
         font-variant-numeric: tabular-nums;

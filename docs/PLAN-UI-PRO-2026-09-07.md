@@ -714,3 +714,50 @@ avec un compte créé pour l'occasion sur la production
 fichiers : `db.users.countDocuments` = 0). Aucun compte existant n'a été
 touché ; l'inscription a déclenché la notification administrateur
 habituelle.
+
+#### U3 passe 2 — l'espace de résultat (09/09), première livraison
+
+**Fait** — le dialogue est devenu un espace de travail :
+
+| Point du plan | Livré |
+|---|---|
+| Plein écran à 24 px | `DialogWrapper` gagne une variante `fullscreen` (`calc(100vw − 48px)` × `calc(100vh − 48px)`), utilisée par le seul dialogue de résultat |
+| Deux volets 2/3 – 1/3 | `.result-space__panes` en grille `2fr minmax(320px, 1fr)` ≥ 768 px ; **c'est le volet rapport qui défile**, jamais le dialogue (`bodyScrollTop 0`, `scrollHeight == clientHeight` mesurés) |
+| Onglets d'alternatives | en tête, pleine largeur |
+| Barre d'outils de la visionneuse | le pager de tôle **quitte le haut du dialogue** pour la barre ; couleur/DXF passe en `UiSegmented` ; le bouton plein écran ne flotte plus au-dessus du dessin, il est dans la barre |
+| L'affichage suit son volet | plus de tailles fixes calculées sur le viewport (`width: min(620px, 78vw)`…) : la scène pilote |
+| En-tête du rapport | méthode + explication + **identifiant copiable** (bouton, toast `useToast`) + densité en **grand chiffre** ; la ligne de densité qui la répétait dans le corps est retirée |
+| Tableau par tôle | il **défile** dans son conteneur (`min-width: 620px` + `overflow-x: auto`) au lieu d'être rogné à droite dans le volet 1/3 |
+| Mobile < 768 px | volets **empilés, visionneuse d'abord**, une seule zone de défilement (la colonne) — la première version superposait le rapport sur la visionneuse, corrigé et recapturé |
+| Migration `data-testid` | `alt-tab` (+ `data-active`), `alts-why`, `result-headline`, `result-explain`, `result-density(-value)`, `report-badge` (+ `data-ok`), `report-engine`, `report-row`, `report-actions`, `view-mode-{color,dxf}` (nouvelle prop `testid` d'`UiSegmented`), `sheet-{prev,label,next}`, `viewer-{toolbar,stage,fullscreen}`, `result-area`, `result-name`, `result-report-btn` — **les deux harnais migrés dans le même commit** |
+| `UiToast` | il n'était **monté nulle part** : `useToast()` n'affichait rien. Monté une fois dans `app.vue` |
+
+**Verrous** : `npx nuxt build` vert ; `npx vitest run` **517/517** ;
+`qa-c02c03-modal.mjs` **intégralement vert sur les `data-testid`** (les
+dix-huit contrôles, dont la barre « Material density », l'absence de
+« Sheet utilization », les badges de verdict et les détails repliés) ;
+harnais principal vert, 900/900, `[587, 313]`, long task max 69 ms /
+après-solve 63 ms, CLS 0,0246.
+
+**Captures** (harnais stabilisé) : `docs/qa/atelier-ui/u3-modal-clair.png`,
+`u3-modal-sombre.png`, `u3-modal-mobile.png`, `u3-rapport.png`.
+
+**Reste à faire sur la passe 2**, énoncé sans détour — ce n'est pas fini :
+
+1. **`CapacityPanel` réutilisé** pour le partiel / le refus : le rapport
+   garde ses bandeaux `report__unfit` et `report__partial` d'origine.
+2. **Zoom molette + glisser** dans la visionneuse : non implémenté (le
+   plein écran et le pager le sont).
+3. **Stats live en `UiStat`** (en-tête de `LiveNestingView`) : non fait.
+4. **`a11y-modal-desktop.json` / `mobile`** : **aucun outil axe dans le
+   dépôt** (`axe-core` / `@axe-core/playwright` absents de
+   `node_modules`). Produire ces fichiers demande d'ajouter une dépendance
+   de développement — décision propriétaire, je ne l'ai pas prise seul.
+   Les points vérifiables sans axe (focus piégé, Échap, restitution du
+   focus) sont dans `DialogWrapper` et inchangés par cette passe, mais je
+   ne les ai **pas** mesurés : je ne les compte pas comme tenus.
+5. Finition : « All parts are placed » flotte encore entre l'en-tête et la
+   carte du rapport.
+
+**Pas de déploiement** — attente du GO visuel. Le socle P6 (`485a491`)
+partira avec.

@@ -8,28 +8,65 @@
 -->
 <template>
     <div class="viewer">
-            <div
-                v-if="hasColorPreview"
-                class="view-toggle"
-            >
-                <button
-                    class="view-toggle__btn"
-                    :class="{ 'view-toggle__btn--active': viewMode === 'color' }"
-                    tracking-tag="result_view_color"
-                    @click="selectViewMode('color')"
+            <div class="viewer__toolbar" data-testid="viewer-toolbar">
+                <!-- Le pager de tole vit desormais DANS la barre d'outils de
+                     la visionneuse, plus au-dessus du dialogue. -->
+                <div
+                    v-if="resultModalData.isMultiSheet && !isHaveError"
+                    class="viewer__sheets list-sheets"
                 >
-                    {{ t('result.colorView') }}
-                </button>
-                <button
-                    class="view-toggle__btn"
-                    :class="{ 'view-toggle__btn--active': viewMode === 'dxf' }"
-                    tracking-tag="result_view_dxf"
-                    @click="selectViewMode('dxf')"
-                >
-                    {{ t('result.dxfView') }}
-                </button>
+                    <MainButton
+                        :theme="themeType.secondary"
+                        :icon="iconType.arrowPrev"
+                        :isLabelShow=false
+                        :size="sizeType.s"
+                        trackingTag="result_part_prev"
+                        data-testid="sheet-prev"
+                        :isDisable="activePart === 0"
+                        label="prev"
+                        class="controls__prev"
+                        @click="$emit('part', activePart - 1)"
+                    />
+                    <span class="viewer__sheet-label" data-testid="sheet-label">
+                        {{ t('result.sheet', { n: activePart + 1, total: currentDxfs.length }) }}
+                    </span>
+                    <MainButton
+                        :theme="themeType.secondary"
+                        :icon="iconType.arrowNext"
+                        :size="sizeType.s"
+                        :isLabelShow=false
+                        :isDisable="activePart === currentDxfs.length - 1"
+                        trackingTag="result_part_next"
+                        data-testid="sheet-next"
+                        label="next"
+                        class="controls__next"
+                        @click="$emit('part', activePart + 1)"
+                    />
+                </div>
+                <div class="viewer__spacer" />
+                <UiSegmented
+                    v-if="hasColorPreview"
+                    class="viewer__mode view-toggle"
+                    :model-value="viewMode"
+                    :options="viewOptions"
+                    :label="t('result.colorView') + ' / ' + t('result.dxfView')"
+                    testid="view-mode"
+                    @update:modelValue="selectViewMode"
+                />
+                <MainButton
+                    v-if="!isHaveError"
+                    label="fullscreen"
+                    :size="sizeType.s"
+                    :theme="themeType.secondary"
+                    :isLabelShow="false"
+                    :icon="iconType.fullscreen"
+                    trackingTag="result_fullscreen"
+                    data-testid="viewer-fullscreen"
+                    class="viewer__fullscreen"
+                    @click="updateFullScreen"
+                />
             </div>
-            <div class="modal__wrapper">
+            <div class="modal__wrapper viewer__stage" data-testid="viewer-stage">
                 <LiveNestingView
                     v-if="isInProgress && resultModalData.liveLayout"
                     :result="resultModalData"
@@ -99,17 +136,6 @@
                     :class="displayClasses"
                     class="modal__display"
                 />
-                <MainButton
-                    v-if="!isHaveError"
-                    label="fullscreen"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    :isLabelShow="false"
-                    :icon="iconType.fullscreen"
-                    trackingTag="result_fullscreen"
-                    @click="updateFullScreen"
-                    class="modal__fullscreen"
-                />
             </div>
     </div>
 </template>
@@ -120,7 +146,7 @@ import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
 
 const props = defineProps({ d: { type: Object, required: true } })
-const emit = defineEmits(['view-mode', 'toggle-fullscreen', 'download-sheet'])
+const emit = defineEmits(['view-mode', 'toggle-fullscreen', 'download-sheet', 'part'])
 
 const t = (...a) => props.d.t(...a)
 const resultModalData = computed(() => props.d.resultModalData)
@@ -140,14 +166,69 @@ const previewSheet = computed(() => props.d.previewSheet)
 const displayClasses = computed(() => props.d.displayClasses)
 const placeholderClasses = computed(() => props.d.placeholderClasses)
 
+const viewOptions = computed(() => ([
+    { value: 'color', label: t('result.colorView') },
+    { value: 'dxf', label: t('result.dxfView') },
+]))
 const selectViewMode = (mode) => emit('view-mode', mode)
 const updateFullScreen = () => emit('toggle-fullscreen')
 const downloadLocalSheet = () => emit('download-sheet')
 </script>
 
 <style lang="scss" scoped>
+/* U3 passe 2 : la visionneuse occupe son volet — barre d'outils en haut,
+   scene qui prend le reste. Le bouton plein ecran est dans la barre, il ne
+   flotte plus au-dessus du dessin. */
 .viewer {
-    display: contents;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+    min-height: 0;
+
+    &__toolbar {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+        flex-wrap: wrap;
+        flex: 0 0 auto;
+    }
+
+    &__spacer {
+        flex: 1 1 auto;
+    }
+
+    &__sheets {
+        display: flex;
+        align-items: center;
+        gap: var(--sp-2);
+    }
+
+    &__sheet-label {
+        font-size: var(--fs-13);
+        font-weight: 600;
+        color: var(--label-primary);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    &__mode {
+        flex: 0 0 auto;
+    }
+
+    &__stage {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--sp-2);
+        border: 1px solid var(--separator-secondary);
+        border-radius: var(--radius-l);
+        background-color: var(--fill-tertiary);
+        padding: var(--sp-3);
+        overflow: hidden;
+    }
 }
 .view-toggle {
     display: flex;
@@ -209,25 +290,15 @@ const downloadLocalSheet = () => emit('download-sheet')
         border-radius: var(--radius-l);
     }
 
+    /* U3 passe 2 : l'affichage suit la scene (le volet 2/3) au lieu de
+       tailles fixes calculees sur le viewport. */
     &__display,
     &__placeholder {
+        width: 100%;
+        height: 100%;
         max-width: 100%;
         max-height: 100%;
-
-        width: 320px;
-        height: 320px;
-
-        @media (min-width: 567px) {
-            width: min(620px, 78vw);
-            height: min(280px, 42vh);
-        }
-
-        &--is-fullscreen {
-            @media (min-width: 567px) {
-                width: calc(80vw - 48px);
-                height: calc(80vh - 148px);
-            }
-        }
+        min-height: 240px;
     }
 
     &__placeholder {

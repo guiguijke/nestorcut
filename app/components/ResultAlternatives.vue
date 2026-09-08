@@ -16,6 +16,8 @@
                     :key="alt.altId"
                     :class="{ 'alts__tab--active': alt.altId === activeAlt }"
                     class="alts__tab"
+                    data-testid="alt-tab"
+                    :data-active="alt.altId === activeAlt ? 'true' : 'false'"
                     :title="altTitle(alt)"
                     @click="selectAlt(alt.altId)"
                 >
@@ -28,7 +30,7 @@
                  VRAIE — « plus grande chute propre » seulement si la chute
                  du rang 0 est bien maximale, sinon la régularité des
                  rangées. -->
-            <p v-if="whyFirstLine" class="alts__why">
+            <p v-if="whyFirstLine" class="alts__why" data-testid="alts-why">
                 {{ whyFirstLine }}
             </p>
 </template>

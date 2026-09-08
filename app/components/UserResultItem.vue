@@ -54,7 +54,7 @@
                     class="result__display"
                 />
             </div>
-            <p class="result__name">
+            <p class="result__name" data-testid="result-name">
                 {{ resultTitle }}
                 <UiBadge
                     v-if="stateLabel"
@@ -86,6 +86,7 @@
                     :size="sizeType.s"
                     :theme="themeType.secondary"
                     class="controls__report"
+                    data-testid="result-report-btn"
                     @click="openReport"
                 />
                 <!-- Job serveur : href GridFS. Job local (J-082) : contenus
@@ -114,6 +115,7 @@
             <UiButton
                 variant="ghost"
                 class="result__area"
+                data-testid="result-area"
                 aria-label="Open result details"
                 @click="openModal"
             />

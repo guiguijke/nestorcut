@@ -7,7 +7,7 @@
                  restitution au déclencheur à la fermeture. -->
             <div
                 ref="bodyEl"
-                class="modal__body modal-body"
+                :class="['modal__body', 'modal-body', { 'modal__body--full': fullscreen }]"
                 role="dialog"
                 aria-modal="true"
                 aria-label="Dialog"
@@ -26,7 +26,7 @@ import { sizeType } from '~~/constants/size.constants';
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { trackEvent } from '~/utils/track';
 
-const { isModalOpen, trackingTag } = defineProps({
+const { isModalOpen, trackingTag, fullscreen } = defineProps({
     isModalOpen: {
         type: Boolean,
         default: false,
@@ -34,6 +34,12 @@ const { isModalOpen, trackingTag } = defineProps({
     trackingTag: {
         type: String,
         default: '',
+    },
+    // U3 passe 2 : dialogue plein ecran a 24 px de marge (espace de
+    // resultat). Les autres dialogues gardent la boite centree.
+    fullscreen: {
+        type: Boolean,
+        default: false,
     },
 })
 
@@ -133,6 +139,16 @@ onUnmounted(() => {
         border-radius: var(--radius-l);
         max-height: 94vh;
         max-width: 94vw;
+
+        /* U3 passe 2 : plein ecran a 24 px. */
+        &--full {
+            max-height: none;
+            max-width: none;
+            width: calc(100vw - 48px);
+            height: calc(100vh - 48px);
+            display: flex;
+            flex-direction: column;
+        }
     }
 }
 

@@ -10,6 +10,7 @@
             role="radio"
             :aria-checked="opt.value === modelValue"
             :class="['ui-seg__opt', { 'ui-seg__opt--active': opt.value === modelValue }]"
+            :data-testid="testid ? `${testid}-${opt.value}` : undefined"
             :title="opt.hint || undefined"
             @click="$emit('update:modelValue', opt.value)"
         >
@@ -24,6 +25,9 @@ defineProps({
     modelValue: { type: [String, Number], default: '' },
     options: { type: Array, required: true }, // [{value,label,hint,icon}]
     label: { type: String, default: '' },
+    // U3 : chaque option porte `${testid}-${value}` — les harnais QA lisent
+    // un identifiant stable, pas une classe de style.
+    testid: { type: String, default: '' },
 })
 defineEmits(['update:modelValue'])
 </script>
