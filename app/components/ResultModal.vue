@@ -1,30 +1,7 @@
 <template>
     <DialogWrapper trackingTag="result">
         <div class="modal">
-            <div
-                v-if="alternatives.length > 1 && !isHaveError"
-                class="modal__alts alts"
-            >
-                <button
-                    v-for="alt in alternatives"
-                    :key="alt.altId"
-                    :class="{ 'alts__tab--active': alt.altId === activeAlt }"
-                    class="alts__tab"
-                    :title="altTitle(alt)"
-                    @click="selectAlt(alt.altId)"
-                >
-                    <span v-if="alt.strategy" class="alts__strategy">{{ strategyLabel(alt.strategy) }}</span>
-                    {{ t('result.option', { n: alt.altId + 1 }) }} · {{ altQualityLine(alt) }}
-                </button>
-            </div>
-            <!-- C02 (audit UX 2026-09-05) : pourquoi l'option 1 est
-                 proposée en premier. AA1 (vérif L1) : la raison doit être
-                 VRAIE — « plus grande chute propre » seulement si la chute
-                 du rang 0 est bien maximale, sinon la régularité des
-                 rangées. -->
-            <p v-if="whyFirstLine" class="alts__why">
-                {{ whyFirstLine }}
-            </p>
+            <ResultAlternatives :d="bundle" @select="selectAlt" />
             <div
                 v-if="resultModalData.isMultiSheet && !isHaveError"
                 class="modal__list-sheets list-sheets"
@@ -81,413 +58,22 @@
                 </div>
                 <span class="summary__value">{{ fmtPercent(densityPct) }}</span>
             </div>
-            <div
-                v-if="hasColorPreview"
-                class="view-toggle"
-            >
-                <button
-                    class="view-toggle__btn"
-                    :class="{ 'view-toggle__btn--active': viewMode === 'color' }"
-                    tracking-tag="result_view_color"
-                    @click="selectViewMode('color')"
-                >
-                    {{ t('result.colorView') }}
-                </button>
-                <button
-                    class="view-toggle__btn"
-                    :class="{ 'view-toggle__btn--active': viewMode === 'dxf' }"
-                    tracking-tag="result_view_dxf"
-                    @click="selectViewMode('dxf')"
-                >
-                    {{ t('result.dxfView') }}
-                </button>
-            </div>
-            <div class="modal__wrapper">
-                <LiveNestingView
-                    v-if="isInProgress && resultModalData.liveLayout"
-                    :result="resultModalData"
-                    class="modal__live"
-                />
-                <div
-                    v-else-if="isHaveError"
-                    :class="placeholderClasses"
-                    class="modal__placeholder"
-                >
-                    {{ t('result.failed') }}
-                </div>
-                <template v-else-if="resultModalData.isMultiSheet">
-                    <SheetSvgPreview
-                        v-if="showColorPreview"
-                        :key="`svg-${activeAlt}-${activePart}`"
-                        :src="currentSvgs[activePart]"
-                        :width="previewSheet.w"
-                        :height="previewSheet.h"
-                        :class="displayClasses"
-                        class="modal__display modal__svg-preview"
-                    />
-                    <DxfViewerComponent
-                        v-else
-                        :key="`dxf-${activeAlt}-${activePart}-${isFullScreen}`"
-                        :dxfUrl="currentDxfs[activePart]"
-                        :isFullScreen="isFullScreen"
-                        :class="displayClasses"
-                        class="modal__display"
-                    />
-                    <MainButton
-                        class="modal__part-download"
-                        v-if="resultModalData.isMultiSheet && !isLocal"
-                        :href="currentDxfs[activePart]"
-                        :label="t('result.downloadSheet', { n: activePart + 1 })"
-                        tag="a"
-                        :isDisable="isHaveError || isUnfit"
-                        :size="sizeType.s"
-                        :theme="themeType.primary"
-                        trackingTag="result_part_download"
-                    />
-                    <MainButton
-                        class="modal__part-download"
-                        v-if="resultModalData.isMultiSheet && isLocal"
-                        :label="t('result.downloadSheet', { n: activePart + 1 })"
-                        :isDisable="isHaveError || isUnfit"
-                        :size="sizeType.s"
-                        :theme="themeType.primary"
-                        trackingTag="result_part_download"
-                        @click="downloadLocalSheet"
-                    />
-                </template>
-                <SheetSvgPreview
-                    v-else-if="showColorPreview"
-                    :key="`svg-${activeAlt}-0`"
-                    :src="currentSvgs[0]"
-                    :width="previewSheet.w"
-                    :height="previewSheet.h"
-                    :class="displayClasses"
-                    class="modal__display modal__svg-preview"
-                />
-                <DxfViewerComponent
-                    v-else
-                    :key="`dxf-${activeAlt}-0-${isFullScreen}`"
-                    :dxfUrl="currentDxfs[0]"
-                    :isFullScreen="isFullScreen"
-                    :class="displayClasses"
-                    class="modal__display"
-                />
-                <MainButton
-                    v-if="!isHaveError"
-                    label="fullscreen"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    :isLabelShow="false"
-                    :icon="iconType.fullscreen"
-                    trackingTag="result_fullscreen"
-                    @click="updateFullScreen"
-                    class="modal__fullscreen"
-                />
-            </div>
-            <div v-if="isHaveError" class="modal__name modal__info info">
-                <span class="info__label">
-                    {{ t('result.noSolution') }}
-                </span>
-                <span v-if="resultModalData.information" class="info__label info__label--detail">
-                    {{ resultModalData.information }}
-                </span>
-                <span class="info__label">
-                    {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
-                </span>
-                <span class="info__label">
-                    {{ t('result.placed', { n: resultModalData.placed }) }}
-                </span>
-            </div>
-            <div
-                v-if="!isHaveError"
-                class="modal__info info"
-            >
-                <span
-                    v-if="resultModalData.requested === resultModalData.placed"
-                    class="info__label"
-                >
-                    {{ t('result.allPlaced') }}
-                </span>
-                <template v-else>
-                    <span class="info__label">
-                        {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
-                    </span>
-                    <span class="info__label">
-                        {{ t('result.placed', { n: resultModalData.placed }) }}
-                    </span>
-                </template>
-            </div>
-            <div
-                v-if="!isHaveError && activeReport"
-                ref="reportEl"
-                class="modal__report report"
-            >
-                <div class="report__row">
-                    <span class="report__label">{{ t('result.densityFull') }}</span>
-                    <div class="report__bar">
-                        <div
-                            class="report__bar-fill"
-                            :style="{ width: `${densityPct != null ? densityPct : 0}%` }"
-                        />
-                    </div>
-                    <span class="report__value">{{ densityPct != null ? fmtPercent(densityPct) : '—' }}</span>
-                </div>
-                <div class="report__row report__row--detail">
-                    <span>{{ t('report.areas', { parts: fmtArea(activeReport.partsAreaMm2), free: fmtArea(freeAreaMm2) }) }}</span>
-                    <span v-if="activeReportOffcut" class="report__offcut">
-                        {{ t('report.offcut', { w: fmtLengthValue(activeReportOffcut.widthMm), h: fmtLengthValue(activeReportOffcut.heightMm), unit: unitLabel }) }}
-                        · {{ fmtArea(activeReportOffcut.areaMm2) }}
-                        <span
-                            class="report__badge"
-                            :class="{ 'report__badge--scrap': !activeReportOffcut.reusable }"
-                        >
-                            {{ activeReportOffcut.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap') }}
-                        </span>
-                        <span class="report__hint">&nbsp;({{ t('report.offcut.atLeast') }})</span>
-                    </span>
-                    <span v-else-if="activeOffcut">{{ t('report.offcut', { w: fmtLengthValue(activeOffcut.width), h: fmtLengthValue(activeOffcut.height), unit: unitLabel }) }}</span>
-                </div>
-                <div
-                    v-if="reportTotals"
-                    class="report__row report__row--detail report__material"
-                >
-                    <span class="report__label">{{ t('report.material') }}</span>
-                    <span class="report__value">{{ materialFormats }}</span>
-                </div>
-                <div
-                    v-if="reportSheets.length"
-                    class="report__table-wrap"
-                >
-                    <table class="report__table">
-                        <thead>
-                            <tr>
-                                <th>{{ t('report.sheet.num') }}</th>
-                                <th>{{ t('report.sheet.format') }}</th>
-                                <th>{{ t('report.sheet.parts') }}</th>
-                                <th>{{ t('report.sheet.used') }}</th>
-                                <th>{{ t('report.sheet.free') }}</th>
-                                <th>{{ t('report.sheet.density') }}</th>
-                                <th>{{ t('report.sheet.offcut') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="s in reportSheets" :key="s.index">
-                                <td>{{ s.index + 1 }}</td>
-                                <td>{{ fmtLength(s.widthMm) }} × {{ fmtLength(s.heightMm) }}</td>
-                                <td>{{ s.partCount }}</td>
-                                <td>
-                                    <span class="report__area">{{ fmtAreaStacked(s.partsAreaMm2).main }}</span>
-                                    <span v-if="fmtAreaStacked(s.partsAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.partsAreaMm2).sub }}</span>
-                                </td>
-                                <td>
-                                    <span class="report__area">{{ fmtAreaStacked(s.freeAreaMm2).main }}</span>
-                                    <span v-if="fmtAreaStacked(s.freeAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.freeAreaMm2).sub }}</span>
-                                </td>
-                                <td>{{ s.densityPct != null ? fmtPercent(s.densityPct) : '—' }}</td>
-                                <td>
-                                    <template v-if="s.offcut">
-                                        {{ fmtLengthValue(s.offcut.widthMm) }} × {{ fmtLengthValue(s.offcut.heightMm) }} {{ unitLabel }}
-                                        <span
-                                            class="report__badge"
-                                            :class="{ 'report__badge--scrap': !s.offcut.reusable }"
-                                        >
-                                            {{ s.offcut.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap') }}
-                                        </span>
-                                    </template>
-                                    <span v-else>—</span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div
-                    v-if="activeReport.holesFilled > 0"
-                    class="report__row report__row--detail"
-                >
-                    <span>{{ t('report.holesFilled', { n: activeReport.holesFilled }) }}</span>
-                </div>
-                <!-- Plan 2026-09-05 §1.2c : verdict unique — un résultat non
-                     découpage n'affiche JAMAIS de badge vert. -->
-                <div v-if="isUnfit" class="report__unfit">
-                    <div class="report__unfit-title">{{ t('report.unfit.title') }}</div>
-                    <div class="report__unfit-detail">
-                        {{ t('report.unfit.detail', {
-                            n: unfitData.overflowMm != null
-                                ? fmtLengthValue(unfitData.overflowMm, unitLabel.value === '"' ? 4 : 2)
-                                : null,
-                            unit: unitLabel,
-                        }) }}
-                    </div>
-                    <ul class="report__unfit-levers">
-                        <li v-if="unfitData.sheetsNeeded">
-                            {{ t('report.unfit.sheetsNeeded', { n: unfitData.sheetsNeeded }) }}
-                        </li>
-                        <li v-if="unfitData.maxParts != null">
-                            {{ t('report.unfit.maxParts', { n: unfitData.maxParts }) }}
-                        </li>
-                        <li v-if="unfitData.maxSpacingMm != null">
-                            {{ t('report.unfit.maxSpacing', { v: unfitData.maxSpacingMm }) }}
-                        </li>
-                    </ul>
-                    <div class="report__unfit-actions">
-                        <MainButton
-                            :label="t('report.unfit.addSheet')"
-                            :size="sizeType.s"
-                            :theme="themeType.primary"
-                            @click="$emit('unfit-add-sheet')"
-                        />
-                        <MainButton
-                            v-if="unfitData.maxSpacingMm != null"
-                            :label="t('report.unfit.reduceSpacing', { v: unfitData.maxSpacingMm })"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            @click="$emit('unfit-reduce-spacing', unfitData.maxSpacingMm)"
-                        />
-                    </div>
-                </div>
-                <!-- Z3 (vérif 2026-09-05) : solution partielle UTILE — le
-                     résultat posé est découpage (pas de rouge), mais
-                     l'utilisateur sait quoi faire du reste : leviers sous le
-                     badge « n pièces non placées ». -->
-                <div
-                    v-if="isPartial && partialHasLevers"
-                    class="report__partial"
-                    data-testid="report-partial"
-                >
-                    <div class="report__partial-title">
-                        {{ t('report.partial.title', {
-                            n: partialUnplacedCount,
-                        }) }}
-                    </div>
-                    <div class="report__partial-detail">{{ t('report.partial.detail') }}</div>
-                    <ul class="report__unfit-levers">
-                        <li v-if="unfitData.sheetsNeeded">
-                            {{ t('report.unfit.sheetsNeeded', { n: unfitData.sheetsNeeded }) }}
-                        </li>
-                        <li v-if="unfitData.maxParts != null">
-                            {{ t('report.unfit.maxParts', { n: unfitData.maxParts }) }}
-                        </li>
-                        <li v-if="unfitData.maxSpacingMm != null">
-                            {{ t('report.unfit.maxSpacing', { v: unfitData.maxSpacingMm }) }}
-                        </li>
-                    </ul>
-                    <div class="report__unfit-actions">
-                        <MainButton
-                            v-if="unfitData.sheetsNeeded"
-                            :label="t('report.unfit.addSheet')"
-                            :size="sizeType.s"
-                            :theme="themeType.primary"
-                            @click="$emit('unfit-add-sheet')"
-                        />
-                        <MainButton
-                            v-if="unfitData.maxSpacingMm != null"
-                            :label="t('report.unfit.reduceSpacing', { v: unfitData.maxSpacingMm })"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            @click="$emit('unfit-reduce-spacing', unfitData.maxSpacingMm)"
-                        />
-                    </div>
-                </div>
-                <div class="report__badges">
-                    <span
-                        v-for="badge in reportBadges"
-                        :key="badge.label"
-                        class="report__badge"
-                        :class="{ 'report__badge--ko': badge.ok === false }"
-                    >
-                        {{ badge.ok === false ? '✗' : '✓' }} {{ badge.label }}
-                    </span>
-                </div>
-                <!-- C03/C12 (audit UX 2026-09-05) : le post-pass (rollback
-                     compris) et les paramètres moteur ne sont plus des
-                     badges — un résultat découpable n'affiche JAMAIS de
-                     rouge « Post-pass … rollback ». Ils vivent repliés
-                     dans les détails techniques ; seed/cores absents
-                     masqués ; « combinations tested » reformulé honnêtement
-                     (ce sont les itérations du recuit moteur). -->
-                <details v-if="hasTechDetails" class="report__tech" data-testid="report-tech">
-                    <summary>{{ t('report.techDetails') }}</summary>
-                    <!-- AB2 (L2-bis) : une option écartée au filet final
-                         n'est plus perdue en silence — info repliée. -->
-                    <p v-if="discardedCount" class="report__tech-line" data-testid="report-discarded">
-                        {{ t('report.discarded', { n: discardedCount }) }}
-                    </p>
-                    <div class="report__engine">
-                        nest-engine<template v-if="activeAltSeed"> · seed {{ activeAltSeed }}</template>
-                        <template v-if="activeReport.iterations"> · {{ activeReport.iterations === 1 ? t('report.iterationsOne') : t('report.iterations', { n: activeReport.iterations }) }}</template>
-                        <template v-if="activeReport.vcores"> · {{ activeReport.vcores === 1 ? t('report.coresOne') : t('report.cores', { n: activeReport.vcores }) }}</template>
-                    </div>
-                    <p v-for="(line, i) in postPassLines" :key="i" class="report__tech-line">
-                        {{ line }}
-                    </p>
-                </details>
-            </div>
-            <div class="controls">
-                <MainButton
-                    v-if="reportSheets.length"
-                    :label="exportLocked ? t('report.exportLocked') : (copied ? t('report.copied') : t('report.copy'))"
-                    :icon="exportLocked ? iconType.lock : undefined"
-                    :isDisable="exportDisabled"
-                    :size="sizeType.s"
-                    :theme="themeType.secondary"
-                    trackingTag="report_copy"
-                    @click="onExportClick(copyReport, 'report_copy_locked_click')"
-                />
-                <MainButton
-                    v-if="reportSheets.length"
-                    :label="exportLocked ? t('report.exportLocked') : t('report.csv')"
-                    :icon="exportLocked ? iconType.lock : undefined"
-                    :isDisable="exportDisabled"
-                    :size="sizeType.s"
-                    :theme="themeType.secondary"
-                    trackingTag="report_csv"
-                    @click="onExportClick(exportCsv, 'report_csv_locked_click')"
-                />
-                <MainButton
-                    v-if="resultModalData.isMultiSheet && !isLocal"
-                    :href="resultModalData.zipDownloadUrl"
-                    :label="t('results.downloadAll')"
-                    tag="a"
-                    :isDisable="isHaveError || isUnfit"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    trackingTag="result_download_all"
-                />
-                <MainButton
-                    v-if="resultModalData.isMultiSheet && isLocal"
-                    :label="t('results.downloadAll')"
-                    :isDisable="isHaveError || isUnfit"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    trackingTag="result_download_all"
-                    @click="downloadLocalAll"
-                />
-                <MainButton
-                    v-if="!resultModalData.isMultiSheet && !isLocal"
-                    :href="currentDxfs[0]"
-                    :label="t('results.download')"
-                    tag="a"
-                    download
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    trackingTag="result_download"
-                />
-                <MainButton
-                    v-if="!resultModalData.isMultiSheet && isLocal"
-                    :label="t('results.download')"
-                    :size="sizeType.s"
-                    :theme="themeType.primary"
-                    trackingTag="result_download"
-                    @click="downloadLocalSingle"
-                />
-                <MainButton
-                    :label="t('result.tryAgain')"
-                    :size="sizeType.s"
-                    :theme="themeType.secondary"
-                    trackingTag="result_try_again"
-                    @click="resultDialog = false"
-                />
-            </div>
+            <ResultViewer
+                :d="bundle"
+                @view-mode="selectViewMode"
+                @toggle-fullscreen="updateFullScreen"
+                @download-sheet="downloadLocalSheet"
+            />
+            <ResultReport
+                ref="reportChild"
+                :d="bundle"
+                @unfit-add-sheet="$emit('unfit-add-sheet')"
+                @unfit-reduce-spacing="$emit('unfit-reduce-spacing', $event)"
+                @export="onExportIntent"
+                @download-all="downloadLocalAll"
+                @download-single="downloadLocalSingle"
+                @close="resultDialog = false"
+            />
         </div>
     </DialogWrapper>
 </template>
@@ -573,7 +159,9 @@ const resultDialog = useResultDialog()
 // The "Nesting report" button on a result card opens this modal already
 // scrolled to the quoting report (the card click opens the sheet preview).
 const scrollToReportFlag = useResultScrollToReport()
-const reportEl = ref(null)
+// U3 : le bloc rapport est passe dans ResultReport — on garde une poignee
+// sur l'enfant pour le scrollIntoView de l'ouverture « Rapport de nesting ».
+const reportChild = ref(null)
 
 const isHaveError = computed(() => {
     return unref(resultModalData).status === statusType.failed
@@ -640,7 +228,7 @@ watch(resultDialog, async (isOpen) => {
             await nextTick()
             // Let the dialog transition settle before scrolling.
             setTimeout(() => {
-                reportEl.value?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+                reportChild.value?.reportEl?.scrollIntoView({ block: 'start', behavior: 'smooth' })
             }, 120)
         }
     }
@@ -1042,52 +630,71 @@ const updatePartPage = (partIndex) => {
     if (partIndex < 0 || partIndex >= unref(currentDxfs).length) return
     activePart.value = partIndex
 }
+// ---------------------------------------------------------------------------
+// U3 passe 1 : les trois enfants sont PUREMENT presentatifs — toute la
+// logique reste ici et leur est passee dans un objet unique, qu'ils
+// re-exposent sous les memes noms. C'est ce qui permet d'avoir DEPLACE les
+// blocs de template sans en reecrire une ligne (donc sans changer le rendu).
+// ---------------------------------------------------------------------------
+const bundle = computed(() => ({
+    t,
+    fmtPercent,
+    fmtArea,
+    fmtLength,
+    fmtLengthValue,
+    fmtAreaStacked,
+    unitLabel: unref(unitLabel),
+    resultModalData: unref(resultModalData),
+    alternatives: unref(alternatives),
+    activeAlt: unref(activeAlt),
+    activePart: unref(activePart),
+    isHaveError: unref(isHaveError),
+    isInProgress: unref(isInProgress),
+    isUnfit: unref(isUnfit),
+    isPartial: unref(isPartial),
+    isLocal: unref(isLocal),
+    isFullScreen: unref(isFullScreen),
+    partialHasLevers: unref(partialHasLevers),
+    partialUnplacedCount: unref(partialUnplacedCount),
+    unfitData: unref(unfitData),
+    hasColorPreview: unref(hasColorPreview),
+    showColorPreview: unref(showColorPreview),
+    viewMode: unref(viewMode),
+    currentSvgs: unref(currentSvgs),
+    currentDxfs: unref(currentDxfs),
+    previewSheet: unref(previewSheet),
+    displayClasses: unref(displayClasses),
+    placeholderClasses: unref(placeholderClasses),
+    activeReport: unref(activeReport),
+    activeReportOffcut: unref(activeReportOffcut),
+    activeOffcut: unref(activeOffcut),
+    activeAltSeed: unref(activeAltSeed),
+    densityPct: unref(densityPct),
+    freeAreaMm2: unref(freeAreaMm2),
+    reportTotals: unref(reportTotals),
+    reportSheets: unref(reportSheets),
+    reportBadges: unref(reportBadges),
+    materialFormats: unref(materialFormats),
+    postPassLines: unref(postPassLines),
+    hasTechDetails: unref(hasTechDetails),
+    discardedCount: unref(discardedCount),
+    exportLocked: unref(exportLocked),
+    exportDisabled: unref(exportDisabled),
+    copied: unref(copied),
+    whyFirstLine: unref(whyFirstLine),
+    altTitle,
+    strategyLabel,
+    altQualityLine,
+}))
+
+// L'enfant n'exprime qu'une INTENTION d'export ; la politique (paywall
+// D-RAP-11) reste ici, ou elle a toujours ete.
+const onExportIntent = ({ action, trackingTag }) => {
+    onExportClick(action === 'csv' ? exportCsv : copyReport, trackingTag)
+}
 </script>
 
 <style lang="scss" scoped>
-
-.report__unfit {
-    grid-column: 1 / -1;
-    border: 1px solid var(--danger);
-    background: rgba(220, 38, 38, 0.08);
-    border-radius: var(--radius-l);
-    padding: 10px 12px;
-    margin: 6px 0;
-}
-.report__unfit-title {
-    color: var(--danger);
-    font-weight: 600;
-}
-.report__unfit-levers {
-    margin: 6px 0 0 18px;
-    padding: 0;
-}
-.report__unfit-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-}
-
-/* Z3 (vérif 2026-09-05) : solution partielle — ambre, pas rouge : le
-   résultat posé est utilisable et découpage. */
-.report__partial {
-    grid-column: 1 / -1;
-    border: 1px solid var(--warn);
-    background: rgba(217, 119, 6, 0.08);
-    border-radius: var(--radius-l);
-    padding: 10px 12px;
-    margin: 6px 0;
-}
-.report__partial-title {
-    color: var(--warn);
-    font-weight: 600;
-}
-.report__partial-detail {
-    margin-top: 2px;
-    font-size: var(--fs-12);
-}
-
 .modal {
     padding: 48px 24px 24px;
 
@@ -1096,98 +703,8 @@ const updatePartPage = (partIndex) => {
         max-width: initial;
         min-width: 368px;
         // Roomy enough for the per-sheet quoting table (7 columns with
-        // in² + ft² areas) without a horizontal scrollbar.
+        // in2 + ft2 areas) without a horizontal scrollbar.
         width: min(800px, 94vw);
-    }
-
-    &__wrapper {
-        position: relative;
-    }
-
-    &__fullscreen {
-        display: none;
-
-        @media (min-width: 567px) {
-            position: absolute;
-            top: 8px;
-            right: 8px;
-            display: block;
-        }
-    }
-
-    &__display {
-        cursor: pointer;
-    }
-
-    // Colored sheet preview (server SVG, per-part colors): keeps its own
-    // white CAD background, never upscaled beyond its box.
-    &__svg-preview {
-        object-fit: contain;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-l);
-    }
-
-    &__display,
-    &__placeholder {
-        max-width: 100%;
-        max-height: 100%;
-
-        width: 320px;
-        height: 320px;
-
-        @media (min-width: 567px) {
-            width: min(620px, 78vw);
-            height: min(280px, 42vh);
-        }
-
-        &--is-fullscreen {
-            @media (min-width: 567px) {
-                width: calc(80vw - 48px);
-                height: calc(80vh - 148px);
-            }
-        }
-    }
-
-    &__placeholder {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        border-radius: var(--radius-l);
-        background-color: var(--error-background);
-        border: solid 1px var(--error-border);
-        color: var(--label-primary);
-    }
-
-    &__name {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-        margin-top: 10px;
-        margin-bottom: 10px;
-        min-height: 42px;
-        color: var(--label-primary);
-        margin-left: auto;
-        margin-right: auto;
-        word-break: break-all;
-
-        @media (min-width: 567px) {
-            max-width: 620px;
-        }
-    }
-
-    &__info {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        color: var(--label-primary);
-
-        &>* {
-            margin-bottom: 10px;
-        }
     }
 
     &__headline {
@@ -1203,43 +720,6 @@ const updatePartPage = (partIndex) => {
     &__list-sheets {
         margin: 10px auto 8px;
     }
-
-    &__part-download {
-        margin-left: auto;
-        margin-right: auto;
-        margin-top: 8px;
-    }
-}
-
-.view-toggle {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    margin: 0 auto 10px;
-
-    &__btn {
-        padding: 5px 14px;
-        border-radius: var(--radius);
-        border: 1px solid var(--separator-secondary);
-        background-color: var(--fill-tertiary);
-        color: var(--label-secondary);
-        font-size: var(--fs-12);
-        font-weight: 600;
-        cursor: pointer;
-        transition: border-color 0.3s, background-color 0.3s;
-
-        @media (hover:hover) {
-            &:hover {
-                border-color: var(--accent-primary);
-            }
-        }
-
-        &--active {
-            color: var(--background-primary);
-            background-color: var(--accent-primary);
-            border-color: var(--accent-primary);
-        }
-    }
 }
 
 .list-sheets {
@@ -1253,206 +733,7 @@ const updatePartPage = (partIndex) => {
         margin-right: 10px;
     }
 }
-.alts {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin: 0 auto 14px;
 
-    &__strategy {
-        padding: 2px 7px;
-        border-radius: var(--radius-s);
-        background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent);
-        color: var(--accent-primary);
-        font-size: var(--fs-12);
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
-    &__tab {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 6px 12px;
-        border-radius: var(--radius);
-        border: 1px solid var(--separator-secondary);
-        background-color: var(--fill-tertiary);
-        color: var(--label-secondary);
-        font-size: var(--fs-13);
-        font-weight: 600;
-        cursor: pointer;
-        transition: border-color 0.3s, background-color 0.3s;
-
-        @media (hover:hover) {
-            &:hover {
-                border-color: var(--accent-primary);
-            }
-        }
-
-        &--active {
-            color: var(--background-primary);
-            background-color: var(--accent-primary);
-            border-color: var(--accent-primary);
-        }
-    }
-
-    /* C02 (audit UX 2026-09-05) : pourquoi l'option 1 est proposée en
-       premier — la Grille (chute propre) ne doit pas paraître « moins
-       bonne » que la Compaction. */
-    &__why {
-        margin: -6px auto 12px;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-        text-align: center;
-    }
-}
-.report {
-    margin-top: 12px;
-    padding: 14px 16px;
-    border: 1px solid var(--separator-secondary);
-    border-radius: var(--radius-l);
-    background-color: var(--background-primary);
-    text-align: left;
-    font-size: var(--fs-14);
-    line-height: 1.45;
-    color: var(--label-secondary);
-
-    &__row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        &:not(:last-child) {
-            margin-bottom: 8px;
-        }
-
-        &--detail {
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 4px 12px;
-            font-variant-numeric: tabular-nums;
-        }
-    }
-
-    &__label {
-        flex-shrink: 0;
-        font-weight: 600;
-        color: var(--label-primary);
-    }
-
-    &__bar {
-        flex: 1;
-        height: 6px;
-        border-radius: var(--radius-s);
-        background-color: var(--fill-tertiary);
-        overflow: hidden;
-    }
-
-    &__bar-fill {
-        height: 100%;
-        border-radius: var(--radius-s);
-        background-color: var(--accent-primary);
-        transition: width 0.4s ease;
-    }
-
-    &__value {
-        flex-shrink: 0;
-        font-weight: 700;
-        color: var(--label-primary);
-        font-variant-numeric: tabular-nums;
-    }
-
-    &__badges {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin-bottom: 8px;
-    }
-
-    &__badge {
-        padding: 2px 9px;
-        border-radius: var(--radius-l);
-        font-size: var(--fs-12);
-        font-weight: 700;
-        background-color: color-mix(in srgb, var(--system-green, rgb(46, 125, 50)) 12%, transparent);
-        color: var(--system-green, rgb(46, 125, 50));
-
-        &--ko {
-            background-color: color-mix(in srgb, var(--error-border, rgb(198, 40, 40)) 12%, transparent);
-            color: var(--error-text, rgb(198, 40, 40));
-        }
-
-        // Scrap offcut: informational, never alarming (not an error).
-        &--scrap {
-            background-color: color-mix(in srgb, var(--label-tertiary, rgb(138, 147, 159)) 14%, transparent);
-            color: var(--label-tertiary, rgb(138, 147, 159));
-        }
-    }
-
-    &__hint {
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-    }
-
-    // ft² under in² in the per-sheet table (both units, narrow columns).
-    &__area-sub {
-        display: block;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-    }
-
-    &__material {
-        padding-top: 10px;
-        margin-top: 2px;
-        border-top: 1px solid var(--separator-secondary);
-        font-size: var(--fs-14);
-    }
-
-    &__table-wrap {
-        overflow-x: auto;
-        margin-bottom: 8px;
-    }
-
-    &__table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: var(--fs-13);
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-
-        th,
-        td {
-            padding: 5px 8px;
-            text-align: right;
-        }
-
-        // Sheet number and format read left-to-right.
-        th:first-child,
-        td:first-child,
-        th:nth-child(2),
-        td:nth-child(2) {
-            text-align: left;
-        }
-
-        thead th {
-            color: var(--label-tertiary);
-            font-weight: 600;
-            border-bottom: 1px solid var(--separator-secondary);
-        }
-
-        tbody tr:not(:last-child) td {
-            border-bottom: 1px solid var(--fill-tertiary);
-        }
-    }
-
-    &__engine {
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-        font-variant-numeric: tabular-nums;
-    }
-}
 .headline {
     &__title {
         margin: 0;
@@ -1469,6 +750,7 @@ const updatePartPage = (partIndex) => {
         font-family: $sf_mono;
     }
 }
+
 
 .summary {
     display: flex;
@@ -1504,52 +786,12 @@ const updatePartPage = (partIndex) => {
     }
 }
 
-.controls {
-    display: flex;
-    flex-wrap: wrap;
-    row-gap: 8px;
-    align-items: center;
-    justify-content: center;
-
-    &>* {
-        margin-left: 4px;
-        margin-right: 4px;
-    }
-}
-
-/* C02 (audit UX 2026-09-05) : sous-titre explicatif de la méthode
+/* C02 (audit UX 2026-09-05) : sous-titre explicatif de la methode
    d'agencement sous le titre de l'option. */
 .headline__explain {
     margin: 2px 0 0;
     font-size: var(--fs-12);
     color: var(--label-tertiary);
     text-align: center;
-}
-
-/* C03/C12 : détails techniques REPLIÉS — post-pass (rollback compris),
-   seed/itérations/cœurs moteur. Un résultat découpable n'affiche jamais
-   de rouge « Post-pass … rollback ». */
-.report__tech {
-    margin: 6px 0;
-
-    & summary {
-        cursor: pointer;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-        user-select: none;
-    }
-
-    & .report__engine {
-        margin: 4px 0 0;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-        font-variant-numeric: tabular-nums;
-    }
-
-    & .report__tech-line {
-        margin: 2px 0 0;
-        font-size: var(--fs-12);
-        color: var(--label-tertiary);
-    }
 }
 </style>

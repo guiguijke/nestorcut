@@ -553,3 +553,46 @@ Verrous : `npx vitest run` **517/517** ; les sélecteurs lus par les scripts QA 
 Non-fait signalé : `scripts/qa-private-badge-and-dirs.mjs` ne peut pas tourner en l'état (`waitUntil: 'networkidle'` sur `/home`, que le flux SSE des résultats ne laisse jamais atteindre ; son `BASE` par défaut pointe encore le port 3000). Défaut **préexistant** du script, sans rapport avec cette retouche — à corriger quand on migrera les scripts QA sur `data-testid` (U3).
 
 **Pas de déploiement** : le correctif est poussé et prêt. Il part avec U3 passe 2, ou immédiatement sur un mot du vérificateur — la règle « GO puis déploiement » reste, y compris pour trois lignes de CSS.
+
+#### U3 passe 1 — extraction pure (09/09), en attente du GO avant passe 2
+
+`ResultModal.vue` (1 555 lignes) est découpé en **quatre** fichiers, **sans
+une ligne de rendu changée** : les blocs de template sont *déplacés* (par
+tranches de lignes, pas retapés) et les règles de style qui les visent
+suivent avec eux.
+
+| Fichier | Contenu | Lignes |
+|---|---|---|
+| `ResultModal.vue` | orchestrateur : **toute** la logique, la coquille, le pager de tôle, le bandeau et la barre de densité | 735 |
+| `ResultAlternatives.vue` | onglets d'alternatives + ligne « proposée en premier » | 107 |
+| `ResultViewer.vue` | bascule couleur/DXF, visionneuse (live, SVG, DXF, placeholder), plein écran, téléchargement par tôle | 251 |
+| `ResultReport.vue` | bandeaux d'information, rapport complet (densité, tôles, chute, leviers unfit/partiel, badges, détails techniques), barre d'actions | 637 |
+
+Le mécanisme qui rend l'extraction *pure* : les enfants sont **purement
+présentatifs** et reçoivent un **objet unique** (`:d="bundle"`) qu'ils
+re-exposent sous les mêmes noms — c'est ce qui a permis de déplacer les
+templates sans les réécrire. Les écritures d'état des blocs déplacés
+(mode d'affichage, plein écran, téléchargements locaux, fermeture,
+intention d'export) deviennent des **événements** ; la politique d'export
+(paywall D-RAP-11) reste dans l'orchestrateur, où elle a toujours été.
+Le `ref` du bloc rapport est exposé par l'enfant (`defineExpose`) pour que
+l'ouverture « Rapport de nesting » garde son `scrollIntoView`.
+
+Ce qui **n'est pas** fait, et qui est la passe 2 : dialogue plein écran
+deux volets, pager migré dans une barre d'outils, `UiSegmented`, slug en
+bouton « Copier l'identifiant », empilement mobile, migration des
+sélecteurs QA vers `data-testid`.
+
+Verrous rejoués : `npx nuxt build` vert ; `npx vitest run` **517/517** ;
+**`scripts/qa-c02c03-modal.mjs` intégralement vert** après découpe — les
+dix-huit contrôles du modal passent sur un vrai calcul 900 pièces
+(onglet actif « GRID Option 1 · 2 sheets · 55.4% material · offcut
+543,9 × 1000 mm », densités homogènes 55,4/55,4, `whyFirst` vérifié vrai
+contre les aires de chute 543 900 / 482 300 mm², barre « Material
+density », « Sheet utilization » absent, badges de verdict sans post-pass,
+détails techniques repliés, ligne moteur propre). C'est le contrôle qui
+compte pour une extraction : les sélecteurs et le contenu sont intacts.
+
+Pas de capture jointe : la passe 1 ne change **rien** à l'écran par
+construction, une planche ne prouverait rien ; elle vient avec la passe 2,
+où le rendu bouge. Pas de déploiement — attente du GO.
