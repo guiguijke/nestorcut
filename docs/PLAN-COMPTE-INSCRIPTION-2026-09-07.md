@@ -169,3 +169,10 @@ d'information, pas une porte.
 
 Non-décisions laissées à l'implémenteur : aucune. Toute question → une
 option chiffrée, et attente.
+
+## 6. Vérification (08/09, commit `0c44248`) — GO sous une retouche
+
+Rejoué par le vérificateur : diff complet relu, `npx vitest run` vert au compte du rapport (507), captures formulaire FR clair et carte 90 j conformes, écart de contraste accepté (le verrou ≥ 4,5 prime sur le jeton nommé). Les trois faits du §5 sont répondus.
+
+**Retouche C1-b-bis, avant déploiement** : fenêtre de course entre la notification immédiate et le digest. Le digest examine `createdAt > curseur` jusqu'à l'instant présent ; un inscrit créé quelques secondes avant un tick, dont l'envoi Resend est encore en vol (marqueur pas encore posé), est envoyé deux fois. Correction : borne haute de grâce dans `digestScanQuery(cursor, now)` → `{ createdAt: { $gt: cursor, $lte: new Date(now − 120 000) } }` (2 min, l'envoi immédiat prend ~1 s), le curseur n'avance jamais au-delà de cette borne ; un test dans `server/tests/signupDigest.test.js` (inscrit à now − 30 s : hors lot ; à now − 3 min : dans le lot). Rapport : ajouter la ligne au tableau des verrous, hash, `npx vitest run`. Puis déploiement app + admin, constat prod « 1 e-mail » par le propriétaire à +10 min.
+

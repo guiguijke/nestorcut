@@ -83,12 +83,15 @@ export default defineNitroPlugin((nitro) => {
       const meta = db.collection('app_meta')
       const metaDoc = await meta.findOne({ _id: META_DOC_ID }, { projection: { digestCursor: 1 } })
       const cursor = metaDoc?.digestCursor ? new Date(metaDoc.digestCursor) : new Date(0)
+      const now = new Date()
 
-      // Examined batch: every signup after the cursor, marked or not — the
-      // cursor must be able to advance past already-reported signups.
+      // Examined batch: every signup after the cursor AND older than the
+      // 2 min grace (C1-b-bis) — a signup whose instant Resend is still
+      // in flight must not enter this lot. Marked or not: the cursor must
+      // still be able to advance past already-reported signups.
       const examined = await db
         .collection(COL.users)
-        .find(digestScanQuery(cursor))
+        .find(digestScanQuery(cursor, now))
         .sort({ createdAt: 1 })
         .limit(200)
         .project(digestProjection)
@@ -103,8 +106,8 @@ export default defineNitroPlugin((nitro) => {
       }
 
       // Advance the cursor to the newest signup we just EXAMINED (sent or
-      // already-reported) — never re-read the same range.
-      const newest = advanceCursor(examined, cursor)
+      // already-reported), never past the grace cutoff.
+      const newest = advanceCursor(examined, cursor, now)
       await meta.updateOne(
         { _id: META_DOC_ID },
         { $set: { digestCursor: newest } },

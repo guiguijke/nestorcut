@@ -3,15 +3,35 @@ import { describe, expect, it } from 'vitest'
 // C1-b — filtre et curseur du digest d'inscriptions (fonctions pures
 // extraites du plugin admin pour être testées hors Nitro).
 
-import { advanceCursor, digestScanQuery, filterUnreported } from '../../admin/server/utils/signupDigest'
+import { advanceCursor, digestGraceCutoff, digestScanQuery, filterUnreported, DIGEST_GRACE_MS } from '../../admin/server/utils/signupDigest'
 
 const days = (n) => new Date(Date.now() - n * 24 * 3600 * 1000)
 const ahead = (n) => new Date(Date.now() + n * 24 * 3600 * 1000)
+const inScan = (createdAt, q) => createdAt > q.createdAt.$gt && createdAt <= q.createdAt.$lte
 
 describe('signupDigest — helpers (D4)', () => {
-    it('digestScanQuery : lot examiné = createdAt > curseur, marqueur ignoré', () => {
+    it('digestScanQuery : lot examiné = createdAt > curseur ET ≤ now − 2 min', () => {
         const cursor = days(7)
-        expect(digestScanQuery(cursor)).toEqual({ createdAt: { $gt: cursor } })
+        const now = new Date('2026-09-08T12:00:00.000Z')
+        const cap = digestGraceCutoff(now)
+        expect(DIGEST_GRACE_MS).toBe(120_000)
+        expect(digestScanQuery(cursor, now)).toEqual({ createdAt: { $gt: cursor, $lte: cap } })
+    })
+
+    it('C1-b-bis : inscrit à now − 30 s hors lot, à now − 3 min dans le lot', () => {
+        const now = new Date('2026-09-08T12:00:00.000Z')
+        const cursor = new Date(0)
+        const q = digestScanQuery(cursor, now)
+        expect(inScan(new Date(now.getTime() - 30_000), q)).toBe(false)
+        expect(inScan(new Date(now.getTime() - 3 * 60_000), q)).toBe(true)
+    })
+
+    it('C1-b-bis : le curseur ne dépasse jamais la borne de grâce', () => {
+        const now = new Date('2026-09-08T12:00:00.000Z')
+        const cursor = new Date(0)
+        const tooFresh = new Date(now.getTime() - 30_000)
+        expect(advanceCursor([{ id: 'local:x', createdAt: tooFresh }], cursor, now).getTime())
+            .toBe(digestGraceCutoff(now).getTime())
     })
 
     it('deux inscrits après le curseur, un marqué → un seul dans l\'envoi', () => {

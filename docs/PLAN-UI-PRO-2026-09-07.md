@@ -345,3 +345,7 @@ Planche attendue : accueil clair / sombre, page projet clair / sombre
 avec la colonne résultats remplie (un terminé, un partiel, un échec), bas
 de page projet.
 
+### U1 passe 2 — GO visuel (vérificateur, 08/09, planche `docs/qa/atelier-ui/p2-0{1..5}-*.png`, commit 982fc4d)
+
+Les six retouches sont fermées : badges contour gris casse normale, cinq stats homogènes, « Espace » à gauche, plus de « Projets récents », pied une ligne prouvé sur la page projet, colonne résultats avec Terminé / Partiel / Échec dans les deux thèmes. **Une retouche reportée dans U2** (page projet, pas bloquante) : dans les cartes de résultat, le titre (« Autre appareil », « Échec du nesting ») est rendu dans un bloc gris bordé qui ressemble à un bouton, et la carte d'échec répète « Échec du nesting » deux fois — titre en texte simple, un seul libellé d'état par carte.
+
