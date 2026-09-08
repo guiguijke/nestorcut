@@ -489,6 +489,25 @@ production modifié) :
   suit bien `emailVerified`) ;
 - `u2ter-compte-neuf-accueil.png` — accueil du même compte.
 
+Toutes les captures ci-dessus ont été **reprises après un rebuild de
+l'image locale sur un arbre propre à HEAD** (image du 2026-09-08 20:03 UTC)
+— demande propriétaire, et à raison : les dates de fichier ne prouvent
+rien ici, `git add` réécrit les fichiers en CRLF et rajeunit leur mtime.
+Contrôle direct sur le CSS RÉELLEMENT construit :
+
+```
+grep -c 'border-radius:50%' .output/public/_nuxt/*.css   → 0 partout
+grep -l 'radius-full'       .output/public/_nuxt/*.css   → Avatar.css (la règle
+                                                            avatar) + entry.css
+                                                            (la définition du jeton)
+```
+
+`u2ter-reglages.png`, `u2ter-abonnement.png` et `u2ter-projet.png` sont
+ressorties **octet pour octet identiques** au premier tirage : l'interface
+n'a pas bougé entre les deux builds (seules les captures qui montrent la
+liste des projets diffèrent — de nouveaux projets de test s'y sont
+ajoutés).
+
 Le build déployé, lui, est attesté côté prod par le contrôle du CSS servi
 et les trois captures publiques ci-dessus. **Résidu confirmé à l'œil sur
 `u2ter-projet.png`** : dans la colonne Projets, « Demo — Marine sheet
