@@ -102,7 +102,7 @@ ces outils.
 | 1bis | **Mettre à jour les 3 workers overflow du homelab** (image du 31/08 : sans `residual.py` ni `capacity.py`, moteur pré-P3 — ils traitent des jobs de prod chaque jour) : `docker compose pull && up -d --force-recreate` dans `/containers/nestorcut-overflow`, puis `assert_overflow_head.py` ; règle gravée : chaque déploiement worker se termine sur le homelab (`AGENTS.md` §6bis) | Ops critique |
 | 2 | **Décision k** : arrêt BPP par itérations — reco vérificateur **k=3, plancher 30 itérations, pas de plancher de temps** (mesure : 0 job perdu en tôles/pièces, même à k=1 ; chute à valider au banc space 2) | Décision owner |
 | 3 | **Décision SAMPLE_CFG** — reco vérificateur : **inchangé** (600/200/3 : +0,01 remnant pour +47 % de temps ; 150/50/3 : −0,006 pour −23 %) ; à rouvrir seulement si les cibles de temps sont manquées après P3 | Décision owner |
-| 3bis | **Basculer vers le dépôt propre** (décidé 07/09 : option A + historique neuf, ancien dépôt privé archivé) — procédure `specs/infra/nouveau-depot/PROCEDURE-BASCULE.md`, à faire après le commit U1 passe 2, hors déploiement | Ops owner |
+| 3bis | ~~Basculer vers le dépôt propre~~ **FAIT 08/09** : `guiguijke/nestorcut` re-créé (3051dc6 + 02326bd), PolyForm Noncommercial 1.0.0 sur les apports, ancien dépôt `nestorcut-archive` privé archivé, build 34207049708 5/5, 4 images ghcr publiées ; validé par le vérificateur (rapport privé `specs/infra/nouveau-depot/RAPPORT-BASCULE-2026-09-08.md`) | Ops owner |
 | 4 | Envoyer la campagne feedback FR (intérêt légitime, 0 promo, désinscription) | Growth |
 
 ## 3. Les features « n°1 » (analyse auditeur, ordre de valeur)
@@ -323,7 +323,7 @@ utilisateurs prime.
 | **Overflow homelab périmé** | Mettre à jour maintenant ; `assert_overflow_head.py` à chaque déploiement worker | **Critique** |
 | **Verrou job T-A** (phase B) | Essai plancher P3 20 **manqué** (chute compaction 0,1 : 606,5 contre 520,7 ; temps inchangé) → plancher 30 gardé, **verrou écrit ≤ 16 s** | **Clos 07/09** (vérificateur, arbitrage délégué) |
 | **Lot C1 inscription** (vérification visible, doublon admin, newsletter 90 j) | Décisions D1-D8 du plan (mécanisme inchangé ; carte, jamais modale répétée ; 90 j ; `adminNotifiedAt`) | **Tranché 07/09** (vérificateur, arbitrage délégué) — à implémenter après U1 passe 2 |
-| **Licence du dépôt public** (`AUDIT-LICENCE-DEPOT-2026-09-07.md`) | Option A + dépôt neuf à historique unique, ancien dépôt privé archivé (données sensibles publiées depuis le 22/08) | **Tranché 07/09 (propriétaire)** — préparation faite (`specs/infra/nouveau-depot/`, script testé à blanc 6/6), bascule = procédure propriétaire après le commit U1 passe 2 |
+| **Licence du dépôt public** (`AUDIT-LICENCE-DEPOT-2026-09-07.md`) | Option A + dépôt neuf à historique unique, ancien dépôt privé archivé | **Clos 08/09** — bascule faite et validée (GO vérificateur) ; reste : relecture juridique d'une heure avant communication publique ; page /licences visible au prochain déploiement app |
 | API/batch (3.8) | GO après lots 2-4, pricing à l'usage | Non tranchée |
 | Turbo hybride Pro | Reporté (Phase 3 STRATEGY) | Dormante |
 
