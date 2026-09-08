@@ -512,3 +512,44 @@ Le build déployé, lui, est attesté côté prod par le contrôle du CSS servi
 et les trois captures publiques ci-dessus. **Résidu confirmé à l'œil sur
 `u2ter-projet.png`** : dans la colonne Projets, « Demo — Marine sheet
 metal » affiche un badge tronqué « ● D » — porté dans les verrous d'U4.
+
+### U3 — cadrage validé, ordre imposé en deux passes (vérificateur, 09/09)
+
+La décomposition proposée par l'implémenteur est retenue : tout le script reste dans `ResultModal.vue` (orchestrateur sur `DialogWrapper`), trois enfants de **présentation seulement** — `ResultAlternatives.vue` (onglets + ligne « proposé en premier »), `ResultViewer.vue` (pager de tôle, couleur / DXF en `UiSegmented`, affichage, plein écran), `ResultReport.vue` (bandeau, résumé, tableau, leviers, badges, détails techniques, exports) — chacun recevant **un objet unique** re-exposé en computeds, les blocs de template déplacés sans réécriture.
+
+- **Passe 1 — extraction pure, zéro changement visuel** (1 j, un commit) : les captures avant / après de la modale sont **octet-identiques** ou n'en diffèrent que par des `data-testid` ajoutés ; verrous : md5 des SVG de tôle inchangés, `qa-c02c03-modal.mjs` vert, `resultQuality.test.js` inchangé et vert, `a11y-modal-desktop.json` / `mobile` identiques à HEAD. Sélecteurs listés au plan migrés sur `data-testid` **dans le même commit** que le harnais qui les lit. GO du vérificateur sur cette passe avant la suivante.
+- **Passe 2 — l'espace de résultat** (2 j) : plein écran à 24 px, visionneuse 2/3 + rapport 1/3, onglets d'alternatives, rapport selon le plan, mobile empilé. Verrous : les mêmes, plus captures `docs/qa/atelier-ui/u3-{modal-clair,modal-sombre,modal-mobile,rapport}.png`, 0 sérieuse a11y, focus piégé, Échap, retour de focus.
+- Le socle P6 (`485a491`) part avec le déploiement de la passe 2 (mesure au repos `fbc88cc` : 70 / 75 / 82 ms après solve, aucun timeout, P6 pas plus lent que P5 — validée).
+
+### Retouche immédiate (propriétaire, 09/09) : le badge « Démo » sort de la carte projet
+
+Cause lue dans `app/components/UserProjectItem.vue` : le nom du projet est un **nœud texte nu** dans `.project__label` (flex, `nowrap`, `overflow: hidden`, `text-overflow: ellipsis` l. 205-212) — l'ellipse ne s'applique jamais à un texte nu dans un conteneur flex, le texte garde sa largeur et c'est le badge `PrivacyChip` qui est comprimé (« D ») puis poussé hors de la carte. Correction, un commit, avant U3 passe 1 :
+
+1. Envelopper le nom : `<span class="project__name">{{ projectName }}</span>` avec `flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap`.
+2. Le badge : `flex-shrink: 0` sur `.project__badge` (et `.project__nesting`), largeur naturelle, jamais tronqué.
+3. Retirer `text-overflow` du conteneur `.project__label` (inutile une fois le span en place).
+4. Verrous : capture `docs/qa/atelier-ui/badge-demo-{clair,sombre}.png` de la colonne projets à 240 px avec « Démo — Tôlerie marine » (nom en ellipse, badge entier), harnais : `.project` / `.project__badge` restent des sélecteurs lus (inchangés), vitest.
+
+
+**Livré (09/09)** — `UserProjectItem.vue`, un commit :
+
+| Point | Fait |
+|---|---|
+| 1. Nom enveloppé | `<span class="project__name">` + `flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap` |
+| 2. Badge et mention | `flex-shrink: 0` sur `.project__badge` **et** `.project__nesting` |
+| 3. Conteneur | `overflow: hidden` et `text-overflow: ellipsis` retirés de `.project__label` (`white-space: nowrap` conservé — il sert encore aux enfants) |
+
+Mesuré sur le build local reconstruit, sonde dans `scripts/badge-demo-check.mjs` (bornes lues dans le DOM, pas seulement l'œil) :
+
+```
+clair  :: badge "Demo" 62px | nom 104px ellipse=true | badge dans la carte=true
+sombre :: badge "Demo" 62px | nom 104px ellipse=true | badge dans la carte=true
+```
+
+— le badge fait sa largeur naturelle (62 px, texte entier) au lieu d'être écrasé à « D », le nom est bien tronqué (`scrollWidth > clientWidth`), et le badge reste dans les bornes de la carte. Toutes les lignes en profitent (« clever-tur… » + « This device » entier). Captures `docs/qa/atelier-ui/badge-demo-{clair,sombre}.png` (colonne à 240 px).
+
+Verrous : `npx vitest run` **517/517** ; les sélecteurs lus par les scripts QA (`.project`, `.project__badge`, `.project__btn`) sont **inchangés** — seul `.project__name` s'ajoute. Capture en anglais : « Demo — Marine sheet metal » est plus long que le libellé français, le cas est donc plus dur, pas moins.
+
+Non-fait signalé : `scripts/qa-private-badge-and-dirs.mjs` ne peut pas tourner en l'état (`waitUntil: 'networkidle'` sur `/home`, que le flux SSE des résultats ne laisse jamais atteindre ; son `BASE` par défaut pointe encore le port 3000). Défaut **préexistant** du script, sans rapport avec cette retouche — à corriger quand on migrera les scripts QA sur `data-testid` (U3).
+
+**Pas de déploiement** : le correctif est poussé et prêt. Il part avec U3 passe 2, ou immédiatement sur un mot du vérificateur — la règle « GO puis déploiement » reste, y compris pour trois lignes de CSS.

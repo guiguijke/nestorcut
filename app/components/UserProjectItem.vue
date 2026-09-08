@@ -8,7 +8,7 @@
             @click="getProject(API_ROUTES.PROJECT(project.slug))"
             class="project__label"
         >
-            {{ projectName }}
+            <span class="project__name">{{ projectName }}</span>
             <PrivacyChip
                 :mode="privacyMode"
                 class="project__badge"
@@ -207,9 +207,7 @@ onBeforeUnmount(() => {
         flex-wrap: nowrap;
         align-items: center;
         gap: 6px;
-        overflow: hidden;
         white-space: nowrap;
-        text-overflow: ellipsis;
         // Room for the trash (absolute, top-right) so the local-project
         // badge never sits on top of it on a narrow aside.
         padding-right: 36px;
@@ -226,14 +224,29 @@ onBeforeUnmount(() => {
         }
     }
 
+    /* U2-ter bis : le nom porte l'ellipse (un noeud texte nu dans un
+       conteneur flex ne s'ellipse JAMAIS : le texte gardait sa largeur et
+       c'est le badge qui se faisait comprimer, puis pousser hors de la
+       carte). Le badge et la mention d'imbrication gardent leur largeur
+       naturelle. */
+    &__name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
     &__badge {
         position: relative;
         z-index: 0;
+        flex-shrink: 0;
     }
 
     &__nesting {
         position: relative;
         z-index: 0;
+        flex-shrink: 0;
         font-size: var(--fs-12);
         font-weight: 500;
         letter-spacing: 0.02em;
