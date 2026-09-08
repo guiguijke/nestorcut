@@ -675,3 +675,42 @@ vraie régression de mise en page. Corollaire que j'ajoute : **une capture
 de référence non reproductible n'est pas une référence** — le diff pixel
 n'a de valeur qu'accompagné du contrôle que deux runs du même code
 donnent la même image.
+
+### U3 passe 1 — GO (vérificateur, 09/09, `2e99ddb` + harnais `9c4c03b`)
+
+Cas (a) démontré par l'implémenteur et relu : sur les DEUX builds (avant découpe `dfdd0ef`, après `2e99ddb`) la modale est dans le même état (`alts: 2`, `scrollTop 131`, croix à −92, premier onglet à −53) ; le décalage venait du clic de téléchargement du harnais qui focalise le bouton et fait défiler `.modal-body` — seulement quand le téléchargement aboutit, d'où une capture de référence non reproductible (269 147 px entre deux runs du même code). Ma baseline du 08/09 était ce tirage au sort ; la faute de méthode est partagée. Harnais stabilisé (focus relâché, `scrollTop = 0`, `modal-state.json`) : diff avant / après **1 396 px, un seul bloc 371 × 10 px = nom du zip**. Capture stabilisée relue : croix et onglets en place. **GO passe 1, GO déploiement app** (badge « Démo » + extraction pure + harnais). Règle ajoutée : une capture de référence n'en est une que si deux runs du même code donnent la même image ; tout diff pixel rapporte d'abord ce contrôle.
+
+
+
+### U3 passe 1 — GO, déployé prod (09/09)
+
+**GO du vérificateur** sur la passe 1 (extraction pure) et sur la retouche
+du badge « Démo », après relecture du diagnostic : les deux builds sont
+dans le même état, l'écart venait de la capture de référence, non
+reproductible. La règle est écrite : *une référence n'en est une que si
+deux runs du même code donnent la même image* — le harnais la garantit
+maintenant (focus relâché, `.modal-body` remise en haut avant la capture
+finale).
+
+**Déployé prod 09/09** : app seule, `ghcr.io/guiguijke/nest2d-app:latest`
+digest `sha256:129cbbd229249174…`,
+`NUXT_PUBLIC_GIT_COMMIT_SHA=9c4c03ba79d782a5…`, app recréée
+2026-09-08T22:08:00Z ; `nesting-worker` **inchangé** (P5, 14:50:28Z), file
+vide au moment du déploiement. Contenu : badge « Démo », extraction pure
+U3 passe 1, harnais stabilisé.
+
+**Contrôle en production**, colonne Projets à 240 px, en français (le cas
+que le propriétaire a signalé) :
+
+```
+clair :: badge "Démo" 62px | nom 104px ellipse=true | badge dans la carte=true
+```
+
+Capture `docs/qa/atelier-ui/badge-demo-prod.png` : « Démo — Tôleri… » en
+ellipse, badge « ● Démo » entier et dans la carte. La capture a été prise
+avec un compte créé pour l'occasion sur la production
+(`scripts/badge-demo-check.mjs` accepte `QA_EMAIL` / `QA_PASSWORD` /
+`QA_REGISTER`), **supprimé juste après** (utilisateur, projets, jobs et
+fichiers : `db.users.countDocuments` = 0). Aucun compte existant n'a été
+touché ; l'inscription a déclenché la notification administrateur
+habituelle.

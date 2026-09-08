@@ -10,8 +10,11 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const BASE = process.argv[2] || 'http://localhost:7100'
-const EMAIL = 'guillaume@local.dev'
-const PASSWORD = 'nestorcut-local-2026'
+// QA_EMAIL / QA_PASSWORD : permet de viser la production avec un compte
+// cree pour l'occasion (le compte local par defaut n'y existe pas).
+const EMAIL = process.env.QA_EMAIL || 'guillaume@local.dev'
+const PASSWORD = process.env.QA_PASSWORD || 'nestorcut-local-2026'
+const PREFIX = process.env.QA_PREFIX || 'badge-demo'
 const OUT = join('docs', 'qa', 'atelier-ui')
 
 mkdirSync(OUT, { recursive: true })
@@ -21,9 +24,18 @@ const main = async () => {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
     page.setDefaultTimeout(30000)
 
-    const login = await page.request.post(`${BASE}/api/auth/local/login`, {
+    let login = await page.request.post(`${BASE}/api/auth/local/login`, {
         data: { email: EMAIL, password: PASSWORD },
     })
+    if (!login.ok() && process.env.QA_REGISTER === '1') {
+        const reg = await page.request.post(`${BASE}/api/auth/local/register`, {
+            data: { email: EMAIL, password: PASSWORD, name: 'Atelier QA' },
+        })
+        console.log('register', reg.status(), EMAIL)
+        login = await page.request.post(`${BASE}/api/auth/local/login`, {
+            data: { email: EMAIL, password: PASSWORD },
+        })
+    }
     if (!login.ok()) throw new Error(`login ${login.status()} ${await login.text()}`)
 
     await page.goto(`${BASE}/home`, { waitUntil: 'domcontentloaded' })
@@ -53,16 +65,16 @@ const main = async () => {
     }
 
     await report('clair')
-    await aside.screenshot({ path: join(OUT, 'badge-demo-clair.png') })
-    console.log('shot', join(OUT, 'badge-demo-clair.png'))
+    await aside.screenshot({ path: join(OUT, `${PREFIX}-clair.png`) })
+    console.log('shot', join(OUT, `${PREFIX}-clair.png`))
 
     const themeBtn = page.getByRole('button', { name: /toggle theme/i })
     if (await themeBtn.count()) {
         await themeBtn.first().click()
         await page.waitForTimeout(800)
         await report('sombre')
-        await aside.screenshot({ path: join(OUT, 'badge-demo-sombre.png') })
-        console.log('shot', join(OUT, 'badge-demo-sombre.png'))
+        await aside.screenshot({ path: join(OUT, `${PREFIX}-sombre.png`) })
+        console.log('shot', join(OUT, `${PREFIX}-sombre.png`))
     }
 
     await browser.close()
