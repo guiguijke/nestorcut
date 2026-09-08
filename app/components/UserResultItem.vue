@@ -37,38 +37,23 @@
             </UiButton>
         </template>
         <template v-else>
-            <!-- U2 : le titre n'est plus un bloc gris bordé (ça ressemblait
-                 à un bouton). Miniature muette ; un seul libellé d'état
-                 (le badge) + le titre en texte simple. -->
+            <!-- U2 passe : pas de rectangle gris vide sans vignette
+                 (échec / autre appareil). Vignette seulement s'il y a
+                 un SVG à montrer. -->
             <div
-                v-if="isResultFailed"
-                class="result__placeholder result__placeholder--silent"
-                :title="isCapacityRefusal ? t('nest.capacity.title') : (result.information || undefined)"
-            />
-            <template v-else>
-                <!-- C05 : job localOnly calculé sur un autre appareil —
-                     aperçu explicite, pas une rangée vide. -->
-                <div
-                    v-if="result.localElsewhere"
-                    class="result__placeholder result__placeholder--elsewhere result__placeholder--silent"
-                    :title="t('results.otherDeviceHint')"
+                v-if="!isResultFailed && !result.localElsewhere && !result.purgedAt && result.svgs?.length"
+                :class="svgRowClasses"
+                class="result__svg-row"
+            >
+                <SheetSvgPreview
+                    v-for="(svg, svgIndex) in result.svgs"
+                    :key="`svg-${svgIndex}`"
+                    :src="svg"
+                    :width="sheetSizeAt(svgIndex).w"
+                    :height="sheetSizeAt(svgIndex).h"
+                    class="result__display"
                 />
-                <div
-                    v-else-if="!result.purgedAt"
-                    :class="svgRowClasses"
-                    class="result__svg-row"
-                >
-                    <SheetSvgPreview
-                        v-for="(svg, svgIndex) in result.svgs"
-                        :key="`svg-${svgIndex}`"
-                        :src="svg"
-                        :width="sheetSizeAt(svgIndex).w"
-                        :height="sheetSizeAt(svgIndex).h"
-                        class="result__display"
-                    />
-                </div>
-                <div v-else class="result__placeholder" :title="t('results.expired')" />
-            </template>
+            </div>
             <p class="result__name">
                 {{ resultTitle }}
                 <UiBadge
@@ -604,11 +589,11 @@ const onDownload = () => {
         background: transparent;
     }
 
+    /* U2 passe : boutons SOUS la vignette, jamais superposés. */
     &__controls {
+        position: relative;
         z-index: 1;
-        position: absolute;
-        top: 8px;
-        right: 8px;
+        margin-top: 8px;
     }
 
     @media (hover:hover) {

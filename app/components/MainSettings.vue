@@ -116,6 +116,7 @@
                         class="rotations__seg"
                     />
                     <InputField
+                        v-if="rotationSeg === 'other'"
                         :prefix="t('settings.rotations')"
                         :suffix="t('settings.steps')"
                         v-model="localRotationCount"

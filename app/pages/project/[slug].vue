@@ -9,7 +9,7 @@
                     class="content__chip"
                 />
             </div>
-            <p v-if="!isDemo && filesCount > 0" class="content__count">{{ t('project.partsFiles', { parts: filesCount, files: projectFilesCount }) }}</p>
+            <p v-if="!isDemo && filesCount > 0" class="content__count">{{ partsFilesLine }}</p>
         </header>
         <p v-if="privacyStatus" class="content__privacy">{{ privacyStatus }}</p>
         <div v-if="isDemo" class="demo-banner">
@@ -183,7 +183,7 @@ definePageMeta({
     middleware: "auth",
 });
 
-const { t, fmtPercent } = useLocale()
+const { t, tp, fmtPercent } = useLocale()
 // Part dims arrive in canonical mm; sheet params are display-unit strings —
 // displayToMm normalizes them for the fit check.
 const { unit, unitLabel, fmtLengthValue, displayToMm } = useUnit()
@@ -432,27 +432,37 @@ const preflightReport = computed(() => {
         displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0),
     )
 })
+const partsFilesLine = computed(() => {
+    const nParts = unref(filesCount)
+    const nFiles = unref(projectFilesCount)
+    if (!nParts) return ''
+    return `${tp('unit.part', nParts)} · ${tp('unit.file', nFiles)}`
+})
 // U2 : carte pré-vol — réponse avant le calcul, recalculée à chaque réglage.
+// Pluriel accordé ; l'aire est omise si inconnue (jamais « — m² »).
 const preflightLine = computed(() => {
     const files = projectFiles.value || []
     const nParts = unref(filesCount)
     if (!nParts || !files.length) return ''
     const report = preflightReport.value
-    const areaM2 = report ? (report.totalInflatedMm2 / 1e6).toFixed(2) : '—'
-    return t('project.preflight', {
-        parts: nParts,
-        files: files.length,
-        area: areaM2,
-        sheets: report?.sheetsNeeded ?? 1,
-        pct: Math.round((REFERENCE_PACKING || 0.85) * 100),
-    })
+    const nSheets = report?.sheetsNeeded ?? 1
+    const bits = [
+        tp('unit.part', nParts),
+        tp('unit.file', files.length),
+    ]
+    if (report?.totalInflatedMm2 > 0) {
+        bits.push(t('project.preflightArea', { area: (report.totalInflatedMm2 / 1e6).toFixed(2) }))
+    }
+    bits.push(tp('project.preflightSheets', nSheets))
+    bits.push(t('project.preflightDensity', { pct: Math.round((REFERENCE_PACKING || 0.85) * 100) }))
+    return bits.join(' · ')
 })
 const ctaHint = computed(() => {
     if (!unref(filesCount)) return ''
     const n = preflightReport.value?.sheetsNeeded ?? 1
     const modeKey = PRIVACY_CHIP_KEY[privacyMode.value]
     const mode = modeKey ? t(modeKey) : ''
-    return t('nest.ctaHint', { n, mode })
+    return tp('nest.ctaHint', n, { mode })
 })
 const isNewParams = computed(() => filesGetters.isNewParams);
 const nestRequestError = computed(() => filesGetters.nestRequestError);
@@ -652,7 +662,7 @@ watch(pageSlug, async (s, prev) => {
     })
 }, { immediate: true })
 const btnLabel = computed(() => {
-    return t('settings.nestFiles', { n: unref(filesCount) })
+    return tp('settings.nestFiles', unref(filesCount))
 })
 // ---------------------------------------------------------------------------
 // Z1 (vérif 2026-09-05) : bandeau « refus capacité » — leviers chiffrés du

@@ -161,6 +161,18 @@ const dict = {
         'settings.rotation.other': 'Other',
         'project.preflight': '{parts} parts · {files} files · {area} m² · ≈ {sheets} sheets at this spacing · max density ≈ {pct} %',
         'nest.ctaHint': '≈ {n} sheets · {mode}',
+        'unit.part.one': '{n} part',
+        'unit.part.other': '{n} parts',
+        'unit.file.one': '{n} file',
+        'unit.file.other': '{n} files',
+        'unit.sheet.one': '{n} sheet',
+        'unit.sheet.other': '{n} sheets',
+        'project.preflightSheets.one': '≈ {n} sheet at this spacing',
+        'project.preflightSheets.other': '≈ {n} sheets at this spacing',
+        'project.preflightArea': '{area} m²',
+        'project.preflightDensity': 'max density ≈ {pct} %',
+        'nest.ctaHint.one': '≈ {n} sheet · {mode}',
+        'nest.ctaHint.other': '≈ {n} sheets · {mode}',
         'settings.nesting': 'Settings',
         'settings.sheet': 'Sheet {n}',
         'settings.removeSheet': 'Remove this sheet type',
@@ -199,6 +211,8 @@ const dict = {
         'settings.noRotation': 'No rotation (0° only)',
         // C06 : le bouton compte des PIÈCES (somme des quantités), pas des fichiers.
         'settings.nestFiles': 'Nest {n} parts',
+        'settings.nestFiles.one': 'Nest {n} part',
+        'settings.nestFiles.other': 'Nest {n} parts',
         'settings.directions': 'Layout directions',
         'settings.directions.help': "Each direction packs the parts towards one edge of the sheet (in the drawing's coordinate system): left edge (X = 0), bottom edge (Y = 0), or a balanced mix. Fewer directions = faster result.",
         'settings.directions.left': 'Left edge',
@@ -847,6 +861,18 @@ const dict = {
         'settings.rotation.other': 'Autre',
         'project.preflight': '{parts} pièces · {files} fichiers · {area} m² · ≈ {sheets} tôles à cet espacement · densité max ≈ {pct} %',
         'nest.ctaHint': '≈ {n} tôles · {mode}',
+        'unit.part.one': '{n} pièce',
+        'unit.part.other': '{n} pièces',
+        'unit.file.one': '{n} fichier',
+        'unit.file.other': '{n} fichiers',
+        'unit.sheet.one': '{n} tôle',
+        'unit.sheet.other': '{n} tôles',
+        'project.preflightSheets.one': '≈ {n} tôle à cet espacement',
+        'project.preflightSheets.other': '≈ {n} tôles à cet espacement',
+        'project.preflightArea': '{area} m²',
+        'project.preflightDensity': 'densité max ≈ {pct} %',
+        'nest.ctaHint.one': '≈ {n} tôle · {mode}',
+        'nest.ctaHint.other': '≈ {n} tôles · {mode}',
         'settings.nesting': 'Réglages',
         'settings.sheet': 'Tôle {n}',
         'settings.removeSheet': 'Retirer ce type de tôle',
@@ -884,6 +910,8 @@ const dict = {
         'demo.quotaEmpty': "Vous avez utilisé toutes vos imbrications de démonstration ce mois-ci — réessayez le mois prochain, ou importez vos propres fichiers DXF.",
         'settings.noRotation': 'Aucune rotation (0° uniquement)',
         'settings.nestFiles': 'Imbriquer {n} pièces',
+        'settings.nestFiles.one': 'Imbriquer {n} pièce',
+        'settings.nestFiles.other': 'Imbriquer {n} pièces',
         'settings.directions': "Sens d'optimisation",
         'settings.directions.help': "Chaque sens tasse les pièces vers un bord de la tôle (repère du dessin) : bord gauche (X = 0), bord bas (Y = 0), ou un mix équilibré. Moins de sens = résultat plus rapide.",
         'settings.directions.left': 'Bord gauche',
@@ -1391,6 +1419,12 @@ const dict = {
  * {placeholder} interpolation. Falls back to English, then to the key itself
  * (so a missing translation is visible during dev, never silently empty).
  */
+/** Catégorie de pluriel ICU (`one` / `other`) pour une locale app. */
+export function pluralSelect(locale, n) {
+    const tag = locale === 'fr' ? 'fr' : 'en'
+    return new Intl.PluralRules(tag).select(Number(n) || 0)
+}
+
 export function translate(key, locale = DEFAULT_LOCALE, params = {}) {
     const table = dict[locale] || dict[DEFAULT_LOCALE]
     let value = table[key]

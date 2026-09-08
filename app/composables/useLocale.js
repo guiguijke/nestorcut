@@ -1,4 +1,4 @@
-import { translate, DEFAULT_LOCALE, LOCALES, formatNumber, formatPercent } from '~/utils/i18n'
+import { translate, DEFAULT_LOCALE, LOCALES, formatNumber, formatPercent, pluralSelect } from '~/utils/i18n'
 
 /**
  * Locale state for the whole app.
@@ -62,10 +62,13 @@ export function useLocale() {
 
     // Reactive translator bound to the current locale.
     const t = (key, params) => translate(key, localeState.value, params)
+    // Lot 3 / U2 : `tp('unit.part', 1)` → `unit.part.one`.
+    const tp = (base, n, params = {}) =>
+        t(`${base}.${pluralSelect(localeState.value, n)}`, { n, ...params })
 
     // C20/C21 : formatage localisé des nombres affichés (%, aires).
     const fmtPercent = (v, digits = 1) => formatPercent(v, localeState.value, digits)
     const fmtNumber = (v, digits = 1) => formatNumber(v, localeState.value, digits)
 
-    return { locale, setLocale, t, fmtPercent, fmtNumber }
+    return { locale, setLocale, t, tp, fmtPercent, fmtNumber }
 }

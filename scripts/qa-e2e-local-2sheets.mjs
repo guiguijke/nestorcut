@@ -24,6 +24,26 @@ const ctx = await browser.newContext({
     viewport: { width: 1680, height: 1000 },
     acceptDownloads: true,
 })
+// U2 passe : observateur longtask + layout-shift (ex-qa-e2e-freeze.mjs).
+await ctx.addInitScript(() => {
+    window.__lt = []
+    window.__ls = []
+    try {
+        new PerformanceObserver((list) => {
+            for (const e of list.getEntries()) {
+                window.__lt.push({ start: Math.round(e.startTime), duration: Math.round(e.duration) })
+            }
+        }).observe({ type: 'longtask', buffered: true })
+    } catch { /* Chromium sans longtask */ }
+    try {
+        new PerformanceObserver((list) => {
+            for (const e of list.getEntries()) {
+                if (e.hadRecentInput) continue
+                window.__ls.push({ start: Math.round(e.startTime), value: e.value })
+            }
+        }).observe({ type: 'layout-shift', buffered: true })
+    } catch { /* layout-shift indisponible */ }
+})
 const page = await ctx.newPage()
 page.on('console', (m) => { const t = m.type(); if (t === 'error' || t === 'warning') log(`[console:${t}]`, m.text().slice(0, 500)) })
 page.on('pageerror', (e) => log('[pageerror]', String(e).slice(0, 800)))
@@ -131,10 +151,17 @@ try {
     await safetyF.fill(half)
     await safetyF.blur()
     log(`kerf/safety set: 0 / ${half} (effectif ${SPACE})`)
-    const rot = page.locator('label.input', { hasText: 'Rotations' }).locator('.input__value')
-    const rotVal = await rot.inputValue()
-    log('rotations:', rotVal)
-    if (String(rotVal) !== '4') { await rot.fill('4'); await rot.blur() }
+    // U2 passe : le champ numérique n'existe que si « Autre » est actif.
+    const rot4 = page.locator('.rotations__seg [role="radio"]').filter({ hasText: /^4$/ })
+    if (await rot4.count()) {
+        if ((await rot4.getAttribute('aria-checked')) !== 'true') await rot4.click()
+        log('rotations: segmented 4')
+    } else {
+        const rot = page.locator('label.input', { hasText: 'Rotations' }).locator('.input__value')
+        const rotVal = await rot.inputValue()
+        log('rotations:', rotVal)
+        if (String(rotVal) !== '4') { await rot.fill('4'); await rot.blur() }
+    }
 
     // Directions : exactement « left » (–X) — toggle multi pour tier standard
     const dirOpts = page.locator('.compute__options .compute__option')
@@ -384,6 +411,22 @@ try {
         if (pre) fs.writeFileSync(path.join(OUT, 'pre-solve.json'), JSON.stringify(pre))
     } catch { /* page fermée */ }
     log('FULL', JSON.stringify(full, null, 1).slice(0, 3000))
+
+    // U2 passe : dump longtask + CLS (page projet, toute la session).
+    const perf = await page.evaluate(() => {
+        const longtasks = window.__lt || []
+        const shifts = window.__ls || []
+        const cls = shifts.reduce((s, e) => s + (e.value || 0), 0)
+        const maxLongTaskMs = longtasks.reduce((m, e) => Math.max(m, e.duration || 0), 0)
+        return { longtasks, shifts, cls, maxLongTaskMs }
+    }).catch(() => ({ longtasks: [], shifts: [], cls: 0, maxLongTaskMs: 0 }))
+    fs.writeFileSync(path.join(OUT, 'longtasks.json'), JSON.stringify(perf.longtasks, null, 1))
+    fs.writeFileSync(path.join(OUT, 'cls.json'), JSON.stringify({
+        cls: perf.cls,
+        maxLongTaskMs: perf.maxLongTaskMs,
+        entries: perf.shifts,
+    }, null, 1))
+    log('longtask max ms:', perf.maxLongTaskMs, 'CLS:', perf.cls)
 
     // ---------- 9. Téléchargement via le bouton du modal (chemin UI) ----------
     const dlBtn = page.locator('.modal .controls__download, .modal button:has-text("Download")').first()

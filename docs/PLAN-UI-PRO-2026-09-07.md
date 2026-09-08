@@ -349,3 +349,17 @@ de page projet.
 
 Les six retouches sont fermées : badges contour gris casse normale, cinq stats homogènes, « Espace » à gauche, plus de « Projets récents », pied une ligne prouvé sur la page projet, colonne résultats avec Terminé / Partiel / Échec dans les deux thèmes. **Une retouche reportée dans U2** (page projet, pas bloquante) : dans les cartes de résultat, le titre (« Autre appareil », « Échec du nesting ») est rendu dans un bloc gris bordé qui ressemble à un bouton, et la carte d'échec répète « Échec du nesting » deux fois — titre en texte simple, un seul libellé d'état par carte.
 
+### U2 — GO partiel, cinq retouches fermées avant déploiement (vérificateur, 08/09, commit `cea3317`)
+
+Rejoué par le vérificateur sur le build local U2 (bundle servi vérifié : `project-preflight` présent) : harnais `scripts/qa-e2e-local-2sheets.mjs` deux configurations **verts et identiques aux références** (0,1 : [587, 313] ; 2 : [573, 327] ; 900/900 ; `check_svg_dir.py` 0 chevauchement, 0 hors tôle) ; vitest 509 ; sélecteurs conservés. Planche : sections, pré-vol, cartes résultat sans bloc-bouton, thèmes cohérents.
+
+Retouches (une passe, commit unique, captures refaites) :
+
+1. **Pluriels et aire du pré-vol** (`pages/project/[slug].vue`, `data-testid="project-preflight"`, et le compteur d'en-tête) : « 1 pièces · 1 fichiers · ≈ 1 tôles » → accord au singulier (`Intl.PluralRules` ou le helper i18n existant du lot 3) ; « — m² » masqué quand l'aire n'est pas connue (projet serveur sans géométrie locale), jamais un tiret dans la phrase.
+2. **Rotations** (`MainSettings.vue`) : le champ numérique « Rotations · pas » ne s'affiche que si le segment « Autre » est actif ; sur 1 · 2 · 4 · 8 il disparaît (doublon aujourd'hui).
+3. **Cartes résultat** (`UserResultItem.vue`) : plus de rectangle gris vide quand il n'y a pas de vignette (autre appareil, échec) ; sur la carte terminée serveur, la vignette est aujourd'hui recouverte par « Rapport de nesting » / « Télécharger » — vignette entière en haut, boutons dessous, rien ne se chevauche.
+4. **Planche** : `u2-resultats.png` est octet-identique à `u2-projet-clair.png` — refaire avec la colonne résultats après la retouche 3 ; ajouter `u2-cta-bas.png` (bas de la colonne réglages : CTA collé avec sa sous-ligne « ≈ N tôles · mode »), preuve manquante du verrou.
+5. **Longues tâches et CLS** : `docs/qa/perf-audit-2026-09-05/l1-verif/qa-e2e-freeze.mjs` est périmé (il attend un champ « Spacing » d'avant kerf/sécurité, timeout l. 127). Porter son observateur (l. 29 : `longtask` ; ajouter `layout-shift`) dans `scripts/qa-e2e-local-2sheets.mjs` avec dump `longtasks.json` et `cls.json` dans `QA_OUT`, puis rejouer à 0,1 : **long task max < 500 ms, CLS < 0,1** sur la page projet. Valeurs dans le rapport.
+
+Reporté à U3 (noté, pas une retouche U2) : stats d'en-tête de `LiveNestingView` en `UiStat`. Après la passe : GO visuel final puis déploiement app (procédure habituelle, aucun worker).
+

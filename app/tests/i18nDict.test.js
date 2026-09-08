@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { LOCALES, translate } from '../utils/i18n'
+import { LOCALES, translate, pluralSelect } from '../utils/i18n'
 
 // ---------------------------------------------------------------------------
 // C06 (lot 3) : unicité des clés i18n. Le dictionnaire est un objet JS —
@@ -66,6 +66,17 @@ describe('dictionnaire i18n (C06)', () => {
             for (const p of b) if (!a.has(p)) problems.push(`${m[1]}: FR a {${p}} en trop`)
         }
         expect(problems).toEqual([])
+    })
+
+    it('pluralSelect : 1 → one, 2 → other (en et fr)', () => {
+        expect(pluralSelect('en', 1)).toBe('one')
+        expect(pluralSelect('en', 2)).toBe('other')
+        expect(pluralSelect('fr', 1)).toBe('one')
+        expect(pluralSelect('fr', 2)).toBe('other')
+        expect(translate('unit.part.one', 'fr', { n: 1 })).toBe('1 pièce')
+        expect(translate('unit.part.other', 'fr', { n: 2 })).toBe('2 pièces')
+        expect(translate('settings.nestFiles.one', 'fr', { n: 1 })).toBe('Imbriquer 1 pièce')
+        expect(translate('settings.nestFiles.other', 'fr', { n: 2 })).toBe('Imbriquer 2 pièces')
     })
 
     it('LOCALES intégré et fallback visible', () => {
