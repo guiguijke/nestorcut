@@ -368,7 +368,7 @@ watch(
               : 'crash')
             : null;
         localUnfit.value = p.phase === 'error' ? (p.unfit || null) : null;
-        if (p.phase === 'queued' || p.phase === 'running') {
+        if (p.phase === 'queued' || p.phase === 'running' || p.phase === 'finalizing') {
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
                 localModeCtl.startTimer();

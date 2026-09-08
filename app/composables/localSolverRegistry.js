@@ -102,6 +102,11 @@ async function launch(jobSlug, projectSlug, itemMap) {
                 if (!j) return
                 if (evt.type === 'evals') { j.evals = evt.evals; return }
                 if (evt.type === 'zone') { j.zone = evt; return }
+                if (evt.stage === 'finalizing') {
+                    j.phase = 'finalizing'
+                    if (j.frame) j.frame = { ...j.frame, stage: 'finalizing' }
+                    return
+                }
                 if (evt.walks) j.walks = evt.walks
                 if (evt.itemMap) j.itemMap = evt.itemMap
                 // Keep the BEST feasible snapshot, not the last walk's
@@ -164,7 +169,7 @@ export function ensureJob(job, { projectSlug = null, maxConcurrent = 1 } = {}) {
     const jobSlug = job?.slug
     if (!jobSlug) return null
     const existing = state.jobs[jobSlug]
-    if (existing && ['queued', 'running', 'done'].includes(existing.phase)) {
+    if (existing && ['queued', 'running', 'finalizing', 'done'].includes(existing.phase)) {
         return readonly(existing)
     }
     // Re-file d'un job terminé en ERREUR (R-5, audit 2026-08-31 §R-5) : sans
@@ -211,7 +216,7 @@ export function progressFor(projectSlug) {
     return readonly(jobs[0])
 }
 
-const ACTIVE_PHASES = new Set(['queued', 'running'])
+const ACTIVE_PHASES = new Set(['queued', 'running', 'finalizing'])
 
 /** True while this project has a local solve queued or running. */
 export function hasActiveJob(projectSlug) {

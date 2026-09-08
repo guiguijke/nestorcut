@@ -15,14 +15,12 @@
 import { markRaw } from 'vue'
 import { saveLocalResult } from './localResultsStore'
 import {
-    buildAlternativeArtifacts,
-    toServerShapeAlternatives,
-    buildSheetDxf,
     normalizeLayouts,
     sheetDims,
     decorateLiveLayout,
     expandMeta,
 } from './localBridge'
+import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 // Import STATIQUE (audit 2026-08-31 §R-i) : la sentinelle d'annulation des
 // zones est comparée dans runLocalJobPrivate — référencée sans import, elle
 // ne résolvait que par l'auto-import Nuxt (fragile : ReferenceError pile
@@ -340,42 +338,7 @@ async function buildClientPayload(meta) {
     return { payload, sources, itemMap }
 }
 
-/** Frame finale synthétique pour la vue live (même forme que le reveal
- * serveur : [item_id, bin, rot_deg, x, y]). */
-function buildLiveLayout(result, payload, bestAlt) {
-    const layouts = normalizeLayouts(bestAlt?.solution)
-    const items = []
-    layouts.forEach((layout, bin) => {
-        for (const pi of layout.placed_items || []) {
-            items.push([
-                pi.item_id,
-                bin,
-                pi.transformation?.rotation ?? 0,
-                pi.transformation?.translation?.[0] ?? 0,
-                pi.transformation?.translation?.[1] ?? 0,
-            ])
-        }
-    })
-    const [w, h] = sheetDims(payload, 0)
-    return {
-        stage: 'final',
-        feasible: true,
-        // V6 : bias de l'alternative — la frame finale doit vivre dans SA
-        // classe (et remplace de toute façon toutes les classes).
-        bias: bestAlt?.bias ?? null,
-        density: bestAlt?.solution?.density ?? bestAlt?.density ?? null,
-        // Portés explicitement : sans strip_width, fitsSheet retourne
-        // true par défaut et une frame finale hors-tôle passerait pour
-        // présentable (piège #6). used_height alimente le tie-break du
-        // champion (même critère que le merge SPP).
-        strip_width: bestAlt?.solution?.strip_width ?? bestAlt?.strip_width ?? null,
-        used_height: bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null,
-        bins: layouts.length,
-        sheets: [[w, h]],
-        isSpp: (result?.problem || payload?.problem) === 'spp',
-        items,
-    }
-}
+
 
 export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) {
     // §M.3 (audit 2026-08-29, durci 2026-08-31) : fetch SANS timeout — un
@@ -482,6 +445,14 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     }
 
     const result = outcome.result
+    // P4 : fin du solve wasm — tout l'aval (grille, post-pass, SVG) est
+    // la finalisation. Horodatage harnais + état « Finalisation… ».
+    if (typeof performance !== 'undefined') {
+        try { globalThis.__solveDoneAt = performance.now() } catch { /* */ }
+    }
+    if (onLive) {
+        try { onLive({ stage: 'finalizing' }) } catch { /* */ }
+    }
     // AC6 (L2-ter) : miroir minimal de l'observabilité serveur — les
     // alternatives écartées laissent un diagnostic (raison + stratégie),
     // jamais une perte silencieuse. Portée FONCTION : le return et le
@@ -498,7 +469,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     // QA (vérif 2026-09-04) : pré-état moteur AVANT post-pass, pour les
     // diagnostics de parité navigateur/serveur (e2e le dump).
     if (typeof window !== 'undefined') {
-        window.__lastSolveResult = JSON.parse(JSON.stringify(result))
+        // P4 : le clone profond est un long task — hors chemin critique
+        // (le worker a déjà sa copie via postMessage).
+        const snap = result
+        setTimeout(() => {
+            try { window.__lastSolveResult = JSON.parse(JSON.stringify(snap)) } catch { /* */ }
+        }, 0)
     }
     // Total réel demandé = somme des quantités d'origine (payload.parts porte
     // les counts complets, indépendamment de l'instance réduite meta).
@@ -538,256 +514,33 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
         console.warn('structural grid pass failed', e)
     }
 
-    // Plan 2026-09-05 §2.2b/§2.2c — BPP multi-tôles : alternative
-    // « Grille » homogène construite sans moteur (miroir main.py). Mêmes
-    // gardes (§5) : motif détecté uniquement, silencieux sinon ;
-    // tout-ou-rien (null + erreurs tracées). Échec ⇒ moteur inchangé.
-    if ((result?.problem || payload?.problem) !== 'spp') {
-        try {
-            const inst = payload?.instance || {}
-            if (Array.isArray(inst.bins) && inst.bins.length) {
-                const { buildGridLayoutsMulti } = await import('./structureMultiClient')
-                const { geoPinwheelCapacity } = await import('./geometryClient')
-                const parts = payload?.parts || []
-                const partsByIdLocal = new Map(parts.map((p) => [Number(p.id), p]))
-                const geomOf = (id) => {
-                    const p = partsByIdLocal.get(Number(id))
-                    return {
-                        coords: p?.coords,
-                        rotations: (p?.rotations?.length ? p.rotations : [0, 90, 180, 270]),
-                    }
-                }
-                const sheets = inst.bins.map((b) => {
-                    const outer = b.shape?.data?.outer || []
-                    let w = 0, h = 0
-                    for (const [x, y] of outer) { w = Math.max(w, x); h = Math.max(h, y) }
-                    return { width: w, height: h, count: Number(b.stock) || 1 }
-                })
-                const spaceMm = Number(payload?.engineConfig?.min_item_separation) || 0
-                const gridStats = { errors: [] }
-                const gridLayouts = await buildGridLayoutsMulti(
-                    parts, geomOf, sheets, spaceMm, gridStats,
-                    { pinwheelCapacity: geoPinwheelCapacity })
-                if (gridLayouts) {
-                    const ringArea = (coords) => {
-                        let s = 0
-                        for (let i = 0; i < coords.length; i++) {
-                            const [x1, y1] = coords[i]
-                            const [x2, y2] = coords[(i + 1) % coords.length]
-                            s += x1 * y2 - x2 * y1
-                        }
-                        return Math.abs(s) / 2
-                    }
-                    let material = 0
-                    for (const p of parts) {
-                        const holesArea = (p.holes || []).reduce((s, h) => s + ringArea(h), 0)
-                        material += Math.max(0, ringArea(p.coords) - holesArea)
-                            * (Number(p.count) || 0)
-                    }
-                    const usedArea = gridLayouts.reduce((s, l) => {
-                        const b = inst.bins[l.container_id ?? 0]
-                        const outer = b?.shape?.data?.outer || []
-                        let w = 0, h = 0
-                        for (const [x, y] of outer) { w = Math.max(w, x); h = Math.max(h, y) }
-                        return s + w * h
-                    }, 0)
-                    const gridDensity = usedArea > 0 ? material / usedArea : null
-                    result.alternatives = [...(result.alternatives || []), {
-                        rank: (result.alternatives?.length) || 0,
-                        seed: null,
-                        bias: null,
-                        structural: true,
-                        selfContained: true,
-                        solution: {
-                            layouts: gridLayouts,
-                            density: gridDensity,
-                            cost: gridLayouts.length,
-                        },
-                    }]
-                    if (typeof window !== 'undefined') {
-                        window.__structMultiDiag = {
-                            built: true,
-                            layouts: gridLayouts.length,
-                            perSheet: gridLayouts.map((l) => (l.placed_items || []).length),
-                        }
-                    }
-                } else if (typeof window !== 'undefined') {
-                    window.__structMultiDiag = { built: false, errors: gridStats.errors }
-                }
-            }
-        } catch (e) {
-            if (typeof window !== 'undefined') {
-                window.__structMultiDiag = { built: false, error: String(e) }
-            }
-            console.warn('grid multi pass failed', e)
-        }
-    }
-
-    const rawAlts = result?.alternatives || []
-
     // Artefacts calculés navigateur (SVG/rapport/DXF), forme serveur.
-    // buildAlternativeArtifacts applique l'expansion meta + post-pass et
-    // MUTATE les layouts — `placed` est donc recalculé APRÈS.
+    // assembleBrowserArtifacts applique l'expansion meta + post-pass et
+    // MUTE les layouts — `placed` est donc recalculé APRÈS. P4 : Worker
+    // (repli thread principal si indisponible).
     let alternatives = []
     let liveLayout = null
     let placed = 0
     let allAlternativesInvalid = false
-    try {
-        // A2 (lot 4, résidu contrôle P8 §5) : les comptes moteur par classe
-        // sont capturés sur une LECTURE AVANT buildAlternativeArtifacts —
-        // le post-pass MUTE les layouts en place (expansion ajoute les
-        // fans, lattice pose les libres) : recalculer la référence après
-        // comparerait l'état final à lui-même et ne verrait jamais une
-        // pièce perdue PAR le post-pass. enginePlacedById ne lit que
-        // placed_items (aucune mutation) : pas besoin d'une copie profonde
-        // de tout, la capture AVANT suffit.
-        const { perClassCountsMatch, enginePlacedById } = await import('./localBridge')
-        const preEngineCounts = rawAlts.map((alt) => enginePlacedById(alt))
-        let arts = await buildAlternativeArtifacts(result, payload)
-        // P-4 (audit 2026-08-31 §P-4) + A4/D13 (audit 2026-09-03) — filet
-        // aval miroir de _finalize_alternative : mesure indépendante
-        // (report wasm) sur l'état POST-PASS (arts[i].containers). Une alt
-        // STRUCTURELLE hors tôle, une alt au compte PAR CLASSE erroné
-        // (doublon + perte compensée passaient : seul le total était
-        // vérifié) ou une alt mesurée en chevauchement/doublons est
-        // ÉCARTÉE. arts suit la même permutation que
-        // result.alternatives (indices alignés).
-        const requestedById = new Map(
-            (payload?.parts || []).map((p) => [String(p.id), Number(p.count) || 0]),
-        )
-        const keptIdx = []
-        rawAlts.forEach((alt, i) => {
-            const art = arts?.[i]
-            const strategy = alt.bias || alt.strategy || 'engine'
-            if (alt.structural && art?.report?.verify?.insideSheet === false) {
-                localDiscarded.push({ reason: 'outside_sheet', strategy })
-                return
-            }
-            // AF6 (L3-bis) : la référence de la garde par classe est ce que
-            // le MOTEUR a posé pour CETTE alternative (miroir de
-            // engine_placed_by_id, X2) — pas le demandé. Une solution
-            // partielle (stock serré : le moteur n'a pas tout placé) est
-            // CONSERVÉE et livrée avec report.unplaced + leviers Z3, au
-            // lieu d'être écartée en « all_alternatives_invalid ».
-            // A2 : la référence vient de art.engineCounts (capturé DANS
-            // buildAlternativeArtifacts après expansion, avant
-            // hole-fill/résiduel — fans d'expansion attendues comprises,
-            // miroir du moment de capture Python) ; repli sur la capture
-            // pré-expansion de localJobPrivate, puis sur le demandé. Une
-            // pièce moteur perdue PAR le post-pass reste dans la référence
-            // et fait échouer la garde.
-            const artCounts = art?.engineCounts
-            const enginePlaced = artCounts && Object.keys(artCounts).length
-                ? new Map(Object.entries(artCounts).map(([k, v]) => [k, v]))
-                : preEngineCounts[i]
-            const referenceById = enginePlaced && enginePlaced.size ? enginePlaced : requestedById
-            if (art?.containers?.length
-                && !perClassCountsMatch(art.containers, referenceById)) {
-                console.error('[local] alternative per-class count mismatch, discarding', {
-                    strategy,
-                })
-                localDiscarded.push({ reason: 'class_mismatch', strategy })
-                return
-            }
-            const verify = art?.report?.verify
-            if (verify && (verify.overlapFree === false || (verify.duplicatePoses || 0) > 0)) {
-                console.error('[local] alternative physically invalid, discarding', {
-                    strategy,
-                    overlapFree: verify.overlapFree,
-                    duplicatePoses: verify.duplicatePoses,
-                })
-                localDiscarded.push({
-                    reason: 'overlap',
-                    strategy,
-                    verification: {
-                        overlapFree: verify.overlapFree,
-                        duplicatePoses: verify.duplicatePoses,
-                        smallestGapMm: verify.smallestGapMm ?? null,
-                    },
-                })
-                return
-            }
-            keptIdx.push(i)
+    {
+        const assembled = await assembleBrowserArtifactsOffThread({
+            result, payload, sources, jobSlug,
         })
-        if (keptIdx.length !== rawAlts.length) {
-            result.alternatives = keptIdx.map((i) => rawAlts[i])
-            arts = keptIdx.map((i) => arts?.[i] ?? null)
+        alternatives = assembled.alternatives || []
+        liveLayout = assembled.liveLayout || null
+        placed = assembled.placed || 0
+        allAlternativesInvalid = !!assembled.allAlternativesInvalid
+        if (assembled.localDiscarded?.length) {
+            localDiscarded.push(...assembled.localDiscarded)
         }
-        // V8 (vérif 2026-09-04) : TOUTES les alternatives rejetées par la
-        // garde (chevauchement/doublons mesurés) ≠ job réussi à 0 pièce —
-        // l'ancien flux livrait placed = 0 avec quota consommé et une
-        // frame finale vide qui battait tout champion (bins: 0). Sortie
-        // local-fail : refund, carte en erreur, message dédié.
-        if (!keptIdx.length && rawAlts.length) {
-            allAlternativesInvalid = true
-            throw new Error('all_alternatives_invalid')
+        if (assembled.result?.alternatives) {
+            result.alternatives = assembled.result.alternatives
         }
-        const bestRaw = result.alternatives[0]
-        placed = normalizeLayouts(bestRaw?.solution)
-            .reduce((n, l) => n + (l.placed_items?.length || 0), 0)
-        // Y3 : le comptage ci-dessus est déjà le POSÉ réel (post-
-        // artefacts) — inchangé ; la demande ne doit jamais être
-        // affichée comme placée en solution partielle.
-        alternatives = toServerShapeAlternatives(result, payload, arts) || []
-        // m-1 (audit 2026-08-31 §R-m.1) : même ordre d'affichage que la
-        // finalisation SERVEUR (main.py — grille d'abord par choix produit,
-        // puis classes canoniques left/bottom/balanced, qualité mesurée
-        // layoutCount/usedSheetShare au sein de chaque classe). Sans ce tri,
-        // « Option 1 » différait entre THIS DEVICE et le serveur. La
-        // permutation réordonne les containers d'artefacts EN PARALLÈLE
-        // (arts est indexé sur l'ordre moteur, pas l'ordre affiché).
-        const DIRECTION_ORDER = { grid: -1, left: 0, bottom: 1, balanced: 2 }
-        const known = alternatives.some((a) => a.strategy in DIRECTION_ORDER)
-        const cmp = (x, y) => {
-            if (known) {
-                const dx = DIRECTION_ORDER[x.strategy] ?? 99
-                const dy = DIRECTION_ORDER[y.strategy] ?? 99
-                if (dx !== dy) return dx - dy
-            }
-            const lx = x.layoutCount || 0
-            const ly = y.layoutCount || 0
-            if (lx !== ly) return lx - ly
-            return (x.usedSheetShare ?? 1.0) - (y.usedSheetShare ?? 1.0)
+        if (typeof window !== 'undefined' && assembled.structMultiDiag) {
+            window.__structMultiDiag = assembled.structMultiDiag
         }
-        const idx = alternatives.map((_, i) => i).sort((a, b) => cmp(alternatives[a], alternatives[b]))
-        const containersOrdered = idx.map((i) => arts?.[i]?.containers || [])
-        alternatives = idx.map((i) => alternatives[i])
-        // DXF combiné par tôle (nommage serveur : {slug}_alt{r}_part_{n}.dxf).
-        for (let rank = 0; rank < alternatives.length; rank++) {
-            const containers = containersOrdered[rank]
-            const dxfs = []
-            for (let li = 0; li < containers.length; li++) {
-                const d = await buildSheetDxf(
-                    `${jobSlug}_alt${rank}`, li + 1, containers[li], payload, sources,
-                )
-                if (d) dxfs.push(d)
-            }
-            alternatives[rank].dxfs = dxfs
-            alternatives[rank].altId = rank
-        }
-        // §2.2c : la frame finale = alternative RANG 0 après le tri
-        // d'affichage (mono : la grille est prependée ; BPP multi : la
-        // grille est appendée puis remontée par DIRECTION_ORDER —
-        // idx[0] désigne la même alternative brute des deux côtés).
-        liveLayout = buildLiveLayout(result, payload,
-            result.alternatives[idx[0]] ?? bestRaw)
-        // C31 (lot 3) : pousse la frame de l'alternative rang 0 dans la vue
-        // live APRÈS le post-pass — la dernière frame affichée est
-        // exactement le layout de l'option 1 (le garde champion du registre
-        // accepte toujours stage 'final').
         if (liveHandler && liveLayout) {
-            try {
-                liveHandler(liveLayout)
-            } catch { /* décorateur best-effort : le reveal reste la source */ }
-        }
-    } catch (e) {
-        // V8 : la sentinelle avorte le reste des artefacts — le flag
-        // portera le local-fail (refund) APRÈS le catch ; une exception
-        // nue sortirait de run() sans refund.
-        if (e?.message !== 'all_alternatives_invalid') {
-            // Les artefacts sont best-effort : le solve a réussi, la
-            // comptabilité passe d'abord ; un artefact manqué dégrade
-            // l'affichage, jamais le job.
+            try { liveHandler(liveLayout) } catch { /* reveal reste la source */ }
         }
     }
 

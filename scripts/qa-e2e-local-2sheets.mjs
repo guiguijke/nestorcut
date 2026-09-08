@@ -418,15 +418,22 @@ try {
         const shifts = window.__ls || []
         const cls = shifts.reduce((s, e) => s + (e.value || 0), 0)
         const maxLongTaskMs = longtasks.reduce((m, e) => Math.max(m, e.duration || 0), 0)
-        return { longtasks, shifts, cls, maxLongTaskMs }
-    }).catch(() => ({ longtasks: [], shifts: [], cls: 0, maxLongTaskMs: 0 }))
+        const solveDoneAt = Number(window.__solveDoneAt) || 0
+        const after = solveDoneAt
+            ? longtasks.filter((e) => (e.start || 0) >= solveDoneAt)
+            : longtasks
+        const maxAfterSolveMs = after.reduce((m, e) => Math.max(m, e.duration || 0), 0)
+        return { longtasks, shifts, cls, maxLongTaskMs, solveDoneAt, maxAfterSolveMs }
+    }).catch(() => ({ longtasks: [], shifts: [], cls: 0, maxLongTaskMs: 0, solveDoneAt: 0, maxAfterSolveMs: 0 }))
     fs.writeFileSync(path.join(OUT, 'longtasks.json'), JSON.stringify(perf.longtasks, null, 1))
     fs.writeFileSync(path.join(OUT, 'cls.json'), JSON.stringify({
         cls: perf.cls,
         maxLongTaskMs: perf.maxLongTaskMs,
+        maxAfterSolveMs: perf.maxAfterSolveMs,
+        solveDoneAt: perf.solveDoneAt,
         entries: perf.shifts,
     }, null, 1))
-    log('longtask max ms:', perf.maxLongTaskMs, 'CLS:', perf.cls)
+    log('longtask max ms:', perf.maxLongTaskMs, 'after solve:', perf.maxAfterSolveMs, 'CLS:', perf.cls)
 
     // ---------- 9. Téléchargement via le bouton du modal (chemin UI) ----------
     const dlBtn = page.locator('.modal .controls__download, .modal button:has-text("Download")').first()

@@ -10,8 +10,16 @@
  */
 
 export function isLocalComputeEnabled() {
-    const v = useRuntimeConfig().public.localComputeEnabled
-    return v === true || v === 'true'
+    // P4 : le worker de finalisation importe geometryClient → ici. Pas de
+    // Nuxt dans un Worker : absence de useRuntimeConfig = chemin local ON
+    // (on n'arrive dans ce worker que pour un job THIS DEVICE).
+    try {
+        if (typeof useRuntimeConfig !== 'function') return true
+        const v = useRuntimeConfig().public.localComputeEnabled
+        return v === true || v === 'true'
+    } catch {
+        return true
+    }
 }
 
 // One engine worker per tab, reused across local jobs (the WASM module

@@ -947,6 +947,9 @@ export async function buildAlternativeArtifacts(result, payload) {
                 holeFillRecovered = applyHoleFill(parts, layouts, space)
             }
             const partsById0 = new Map(parts.map((p2) => [String(p2.id), p2]))
+            // P4 : import explicite — Nuxt auto-importe layoutAabb sur le
+            // thread principal, pas dans le worker de finalisation.
+            const { fillResidualBands, layoutAabb } = await import('./residualClient')
             const pre = []
             for (let li = 0; li < layouts.length; li++) {
                 const aabb0 = layoutAabb(layouts[li], partsById0)
@@ -976,7 +979,6 @@ export async function buildAlternativeArtifacts(result, payload) {
             // re-grille des hélices — miroir main.py).
             if (!selfContained && !alt.structural
                 && ((payload?.problem || 'spp') !== 'spp' || layouts.length >= 2)) {
-                const { fillResidualBands } = await import('./residualClient')
                 fillResidualBands(parts, layouts, space, payload, postPass, 'compact')
                 // A13 (audit 2026-09-03) : le pass résidiel déplace des
                 // libres entre tôles — un trou resté vide sur une tôle sans
@@ -1023,7 +1025,8 @@ export async function buildAlternativeArtifacts(result, payload) {
             })
         }
         return out
-    } catch {
+    } catch (e) {
+        console.error('[local] buildAlternativeArtifacts failed', e)
         return null
     }
 }

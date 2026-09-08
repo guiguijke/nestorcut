@@ -188,6 +188,25 @@ describe('localSolverRegistry — navigation isolée, file tier, idempotence', (
     // C31 (lot 3) : la frame stage 'final' (alternative rang 0 post-pass)
     // est LA conclusion — elle remplace le champion même si une frame
     // moteur brute semble mieux classée (bins moindre ici).
+    it('P4 : phase finalizing est active (hasActiveJob, pas de re-run)', async () => {
+        let release
+        const gate = new Promise((r) => { release = r })
+        const mod = await freshRegistry(async (_slug, { onLive }) => {
+            onLive({ feasible: true, strip_width: 600, items: [1] })
+            onLive({ stage: 'finalizing' })
+            await gate
+            return { ok: true }
+        })
+        mod.ensureJob(job('j1'), { projectSlug: 'pA', maxConcurrent: 1 })
+        await new Promise((r) => setTimeout(r, 20))
+        expect(mod.progressFor('pA').phase).toBe('finalizing')
+        expect(mod.hasActiveJob('pA')).toBe(true)
+        mod.ensureJob(job('j1'), { projectSlug: 'pA', maxConcurrent: 1 })
+        release()
+        await new Promise((r) => setTimeout(r, 20))
+        expect(mod.progressFor('pA').phase).toBe('done')
+    })
+
     it('champion registre : stage final remplace toujours (verrou C31)', async () => {
         const champ = { feasible: true, isSpp: false, bins: 1, remnant: 900, items: [1] }
         const final = { stage: 'final', feasible: true, isSpp: false, bins: 2, remnant: null, items: [1, 2] }
