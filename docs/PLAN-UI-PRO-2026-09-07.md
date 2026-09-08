@@ -363,3 +363,7 @@ Retouches (une passe, commit unique, captures refaites) :
 
 Reporté à U3 (noté, pas une retouche U2) : stats d'en-tête de `LiveNestingView` en `UiStat`. Après la passe : GO visuel final puis déploiement app (procédure habituelle, aucun worker).
 
+### U2 — GO final (vérificateur, 08/09, commit `0bf868c`)
+
+Cinq retouches vérifiées sur la planche refaite (pluriels, champ rotations masqué hors « Autre », cartes sans rectangle vide et vignette dégagée, `u2-resultats.png` distinct, `u2-cta-bas.png`). Rejoué par le vérificateur sur le build servi : configuration 2 → 900/900, [573, 327], 0 chevauchement, long task max 267 ms, CLS 0,0235 ; configuration 0,1 de l'implémenteur relue (228 ms, 0,0246, [587, 313]). **GO déploiement app** (aucun worker). **Déployé prod 08/09** : image `ghcr.io/guiguijke/nest2d-app:latest` SHA `c6c7a43` (`NUXT_PUBLIC_GIT_COMMIT_SHA`), app recréée 2026-09-08T11:38:45Z ; nesting-worker inchangé (2026-09-07T14:20). `/benchmarks` : version corpus **`45c49f3` inchangée** ; « image déployée `c6c7a43` ». Capture `docs/qa/atelier-ui/u2-prod.png` (session QA Agent, accueil authentifié — un GET SSR `/project/:slug` répond 302 `/home` via `getProject` sans cookie au fetch interne, préexistant). U3 commence après P4 ; y inclure les stats live en `UiStat`.
+
