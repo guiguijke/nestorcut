@@ -1,6 +1,6 @@
 name: Build and publish Docker images
 
-# Builds the main app and the 4 worker images and pushes them to the GitHub
+# Builds the main app and the 3 worker images and pushes them to the GitHub
 # Container Registry (ghcr.io) under the repository owner's namespace.
 #
 # On the homelab you then just run:
@@ -13,8 +13,8 @@ name: Build and publish Docker images
 # Notes:
 #  - The nesting worker builds the nest-engine Rust workspace (workers/nesting/engine),
 #    no external submodule required.
-#  - The strip-nesting worker pulls spyrrow wheels that only ship for linux/amd64,
-#    so the whole matrix runs on amd64 runners.
+#  - The legacy strip workers were removed with the 2026-09 repository
+#    re-creation; their ghcr images remain for the running stacks.
 
 on:
   push:
@@ -100,12 +100,6 @@ jobs:
           - image: nest2d-nesting-worker
             context: ./workers
             file: ./workers/nesting/Dockerfile
-          - image: nest2d-strip-file-processing-worker
-            context: ./workers
-            file: ./workers/stripfileprocessing/Dockerfile
-          - image: nest2d-strip-nesting-worker
-            context: ./workers
-            file: ./workers/stripnesting/Dockerfile
 
     steps:
       - name: Checkout repository
@@ -133,7 +127,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: true
-          # spyrrow ships linux/amd64 wheels only — force amd64 for the whole matrix.
+          # Host + homelab are amd64 — keep the whole matrix explicit.
           platforms: linux/amd64
           tags: |
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:latest
