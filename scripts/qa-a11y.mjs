@@ -9,6 +9,11 @@
 // (Tab / Shift+Tab), Échap qui ferme, focus rendu au déclencheur
 // (a11y-modal-focus.json).
 //
+// Prérequis : `playwright` n'est PAS dans package.json (il ferait
+// télécharger les navigateurs à chaque build d'image) — l'installer hors
+// verrou : `npm i --no-save playwright && npx playwright install chromium`.
+// Seul `@axe-core/playwright` est en devDependencies (AGENTS §5).
+//
 // Usage : QA_BASE_URL=http://localhost:7100 node scripts/qa-a11y.mjs
 import { AxeBuilder } from '@axe-core/playwright'
 import { chromium } from 'playwright'

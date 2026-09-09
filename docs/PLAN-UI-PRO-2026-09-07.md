@@ -883,3 +883,126 @@ La géométrie exportée n'a pas bougé.
 
 **Pas de déploiement** — attente du GO visuel. Le socle P6 (`485a491`)
 part avec.
+
+### U3 passe 3 — GO visuel (vérificateur, 09/09, `251d182`) ; déploiement app
+
+Relu et rejoué : diff complet des 37 fichiers, planches `u3-modal-clair`,
+`u3-rapport`, `u3-refus`, `u3-live-stats`, JSON a11y (0 violation sur les
+cinq pages, focus piégé / Échap / retour au déclencheur), `u3-police.json`
+(Inter sur les trois dialogues, Times New Roman sans la règle),
+`npx vitest run` 517/517, `npx nuxt build` vert sur le poste. Les neuf
+points sont livrés ; le tableau n'est plus rogné, les segments tiennent
+sur une ligne, « All parts are placed » est un badge aligné à gauche, le
+zoom n'écrit aucune transformation au repos. Les pièges #24d (prélude
+`global.scss`) et #24e (désactivé par classe) sont consignés dans
+`AGENTS.md`.
+
+**Arbitrage couleur de marque (délégué, informé au propriétaire)** :
+l'accent de l'app passe de `#007bff` à `#0069d9`. `#007bff` échoue au
+seuil AA 4,5:1 aussi bien en texte qu'en fond de bouton primaire ; le
+verrou « 0 violation sérieuse » ne tient pas avec lui. Même teinte, un
+cran plus foncé, c'était déjà la couleur de survol. Le site marketing
+(dépôt frère, `src/styles/global.css` : `--blue` et le dégradé) garde
+`#007bff` — à aligner dans une retouche site (10 min) pour que les deux
+surfaces aient le même bleu. Si le propriétaire tient à `#007bff`, on le
+rétablit et on retire le verrou a11y sur le contraste — mais on ne
+publie pas alors de revendication d'accessibilité.
+
+**Périmètre du déploiement** : app seule. `git diff faa6485..HEAD --
+workers public/engine` est vide → ni benchmarks publics à régénérer, ni
+homelab à mettre à jour. Le socle P6 (`485a491`, `fbc88cc`) part avec.
+
+**Contrôles après déploiement** (en prod, lecture seule) :
+
+1. police calculée sur `.modal-body` d'un dialogue = Inter (console :
+   `getComputedStyle(document.querySelector('.modal-body')).fontFamily`) ;
+2. le CSS servi contient `#0069d9` ; le seul `#007bff` restant est
+   l'anneau de focus translucide `--focus-ring: … #007bff40` (vérifié sur
+   le build local, sans effet sur le contraste) ;
+3. la modale de résultats de la démo : tableau non rogné, segments sur
+   une ligne, badge « All parts are placed » ; molette → zoom, double-clic
+   → ajusté ;
+4. `curl -sI` de la page d'accueil : 200, hash du build = `251d182`.
+
+**Résidus, reportés à U4 (aucun ne bloque)** :
+
+- badges de verdict du rapport et badge de la vue live : `--radius-l`
+  (8 px) → `--radius-s` (2 px), charte ;
+- thème sombre à passer à axe (le script n'audite que le clair) ;
+- `playwright` non déclaré dans `package.json` : on le laisse ainsi
+  (`npm install` en étape de build téléchargerait les navigateurs) ;
+  le script `qa-a11y.mjs` documente en tête qu'il suppose Playwright
+  installé hors verrou — à écrire dans `AGENTS.md` §5 ;
+- `CapacityPanel` dans le volet rapport (partiel / non découpable) :
+  branché, non capturé — un fixture partiel de banc le couvrira au
+  lot 5-moteur (résultat tronqué reproductible) ;
+- alignement du bleu du site marketing (voir arbitrage ci-dessus).
+
+#### U3 passe 3 — déployé prod (09/09), app seule
+
+**Périmètre confirmé avant de partir** : `git diff faa6485..HEAD --
+workers public/engine` **vide** → aucun benchmark public à régénérer,
+aucun homelab à mettre à jour, aucun worker touché. File vide et pool
+`{total: 28, used: 0}` au moment du déploiement.
+
+| | |
+|---|---|
+| Image app | `ghcr.io/guiguijke/nest2d-app:latest`, digest **`sha256:cccfeb1f86ad7aedc0115474064ea763403d9c067aa216a3722125fb9ad0193f`** |
+| Hash injecté | `NUXT_PUBLIC_GIT_COMMIT_SHA=251d1823a5f3e55362b3d83acf46c948f3776b39` |
+| Recréation | 2026-09-09T16:56:59Z (`docker compose pull app` + `up -d --no-deps --force-recreate app`) |
+| Avant | `9c4c03ba…`, digest `sha256:129cbbd2…` |
+| `nesting-worker` | **inchangé** — digest `sha256:e2bb1c19…` (image P5), démarré 2026-09-08T14:50:30Z |
+| Socle P6 | `485a491` / `fbc88cc`, parti avec ce déploiement |
+
+**Contrôles après déploiement (prod, lecture seule)**
+
+1. **Police.** Sonde montée dans `<body>` là où `DialogWrapper` téléporte
+   (`div.modal > div.modal__body.modal-body`, aucune `font-family` propre —
+   c'est exactement ce dont hérite un dialogue réel) :
+   `font-family: "Inter, system-ui, -apple-system, sans-serif"`,
+   `color: rgb(26, 35, 64)`. Le `body` de la page servie rend la même
+   chose. `docs/qa/atelier-ui/u3-p3-prod.json`.
+2. **CSS servi** (`_nuxt/entry.CSM4TB26.css`) : `--accent:#0069d9`,
+   `--accent-hover:#0057b8`, `--text-3:#5f6782`,
+   `--label-tertiary:#5f6782`, et
+   `body{font-family:var(--font-body);color:var(--text);line-height:1.45}`.
+   Le bloc `[data-theme="primary"]` garde ses valeurs sombres
+   (`#00c2ff`, `#8b93ad`, `#767e9a`) — non touché.
+   **Seul `#007bff` restant : `--focus-ring:0 0 0 3px #007bff40`**, exactement
+   le cas prévu au verdict. Le pied de page sert bien sa palette explicite
+   (`Footer.DeuUW-20.css` : `--accent:#6cb6ff`, `--text-3:#a8b0c0`).
+3. **Modale de résultats de la démo : NON FAIT.** `/project/demo` répond
+   **302** vers `/` sans session : le contrôle demande un compte. La règle
+   posée en tête de passe interdit d'en créer un en production sans
+   demander — je n'en ai pas créé. Deux façons de le clore : un feu vert
+   pour un compte QA temporaire (créé puis supprimé, comme le 08/09), ou
+   les quatre vérifications faites depuis votre propre session. Les mêmes
+   contrôles sont verts sur le build local du **même commit** (tableau
+   `overflowPx: 0`, segments sur une ligne, badge succès,
+   `ZOOM: transformAuRepos "none"` → ×8 → « Ajuster » → `"none"`).
+4. **Hash servi** : `https://app.nestorcut.com/` répond **200**, HTML
+   `gitCommitSha:"251d1823a5f3e55362b3d83acf46c948f3776b39"`.
+
+**Site marketing** (`../nestorcut-website`, commit `308eb08`, poussé —
+Cloudflare Pages déploie sur push) : `--blue: #0069d9` et
+`--gradient: linear-gradient(135deg, #0069d9 0%, #00c2ff 100%)`.
+Vérifié **en ligne** sur `https://nestorcut.com/_astro/_slug_.CAjAlhEa.css`.
+Seuls les deux fichiers de contenu de blog déjà modifiés dans l'arbre du
+dépôt frère n'ont **pas** été commités (travail non sollicité, AGENTS §7).
+**Reste** : les dix diagrammes de `public/diagrams/*.svg` portent encore
+`#007bff` (**64 occurrences**, flèches et traits) — remplacement mécanique,
+hors du périmètre annoncé, à faire sur un mot.
+
+**Résidu clos dans cette foulée** : le prérequis Playwright est écrit dans
+`AGENTS.md` §5 et en tête de `scripts/qa-a11y.mjs` (`npm i --no-save
+playwright && npx playwright install chromium` ; seul
+`@axe-core/playwright` est en devDependencies, un `npm i` ultérieur élague
+`playwright`).
+
+**Rouge de CI à ne pas confondre avec cette passe** : le workflow `app-ci`
+échoue depuis au moins `2e99ddb` (donc avant U3 passe 2) —
+`TSConfckParseError: failed to resolve "extends":"./.nuxt/tsconfig.json" in
+admin/tsconfig.json`, **47 fichiers de test sur 48 passent**, la suite qui
+tombe ne se charge pas faute de `admin/.nuxt` (aucun `nuxt prepare` de
+l'admin en CI). Défaut d'environnement, préexistant. Le workflow qui
+publie les images, lui, est vert sur `251d182`.

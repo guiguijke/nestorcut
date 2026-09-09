@@ -1,0 +1,18 @@
+{
+  "body": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "color": "rgb(26, 35, 64)"
+  },
+  "dialogueTeleporte": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "color": "rgb(26, 35, 64)"
+  },
+  "jetons": {
+    "accent": "#0069d9",
+    "accentHover": "#0057b8",
+    "text3": "#5f6782",
+    "labelTertiary": "#5f6782",
+    "fontBody": "\"Inter\",system-ui,-apple-system,sans-serif"
+  },
+  "sha": null
+}

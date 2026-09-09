@@ -787,6 +787,14 @@ Après tout changement moteur : rebuild le wasm dans la MÊME PR (piège
 #33b) ET vider le cache navigateur (piège 14i). Référence complète des
 correctifs 2026-08-28/29 : `docs/archive/2026-08-audits/AUDIT-2026-08-29.md`.
 
+**Harnais navigateur (`scripts/qa-*.mjs`, dont `qa-a11y.mjs`)** : ils
+importent `playwright`, qui n'est **PAS** déclaré dans `package.json` —
+l'étape de build de l'image (`npm install`, devDeps comprises)
+téléchargerait les navigateurs à chaque build. Installation hors verrou,
+une fois par poste : `npm i --no-save playwright && npx playwright install
+chromium`. Un `npm i` ultérieur l'élague : le refaire alors. Seul
+`@axe-core/playwright` (léger, aucun navigateur) est en devDependencies.
+
 Benchmarks ESICUP (lents) : `pytest benchmarks/test_benchmarks.py -m slow`.
 Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --nocapture`.
 
