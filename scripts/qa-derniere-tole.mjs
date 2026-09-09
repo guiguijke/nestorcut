@@ -61,76 +61,78 @@ try {
     await kerf.fill('0'); await kerf.blur()
     const safety = page.locator('label.input', { hasText: 'Safety' }).locator('.input__value')
     await safety.fill('1'); await safety.blur()
-    // Les TROIS directions.
-    const dirOpts = page.locator('.compute__options .compute__option')
-    for (let i = 0; i < await dirOpts.count(); i++) {
-        const active = (await dirOpts.nth(i).getAttribute('class') || '').includes('--active')
-        if (!active) await dirOpts.nth(i).click()
-    }
-    await page.waitForTimeout(400)
-    const dirs = []
-    for (let i = 0; i < await dirOpts.count(); i++) {
-        dirs.push((await dirOpts.nth(i).getAttribute('class') || '').includes('--active'))
-    }
-    log('directions actives :', JSON.stringify(dirs))
-
-    const t0 = Date.now()
-    await page.locator('.atelier__nest').click()
-    log('nest lancé')
-    let done = false
-    while (Date.now() - t0 < 15 * 60 * 1000) {
-        await page.waitForTimeout(3000)
-        const err = (await page.locator('.content__error').allInnerTexts().catch(() => [])).join(' ')
-        if (err) throw new Error('page-error: ' + err)
-        const running = await page.locator('.stage__status').count()
-        const btn = await page.locator('[data-testid="result-report-btn"]').count()
-        if (btn && !running) { done = true; break }
-    }
-    if (!done) throw new Error('le calcul démo n’a pas abouti')
-    log('calcul terminé en', ((Date.now() - t0) / 1000).toFixed(0) + 's')
-    await page.waitForTimeout(2000)
-
-    // Trace `finish` + extrémités par alternative, lues dans IndexedDB.
-    const rec = await page.evaluate(async () => {
-        const db = await new Promise((res, rej) => {
-            const req = indexedDB.open('nestorcut-local')
-            req.onsuccess = () => res(req.result)
-            req.onerror = () => rej(req.error)
-        })
-        const recs = await new Promise((res, rej) => {
-            const r = db.transaction('results', 'readonly').objectStore('results').getAll()
-            r.onsuccess = () => res(r.result || [])
-            r.onerror = () => rej(r.error)
-        })
-        recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-        const rr = recs[0] || {}
-        return {
-            slug: rr.slug, requested: rr.requested, placed: rr.placed,
-            alternatives: (rr.alternatives || []).map((a) => ({
-                strategy: a.strategy, layoutCount: a.layoutCount,
-                finish: a.finish || null,
-                overlapFree: a.report?.overlapFree, spacingOk: a.report?.spacingOk,
-                insideSheet: a.report?.insideSheet,
-                sheets: (a.report?.sheets || []).map((s) => ({
-                    index: s.index, parts: s.partCount, densityPct: s.densityPct,
-                })),
-            })),
+    // Le projet DÉMO est bridé à UNE direction par calcul
+    // (`DEMO_MAX_DIRECTIONS = 1`, shared/constants/demo.constants.js) : le
+    // sélecteur y est un radio. On fait donc TROIS calculs, un par
+    // direction — c'est ce que voit l'utilisateur de la démo.
+    const DIRS = ['left', 'bottom', 'balanced']
+    const rows = []
+    for (let d = 0; d < DIRS.length; d++) {
+        const dirOpts = page.locator('.compute__options').first().locator('.compute__option')
+        await dirOpts.nth(d).click()
+        await page.waitForTimeout(400)
+        const actives = []
+        for (let i = 0; i < await dirOpts.count(); i++) {
+            actives.push((await dirOpts.nth(i).getAttribute('class') || '').includes('--active'))
         }
-    })
-    fs.writeFileSync(path.join(OUT, 'demo-finish.json'), JSON.stringify(rec, null, 2) + '\n')
-    log('record :', rec.slug, rec.placed + '/' + rec.requested)
+        log(`${DIRS[d]} : directions actives ${JSON.stringify(actives)}`)
 
-    // Captures : pour chaque alternative, la tôle PARTIELLE (la moins dense).
-    await page.locator('[data-testid="result-report-btn"]').first().click()
-    await page.waitForSelector('.modal-body', { timeout: 20000 })
-    await page.waitForTimeout(1500)
-    const tabs = page.locator('[data-testid="alt-tab"]')
-    const n = await tabs.count()
-    for (let k = 0; k < n; k++) {
-        await tabs.nth(k).click()
-        await page.waitForTimeout(1200)
-        const alt = rec.alternatives[k] || {}
-        const strategy = alt.strategy || `alt${k}`
+        const t0 = Date.now()
+        const before = await page.locator('[data-testid="result-report-btn"]').count()
+        await page.locator('.atelier__nest').click()
+        let done = false
+        while (Date.now() - t0 < 15 * 60 * 1000) {
+            await page.waitForTimeout(3000)
+            const err = (await page.locator('.content__error').allInnerTexts().catch(() => [])).join(' ')
+            if (err) throw new Error('page-error: ' + err)
+            const running = await page.locator('.stage__status').count()
+            const btn = await page.locator('[data-testid="result-report-btn"]').count()
+            if (btn > before && !running) { done = true; break }
+        }
+        if (!done) throw new Error(`le calcul démo (${DIRS[d]}) n'a pas abouti`)
+        const wallSec = (Date.now() - t0) / 1000
+        await page.waitForTimeout(2000)
+
+        const rec = await page.evaluate(async () => {
+            const db = await new Promise((res, rej) => {
+                const req = indexedDB.open('nestorcut-local')
+                req.onsuccess = () => res(req.result)
+                req.onerror = () => rej(req.error)
+            })
+            const recs = await new Promise((res, rej) => {
+                const r = db.transaction('results', 'readonly').objectStore('results').getAll()
+                r.onsuccess = () => res(r.result || [])
+                r.onerror = () => rej(r.error)
+            })
+            recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+            const rr = recs[0] || {}
+            return {
+                requested: rr.requested, placed: rr.placed,
+                alternatives: (rr.alternatives || []).map((a) => ({
+                    strategy: a.strategy, layoutCount: a.layoutCount,
+                    finish: a.finish || null,
+                    overlapFree: a.report?.overlapFree, spacingOk: a.report?.spacingOk,
+                    insideSheet: a.report?.insideSheet,
+                    sheets: (a.report?.sheets || []).map((s) => ({
+                        index: s.index, parts: s.partCount, densityPct: s.densityPct,
+                    })),
+                })),
+            }
+        })
+        // L'alternative MOTEUR de cette direction (la grille est à part).
+        const alt = (rec.alternatives || []).find((a) => a.strategy === DIRS[d])
+            || (rec.alternatives || [])[0] || {}
+        rows.push({ direction: DIRS[d], wallSec: Math.round(wallSec),
+                    placed: rec.placed, requested: rec.requested, ...alt })
+
+        await page.locator('[data-testid="result-report-btn"]').first().click()
+        await page.waitForSelector('.modal-body', { timeout: 20000 })
+        await page.waitForTimeout(1500)
+        const tabs = page.locator('[data-testid="alt-tab"]')
+        for (let k = 0; k < await tabs.count(); k++) {
+            const txt = (await tabs.nth(k).innerText()).toLowerCase()
+            if (!/grid/.test(txt)) { await tabs.nth(k).click(); await page.waitForTimeout(1200); break }
+        }
         // Tôle la moins dense = la partielle.
         let target = 0
         const sh = alt.sheets || []
@@ -146,16 +148,19 @@ try {
             await next.click({ timeout: 5000 }).catch(() => {})
             await page.waitForTimeout(700)
         }
-        const stage = page.locator('[data-testid="viewer-stage"]').first()
-        const file = path.join(OUT, `demo-${strategy}.png`)
-        await stage.screenshot({ path: file })
+        await page.locator('[data-testid="viewer-stage"]').first()
+            .screenshot({ path: path.join(OUT, `demo-${DIRS[d]}.png`) })
         const f = alt.finish
-        log(`${strategy.padEnd(9)} tôle ${target}`
-            + (f ? `  kept=${f.kept}  avant x≤${f.before.xMax.toFixed(1)} y≤${f.before.yMax.toFixed(1)}`
-                 + `  après x≤${f.after.xMax.toFixed(1)} y≤${f.after.yMax.toFixed(1)} (${f.elapsedMs} ms)`
-                 : '  finish absent')
+        log(`${DIRS[d].padEnd(9)} ${wallSec.toFixed(0)}s  tôle ${target}  `
+            + (f ? `kept=${f.kept} avant x≤${f.before.xMax.toFixed(1)} y≤${f.before.yMax.toFixed(1)}`
+                 + ` après x≤${f.after.xMax.toFixed(1)} y≤${f.after.yMax.toFixed(1)} (${f.elapsedMs} ms)`
+                 : 'finish absent')
             + `  badges ${alt.overlapFree}/${alt.spacingOk}/${alt.insideSheet}`)
+        await page.keyboard.press('Escape')
+        await page.waitForTimeout(1200)
     }
+    fs.writeFileSync(path.join(OUT, 'demo-finish.json'), JSON.stringify(rows, null, 2) + '\n')
+
     console.log('\nL5 OK — captures dans', OUT)
     await browser.close()
     process.exit(0)

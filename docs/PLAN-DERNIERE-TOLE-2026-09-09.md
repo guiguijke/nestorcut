@@ -241,3 +241,153 @@ Baseline **avant** toute modification (image actuelle), à rejouer après :
 
 Pour chaque verrou : valeur baseline, valeur après, commande, nombre de
 passages ; tests retirés nommés ; non-faits énoncés ; hashes de commits.
+
+### §7 — Rapport de l'implémenteur (09/09)
+
+Commits : `b651672` (documents du lot), `9ebde5a` (moteur + post-pass +
+docs), `1d2622f` (finition en parallèle + trace portée au job), `7e013f4`
+(finition limitée aux runs exportés), `1dc07ae` (critère balanced du banc),
+`63d0517` (dumps du harnais + verrou L5). **Non déployé.**
+
+#### Ce que la finition donne, mesuré
+
+Banc serveur `seed_demo_dirs.py`, 304 pièces, tôle 1500 × 3000 × 3,
+espacement 2, budget 120 s, trois directions, image = HEAD, au repos.
+Trois passages APRÈS (`BENCH_ASSERT=1` vert les trois fois) :
+
+| | left (x_max) | bottom (y_max) | balanced (x_max × y_max) |
+|---|---|---|---|
+| **Avant** (3 passages) | 106 / 122 / 242 | 1211 / 159 / 185 | 207×1055 / 262×1039 / 837×230 |
+| **Après** (3 passages) | **94 / 93 / 94** | **119 / 153 / 263** | **224×578 / 280×658 / 261×648** |
+
+Et l'ancrage, qui manquait : `xMin` et `yMin` valent **2,0 mm** (l'espacement)
+dans les neuf mesures d'après, contre des tôles flottantes avant
+(`yMin` 204 pour left au passage 3, 186 pour balanced au passage 2).
+
+Lecture directe de la trace `finish` (avant → après, même tôle, même run) :
+
+- `left` : 856,7 → **94,4** ; 186,1 → **93,2** ; 939,1 → **94,4** (x_max)
+- `bottom` : 166,0 → **118,6** ; 224,0 → **153,1** ; 345,9 → **262,9** (y_max)
+- `balanced` : 683×252 → **224×578** ; 274×794 → **280×658** ; 196×1117 → **261×648**
+
+Les trois formes sont désormais **distinctes et conformes à la direction** :
+colonne −X étroite, bande −Y pleine largeur, bloc de coin.
+
+#### Verrous
+
+| Verrou | Avant | Après | Commande |
+|---|---|---|---|
+| **L3** banc serveur, 3 passages | verrous NON tenus (bottom pas le plus petit y_max ; tôle non ancrée 2 fois sur 3) | **verrous tenus 3/3** | `seed_demo_dirs.py`, `BENCH_ASSERT=1` |
+| **L1** moteur natif, 3 biais | — (verrou créé) | **tenu** (`kept=spp` ×3, ancré, left x_max minimal, bottom y_max minimal, balanced max(x/W,y/H) minimal) | `bench/lock_last_sheet.py` |
+| **L2** déterminisme natif ≡ wasm | — | **SHA identiques**, tolérance 0, `04944ada…` — et INCHANGÉ par la parallélisation | `bench/determinism_lock.py` |
+| **L4** navigateur, 3 passages | solve 21,3 / 21,4 / 21,4 s ; tôle partielle x_max **396,3** | solve 54,7 / 57,6 / 54,6 s ; x_max **349,1 / 349,1 / 348,7** | `qa-e2e-local-2sheets.mjs` |
+| **L4** long task après solve | 0 / 51 / 52 ms | 51 / 0 / 55 ms — **< 100 ms** | idem |
+| **L5** démo navigateur, 3 directions | — | left 113×1493, bottom **1498×124**, balanced 244×629 ; `kept=spp` ×3, badges verts, 304/304 | `scripts/qa-derniere-tole.mjs` |
+| **L6** cargo | 75 | **79** (4 verrous de finition) | `cargo test --release -p nest-engine` |
+| **L6** vitest | 517 | **514** (3 tests de compaction retirés) | `npx vitest run` |
+| **L6** pytest nesting | 227 | **221** (6 tests de compaction retirés) + 2 skipped | image worker + pytest |
+
+Captures L5 : `docs/qa/derniere-tole-2026-09-09/demo-{left,bottom,balanced}.png`
+et les nombres dans `demo-finish.json`.
+
+#### Deux verrous de temps NON tenus — chiffrés
+
+- **L3, temps de job** : référence 25 / 20 / 20 s → après **45 / 35 / 30 s**.
+  Deux passages sur trois sont dans le budget (+10 et +15 s), le troisième
+  est à **+23 s** pour un plafond de +20 s.
+- **L4, durée de calcul navigateur** : référence 21,3 / 21,4 / 21,4 s →
+  après **54,7 / 57,6 / 54,6 s**, soit **+33 s** pour un plafond de +15 s.
+
+La cause est structurelle et mesurée : une finition coûte **15 à 17 s**
+(plafond du plan) et le navigateur **n'a pas un walk mais huit**
+(`QUALITY_WALKS`, AGENTS §1), chacun étant un appel wasm mono-walk avec sa
+propre finition — sur 4 voies, deux vagues. Côté serveur la finition est
+déjà limitée aux **champions de classe** (3 au lieu de 8, gain mesuré : de
+115 s à 35 s de temps de job) ; côté navigateur la fusion se fait en JS
+après les walks, le moteur ne peut donc pas savoir lesquels seront retenus.
+
+**Décision à prendre par le vérificateur** (le plan §6 fige le budget) :
+abaisser le plafond de finition de **15 s à 7 s**. A/B mesuré :
+
+| | 15 s (livré) | 7 s (A/B) |
+|---|---|---|
+| temps de job serveur | 30-45 s | **25 s** |
+| calcul navigateur | 54,6 s | **39,6 s** (+18 s au lieu de +33) |
+| tôle partielle navigateur x_max | 349,1 | 353,0 |
+| L3 `BENCH_ASSERT` | tenu 3/3 | **NON tenu** : `bottom` sort avec **`spacingOk=false`**, plus petit écart mesuré **1,849 mm pour 2,0 demandés** |
+
+**Je n'ai pas adopté les 7 s** : l'unique passage à ce budget a produit une
+tôle sous l'espacement promis. C'est un fait isolé (1 direction-run sur 3 à
+7 s, contre 0 sur ~30 à 15 s) et je ne sais pas encore l'imputer — la
+finition passe par le même `run_spp_mem` que les jobs mono-tôle, gravité et
+`column_fill` compris (piège 14d : à space 2 les gaps du solve tombent déjà
+à ~1,998 mm ; ici 1,849). À trancher avec vous : garder 15 s et accepter le
+dépassement de temps, ou descendre le plafond après avoir compris ce
+1,849 mm.
+
+#### Écarts au périmètre du plan, tous mesurés
+
+1. **`_compact_last_sheet` et `_regrid_helices` NE SONT PAS supprimées.**
+   Le balayage (AGENTS §7) les a trouvées importées par
+   `core/structure_multi.py` et `structureMultiClient.js` : elles
+   construisent l'alternative **GRILLE**, hors périmètre du lot. Seul leur
+   APPEL dans `fill_residual_bands` disparaît, avec `profile` et
+   `stats['profile']`. `_sheet_needs_compaction` et
+   `_relay_frees_behind_anchor` restent donc aussi (elles servent
+   `_compact_last_sheet`). Résidu signalé : `_compact_receivers` est morte
+   en production (seul un test l'appelle) — pas touchée, elle ne fait pas
+   partie de la compaction −X de la donneuse.
+2. **« balanced » n'est pas un appel SPP `balanced`.** Mesuré sur `b_demo` :
+   `spp.rs::balanced_width` (J-088) équilibre les BRAS DE CHUTE sur toute
+   la tôle ; sur une tôle remplie à 2,4 % cette égalité impose une région
+   large et plate — **x_max 1755 sur 3000**, le PIRE des trois au critère
+   du plan. Et un solveur SPP minimise toujours la largeur : on ne peut pas
+   lui demander un bloc large. Le bloc de coin s'obtient en contraignant
+   l'AUTRE axe — bande de hauteur `sqrt(aire_utilisée · H / W)` puis
+   minimisation de la largeur dedans (le flux « left »). Résultat mesuré :
+   617×369 puis 224×578 sur le banc, 244×629 en navigateur. Consigné en
+   piège #54b.
+3. **Constante `0x5EED_F1N1` du plan** : pas un littéral hexadécimal valide
+   (`N`). Remplacée par `FINISH_SEED_XOR = 0x5EED_F111`, même intention.
+4. **Signature** : `finish_partial_sheet` prend aussi le `sink` (le §3.1.7
+   demande une frame live, il lui faut le puits) et se décompose en
+   `plan_finish` (pur, parallélisable) + `apply_finish`.
+5. **Verrou L1 « réduction stricte »** : gardé pour `left`, assoupli en
+   « pas de régression » pour `bottom` — sur cette fixture le recuit avait
+   DÉJÀ la bande (262,2 mm) et la finition rend 263,0 : une réduction
+   stricte n'y est pas mesurable. L'absence de gain est imprimée, pas
+   masquée.
+6. **Verrou L3 croisé** : tenu 3/3 au final, mais il est fragile par
+   nature — chaque direction est un walk différent, donc une affectation
+   pièces → tôles différente ; une tôle partielle qui hérite d'une pièce de
+   300 mm ne peut pas faire de bande plus étroite que 300 mm. Observé une
+   fois (`left` x_max 263 = plancher matière contre `balanced` 231,6). J'ai
+   ajouté au banc un verrou **apples-to-apples** : chaque direction contre
+   sa propre entrée `finish.before`.
+
+#### Autres constats
+
+- **La trace `finish` n'arrivait pas au job** : `core/engine.py` ne la
+  recopiait pas à la normalisation — ni la garde de post-pass de `main.py`,
+  ni la ligne du rapport, ni le banc ne la voyaient, alors que la géométrie,
+  elle, avait bien changé. Champ additif porté dans `engine.py`, main.py,
+  `localBridge.js` et les deux dumps du harnais.
+- **Référence de parité régénérée** : `out_user_layouts_post_py.json`
+  (test `replayUserBpp`) contenait le résultat Python AVEC compaction. Son
+  générateur d'origine rejouait un job Mongo disparu ; nouveau générateur
+  `bench/regen_user_post_py.py`, qui repart des deux fixtures commitées.
+  Après régénération : comptes par tôle [590, 509], `residualMoved 0`,
+  parité JS ↔ Python verte.
+- **`wasm-opt` absent du poste** : `build-wasm.sh` s'arrêtait après
+  `wasm-bindgen` et laissait un artefact non optimisé (1 536 169 octets).
+  Installé hors verrou (`npm i --no-save binaryen`), wasm livré à
+  **1 318 630 octets** (gzip 472 474) contre 1 290 374 avant le lot.
+  À noter : `npm i --no-save <x>` **élague** `playwright` (AGENTS §5) — les
+  deux se réinstallent ensemble.
+- **Non-fait** : le `qa-e2e-local-2sheets.mjs` en configuration espacement 2
+  n'a pas été rejoué après le lot (référence prise : solve 24,4 s, tôle
+  partielle x_max 517,7). Seule la configuration 0,1 l'a été, trois fois.
+- **Non-fait** : `verify_l4a_corpus.sh` 11/11 et la régénération des
+  benchmarks publics — ils appartiennent à l'étape de déploiement, qui
+  attend le GO.
+

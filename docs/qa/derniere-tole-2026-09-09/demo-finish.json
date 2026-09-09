@@ -1,0 +1,128 @@
+[
+  {
+    "direction": "left",
+    "wallSec": 148,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "left",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 112.9958038330078,
+        "xMin": 2.000051498413086,
+        "yMax": 1492.5372314453125,
+        "yMin": 2.14666748046875
+      },
+      "before": {
+        "xMax": 158.518310546875,
+        "xMin": 2.0037953853607178,
+        "yMax": 1398.5894775390625,
+        "yMin": 2.0685501098632812
+      },
+      "bias": "left",
+      "elapsedMs": 9921,
+      "kept": "spp",
+      "reason": "",
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 270,
+        "densityPct": 72.4
+      },
+      {
+        "index": 1,
+        "parts": 34,
+        "densityPct": 3
+      }
+    ]
+  },
+  {
+    "direction": "bottom",
+    "wallSec": 191,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "bottom",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 1497.999755859375,
+        "xMin": 2.0002593994140625,
+        "yMax": 124.09925079345705,
+        "yMin": 2.000032424926758
+      },
+      "before": {
+        "xMax": 1154.740478515625,
+        "xMin": 2.00154185295105,
+        "yMax": 220.7723388671875,
+        "yMin": 2.008533477783203
+      },
+      "bias": "bottom",
+      "elapsedMs": 15294,
+      "kept": "spp",
+      "reason": "",
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 267,
+        "densityPct": 72.1
+      },
+      {
+        "index": 1,
+        "parts": 37,
+        "densityPct": 3.3
+      }
+    ]
+  },
+  {
+    "direction": "balanced",
+    "wallSec": 191,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "balanced",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 243.85292053222656,
+        "xMin": 2.0000171661376953,
+        "yMax": 628.761474609375,
+        "yMin": 2.0000038146972656
+      },
+      "before": {
+        "xMax": 1343.0850830078125,
+        "xMin": 2.003955841064453,
+        "yMax": 148.14437866210938,
+        "yMin": 2.0190582275390625
+      },
+      "bias": "balanced",
+      "elapsedMs": 15461,
+      "kept": "spp",
+      "reason": "",
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 272,
+        "densityPct": 72.8
+      },
+      {
+        "index": 1,
+        "parts": 32,
+        "densityPct": 2.6
+      }
+    ]
+  }
+]
