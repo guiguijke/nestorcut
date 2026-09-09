@@ -207,6 +207,10 @@ try {
     if (!new RegExp(String(expectedTotal)).test(nestLabel)) {
         throw new Error(`expected ${expectedTotal} files on nest button, got "${nestLabel}"`)
     }
+    // Lot « derniere tole » (L4) : duree de calcul MESUREE PAR LE HARNAIS —
+    // du clic « Nest » a l'apparition du resultat. `solveDoneAt` de la page
+    // ne vaut pas comme mesure (CLAUDE.md, discipline de mesure).
+    const tNest = Date.now()
     await nestBtn.click()
     log('nest clicked')
 
@@ -266,7 +270,9 @@ try {
         }
         await page.waitForTimeout(3000)
     }
+    const solveWallMs = Date.now() - tNest
     log('compute outcome:', outcome, `(${((Date.now() - t0) / 1000).toFixed(0)}s)`)
+    log('SOLVE WALL:', (solveWallMs / 1000).toFixed(1) + 's', `(${solveWallMs} ms depuis le clic)`)
     await page.waitForTimeout(1500)
     await shot('03-stage-final.png')
 

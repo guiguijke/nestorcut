@@ -14,7 +14,12 @@ use anyhow::{Context, Result, bail};
 use constructive::DirBias;
 use jagua_rs::entities::Instance as _;
 use jagua_rs::io::import::Importer;
-use jagua_rs::probs::bpp::io::ext_repr::{ExtBPInstance, ExtBPSolution};
+use jagua_rs::io::ext_repr::{ExtLayout, ExtPlacedItem, ExtShape, ExtTransformation};
+use jagua_rs::probs::bpp::io::ext_repr::{ExtBPInstance, ExtBPSolution, ExtBin};
+use jagua_rs::probs::spp::io::ext_repr::{
+    ExtItem as SpExtItem, ExtSPInstance, ExtSPSolution,
+};
+use std::sync::Arc;
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
 use serde::{Deserialize, Serialize};
@@ -238,7 +243,7 @@ pub fn run_bpp_mem(
     // or more alternatives are requested than there are active classes.
     // La fusion est partagée avec l'entrée wasm `merge_alternatives` (J-093).
     let epoch = *sparrow::EPOCH;
-    let exported: Vec<BpRun> = runs
+    let mut exported: Vec<BpRun> = runs
         .iter()
         .map(|r| BpRun {
             seed: r.seed,
@@ -246,8 +251,19 @@ pub fn run_bpp_mem(
             cost: r.cost,
             iterations: r.iterations,
             solution: jagua_rs::probs::bpp::io::export(instance, &r.solution, epoch),
+            finish: None,
         })
         .collect();
+
+    // Plan « dernière tôle » (2026-09-09) §3.1 : la tôle partielle de CHAQUE
+    // walk est refaite en SPP de la même direction, avant la fusion. Le coût
+    // du recuit n'a pas de direction (il minimise l'aire de l'AABB de la
+    // tôle) et le biais du constructif est un multiplicateur faible : la
+    // direction est un objectif de SOLVEUR, elle se règle ici, pas dans un
+    // post-pass −X côté Python/JS.
+    for run in exported.iter_mut() {
+        run.finish = finish_partial_sheet(&ext_instance, run, config, &started, sink);
+    }
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
         Ok(merged) => {
             sink(&format!(
@@ -267,6 +283,746 @@ pub fn run_bpp_mem(
             ));
             bail!("no feasible solution: {best_unplaced} items could not be placed")
         }
+    }
+}
+
+
+// ===========================================================================
+// Finition de la tôle partielle — plan docs/PLAN-DERNIERE-TOLE-2026-09-09.md
+// ===========================================================================
+
+/// Décalage de seed de la finition. Le plan écrit `0x5EED_F1N1`, qui n'est
+/// PAS un littéral hexadécimal valide (`N`) : même intention — un flux
+/// distinct de celui du walk BPP — avec une constante nommée.
+pub const FINISH_SEED_XOR: u64 = 0x5EED_F111;
+
+/// Au-delà de ce taux de remplissage, la tôle n'est plus « partielle » :
+/// la refaire en SPP n'aurait pas de sens (et coûterait du budget).
+const FINISH_MAX_FILL: f32 = 0.5;
+
+/// Tolérance de la garde de faisabilité (piège #6 : sparrow n'a pas de
+/// borne dure, une solution « feasible » peut dépasser la tôle).
+const FINISH_EPS: f32 = 1e-3;
+
+/// Sommets des anneaux EXTERNES d'une forme (les trous n'élargissent pas
+/// l'AABB). Suffisant pour une AABB : pour un polygone, l'AABB des sommets
+/// transformés est exacte.
+fn shape_points(shape: &ExtShape) -> Vec<(f32, f32)> {
+    match shape {
+        ExtShape::Rectangle {
+            x_min,
+            y_min,
+            width,
+            height,
+        } => vec![
+            (*x_min, *y_min),
+            (*x_min + *width, *y_min),
+            (*x_min + *width, *y_min + *height),
+            (*x_min, *y_min + *height),
+        ],
+        ExtShape::SimplePolygon(p) => p.0.clone(),
+        ExtShape::Polygon(p) => p.outer.0.clone(),
+        ExtShape::MultiPolygon(ps) => ps.iter().flat_map(|p| p.outer.0.iter().copied()).collect(),
+    }
+}
+
+/// Aire d'un anneau (lacet de Gauss), en valeur absolue.
+fn ring_area_abs(pts: &[(f32, f32)]) -> f32 {
+    let mut s = 0.0;
+    for i in 0..pts.len().saturating_sub(1) {
+        s += pts[i].0 * pts[i + 1].1 - pts[i + 1].0 * pts[i].1;
+    }
+    (s / 2.0).abs()
+}
+
+fn aabb_of(pts: &[(f32, f32)]) -> Option<(f32, f32, f32, f32)> {
+    let mut it = pts.iter();
+    let (x0, y0) = *it.next()?;
+    let (mut x_min, mut y_min, mut x_max, mut y_max) = (x0, y0, x0, y0);
+    for (x, y) in it {
+        x_min = x_min.min(*x);
+        y_min = y_min.min(*y);
+        x_max = x_max.max(*x);
+        y_max = y_max.max(*y);
+    }
+    Some((x_min, y_min, x_max, y_max))
+}
+
+/// AABB d'une pièce POSÉE : rotation autour de l'origine puis translation,
+/// dans la convention de `ExtTransformation` (rotation en degrés).
+fn placed_aabb(pts: &[(f32, f32)], t: &ExtTransformation) -> Option<(f32, f32, f32, f32)> {
+    let th = t.rotation.to_radians();
+    let (c, sn) = (th.cos(), th.sin());
+    let (tx, ty) = t.translation;
+    let moved: Vec<(f32, f32)> = pts
+        .iter()
+        .map(|(x, y)| (tx + x * c - y * sn, ty + x * sn + y * c))
+        .collect();
+    aabb_of(&moved)
+}
+
+/// Miroir EXTERNE de `sa::layout_remnant` : plus grande bande (ou L) libre
+/// autour de l'AABB des pièces, en fraction de l'aire de la tôle. Le coût du
+/// recuit se calcule sur les formes INTERNES (gonflées de
+/// `min_item_separation`, simplifiées) ; après finition les poses viennent
+/// de l'export, il faut la même règle sur les formes d'origine.
+pub fn ext_layout_remnant(bin: &ExtBin, layout: &ExtLayout, item_pts: &[Vec<(f32, f32)>]) -> f64 {
+    let Some((bx0, by0, bx1, by1)) = shape_aabb(&bin.base.shape) else {
+        return 0.0;
+    };
+    let (w, h) = ((bx1 - bx0) as f64, (by1 - by0) as f64);
+    if w <= 0.0 || h <= 0.0 {
+        return 0.0;
+    }
+    let mut min_x = f32::INFINITY;
+    let mut min_y = f32::INFINITY;
+    let mut max_x = f32::NEG_INFINITY;
+    let mut max_y = f32::NEG_INFINITY;
+    for pi in &layout.placed_items {
+        let Some(pts) = item_pts.get(pi.item_id as usize) else {
+            continue;
+        };
+        let Some((x0, y0, x1, y1)) = placed_aabb(pts, &pi.transformation) else {
+            continue;
+        };
+        min_x = min_x.min(x0 - bx0);
+        min_y = min_y.min(y0 - by0);
+        max_x = max_x.max(x1 - bx0);
+        max_y = max_y.max(y1 - by0);
+    }
+    if !min_x.is_finite() {
+        return 1.0; // tôle vide : entièrement réutilisable
+    }
+    let (min_x, min_y) = (min_x as f64, min_y as f64);
+    let (max_x, max_y) = (max_x as f64, max_y as f64);
+
+    let right = (w - max_x) * h;
+    let top = w * (h - max_y);
+    let left = min_x * h;
+    let bottom = w * min_y;
+    let l_right_top = (w - max_x) * h + max_x * (h - max_y);
+    let l_top_right = w * (h - max_y) + (w - max_x) * max_y;
+    let l_left_bottom = min_x * h + (w - min_x) * min_y;
+    let l_bottom_left = w * min_y + min_x * (h - min_y);
+
+    let best = right
+        .max(top)
+        .max(left)
+        .max(bottom)
+        .max(l_right_top)
+        .max(l_top_right)
+        .max(l_left_bottom)
+        .max(l_bottom_left);
+    (best / (w * h)).clamp(0.0, 1.0)
+}
+
+fn shape_aabb(shape: &ExtShape) -> Option<(f32, f32, f32, f32)> {
+    aabb_of(&shape_points(shape))
+}
+
+/// Frame live de la finition : MÊME schéma que `layout_event`, lue dans les
+/// layouts EXTERNES du run fini (pièges 14g / 46 — la convention externe est
+/// déjà celle de l'export, il n'y a pas de `int_to_ext` à composer ici).
+fn ext_layout_event(run: &BpRun, started: &Instant) -> String {
+    let mut items = String::new();
+    items.push('[');
+    let mut first = true;
+    for (bin, layout) in run.solution.layouts.iter().enumerate() {
+        for pi in &layout.placed_items {
+            if !first {
+                items.push(',');
+            }
+            first = false;
+            items.push_str(&format!(
+                "[{},{},{:.2},{:.3},{:.3}]",
+                pi.item_id,
+                bin,
+                pi.transformation.rotation,
+                pi.transformation.translation.0,
+                pi.transformation.translation.1
+            ));
+        }
+    }
+    items.push(']');
+    format!(
+        "{{\"type\":\"layout\",\"worker\":0,\"stage\":\"bpp-finish\",\"feasible\":{},\"bins\":{},\"bin_cost\":{},\"unplaced\":{},\"remnant\":{:.4},\"elapsed_ms\":{},\"items\":{},\"bias\":\"{}\"}}",
+        run.cost.unplaced == 0,
+        run.solution.layouts.len(),
+        run.cost.bin_cost,
+        run.cost.unplaced,
+        run.cost.remnant,
+        started.elapsed().as_millis(),
+        items,
+        run.bias.as_str()
+    )
+}
+
+/// Refait la tôle la MOINS remplie d'un run BPP comme le ferait un job
+/// mono-tôle SPP des mêmes pièces avec la même direction, et remplace ses
+/// poses si le résultat tient dans la tôle. Renvoie la trace (`finish`) à
+/// exporter, ou `None` quand la finition ne s'applique pas.
+///
+/// Ne touche ni l'affectation des pièces aux tôles, ni les autres layouts,
+/// ni le schéma d'export (champs additifs seulement).
+pub fn finish_partial_sheet(
+    ext_instance: &ExtBPInstance,
+    run: &mut BpRun,
+    config: &EngineConfig,
+    started: &Instant,
+    sink: &EventSink,
+) -> Option<serde_json::Value> {
+    // 1. Tôle partielle : taux de remplissage minimal, ex æquo → index le
+    //    plus haut. Rien à finir si le run laisse des pièces non placées.
+    if run.cost.unplaced > 0 {
+        return None;
+    }
+    let (idx, fill) = run
+        .solution
+        .layouts
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.placed_items.len() >= 2)
+        .map(|(i, l)| (i, l.density))
+        .min_by(|(ia, a), (ib, b)| a.total_cmp(b).then(ib.cmp(ia)))?;
+    if fill > FINISH_MAX_FILL {
+        return None;
+    }
+
+    let t_start = Instant::now();
+    let layout = &run.solution.layouts[idx];
+    let bin = ext_instance
+        .bins
+        .iter()
+        .find(|b| b.base.id == layout.container_id)?;
+    let (bx0, by0, bx1, by1) = shape_aabb(&bin.base.shape)?;
+    let (bw, bh) = (bx1 - bx0, by1 - by0);
+    if bw <= 0.0 || bh <= 0.0 {
+        return None;
+    }
+
+    // Sommets des anneaux externes, indexés par id d'item BPP (les ids sont
+    // consécutifs 0..n-1 à l'import jagua, piège #3b).
+    let item_pts: Vec<Vec<(f32, f32)>> = ext_instance
+        .items
+        .iter()
+        .map(|it| shape_points(&it.base.shape))
+        .collect();
+
+    let before = layout_extent(layout, &item_pts, bx0, by0)?;
+
+    // Aire de matière et plus grande dimension de pièce de CETTE tôle —
+    // servent à dimensionner le corridor « balanced » (coin) plus bas.
+    let mut parts_area = 0.0_f32;
+    let mut max_item_span = 0.0_f32;
+    for pi in &layout.placed_items {
+        if let Some(pts) = item_pts.get(pi.item_id as usize) {
+            parts_area += ring_area_abs(pts);
+            if let Some((x0, y0, x1, y1)) = aabb_of(pts) {
+                max_item_span = max_item_span.max((x1 - x0).max(y1 - y0));
+            }
+        }
+    }
+
+    // 2. Instance SPP : ids réindexés 0..k-1 (piège #3b : l'importeur exige
+    //    des ids consécutifs), table de retour vers les ids BPP.
+    let mut ids: Vec<u64> = layout.placed_items.iter().map(|pi| pi.item_id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    let mut sp_items = Vec::with_capacity(ids.len());
+    for (new_id, old_id) in ids.iter().enumerate() {
+        let src = ext_instance.items.get(*old_id as usize)?;
+        let demand = layout
+            .placed_items
+            .iter()
+            .filter(|pi| pi.item_id == *old_id)
+            .count() as u64;
+        sp_items.push(SpExtItem {
+            base: jagua_rs::io::ext_repr::ExtItem {
+                id: new_id as u64,
+                allowed_orientations: src.base.allowed_orientations.clone(),
+                shape: src.base.shape.clone(),
+                min_quality: src.base.min_quality,
+            },
+            demand,
+        });
+    }
+    let n_placed = layout.placed_items.len();
+    // « balanced » = pièces COLLÉES AU COIN. Le mode directions de sparrow
+    // équilibre les BRAS DE CHUTE sur toute la tôle (`balanced_width`,
+    // J-088) : sur une tôle quasi vide cette égalité impose une région large
+    // et plate (mesuré sur b_demo : x_max 1755 sur 3000, le PIRE des trois
+    // au critère du plan). Et un solveur SPP minimise toujours la largeur —
+    // on ne peut pas lui DEMANDER un bloc large.
+    // On obtient le bloc de coin en contraignant l'AUTRE axe : bande de
+    // hauteur cible `ty` telle que x/W = y/H pour l'aire réellement occupée,
+    // puis minimisation de la largeur dedans (le flux « left », qui converge).
+    let sep = config.min_item_separation.unwrap_or(0.0).max(0.0);
+    let (strip_h, finish_bias) = if run.bias == DirBias::Balanced {
+        let used = (before.x_max * before.y_max).max(parts_area * 1.15);
+        let ty = (used * bh / bw)
+            .sqrt()
+            .max(max_item_span + 2.0 * sep)
+            .min(bh);
+        (ty, "left")
+    } else {
+        (bh, run.bias.as_str())
+    };
+    let sp_instance = ExtSPInstance {
+        name: format!("{}-finish{}", ext_instance.name, idx),
+        items: sp_items,
+        strip_height: strip_h,
+    };
+
+    // 3. Config de finition : mono-walk, direction du run, borne = largeur
+    //    de la tôle, budget borné, aucun événement.
+    let mut cfg = config.clone();
+    cfg.biases = Some(vec![finish_bias.to_owned()]);
+    cfg.n_workers = Some(1);
+    cfg.separator_workers = Some(1);
+    cfg.max_strip_width = Some(bw);
+    cfg.two_phase = Some(true);
+    cfg.live_events = Some(false);
+    cfg.initial_sequence = None;
+    cfg.n_alternatives = 1;
+    cfg.prng_seed = run.seed ^ FINISH_SEED_XOR;
+    cfg.time_budget_sec = (((config.time_budget_sec as f64) * 0.25).round() as u64).clamp(3, 15);
+    cfg.plateau_patience_sec = Some(match config.plateau_patience_sec {
+        Some(p) if p > 0.0 => p.min(3.0),
+        _ => 3.0,
+    });
+    // Mode déterministe : la finition doit être bornée en TRAVAIL, pas en
+    // temps, sinon le verrou natif ≡ wasm tombe (une machine plus lente
+    // couperait la trajectoire ailleurs).
+    if cfg.sa_max_iterations.is_some() {
+        if cfg.explore_max_conseq_failed_attempts.is_none() {
+            cfg.explore_max_conseq_failed_attempts = Some(30);
+        }
+        if cfg.compress_failure_decay.is_none() {
+            cfg.compress_failure_decay = Some(0.7);
+        }
+    }
+
+    // 4. Résolution — sink MUET : aucun événement SPP ne doit sortir d'un job
+    //    BPP (le worker Python et engine.worker.js lisent le flux).
+    let silent: EventSink = Arc::new(|_: &str| {});
+    let keep = |reason: &str| -> Option<serde_json::Value> {
+        Some(finish_report(
+            idx, run.bias.as_str(), &before, &before, &t_start, "bpp", reason,
+        ))
+    };
+    let Ok(out) = crate::spp::run_spp_mem(sp_instance, &cfg, &silent) else {
+        return keep("spp run failed");
+    };
+    let Some(alt) = out.alternatives.first() else {
+        return keep("no spp alternative");
+    };
+    let Ok(sp_sol) = serde_json::from_value::<ExtSPSolution>(
+        alt.get("solution").cloned().unwrap_or(serde_json::Value::Null),
+    ) else {
+        return keep("unreadable spp solution");
+    };
+
+    // 5. Faisabilité (piège #6 : pas de borne dure en SPP) + complétude.
+    if sp_sol.layout.placed_items.len() != n_placed {
+        return keep("spp placed a different number of items");
+    }
+    let mut placed = Vec::with_capacity(n_placed);
+    let (mut x_min, mut y_min) = (f32::INFINITY, f32::INFINITY);
+    let (mut x_max, mut y_max) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for pi in &sp_sol.layout.placed_items {
+        let old_id = *ids.get(pi.item_id as usize)?;
+        let pts = item_pts.get(old_id as usize)?;
+        let (a0, b0, a1, b1) = placed_aabb(pts, &pi.transformation)?;
+        x_min = x_min.min(a0);
+        y_min = y_min.min(b0);
+        x_max = x_max.max(a1);
+        y_max = y_max.max(b1);
+        placed.push(ExtPlacedItem {
+            item_id: old_id,
+            transformation: ExtTransformation {
+                rotation: pi.transformation.rotation,
+                // Repère de la tôle : le bin n'est pas forcément ancré en
+                // (0,0), le strip SPP l'est toujours.
+                translation: (
+                    pi.transformation.translation.0 + bx0,
+                    pi.transformation.translation.1 + by0,
+                ),
+            },
+        });
+    }
+    if x_min < -FINISH_EPS || y_min < -FINISH_EPS || x_max > bw + FINISH_EPS || y_max > bh + FINISH_EPS
+    {
+        return keep("spp layout exceeds the sheet");
+    }
+
+    // 6. Remplacement des poses (container_id inchangé) + remnant recalculé.
+    run.solution.layouts[idx].placed_items = placed;
+    let after = Extent {
+        x_min: x_min.max(0.0),
+        y_min: y_min.max(0.0),
+        x_max,
+        y_max,
+    };
+    run.cost.remnant = run
+        .solution
+        .layouts
+        .iter()
+        .filter_map(|l| {
+            ext_instance
+                .bins
+                .iter()
+                .find(|b| b.base.id == l.container_id)
+                .map(|b| ext_layout_remnant(b, l, &item_pts))
+        })
+        .fold(0.0_f64, f64::max);
+
+    // 7. Frame live finale (V14) : même schéma que `layout_event`.
+    if config.live_events() {
+        sink(&ext_layout_event(run, started));
+    }
+
+    Some(finish_report(
+        idx,
+        run.bias.as_str(),
+        &before,
+        &after,
+        &t_start,
+        "spp",
+        "",
+    ))
+}
+
+#[derive(Clone, Copy)]
+struct Extent {
+    x_min: f32,
+    y_min: f32,
+    x_max: f32,
+    y_max: f32,
+}
+
+fn layout_extent(
+    layout: &ExtLayout,
+    item_pts: &[Vec<(f32, f32)>],
+    bx0: f32,
+    by0: f32,
+) -> Option<Extent> {
+    let (mut x_min, mut y_min) = (f32::INFINITY, f32::INFINITY);
+    let (mut x_max, mut y_max) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
+    for pi in &layout.placed_items {
+        let pts = item_pts.get(pi.item_id as usize)?;
+        let (a0, b0, a1, b1) = placed_aabb(pts, &pi.transformation)?;
+        x_min = x_min.min(a0 - bx0);
+        y_min = y_min.min(b0 - by0);
+        x_max = x_max.max(a1 - bx0);
+        y_max = y_max.max(b1 - by0);
+    }
+    x_min.is_finite().then_some(Extent {
+        x_min,
+        y_min,
+        x_max,
+        y_max,
+    })
+}
+
+fn finish_report(
+    sheet: usize,
+    bias: &str,
+    before: &Extent,
+    after: &Extent,
+    t_start: &Instant,
+    kept: &str,
+    reason: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "sheet": sheet,
+        "bias": bias,
+        "before": {
+            "xMin": before.x_min, "yMin": before.y_min,
+            "xMax": before.x_max, "yMax": before.y_max,
+        },
+        "after": {
+            "xMin": after.x_min, "yMin": after.y_min,
+            "xMax": after.x_max, "yMax": after.y_max,
+        },
+        "elapsedMs": t_start.elapsed().as_millis() as u64,
+        "kept": kept,
+        "reason": reason,
+    })
+}
+
+
+#[cfg(test)]
+mod finish_tests {
+    //! Verrous de la finition de la tôle partielle (plan
+    //! docs/PLAN-DERNIERE-TOLE-2026-09-09.md §4, L6).
+    //!
+    //! Les trois premiers appellent `finish_partial_sheet` DIRECTEMENT sur un
+    //! run construit à la main : la tôle partielle y est volontairement
+    //! étalée en diagonale, ce que la sortie d'un vrai recuit ne garantit
+    //! pas — un test qui dépend de ce que produit le recuit ne mesure rien.
+
+    use super::*;
+    use jagua_rs::io::ext_repr::{ExtSPolygon, ExtShape};
+    use jagua_rs::probs::bpp::io::ext_repr::{ExtBin, ExtItem as BpExtItem};
+
+    const SIDE: f32 = 40.0;
+    const SHEET: f32 = 200.0;
+
+    fn square_instance(demand: u64) -> ExtBPInstance {
+        ExtBPInstance {
+            name: "finish-lock".to_owned(),
+            items: vec![BpExtItem {
+                base: jagua_rs::io::ext_repr::ExtItem {
+                    id: 0,
+                    allowed_orientations: Some(vec![0.0, 90.0, 180.0, 270.0]),
+                    shape: ExtShape::SimplePolygon(ExtSPolygon(vec![
+                        (0.0, 0.0),
+                        (SIDE, 0.0),
+                        (SIDE, SIDE),
+                        (0.0, SIDE),
+                        (0.0, 0.0),
+                    ])),
+                    min_quality: None,
+                },
+                demand,
+            }],
+            bins: vec![ExtBin {
+                base: jagua_rs::io::ext_repr::ExtContainer {
+                    id: 0,
+                    shape: ExtShape::SimplePolygon(ExtSPolygon(vec![
+                        (0.0, 0.0),
+                        (SHEET, 0.0),
+                        (SHEET, SHEET),
+                        (0.0, SHEET),
+                        (0.0, 0.0),
+                    ])),
+                    zones: vec![],
+                },
+                cost: 1,
+                stock: 2,
+            }],
+        }
+    }
+
+    /// Tôle partielle ÉTALÉE : quatre carrés sur la diagonale, étendue
+    /// ≈ 160 mm sur les deux axes dans une tôle de 200.
+    fn spread_layout() -> ExtLayout {
+        let placed = (0..4)
+            .map(|k| ExtPlacedItem {
+                item_id: 0,
+                transformation: ExtTransformation {
+                    rotation: 0.0,
+                    translation: (k as f32 * 40.0, k as f32 * 40.0),
+                },
+            })
+            .collect::<Vec<_>>();
+        ExtLayout {
+            container_id: 0,
+            placed_items: placed,
+            density: 4.0 * SIDE * SIDE / (SHEET * SHEET), // 0,16
+        }
+    }
+
+    fn run_with(layout: ExtLayout, bias: DirBias) -> BpRun {
+        BpRun {
+            seed: 7,
+            bias,
+            cost: sa::Cost {
+                unplaced: 0,
+                bin_cost: 1,
+                remnant: 0.0,
+                falkenauer: 0.0,
+            },
+            iterations: 0,
+            solution: ExtBPSolution {
+                cost: 1,
+                layouts: vec![layout],
+                density: 0.16,
+                run_time_sec: 0,
+            },
+        finish: None,
+        }
+    }
+
+    fn finish_cfg() -> EngineConfig {
+        serde_json::from_value(serde_json::json!({
+            "time_budget_sec": 12,
+            "prng_seed": 1234,
+            "poly_simpl_tolerance": null,
+        }))
+        .unwrap()
+    }
+
+    fn silent() -> EventSink {
+        Arc::new(|_: &str| {})
+    }
+
+    #[test]
+    fn finish_left_reduces_x_max() {
+        let inst = square_instance(4);
+        let mut run = run_with(spread_layout(), DirBias::LeftFirst);
+        let started = Instant::now();
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+            .expect("la finition doit s'appliquer (une tôle, 4 pièces, 16 % de remplissage)");
+        assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
+        let before = rep["before"]["xMax"].as_f64().unwrap();
+        let after = rep["after"]["xMax"].as_f64().unwrap();
+        assert!(
+            after < before - 1.0,
+            "left : xMax {after} pas réduit depuis {before}"
+        );
+        // Une bande −X : au plus deux colonnes de 40 mm.
+        assert!(after <= 2.0 * SIDE as f64 + 1.0, "left : xMax {after} n'est pas une bande");
+        assert_eq!(run.solution.layouts[0].placed_items.len(), 4, "pièces perdues");
+    }
+
+    #[test]
+    fn finish_bottom_reduces_y_max() {
+        let inst = square_instance(4);
+        let mut run = run_with(spread_layout(), DirBias::BottomFirst);
+        let started = Instant::now();
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+            .expect("la finition doit s'appliquer");
+        assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
+        let before = rep["before"]["yMax"].as_f64().unwrap();
+        let after = rep["after"]["yMax"].as_f64().unwrap();
+        assert!(
+            after < before - 1.0,
+            "bottom : yMax {after} pas réduit depuis {before}"
+        );
+        assert!(after <= 2.0 * SIDE as f64 + 1.0, "bottom : yMax {after} n'est pas une bande");
+        assert_eq!(run.solution.layouts[0].placed_items.len(), 4, "pièces perdues");
+    }
+
+    /// Piège #6 : sparrow n'a pas de borne dure. Deux pièces qui ne peuvent
+    /// pas tenir côte à côte dans la tôle donnent une bande plus large que la
+    /// tôle — le layout BPP doit être CONSERVÉ, pas remplacé par du hors-tôle.
+    #[test]
+    fn finish_keeps_bpp_when_strip_exceeds_sheet() {
+        let big = 190.0_f32;
+        let inst = ExtBPInstance {
+            name: "finish-overflow".to_owned(),
+            items: vec![BpExtItem {
+                base: jagua_rs::io::ext_repr::ExtItem {
+                    id: 0,
+                    allowed_orientations: Some(vec![0.0]),
+                    shape: ExtShape::SimplePolygon(ExtSPolygon(vec![
+                        (0.0, 0.0),
+                        (big, 0.0),
+                        (big, big),
+                        (0.0, big),
+                        (0.0, 0.0),
+                    ])),
+                    min_quality: None,
+                },
+                demand: 2,
+            }],
+            bins: vec![ExtBin {
+                base: jagua_rs::io::ext_repr::ExtContainer {
+                    id: 0,
+                    shape: ExtShape::SimplePolygon(ExtSPolygon(vec![
+                        (0.0, 0.0),
+                        (SHEET, 0.0),
+                        (SHEET, SHEET),
+                        (0.0, SHEET),
+                        (0.0, 0.0),
+                    ])),
+                    zones: vec![],
+                },
+                cost: 1,
+                stock: 2,
+            }],
+        };
+        let layout = ExtLayout {
+            container_id: 0,
+            placed_items: vec![
+                ExtPlacedItem {
+                    item_id: 0,
+                    transformation: ExtTransformation { rotation: 0.0, translation: (0.0, 0.0) },
+                },
+                ExtPlacedItem {
+                    item_id: 0,
+                    transformation: ExtTransformation { rotation: 0.0, translation: (5.0, 5.0) },
+                },
+            ],
+            density: 0.2,
+        };
+        let before_poses: Vec<(f32, f32)> = layout
+            .placed_items
+            .iter()
+            .map(|p| p.transformation.translation)
+            .collect();
+        let mut run = run_with(layout, DirBias::LeftFirst);
+        let started = Instant::now();
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+            .expect("la finition doit rendre une trace même quand elle renonce");
+        assert_eq!(rep["kept"], "bpp", "hors tôle accepté : {rep}");
+        assert!(
+            !rep["reason"].as_str().unwrap_or("").is_empty(),
+            "une renonciation doit dire pourquoi : {rep}"
+        );
+        let after_poses: Vec<(f32, f32)> = run.solution.layouts[0]
+            .placed_items
+            .iter()
+            .map(|p| p.transformation.translation)
+            .collect();
+        assert_eq!(before_poses, after_poses, "le layout BPP a été modifié malgré le refus");
+    }
+
+    /// `ext_layout_remnant` (formes d'origine, repère externe) doit rendre la
+    /// même valeur que `sa::layout_remnant` (formes internes) — sans
+    /// inflation ni simplification, les deux polygones sont le même.
+    #[test]
+    fn ext_layout_remnant_matches_layout_remnant() {
+        // Une seule tôle remplie à 64 % : la finition ne s'applique pas
+        // (seuil 0,5), `cost.remnant` reste la valeur INTERNE du recuit.
+        let mut instance = square_instance(4);
+        instance.bins[0].stock = 1;
+        instance.items[0].demand = 16; // 16 x 40² = 25 600 / 40 000 = 64 %
+        instance.bins[0].base.shape = ExtShape::SimplePolygon(ExtSPolygon(vec![
+            (0.0, 0.0),
+            (200.0, 0.0),
+            (200.0, 200.0),
+            (0.0, 200.0),
+            (0.0, 0.0),
+        ]));
+        let config: EngineConfig = serde_json::from_value(serde_json::json!({
+            "time_budget_sec": 2,
+            "prng_seed": 5,
+            "n_workers": 1,
+            "biases": ["left"],
+            "poly_simpl_tolerance": null,
+        }))
+        .unwrap();
+        let out = run_bpp_mem(instance.clone(), &config, &silent()).expect("doit résoudre");
+        let alt = &out.alternatives[0];
+        assert!(
+            alt["finish"].is_null(),
+            "la finition ne doit PAS s'appliquer à 64 % de remplissage : {}",
+            alt["finish"]
+        );
+        let internal = alt["cost_detail"]["remnant"].as_f64().unwrap();
+        let sol: ExtBPSolution = serde_json::from_value(alt["solution"].clone()).unwrap();
+        let item_pts: Vec<Vec<(f32, f32)>> = instance
+            .items
+            .iter()
+            .map(|it| shape_points(&it.base.shape))
+            .collect();
+        let external = sol
+            .layouts
+            .iter()
+            .filter_map(|l| {
+                instance
+                    .bins
+                    .iter()
+                    .find(|b| b.base.id == l.container_id)
+                    .map(|b| ext_layout_remnant(b, l, &item_pts))
+            })
+            .fold(0.0_f64, f64::max);
+        assert!(
+            (internal - external).abs() < 2e-3,
+            "remnant interne {internal} vs externe {external}"
+        );
     }
 }
 
@@ -404,6 +1160,18 @@ mod live_frame_tests {
         assert!(!guard.is_empty(), "no layout frame captured (live_events?)");
         let last: serde_json::Value =
             serde_json::from_str(guard.last().unwrap()).unwrap();
+        // Plan « derniere tole » §3.1.7 : sur cette instance (une tole, 3
+        // pieces, 1,5 % de remplissage) la FINITION s'applique — la derniere
+        // frame est la sienne. L'assertion evite que ce verrou devienne
+        // vide si la finition cessait de s'appliquer ici.
+        assert_eq!(
+            last["stage"], "bpp-finish",
+            "la finition doit produire la derniere frame live"
+        );
+        assert_eq!(
+            out.alternatives[0]["finish"]["kept"], "spp",
+            "finition non appliquee : {}", out.alternatives[0]["finish"]
+        );
         let mut frame: Vec<(f32, f32, f32)> = last["items"]
             .as_array()
             .expect("frame items array")

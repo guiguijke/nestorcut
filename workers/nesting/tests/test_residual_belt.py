@@ -71,8 +71,7 @@ def test_belt_restores_when_pass_degrades(monkeypatch):
         return placed
 
     monkeypatch.setattr(R, "_relay_candidates_in_bands", _evil_relay)
-    moved = R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats,
-                                  profile="compact")
+    moved = R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats)
     assert moved == 0
     assert stats.get("residualRolledBack") is True
     assert any("ceinture exacte" in e.get("message", "")
@@ -97,8 +96,7 @@ def test_belt_passes_clean_pass(monkeypatch):
         return moved
 
     monkeypatch.setattr(R, "_relay_candidates_in_bands", _clean_relay)
-    moved = R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats,
-                                  profile="compact")
+    moved = R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats)
     assert stats.get("residualRolledBack") is None
     assert any(pi["transformation"]["translation"] == [700.0, 200.0]
                for l in layouts for pi in l["placed_items"])
@@ -140,8 +138,7 @@ def test_ad1_recv_return_on_donor_validated(monkeypatch):
         return 0
 
     monkeypatch.setattr(R, "_relay_candidates_in_bands", _no_relay)
-    R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats,
-                          profile="compact")
+    R.fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats)
     by_sheet = [[p for p in l["placed_items"]] for l in layouts]
     donor_fans = [p for p in by_sheet[1] if p["item_id"] == 1]
     assert not any(p["transformation"]["translation"] == [216.0, 600.0]

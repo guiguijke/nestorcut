@@ -49,6 +49,13 @@ def layout(pis, container_id=0):
     return {"container_id": container_id, "placed_items": pis}
 
 
+# Plan « derniere tole » 2026-09-09 §3.2 : les classes de test de la
+# COMPACTION -X *dans fill_residual_bands* sont retirees avec elle :
+# TestT10CompactLastSheet, TestProfilesCompactGrid (profils compact/grid)
+# et TestT12PocketFilledFirst. `_compact_last_sheet` reste testee
+# (TestW1W2GenericAcceptance::test_w2..., TestV7..., TestH1...) : elle
+# sert encore a l'alternative GRILLE (core/structure_multi.py).
+
 class TestT1ResidualBands:
     def test_bands_clipped_inset(self):
         bands = residual_bands((2.0, 2.0, 920.0, 920.0), 1000.0, 1000.0, 2.0)
@@ -211,154 +218,6 @@ class TestT6ValidateBatch:
         assert _validate_batch([new], l, BY_ID, 1000.0, 1000.0, 2.0) is False
 
 
-class TestT10CompactLastSheet:
-    """Constat 2026-09-02 « pas optimisé −X » : le moteur BPP ne compacte
-    pas la dernière tôle. La compaction détache les libres et les re-pose
-    en lattice derrière le bloc ancré (hôtes + nichées) — la chute
-    redevient un rectangle unique."""
-
-    def _full_sheet0(self):
-        # 100 hôtes 10×10 → AABB collée aux bords : AUCUNE bande, la tôle
-        # pleine ne peut rien recevoir (les libres restent sur la donneuse).
-        hosts = [pi(0, 52.0 + 100 * gx, 52.0 + 100 * gy)
-                 for gx in range(10) for gy in range(10)]
-        return layout(hosts)
-
-    def test_helices_regrillees_et_libres_compactees(self):
-        # Donneuse : colonne d'hôtes à x=150 + 25 fans dispersées jusqu'à
-        # x=900. v2 : hélices re-grillées en colonnes DEPUIS le bord
-        # gauche, fans re-posées derrière la grille — tout −X, chute
-        # rectangulaire unique.
-        hosts = [pi(0, 150.0, 50.0 + 100 * k) for k in range(10)]
-        free = [pi(1, 500.0 + 60 * (k % 7), 100.0 + 70 * (k // 7))
-                for k in range(25)]
-        layouts = [self._full_sheet0(), layout(hosts + free)]
-
-        n = fill_residual_bands(layouts, ITEMS, BIN, 2.0)
-        assert n >= 25 + 10  # hôtes re-grillés + fans recompactées
-        # Comptes invariants : rien n'a bougé vers la tôle pleine.
-        assert len(layouts[0]["placed_items"]) == 100
-        l1_fans = [p for p in layouts[1]["placed_items"] if p["item_id"] == 1]
-        l1_hosts = [p for p in layouts[1]["placed_items"] if p["item_id"] == 0]
-        assert len(l1_fans) == 25
-        assert len(l1_hosts) == 10
-        # Hélices compactées à gauche (2 colonnes max depuis x≈2+50).
-        for p in l1_hosts:
-            tx = p["transformation"]["translation"][0]
-            assert tx <= 160, f"hôte non re-grillé : tx={tx}"
-        # Fans derrière la grille des hélices, en bloc compact. Borne basse
-        # 100 (et non 155) depuis le fix poches (audit 2026-09-02 F1) : les
-        # fans remplissent D'ABORD la poche de la colonne partielle
-        # d'hélices (x[104,204]) avant la bande droite.
-        for p in l1_fans:
-            tx = p["transformation"]["translation"][0]
-            assert 100 <= tx <= 450, f"fan non compactée : tx={tx}"
-        aabb = layout_aabb(layouts[1], BY_ID)
-        assert aabb[2] <= 500  # chute = rectangle x[500,1000]
-
-    def test_fixture_legal_tout_compacte_sans_chevauchement(self):
-        # Originals LÉGAUX (grille 60 mm, sans contact hôtes) : tout est
-        # re-posé derrière l'ancre, layout final valide par paires.
-        # NB : le chemin « restauration des non-placées » ne peut pas être
-        # atteint avec ce filler simple (la capacité du lattice EST sa
-        # densité max) — il ne se déclenche qu'avec des géométries
-        # imbriquées (Fillx4 réel) : filet de sécurité, pas un objectif.
-        hosts = [pi(0, 152.0, 50.0 + 100 * k) for k in range(10)]
-        free = [pi(1, 300.0 + 60 * gx, 20.0 + 60 * gy)
-                for gx in range(12) for gy in range(16)]
-        layouts = [self._full_sheet0(), layout(hosts + free)]
-
-        n = fill_residual_bands(layouts, ITEMS, BIN, 2.0)
-        assert n >= 192  # fans re-posées + hôtes re-grillés
-        l1_fans = [p for p in layouts[1]["placed_items"] if p["item_id"] == 1]
-        l1_hosts = [p for p in layouts[1]["placed_items"] if p["item_id"] == 0]
-        assert len(l1_fans) == 192
-        assert len(l1_hosts) == 10
-        for p in l1_hosts:
-            assert p["transformation"]["translation"][0] <= 160
-        # Bloc compact derrière la grille des hélices, fini bien avant
-        # x=960. Borne basse ~2 : depuis P1 (audit 2026-09-03) la poche de
-        # la colonne partielle est CLIPPÉE au sommet des colonnes pleines
-        # et la bande haute pleine largeur est remplie la première en
-        # gravité −X — c'est le coin haut-gauche qui était perdu.
-        for p in l1_fans:
-            tx = p["transformation"]["translation"][0]
-            assert 2 <= tx <= 420, f"fan non compactée : tx={tx}"
-        if HAS_SHAPELY:
-            import math as _math
-            from shapely.geometry import Polygon
-            polys = []
-            for p in layouts[1]["placed_items"]:
-                it = BY_ID[p["item_id"]]
-                tr = p["transformation"]
-                r = _math.radians(tr["rotation"])
-                c, si = _math.cos(r), _math.sin(r)
-                pts = [(tr["translation"][0] + c * x - si * y,
-                        tr["translation"][1] + si * x + c * y)
-                       for x, y in it["coords"]]
-                polys.append(Polygon(pts))
-            # Paires impliquant une FAN uniquement : les hôtes se
-            # touchent dans ce fixture (grille 100 mm, artefact local) —
-            # état PRÉEXISTANT que le pass ne rejuge pas.
-            ids = [p["item_id"] for p in layouts[1]["placed_items"]]
-            for i in range(len(polys)):
-                for j in range(i + 1, len(polys)):
-                    if ids[i] == 0 and ids[j] == 0:
-                        continue
-                    assert polys[i].distance(polys[j]) >= 2.0 - 0.05,                         f"chevauchement {i}-{j}"
-
-
-class TestProfilesCompactGrid:
-    """Plan 2026-09-05 §2.2a : le profil 'compact' ne re-grille JAMAIS les
-    hélices — les hôtes de TOUTES les tôles gardent leur pose moteur (seules
-    les libres bougent, derrière l'ancre) ; le profil 'grid' (défaut,
-    comportement historique) re-grille la donneuse en colonnes depuis −X.
-    Verrou du tour : profil compact → poses d'hôtes BIT-IDENTIQUES."""
-
-    def _layouts(self):
-        hosts = [pi(0, 150.0, 50.0 + 100 * k) for k in range(10)]
-        free = [pi(1, 500.0 + 60 * (k % 7), 100.0 + 70 * (k // 7))
-                for k in range(25)]
-        full = [pi(0, 52.0 + 100 * gx, 52.0 + 100 * gy)
-                for gx in range(10) for gy in range(10)]
-        return [layout(full), layout(hosts + free)]
-
-    def _host_poses(self, l):
-        return sorted((p["transformation"]["translation"][0],
-                       p["transformation"]["translation"][1],
-                       p["transformation"]["rotation"])
-                      for p in l["placed_items"] if p["item_id"] == 0)
-
-    def test_profil_compact_hotes_bit_identiques(self):
-        layouts = self._layouts()
-        before = [self._host_poses(l) for l in layouts]
-        stats = {}
-        fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats,
-                            profile="compact")
-        assert stats["profile"] == "compact"
-        for k, l in enumerate(layouts):
-            assert self._host_poses(l) == before[k],             f"hôte déplacé sur la tôle {k} en profil compact"
-
-    def test_profil_grid_regrille_comme_avant(self):
-        layouts = self._layouts()
-        stats = {}
-        n = fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats,
-                                profile="grid")
-        assert stats["profile"] == "grid"
-        assert n >= 25 + 10  # hélices re-grillées + fans recompactées
-        for p in layouts[1]["placed_items"]:
-            if p["item_id"] == 0:
-                assert p["transformation"]["translation"][0] <= 160
-
-    def test_defaut_grid_retrocompatible(self):
-        # Les appelants existants (sans profil) gardent le comportement
-        # historique — le flip vers 'compact' se fera au branchement §2.2c.
-        layouts = self._layouts()
-        stats = {}
-        fill_residual_bands(layouts, ITEMS, BIN, 2.0, stats=stats)
-        assert stats["profile"] == "grid"
-
-
 class TestT9CornerCovered:
     """Constat 2026-09-01 : donneurs suffisants → la 2e bande, recalculée
     sur l'AABB étendue par la 1re, couvre le coin TR — aucun vide « en
@@ -469,47 +328,6 @@ class TestT11PocketsFromRegrid:
         assert moved == 0 and pockets == []
         for p, b in zip(last["placed_items"], before):
             assert p["transformation"] == b
-
-
-class TestT12PocketFilledFirst:
-    """La compaction remplit la poche de la colonne partielle AVANT la
-    bande droite : des fans vivent dans x[104,204] même quand la bande
-    droite a de la capacité, et le layout reste physiquement valide."""
-
-    @pytest.mark.skipif(not HAS_SHAPELY, reason="shapely")
-    def test_fans_in_pocket_and_valid(self):
-        hosts = [pi(0, 500.0 + 37 * k, 300.0) for k in range(10)]
-        free = [pi(1, 400.0 + 60 * (k % 9), 500.0 + 50 * (k // 9))
-                for k in range(25)]
-        layouts = [layout([pi(0, 52.0 + 100 * gx, 52.0 + 100 * gy)
-                           for gx in range(10) for gy in range(10)]),
-                   layout(hosts + free)]
-        n = fill_residual_bands(layouts, ITEMS, BIN, 2.0)
-        assert n > 0
-        l1_fans = [p for p in layouts[1]["placed_items"] if p["item_id"] == 1]
-        assert len(l1_fans) == 25  # rien ne quitte la donneuse (L0 pleine)
-        in_pocket = [p for p in l1_fans
-                     if 104 <= p["transformation"]["translation"][0] <= 204]
-        assert in_pocket, "la poche de la colonne partielle devrait être remplie"
-        # Validité physique des fans du layout final (hélices incluses :
-        # re-grillées par small_lattice, elles sont valides par paires).
-        from shapely.geometry import Polygon
-        polys = []
-        for p in layouts[1]["placed_items"]:
-            it = BY_ID[p["item_id"]]
-            tr = p["transformation"]
-            r = math.radians(tr["rotation"])
-            c, s = math.cos(r), math.sin(r)
-            pts = [(tr["translation"][0] + c * x - s * y,
-                    tr["translation"][1] + s * x + c * y)
-                   for x, y in it["coords"]]
-            polys.append(Polygon(pts))
-        ids = [p["item_id"] for p in layouts[1]["placed_items"]]
-        for i in range(len(polys)):
-            for j in range(i + 1, len(polys)):
-                if ids[i] == 0 and ids[j] == 0:
-                    continue  # hôtes du fixture dispersés : artefact préexistant
-                assert polys[i].distance(polys[j]) >= 2.0 - 0.05, (i, j)
 
 
 class TestT13SinglePosePocketBatch:

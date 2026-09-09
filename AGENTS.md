@@ -635,19 +635,45 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     Toute évolution d'AABB tournée se verrouille par T9 (coin couvert)
     des DEUX côtés — parité chiffrée moved/AABB JS == Python.
 
-54. **BPP : le moteur ne compacte PAS la dernière tôle (constat
-    2026-09-02 « pas optimisé −X »).** Coût moteur = tôles + remnant,
-    pas la direction par tôle — sans post-pass, la donneuse finit en
-    amas dentelé et la « chute » n'est pas un rectangle.
-    v1 : détacher les libres, re-poser en lattice derrière l'ancre via
-    `_fill_one_batch(free=…)`. v2 (même jour, re-test user) : d'abord
-    RE-GRILLER les hélices en colonnes depuis le bord gauche
-    (`_regrid_helices` — unités rigides hôte+fans nichées, la fan suit
-    en transformation rigide ; une fan nichée vit dans le polygone
-    externe de son hôte → distance aux autres unités = celle des hôtes,
-    lattice-validée) PUIS les libres derrière. Tout-ou-rien par phase ;
-    hôtes des tôles receveuses JAMAIS déplacés (seule la donneuse) ;
-    T3 compte le solde L0↔L1. Uniquement ≥ 2 tôles (contrat T8).
+54. **La direction d'un job BPP est un objectif de SOLVEUR, jamais de
+    post-pass (constat 2026-09-09, plan `docs/PLAN-DERNIERE-TOLE-2026-09-09.md`).**
+    Trois niveaux se cumulaient : (a) le coût du recuit n'a AUCUNE
+    direction — `sa.rs::layout_remnant` est la plus grande bande ou L
+    libre autour de l'AABB, donc il minimise l'AIRE de l'AABB de la tôle
+    partielle, jamais son étendue sur un axe : un bloc carré gagne
+    toujours contre une bande ; (b) le biais du constructif est un
+    multiplicateur faible (`loss = growth × 10 × (1 + 1,5 × Δextent /
+    dimension_tôle)`, soit +5 à +10 %) et le tie-break `BL_X = 10` pousse
+    TOUT vers −X, « balanced » compris ; (c) le post-pass de compaction
+    était **câblé −X** dans les deux langues, ce qui contredisait
+    « bottom » et « balanced » et n'ancrait même pas au coin.
+    Correctif : la tôle la moins remplie de chaque walk est REFAITE dans
+    le moteur, en SPP de la même direction
+    (`bpp/mod.rs::finish_partial_sheet`, natif ≡ wasm), et la compaction
+    −X est retirée de `residual.py` / `residualClient.js`. Garde piège #6
+    (sparrow n'a pas de borne dure) : si la bande SPP dépasse la tôle, le
+    layout BPP est CONSERVÉ (`finish.kept == "bpp"` + raison). Verrous :
+    `bench/lock_last_sheet.py` (natif, trois directions),
+    `bench/seed_demo_dirs.py BENCH_ASSERT=1` (serveur), `determinism_lock.py`.
+54b. **« balanced » de sparrow équilibre les BRAS DE CHUTE, pas le bloc de
+    coin.** `spp.rs::balanced_width` (J-088) résout `uw² + (H−W)·uw − A = 0`
+    pour que chute droite ≈ chute haut SUR TOUTE LA TÔLE : sur une tôle
+    quasi vide (2 à 3 % de matière) cette égalité impose une région LARGE
+    ET PLATE (mesuré : x_max 1755 sur une tôle de 3000, le pire des trois
+    au critère « min de max(x/W, y/H) »). Et un solveur SPP minimise
+    toujours la largeur : on ne peut pas lui DEMANDER un bloc large. Le
+    bloc de coin s'obtient en contraignant l'AUTRE axe — bande de hauteur
+    cible `y = sqrt(aire_utilisée · H / W)` puis minimisation de la
+    largeur dedans (le flux « left »). C'est ce que fait
+    `finish_partial_sheet` pour la classe balanced.
+54c. **Compaction −X (historique, conservée pour l'alternative GRILLE).**
+    `_compact_last_sheet` / `_regrid_helices` restent utilisées par
+    `core/structure_multi.py` et `structureMultiClient.js` : détacher les
+    libres, RE-GRILLER les hélices en colonnes depuis le bord gauche
+    (unités rigides hôte + fans nichées — une fan nichée vit dans le
+    polygone externe de son hôte, donc distance aux autres unités =
+    celle des hôtes, lattice-validée) PUIS les libres derrière.
+    Tout-ou-rien par phase ; hôtes des tôles receveuses JAMAIS déplacés.
     Piège associé : la couverture tôle se teste en BORNES ±ε sur anneau
     BRUT — `covers` strict refuse le simplify (sommet plongé de ~0,05
     sous un bord touché) ET le bruit flottant du lattice calé au bord

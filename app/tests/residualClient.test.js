@@ -31,6 +31,13 @@ const pi = (itemId, tx, ty, rot = 0) => ({
 })
 const layout = (pis, containerId = 0) => ({ container_id: containerId, placed_items: pis })
 
+// Plan « derniere tole » 2026-09-09 §3.2 : les tests de la COMPACTION
+// -X *a l'interieur de fillResidualBands* sont retires avec elle (T10 :
+// « helices re-grillees depuis la gauche », « profil compact : poses
+// moteur bit-identiques » ; T12 : « poche remplie avant la bande
+// droite »). `compactLastSheet` reste testee (V7, W1/W2, rollback A2) :
+// structureMultiClient.js l'utilise pour l'alternative GRILLE.
+
 describe('residualBands — miroir residual.py (T1)', () => {
     it('4 côtés clippés à l\'AABB + coin TR, inset space, pas de L, pas de pleine tôle', () => {
         const bands = residualBands([2, 2, 920, 920], 1000, 1000, 2)
@@ -97,80 +104,6 @@ describe('smallLattice dans une bande de 79 mm (T2)', () => {
                 expect(ringDist(rings[i], rings[j])).toBeGreaterThanOrEqual(2 - 1e-6)
             }
         }
-    })
-})
-
-describe('fillResidualBands — compaction de la dernière tôle (T10, miroir test_residual.py)', () => {
-    it("hélices re-grillées depuis la gauche + libres compactées derrière (v2, constat 2026-09-02)", () => {
-        // Tôle 0 pleine (AABB collée aux bords → aucune bande) ; donneuse =
-        // colonne d'hôtes à x=150 + 25 fans dispersées jusqu'à x=880.
-        // v2 : hélices re-grillées en colonnes DEPUIS le bord gauche,
-        // fans derrière la grille — tout −X, chute rectangulaire unique.
-        const hosts0 = []
-        for (let gx = 0; gx < 10; gx++) {
-            for (let gy = 0; gy < 10; gy++) hosts0.push(pi(0, 50 + 100 * gx, 50 + 100 * gy))
-        }
-        const hosts1 = []
-        for (let k = 0; k < 10; k++) hosts1.push(pi(0, 150, 50 + 100 * k))
-        const free = []
-        for (let k = 0; k < 25; k++) {
-            free.push(pi(1, 500 + 60 * (k % 7), 100 + 70 * Math.floor(k / 7)))
-        }
-        const layouts = [layout(hosts0), layout([...hosts1, ...free])]
-
-        const n = fillResidualBands(PARTS, layouts, 2, payload)
-        expect(n).toBeGreaterThanOrEqual(35) // hôtes re-grillés + fans
-        expect(layouts[0].placed_items).toHaveLength(100)
-        const l1Fans = layouts[1].placed_items.filter((p) => p.item_id === 1)
-        const l1Hosts = layouts[1].placed_items.filter((p) => p.item_id === 0)
-        expect(l1Fans).toHaveLength(25)
-        expect(l1Hosts).toHaveLength(10)
-        for (const p of l1Hosts) {
-            expect(p.transformation.translation[0]).toBeLessThanOrEqual(160)
-        }
-        // Borne basse 100 (et non 155) depuis le fix poches (audit
-        // 2026-09-02 F1) : les fans remplissent D'ABORD la poche de la
-        // colonne partielle d'hélices (x[104,204]) avant la bande droite.
-        for (const p of l1Fans) {
-            const tx = p.transformation.translation[0]
-            expect(tx).toBeGreaterThanOrEqual(100)
-            expect(tx).toBeLessThanOrEqual(450)
-        }
-        const aabb = layoutAabb(layouts[1], new Map(PARTS.map((p) => [String(p.id), p])))
-        expect(aabb[2]).toBeLessThanOrEqual(500)
-    })
-
-    it("profil 'compact' (§2.2a) : les hôtes gardent leur pose moteur BIT-identique", () => {
-        // Même fixture que le test précédent, profile='compact' : seules
-        // les libres bougent — JAMAIS de re-grille des hélices (l'alternative
-        // « Compaction » est homogène sur toutes ses tôles).
-        const hosts0 = []
-        for (let gx = 0; gx < 10; gx++) {
-            for (let gy = 0; gy < 10; gy++) hosts0.push(pi(0, 50 + 100 * gx, 50 + 100 * gy))
-        }
-        const hosts1 = []
-        for (let k = 0; k < 10; k++) hosts1.push(pi(0, 150, 50 + 100 * k))
-        const free = []
-        for (let k = 0; k < 25; k++) {
-            free.push(pi(1, 500 + 60 * (k % 7), 100 + 70 * Math.floor(k / 7)))
-        }
-        const layouts = [layout(hosts0), layout([...hosts1, ...free])]
-        const hostPoses = (l) => l.placed_items
-            .filter((p) => p.item_id === 0)
-            .map((p) => [p.transformation.translation[0], p.transformation.translation[1], p.transformation.rotation])
-            .sort()
-        const before = layouts.map(hostPoses)
-
-        const stats = {}
-        fillResidualBands(PARTS, layouts, 2, payload, stats, 'compact')
-        expect(stats.profile).toBe('compact')
-        layouts.forEach((l, k) => {
-            expect(hostPoses(l)).toEqual(before[k])
-        })
-        // Profil par défaut (rétrocompat) : grid.
-        const stats2 = {}
-        fillResidualBands(PARTS, layouts, 2, payload, stats2)
-        expect(stats2.profile).toBe('grid')
     })
 })
 
@@ -335,28 +268,6 @@ describe('regridHelices — poches des colonnes partielles (T11)', () => {
         last.placed_items.forEach((p, i) => {
             expect(p.transformation).toEqual(before[i])
         })
-    })
-})
-
-describe('compaction — poche remplie avant la bande droite (T12)', () => {
-    it('des fans vivent dans la poche x[104,204] et le layout reste intact', () => {
-        const hosts0 = []
-        for (let gx = 0; gx < 10; gx++) for (let gy = 0; gy < 10; gy++) hosts0.push(pi(0, 50 + 100 * gx, 50 + 100 * gy))
-        const hosts1 = []
-        for (let k = 0; k < 10; k++) hosts1.push(pi(0, 500, 300 + 37 * k))
-        const free = []
-        for (let k = 0; k < 25; k++) free.push(pi(1, 400 + 60 * (k % 9), 500 + 50 * Math.floor(k / 9)))
-        const layouts = [layout(hosts0), layout([...hosts1, ...free])]
-
-        const n = fillResidualBands(PARTS, layouts, 2, payload)
-        expect(n).toBeGreaterThan(0)
-        const l1Fans = layouts[1].placed_items.filter((p) => p.item_id === 1)
-        expect(l1Fans).toHaveLength(25)
-        const inPocket = l1Fans.filter((p) => {
-            const tx = p.transformation.translation[0]
-            return tx >= 104 && tx <= 204
-        })
-        expect(inPocket.length).toBeGreaterThan(0)
     })
 })
 

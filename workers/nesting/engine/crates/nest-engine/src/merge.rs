@@ -60,6 +60,10 @@ pub struct BpRun {
     pub cost: Cost,
     pub iterations: usize,
     pub solution: ExtBPSolution,
+    /// Trace de la finition de la tôle partielle (plan « dernière tôle »
+    /// §3.1). Champ ADDITIF : absent = pas de finition (runs wasm anciens,
+    /// fixtures). Jamais lu par la fusion — seulement transporté.
+    pub finish: Option<serde_json::Value>,
 }
 
 /// Mode de fusion SPP : flux legacy (tri qualité à plat, sans classe) ou
@@ -363,6 +367,8 @@ pub fn merge_bp_runs(
             "density": output.solution.density,
             "layout_count": output.solution.layouts.len(),
             "iterations": run.iterations,
+            // Additif : trace de la finition de la tôle partielle.
+            "finish": run.finish,
             "solution": output.solution,
         }));
         if alternatives.len() >= n_alternatives {
@@ -641,6 +647,8 @@ fn merge_bp_json(
             cost,
             iterations,
             solution,
+            // Champ additif : absent des runs produits avant ce lot.
+            finish: r.get("finish").cloned().filter(|v| !v.is_null()),
         });
     }
 
@@ -764,6 +772,7 @@ mod tests {
                 remnant,
                 falkenauer,
             },
+            finish: None,
             iterations: seed as usize,
             solution: ExtBPSolution {
                 cost: bin_cost,

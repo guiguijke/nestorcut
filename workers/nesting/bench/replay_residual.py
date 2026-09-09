@@ -115,7 +115,7 @@ def main():
     print("[3] après hole-fill :", _dirty_pairs(layouts, items_by_id) or "propre")
     stats = {}
     fill_residual_bands(layouts, items, bin_dims, space, stats=stats,
-                        profile="compact")
+                        )
     dirty = _dirty_pairs(layouts, items_by_id)
     print("[4] après résiduel  :", dirty or "propre")
     print("\npostPass rejeu :", {k: v for k, v in stats.items()

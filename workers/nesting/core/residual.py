@@ -1298,8 +1298,7 @@ def _exact_overlap_area(layouts, items_by_id, only=None):
     return total
 
 
-def fill_residual_bands(layouts, input_items, bin_dims, space, stats=None,
-                        profile="grid"):
+def fill_residual_bands(layouts, input_items, bin_dims, space, stats=None):
     """Mutate layouts in place. Retourne le nombre de pièces déplacées
     (0 = no-op). Voir le module docstring pour le contrat complet.
 
@@ -1307,22 +1306,26 @@ def fill_residual_bands(layouts, input_items, bin_dims, space, stats=None,
     residualMoved / residualRounds / compactRollback / errors — le
     post-pass ne peut plus échouer SILENCIEUSEMENT (rollback muet,
     `except Exception` sans trace). Miroir JS : fillResidualBands(payload,
-    stats, profile).
+    stats).
 
-    Plan 2026-09-05 §2.2a : `profile` ∈ {'compact', 'grid'} —
-    'compact' = passe fusionnée + compaction donneuse SANS re-grille des
-    hélices (les hôtes gardent leur pose moteur, l'alternative
-    « Compaction » est homogène sur toutes ses tôles) ; 'grid' (défaut,
-    comportement historique) = re-grille de la dernière tôle en colonnes
-    depuis −X. Le profil est exposé dans stats['profile'] (→
-    report.postPass.profile)."""
+    Plan « dernière tôle » 2026-09-09 §3.2 : la COMPACTION −X de la tôle
+    donneuse est RETIRÉE de ce pass. Elle était câblée sur −X quelle que
+    soit la direction demandée — elle contredisait « bottom » et
+    « balanced » et n'ancrait même pas au coin. La direction est désormais
+    un objectif de SOLVEUR : le moteur refait la tôle partielle en SPP de
+    la même direction (`bpp/mod.rs::finish_partial_sheet`). Il ne reste ici
+    que le remplissage inter-tôles. Le paramètre `profile` et
+    `stats['profile']`, qui ne pilotaient que la re-grille de cette
+    compaction, disparaissent avec.
+
+    `_compact_last_sheet` n'est PAS supprimée : `core/structure_multi.py`
+    l'appelle pour construire l'alternative GRILLE (hors périmètre du lot)."""
     if stats is None:
         stats = {}
     stats.setdefault("residualMoved", 0)
     stats.setdefault("residualRounds", 0)
     stats.setdefault("compactRollback", False)
     stats.setdefault("errors", [])
-    stats["profile"] = profile if profile in ("compact", "grid") else "grid"
     if not layouts or len(layouts) < 2:
         return 0
     items_by_id = {i["id"]: i for i in input_items}
@@ -1395,23 +1398,8 @@ def fill_residual_bands(layouts, input_items, bin_dims, space, stats=None,
                                      "frontX": _fronts(layouts)}
         # Tôle source entièrement vidée de ses libres : on la retire.
         layouts[:] = [l for l in layouts if l.get("placed_items")]
-        # Compaction de la tôle la moins remplie (la donneuse) — le moteur
-        # BPP ne la compacte pas dans la direction d'optimisation.
-        # Uniquement s'il reste PLUSIEURS tôles (contrat T8). Miroir JS :
-        # residualClient._compactLastSheet. §2.2a : profil 'compact' →
-        # PAS de re-grille des hélices (pose moteur conservée).
-        if len(layouts) >= 2:
-            ratios = [_fill_ratio(l, items_by_id, bin_dims) for l in layouts]
-            last = min(range(len(layouts)), key=lambda i: (ratios[i], -i))
-            _n_compact = _compact_last_sheet(layouts, last, items_by_id,
-                                             bin_dims, space, stats=stats,
-                                             regrid=(stats.get("profile") == "grid"))
-            moved += _n_compact
-            stats["perPass"]["compact"] = {
-                "moved": _n_compact,
-                "rolledBack": bool(stats.get("compactRollback")),
-                "frontX": _fronts(layouts),
-            }
+        # Plan « dernière tôle » §3.2 : plus de compaction −X ici. La tôle
+        # partielle est finie DANS LE MOTEUR, dans la direction demandée.
         import time as _belt_t
         _belt_t0 = _belt_t.monotonic()
         _after_tuples = _tuples(layouts)

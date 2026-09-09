@@ -1382,15 +1382,17 @@ export function exactOverlapArea(layouts, partsById, watchedTuples = null) {
     return total
 }
 
-export function fillResidualBands(parts, layouts, space, payload, stats = null, profile = 'grid') {
+export function fillResidualBands(parts, layouts, space, payload, stats = null) {
     // A5 (audit 2026-09-03) : `stats` (additif) reçoit residualMoved /
     // residualRounds / compactRollback / errors — le post-pass ne peut
     // plus échouer SILENCIEUSEMENT (miroir fill_residual_bands Python).
-    // §2.2a : profile 'compact' = compaction donneuse SANS re-grille des
-    // hélices (pose moteur conservée — alternative « Compaction »
-    // homogène) ; 'grid' (défaut) = comportement historique.
+    //
+    // Plan « dernière tôle » 2026-09-09 §3.2 : la COMPACTION −X de la tôle
+    // donneuse est RETIRÉE de ce pass (elle était câblée −X quelle que soit
+    // la direction demandée). La tôle partielle est finie DANS LE MOTEUR,
+    // en SPP de la même direction. `compactLastSheet` reste exportée :
+    // structureMultiClient.js l'utilise pour l'alternative GRILLE.
     if (!stats) stats = {}
-    stats.profile = (profile === 'compact') ? 'compact' : 'grid'
     if (!layouts || layouts.length < 2) return 0
     const partsById = new Map(parts.map((p) => [String(p.id), p]))
     for (const l of layouts) {
@@ -1443,19 +1445,8 @@ export function fillResidualBands(parts, layouts, space, payload, stats = null, 
             layouts.length = 0
             layouts.push(...kept)
         }
-        // Compaction de la tôle la moins remplie (la donneuse) — le moteur
-        // BPP ne la compacte pas dans la direction d'optimisation (constat
-        // user 2026-09-02 « pas optimisé −X »). Uniquement s'il reste
-        // PLUSIEURS tôles (contrat T8). Miroir Python. §2.2a : profil
-        // 'compact' → PAS de re-grille des hélices.
-        if (layouts.length >= 2) {
-            const ratios2 = layouts.map((l) => fillRatio(l, partsById, sheetDimsOf))
-            let last2 = 0
-            for (let i = 1; i < layouts.length; i++) {
-                if (ratios2[i] <= ratios2[last2]) last2 = i
-            }
-            moved += compactLastSheet(layouts, last2, partsById, sheetDimsOf, space, payload, stats, stats.profile === 'grid')
-        }
+        // Plan « dernière tôle » §3.2 : plus de compaction −X ici (miroir
+        // Python). La direction est un objectif de solveur, pas de post-pass.
         // AD5 (L2-quater) : DIFFÉRENTIELLE sur les pièces modifiées —
         // un nouveau chevauchement implique une pièce déplacée/ajoutée.
         const beltT0 = (typeof performance !== 'undefined' ? performance.now() : Date.now())

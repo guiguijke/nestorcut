@@ -479,11 +479,38 @@ const reportBadges = computed(() => {
     }
     return badges
 })
+// Plan « dernière tôle » 2026-09-09 : trace de la FINITION de la tôle
+// partielle (le moteur la refait en SPP de la direction demandée). Elle
+// remplace l'ancienne ligne de compaction −X.
+const activeFinish = computed(() => {
+    const alts = unref(alternatives)
+    return (alts[unref(activeAlt)] || alts[0])?.finish || null
+})
 // C03 : lignes techniques du post-pass (repliées, jamais en badge).
 const postPassLines = computed(() => {
     const pp = unref(activeReport)?.postPass
-    if (!pp) return []
+    const fin = unref(activeFinish)
+    if (!pp && !fin) return []
     const lines = []
+    if (fin && fin.kept === 'spp') {
+        const b = fin.before || {}
+        const a = fin.after || {}
+        const L = (v) => fmtLengthValue(Number(v) || 0)
+        if (fin.bias === 'balanced') {
+            lines.push(t('report.finish.balanced', {
+                bw: L(b.xMax), bh: L(b.yMax), aw: L(a.xMax), ah: L(a.yMax),
+                unit: unref(unitLabel),
+            }))
+        } else {
+            const key = fin.bias === 'bottom' ? 'yMax' : 'xMax'
+            lines.push(t(`report.finish.${fin.bias === 'bottom' ? 'bottom' : 'left'}`, {
+                before: L(b[key]), after: L(a[key]), unit: unref(unitLabel),
+            }))
+        }
+    } else if (fin && fin.kept === 'bpp') {
+        lines.push(t('report.finish.kept', { reason: fin.reason || '' }))
+    }
+    if (!pp) return lines
     if ((pp.residualMoved || 0) > 0 || pp.compactRollback || (pp.errors || []).length) {
         lines.push(t('report.postPass', {
             n: pp.residualMoved || 0,
@@ -494,7 +521,8 @@ const postPassLines = computed(() => {
     return lines
 })
 const hasTechDetails = computed(() => Boolean(
-    unref(activeAltSeed)
+    unref(activeFinish)
+    || unref(activeAltSeed)
     || unref(activeReport)?.iterations
     || unref(activeReport)?.vcores
     || unref(postPassLines).length

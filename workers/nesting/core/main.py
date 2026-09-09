@@ -1696,16 +1696,20 @@ def _nesting_process_impl(doc):
                 {"expandMeta": 0, "holeFillRecovered": 0, "residualMoved": 0,
                  "residualRounds": 0, "compactRollback": False, "errors": []},
             )
-            # §2.2c : l'alternative MOTEUR porte le profil « compact » —
-            # compaction donneuse SANS re-grille des hélices (pose moteur
-            # conservée) : l'alternative « Compaction » est homogène sur
-            # toutes ses tôles (le style « grille » appartient à
-            # l'alternative grille).
+            # Plan « dernière tôle » §3.2 : quand le moteur a FINI la tôle
+            # partielle dans la direction demandée (`finish.kept == "spp"`),
+            # la finition REMPLACE la fusion et la compaction — on ne
+            # repasse pas derrière elle. Sinon : remplissage inter-tôles
+            # seul (la compaction −X est retirée des deux langues).
+            _finish = engine_alt.get("finish") or {}
             _t0 = _pass_t.monotonic()
-            n = fill_residual_bands(sol.get("layouts") or [], input_items,
-                                    bin_dims_engine, space,
-                                    stats=engine_alt["postPass"],
-                                    profile="compact")
+            if _finish.get("kept") == "spp":
+                engine_alt["postPass"]["finishKept"] = "spp"
+                n = 0
+            else:
+                n = fill_residual_bands(sol.get("layouts") or [], input_items,
+                                        bin_dims_engine, space,
+                                        stats=engine_alt["postPass"])
             _tk = _pass_timings.setdefault(engine_alt.get("bias") or "alt", {})
             _tk["residualMs"] = int((_pass_t.monotonic() - _t0) * 1000)
             if n:

@@ -975,11 +975,15 @@ export async function buildAlternativeArtifacts(result, payload) {
             // D-MOT-19 : bandes résiduelles BPP (miroir core/residual.py) —
             // APRÈS hole-fill (les trous sont de meilleurs emplacements),
             // AVANT SVG/rapport/DXF sinon le livrable ignore le pass.
-            // §2.2c : profil « compact » pour l'alternative MOTEUR (pas de
-            // re-grille des hélices — miroir main.py).
-            if (!selfContained && !alt.structural
+            // Plan « dernière tôle » §3.2 : si le moteur a FINI la tôle
+            // partielle dans la direction demandée (`finish.kept === 'spp'`),
+            // la finition remplace fusion et compaction — on ne repasse pas
+            // derrière elle (miroir main.py).
+            const finishKept = (alt.finish && alt.finish.kept) || null
+            if (finishKept === 'spp') postPass.finishKept = 'spp'
+            if (!selfContained && !alt.structural && finishKept !== 'spp'
                 && ((payload?.problem || 'spp') !== 'spp' || layouts.length >= 2)) {
-                fillResidualBands(parts, layouts, space, payload, postPass, 'compact')
+                fillResidualBands(parts, layouts, space, payload, postPass)
                 // A13 (audit 2026-09-03) : le pass résidiel déplace des
                 // libres entre tôles — un trou resté vide sur une tôle sans
                 // libre peut devenir remplissable. Deuxième hole-fill,
