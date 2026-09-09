@@ -476,6 +476,8 @@ try {
                     density: a.density,
                     layoutCount: a.layoutCount,
                     offcut: a.offcut,
+                    // Plan « derniere tole » : trace de la finition.
+                    finish: a.finish || null,
                     report: a.report,
                     dxfNames: (a.dxfs || []).map((d) => d.fileName),
                     dxfSizes: (a.dxfs || []).map((d) => (d.content || '').length),
@@ -512,6 +514,7 @@ try {
             alternatives: (rec?.alternatives || []).map((a) => ({
                 altId: a.altId, strategy: a.strategy, seed: String(a.seed), density: a.density, layoutCount: a.layoutCount,
                 usedSheetShare: a.usedSheetShare, offcut: a.offcut, report: a.report, keys: Object.keys(a),
+                finish: a.finish || null,
                 svgs: a.svgs || [], dxfNames: (a.dxfs || []).map((d) => d.fileName),
             })),
         }
