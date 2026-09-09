@@ -1,14 +1,16 @@
 <template>
     <!-- U0 : statistique — valeur en chiffres tabulaires + libellé. -->
     <div class="ui-stat">
-        <span class="ui-stat__value num">{{ value }}</span>
+        <!-- U3 passe 3 : la valeur accepte un contenu riche (le compteur
+             de coeurs anime de la vue live) ; sans slot, c'est `value`. -->
+        <span class="ui-stat__value num"><slot>{{ value }}</slot></span>
         <span class="ui-stat__label">{{ label }}</span>
     </div>
 </template>
 
 <script setup>
 defineProps({
-    value: { type: [String, Number], required: true },
+    value: { type: [String, Number], default: '' },
     label: { type: String, default: '' },
 })
 </script>

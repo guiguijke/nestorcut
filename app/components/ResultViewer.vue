@@ -44,9 +44,19 @@
                     />
                 </div>
                 <div class="viewer__spacer" />
+                <MainButton
+                    v-if="canZoom && !isFit"
+                    :label="t('result.fitView')"
+                    :size="sizeType.s"
+                    :theme="themeType.secondary"
+                    trackingTag="result_fit_view"
+                    data-testid="viewer-fit"
+                    class="viewer__fit"
+                    @click="fitView"
+                />
                 <UiSegmented
                     v-if="hasColorPreview"
-                    class="viewer__mode view-toggle"
+                    class="viewer__mode"
                     :model-value="viewMode"
                     :options="viewOptions"
                     :label="t('result.colorView') + ' / ' + t('result.dxfView')"
@@ -66,7 +76,18 @@
                     @click="updateFullScreen"
                 />
             </div>
-            <div class="modal__wrapper viewer__stage" data-testid="viewer-stage">
+            <div
+                ref="stageEl"
+                class="modal__wrapper viewer__stage"
+                :class="{ 'viewer__stage--zoomable': canZoom, 'viewer__stage--dragging': dragging }"
+                data-testid="viewer-stage"
+                @wheel="onWheel"
+                @pointerdown="onPointerDown"
+                @pointermove="onPointerMove"
+                @pointerup="onPointerUp"
+                @pointercancel="onPointerUp"
+                @dblclick="fitView"
+            >
                 <LiveNestingView
                     v-if="isInProgress && resultModalData.liveLayout"
                     :result="resultModalData"
@@ -87,6 +108,7 @@
                         :width="previewSheet.w"
                         :height="previewSheet.h"
                         :class="displayClasses"
+                        :style="zoomStyle"
                         class="modal__display modal__svg-preview"
                     />
                     <DxfViewerComponent
@@ -126,6 +148,7 @@
                     :width="previewSheet.w"
                     :height="previewSheet.h"
                     :class="displayClasses"
+                    :style="zoomStyle"
                     class="modal__display modal__svg-preview"
                 />
                 <DxfViewerComponent
@@ -171,6 +194,77 @@ const viewOptions = computed(() => ([
     { value: 'dxf', label: t('result.dxfView') },
 ]))
 const selectViewMode = (mode) => emit('view-mode', mode)
+
+// ---------------------------------------------------------------------------
+// U3 passe 3 : zoom molette + glisser sur l'apercu COULEUR (le mode DXF a
+// deja la navigation de dxf-viewer). Borne x0,5 - x8 ; double-clic ou
+// « Ajuster » remet a plat. Tant qu'on est ajuste, AUCUNE transformation
+// n'est ecrite : le rendu par defaut reste exactement celui d'avant, donc
+// le diff pixel du harnais reste comparable d'un build a l'autre.
+// ---------------------------------------------------------------------------
+const ZOOM_MIN = 0.5
+const ZOOM_MAX = 8
+const zoom = ref(1)
+const panX = ref(0)
+const panY = ref(0)
+const dragging = ref(false)
+const stageEl = ref(null)
+let dragFrom = null
+
+const canZoom = computed(() => Boolean(
+    unref(showColorPreview) && !unref(isHaveError) && !unref(isInProgress),
+))
+const isFit = computed(() => zoom.value === 1 && panX.value === 0 && panY.value === 0)
+const zoomStyle = computed(() => (unref(isFit)
+    ? undefined
+    : { transform: `translate(${panX.value}px, ${panY.value}px) scale(${zoom.value})` }))
+
+const fitView = () => {
+    zoom.value = 1
+    panX.value = 0
+    panY.value = 0
+}
+// Changer d'alternative, de tole ou de mode de vue rend le cadrage
+// precedent sans objet.
+watch([() => unref(activeAlt), () => unref(activePart), () => unref(viewMode)], fitView)
+
+const onWheel = (event) => {
+    if (!unref(canZoom)) return
+    event.preventDefault()
+    const el = stageEl.value
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    // origine de la transformation = centre de la scene
+    const mx = event.clientX - rect.left - rect.width / 2
+    const my = event.clientY - rect.top - rect.height / 2
+    const z0 = zoom.value
+    const z1 = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z0 * Math.exp(-event.deltaY / 400)))
+    if (z1 === z0) return
+    // le point sous le curseur ne bouge pas
+    const u = (mx - panX.value) / z0
+    const v = (my - panY.value) / z0
+    zoom.value = z1
+    panX.value = mx - u * z1
+    panY.value = my - v * z1
+}
+
+const onPointerDown = (event) => {
+    if (!unref(canZoom) || event.button !== 0) return
+    dragging.value = true
+    dragFrom = { x: event.clientX, y: event.clientY, px: panX.value, py: panY.value }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+}
+const onPointerMove = (event) => {
+    if (!dragging.value || !dragFrom) return
+    panX.value = dragFrom.px + (event.clientX - dragFrom.x)
+    panY.value = dragFrom.py + (event.clientY - dragFrom.y)
+}
+const onPointerUp = (event) => {
+    if (!dragging.value) return
+    dragging.value = false
+    dragFrom = null
+    event.currentTarget?.releasePointerCapture?.(event.pointerId)
+}
 const updateFullScreen = () => emit('toggle-fullscreen')
 const downloadLocalSheet = () => emit('download-sheet')
 </script>
@@ -211,7 +305,8 @@ const downloadLocalSheet = () => emit('download-sheet')
         white-space: nowrap;
     }
 
-    &__mode {
+    &__mode,
+    &__fit {
         flex: 0 0 auto;
     }
 
@@ -228,39 +323,19 @@ const downloadLocalSheet = () => emit('download-sheet')
         background-color: var(--fill-tertiary);
         padding: var(--sp-3);
         overflow: hidden;
-    }
-}
-.view-toggle {
-    display: flex;
-    justify-content: center;
-    gap: 6px;
-    margin: 0 auto 10px;
 
-    &__btn {
-        padding: 5px 14px;
-        border-radius: var(--radius);
-        border: 1px solid var(--separator-secondary);
-        background-color: var(--fill-tertiary);
-        color: var(--label-secondary);
-        font-size: var(--fs-12);
-        font-weight: 600;
-        cursor: pointer;
-        transition: border-color 0.3s, background-color 0.3s;
-
-        @media (hover:hover) {
-            &:hover {
-                border-color: var(--accent-primary);
-            }
+        /* U3 passe 3 : molette = zoom, glisser = deplacement. */
+        &--zoomable {
+            cursor: grab;
+            touch-action: none;
         }
 
-        &--active {
-            color: var(--background-primary);
-            background-color: var(--accent-primary);
-            border-color: var(--accent-primary);
+        &--dragging {
+            cursor: grabbing;
+            user-select: none;
         }
     }
 }
-
 .modal {
     &__wrapper {
         position: relative;
@@ -278,7 +353,7 @@ const downloadLocalSheet = () => emit('download-sheet')
     }
 
     &__display {
-        cursor: pointer;
+        cursor: inherit;
     }
 
     // Colored sheet preview (server SVG, per-part colors): keeps its own

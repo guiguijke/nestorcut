@@ -53,6 +53,9 @@ defineEmits(['update:modelValue'])
         color: var(--text-2);
         font-size: var(--fs-13);
         font-weight: 600;
+        /* U3 passe 3 : un segment ne se replie pas sur deux lignes
+           (« Color preview » / « DXF view » dans la barre d'outils). */
+        white-space: nowrap;
         cursor: pointer;
         transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
 

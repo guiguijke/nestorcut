@@ -18,7 +18,7 @@ import { defaultSizeType } from '~~/constants/size.constants';
 import { defaultThemeType } from '~~/constants/theme.constants';
 import { trackEvent } from '~/utils/track';
 
-const { label, icon, target, href, size, theme, isDisable, isLabelShow, isNotClickable, trackingTag } = defineProps({
+const { label, icon, target, href, size, theme, tag, isDisable, isLabelShow, isNotClickable, trackingTag } = defineProps({
     label: {
         type: String,
         default: '',
@@ -68,10 +68,21 @@ const attr = computed(() => {
     const hrefValue = Boolean(unref(href)) ? { href: unref(href) } : {} 
     const targetValue = Boolean(unref(target)) ? { target: unref(target) } : {}
     const titleValue = !unref(isLabelShow)  ? { title: unref(label), 'aria-label': unref(label) } : {}
+    // U3 passe 3 (a11y) : `button--disabled` ne posait QUE
+    // `pointer-events: none` — la souris etait bloquee, mais le bouton
+    // restait dans l'ordre de tabulation, activable au clavier, et n'etait
+    // annonce desactive par aucun lecteur d'ecran. Sur un <a> (pas de
+    // `disabled` valide) on pose aria-disabled + tabindex -1.
+    const disabledValue = unref(isDisable)
+        ? (unref(tag) === 'button'
+            ? { disabled: true, 'aria-disabled': 'true' }
+            : { 'aria-disabled': 'true', tabindex: -1 })
+        : {}
     return {
         ...hrefValue,
         ...targetValue,
         ...titleValue,
+        ...disabledValue,
     }
 })
 const onClick = () => {

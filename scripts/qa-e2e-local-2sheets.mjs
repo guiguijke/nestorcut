@@ -215,8 +215,13 @@ try {
     // mettait 75 s à voir une erreur qui s'affiche en < 1 s. On attend
     // l'un des deux états, et si l'erreur est déjà là on ne perd pas les
     // 15 s de « live early ».
+    // U3 passe 3 : le REFUS de capacite ne passe PAS par `.content__error` —
+    // [slug].vue rend le panneau de leviers a la place (`v-if="localComputeError
+    // && !capacityPanel"`). L'ancienne detection attendait donc 12 minutes sur
+    // un refus deja affiche.
     const early = await Promise.race([
         page.waitForSelector('.content__error', { timeout: 30000 }).then(() => 'error'),
+        page.waitForSelector('[data-testid="capacity-panel"]', { timeout: 30000 }).then(() => 'error'),
         page.waitForSelector('.stage__status', { timeout: 30000 }).then(() => 'running'),
     ]).catch(() => log('WARN: neither error nor stage status within 30s') || 'none')
     log('early state:', early)
@@ -232,10 +237,15 @@ try {
     // ---------- 6. Attendre la fin (item résultat done/failed dans l'aside) ----------
     const t0 = Date.now()
     let outcome = 'timeout'
+    let liveStatsShot = false
     while (Date.now() - t0 < 12 * 60 * 1000) {
         const err = await page.locator('.content__error').allInnerTexts().catch(() => [])
         const errTxt = err.map((s) => s.trim()).filter(Boolean).join(' | ')
         if (errTxt) { outcome = 'page-error: ' + errTxt; break }
+        if (await page.locator('[data-testid="capacity-panel"]').count()) {
+            outcome = 'page-error: capacity panel'
+            break
+        }
         const stageRunning = await page.locator('.stage__status').count()
         const item = page.locator('.results__item').first()
         if (await item.count()) {
@@ -244,6 +254,15 @@ try {
             const doneBtn = await item.locator('.controls__report, .controls__download').count()
             if (failedPh) { outcome = 'result-failed'; break }
             if (!running && doneBtn && !stageRunning) { outcome = 'done'; break }
+        }
+        // U3 passe 3 : planche des statistiques live (temps, densite,
+        // toles, coeurs en UiStat) — prise UNE fois, pendant le calcul.
+        if (!liveStatsShot && await page.locator('[data-testid="live-stats"]').count()) {
+            liveStatsShot = true
+            const live = page.locator('.live').first()
+            await live.screenshot({ path: path.join(OUT, 'u3-live-stats.png'), timeout: 30000 })
+                .then(() => log('screenshot: u3-live-stats.png'))
+                .catch((e) => log('u3-live-stats FAILED (non fatal):', String(e).slice(0, 120)))
         }
         await page.waitForTimeout(3000)
     }
@@ -270,6 +289,11 @@ try {
         if (!/\d/.test(levers.join(' '))) throw new Error('levers carry no numbers: ' + levers.join(' / '))
         if (!addSheetBtn || !retryBtn) throw new Error('missing action buttons')
         await shot('04-capacity-panel.png')
+        // U3 passe 3 : la planche du refus attendue au plan.
+        await page.locator('[data-testid="capacity-panel"]').first()
+            .screenshot({ path: path.join(OUT, 'u3-refus.png') })
+            .then(() => log('screenshot: u3-refus.png'))
+            .catch((e) => log('u3-refus FAILED (non fatal):', String(e).slice(0, 120)))
         // Le clic « Ajouter une tôle » incrémente le compte du 1er format
         // et fait disparaître le bandeau (le refus devient re-essayable).
         const cntBefore = await page.locator('.size__sheet > .input__value, .size__sheet > label.input .input__value').first().inputValue()
@@ -295,7 +319,9 @@ try {
     await page.waitForTimeout(1500)
     await shot('04-modal-color.png')
 
-    const info = await page.locator('.modal__info .info__label').allInnerTexts()
+    // U3 passe 3 : « toutes les pieces sont placees » est un badge d'etat
+    // dans l'en-tete du rapport, plus une phrase centree orpheline.
+    const info = await page.locator('[data-testid="result-state"]').allInnerTexts()
     const badges = await page.locator('[data-testid="report-badge"]').allInnerTexts()
     const badgeClasses = await page.locator('[data-testid="report-badge"]').evaluateAll(
         (els) => els.map((e) => e.className),
@@ -314,6 +340,59 @@ try {
     }
     log('REPORT', JSON.stringify(report, null, 1))
     fs.writeFileSync(path.join(OUT, 'modal-report.json'), JSON.stringify(report, null, 1))
+
+    // ---------- 7a-bis. U3 passe 3 : zoom molette, glisser, « Ajuster » ----
+    // Borne x0,5 - x8 ; tant qu'on est ajuste AUCUNE transformation n'est
+    // ecrite (le rendu par defaut ne bouge pas d'un pixel).
+    const zoom = await page.evaluate(async () => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+        const stage = document.querySelector('[data-testid="viewer-stage"]')
+        const img = stage && stage.querySelector('.modal__svg-preview')
+        if (!stage || !img) return { skipped: 'pas d apercu couleur' }
+        const scaleOf = () => {
+            const m = new DOMMatrixReadOnly(getComputedStyle(img).transform)
+            return { a: Math.round(m.a * 1000) / 1000, e: Math.round(m.e), f: Math.round(m.f) }
+        }
+        const r = stage.getBoundingClientRect()
+        const cx = r.left + r.width / 2
+        const cy = r.top + r.height / 2
+        const idle = getComputedStyle(img).transform
+        const wheel = (dy) => stage.dispatchEvent(new WheelEvent('wheel', {
+            deltaY: dy, clientX: cx, clientY: cy, bubbles: true, cancelable: true,
+        }))
+        for (let i = 0; i < 6; i++) wheel(-400)
+        await sleep(150)
+        const zoomedIn = scaleOf()
+        for (let i = 0; i < 40; i++) wheel(-400)   // butee haute
+        await sleep(150)
+        const maxed = scaleOf()
+        // glisser : 120 px vers la droite, 40 vers le bas
+        stage.dispatchEvent(new PointerEvent('pointerdown', { button: 0, clientX: cx, clientY: cy, bubbles: true, pointerId: 1 }))
+        stage.dispatchEvent(new PointerEvent('pointermove', { clientX: cx + 120, clientY: cy + 40, bubbles: true, pointerId: 1 }))
+        stage.dispatchEvent(new PointerEvent('pointerup', { clientX: cx + 120, clientY: cy + 40, bubbles: true, pointerId: 1 }))
+        await sleep(150)
+        const dragged = scaleOf()
+        for (let i = 0; i < 60; i++) wheel(400)    // butee basse
+        await sleep(150)
+        const minned = scaleOf()
+        return {
+            transformAuRepos: idle,
+            apres6Crans: zoomedIn,
+            buteeHaute: maxed,
+            apresGlisser: dragged,
+            buteeBasse: minned,
+            boutonAjuster: Boolean(document.querySelector('[data-testid="viewer-fit"]')),
+        }
+    })
+    if (!zoom.skipped) {
+        await page.locator('[data-testid="viewer-fit"]').click()
+        await page.waitForTimeout(300)
+        zoom.transformApresAjuster = await page.evaluate(
+            () => getComputedStyle(document.querySelector('.modal__svg-preview')).transform)
+        zoom.boutonAjusterApres = await page.locator('[data-testid="viewer-fit"]').count()
+    }
+    log('ZOOM:', JSON.stringify(zoom))
+    fs.writeFileSync(path.join(OUT, 'zoom.json'), JSON.stringify(zoom, null, 1))
 
     // Vue DXF (toggle) + screenshot
     const dxfToggle = page.locator('[data-testid="view-mode-dxf"]').first()
@@ -340,8 +419,16 @@ try {
         const nextBtn = page.locator('[data-testid="sheet-next"]').first()
         for (let s = 1; s < 8; s++) {
             if (!(await nextBtn.count())) break
-            if (await nextBtn.isDisabled().catch(() => true)) break
-            await nextBtn.click().catch(() => {})
+            // MainButton marquait « desactive » par une CLASSE seulement :
+            // isDisabled() rendait false et chaque clic partait en timeout
+            // d'actionnabilite (30 s perdues et une capture en double par
+            // tole inexistante). L'attribut est desormais pose (U3 passe 3),
+            // on lit les deux.
+            const off = await nextBtn.evaluate(
+                (el) => el.disabled === true || el.classList.contains('button--disabled'),
+            ).catch(() => true)
+            if (off) break
+            await nextBtn.click({ timeout: 5000 }).catch((e) => log('sheet-next click:', String(e).slice(0, 80)))
             await page.waitForTimeout(600)
             await shot(`06-alt${a}-sheet${s + 1}.png`)
         }
@@ -495,6 +582,24 @@ try {
         }
     })
     log('MODAL STATE:', JSON.stringify(modalState))
+    // U3 passe 3 : preuve chiffree qu'AUCUNE colonne n'est rognee et qu'il
+    // n'y a pas de defilement horizontal cache dans le volet rapport.
+    const tableFit = await page.evaluate(() => {
+        const wrap = document.querySelector('.report__table-wrap')
+        const table = wrap?.querySelector('.report__table')
+        if (!wrap || !table) return null
+        const heads = [...table.querySelectorAll('thead th')]
+            .filter((th) => getComputedStyle(th).display !== 'none')
+            .map((th) => th.textContent.trim())
+        return {
+            wrapClientWidth: Math.round(wrap.clientWidth),
+            tableScrollWidth: Math.round(table.scrollWidth),
+            overflowPx: Math.round(table.scrollWidth - wrap.clientWidth),
+            visibleColumns: heads,
+        }
+    })
+    log('TABLE FIT:', JSON.stringify(tableFit))
+    fs.writeFileSync(path.join(OUT, 'table-fit.json'), JSON.stringify(tableFit, null, 1))
     // U3 passe 1 : 06-modal-final.png doit etre REPRODUCTIBLE. Le clic sur
     // le bouton de telechargement ci-dessus le focalise, et le navigateur
     // fait defiler .modal-body (1071 px de contenu pour 940 px de hauteur)

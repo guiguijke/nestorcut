@@ -341,6 +341,27 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     affiche « NetworkError when attempting to fetch resource » (l'aperçu
     SVG data: continue de marcher). Constat prod 2026-08-22.
 
+24d. **`app/assets/scss/global.scss` N'EST PAS une feuille globale** :
+    vite l'injecte (`additionalData`, nuxt.config) en tête de CHAQUE bloc
+    `<style lang="scss" scoped>`, et le compilateur SFC suffixe le dernier
+    sélecteur de chaque règle avec l'attribut de portée. `.main` y survit
+    (l'élément porte l'attribut — 94 `.main[data-v-…]` dans le CSS bâti),
+    `body`/`html` non : la règle devient `body[data-v-…]`, morte. La
+    conséquence a vécu en prod jusqu'au 2026-09-09 : la police du corps
+    n'était posée que sur `.main`, or `DialogWrapper` téléporte vers
+    `<body>` — TOUS les dialogues (résultat, newsletter, suppression)
+    s'affichaient en **serif par défaut**. Toute règle qui doit porter sur
+    `body`/`html` va dans `app/assets/css/main.css` (seule feuille
+    réellement globale). Verrou : `font-family` calculée sur `.modal-body`.
+24e. **« Désactivé » par une CLASSE n'est pas désactivé** : `MainButton`
+    ne posait que `button--disabled` (`pointer-events: none`) — la souris
+    était bloquée mais le bouton restait tabulable, activable au clavier et
+    annoncé actif par un lecteur d'écran. L'attribut `disabled` (ou
+    `aria-disabled` + `tabindex="-1"` sur un `<a>`) est obligatoire. Effet
+    de bord typique : Playwright `isDisabled()` rend `false`, chaque clic
+    part en timeout d'actionnabilité (30 s) et le harnais capture des états
+    fantômes.
+
 ### Unités (mm canonique + inches)
 25. **mm canonique interne, conversion aux 3 frontières seulement** :
     import DXF (`$INSUNITS` → mm dans `dxf_utils.read_dxf_file`), UI

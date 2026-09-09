@@ -1,0 +1,16 @@
+{
+  "page": "home",
+  "url": "http://localhost:7100/home",
+  "timestamp": "2026-09-09T13:56:01.575Z",
+  "viewport": {
+    "width": 1680,
+    "height": 1000
+  },
+  "counts": {
+    "violations": 0,
+    "seriousOrCritical": 0,
+    "passes": 24,
+    "incomplete": 1
+  },
+  "violations": []
+}

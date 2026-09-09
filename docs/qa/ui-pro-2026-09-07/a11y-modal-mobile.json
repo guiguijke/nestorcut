@@ -1,0 +1,16 @@
+{
+  "page": "modal-mobile",
+  "url": "http://localhost:7100/project/fierce-newton-c94ac8d58771",
+  "timestamp": "2026-09-09T13:56:18.603Z",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "counts": {
+    "violations": 0,
+    "seriousOrCritical": 0,
+    "passes": 29,
+    "incomplete": 1
+  },
+  "violations": []
+}

@@ -113,6 +113,19 @@ const { copyrightYear, discordUrl, githubIssues: supportUrl } = useSiteConfig();
 
 <style lang="scss" scoped>
 .footer {
+    /* AGENTS #21 / #24 : cette surface est TOUJOURS sombre, quel que soit le
+       thème — les jetons de texte du thème clair y descendent à 2,11:1
+       (mesuré par axe). Palette explicite, redéfinie sur le conteneur : tous
+       les descendants héritent sans qu'aucune règle enfant ne bouge. */
+    --text: #f8fbff;
+    --text-2: #c9d1de;
+    --text-3: #a8b0c0;
+    --label-primary: #f8fbff;
+    --label-secondary: #c9d1de;
+    --label-tertiary: #a8b0c0;
+    --accent: #6cb6ff;
+    --accent-primary: #6cb6ff;
+
     padding: 12px 8px;
     background-color: var(--footer-bg);
 
@@ -159,7 +172,8 @@ const { copyrightYear, discordUrl, githubIssues: supportUrl } = useSiteConfig();
         color: var(--main-white);
         display: block;
         font-size: var(--fs-13);
-        opacity: 0.45;
+        /* a11y : 0,45 d'opacité = 4,37:1 sur le fond du pied de page. */
+        opacity: 0.62;
         margin-top: 4px;
 
         @media (min-width: 1199px) {

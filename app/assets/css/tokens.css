@@ -18,9 +18,16 @@
     --border-strong: #b9c2d0; /* bordures interactives (champs) */
     --text: #1a2340;          /* marine — texte principal */
     --text-2: #4a5270;        /* texte secondaire */
-    --text-3: #6d7590;        /* texte tertiaire, placeholders */
-    --accent: #007bff;        /* bleu — actions primaires et sélection */
-    --accent-hover: #0069d9;
+    /* a11y : 4,40:1 sur le fond de page et 4,00:1 sur une carte en retrait
+       — sous 4,5:1. #5f6782 donne 5,40 / 4,90. */
+    --text-3: #5f6782;        /* texte tertiaire, placeholders */
+    /* U3 passe 3 (a11y) : le bleu a été FONCÉ. #007bff donnait 3,98:1 sur
+        blanc et 3,83:1 pour le libellé blanc posé dessus — sous le seuil
+        AA 4,5:1 mesuré par axe (26 nœuds en texte, 8 en bouton primaire).
+        #0069d9 (l'ancien accent-hover) donne 5,22:1 sur blanc et 5,03:1
+        pour le libellé : même bleu, même rôle, lisible. */
+    --accent: #0069d9;        /* bleu — actions primaires et sélection */
+    --accent-hover: #0057b8;
     --on-accent: #ffffff;     /* texte posé sur l'accent */
     --ok: #157036;
     --ok-bg: #e6f4ea;
@@ -86,7 +93,8 @@
     --fill-tertiary: rgba(26, 35, 64, 0.05);
     --label-primary: var(--text);
     --label-secondary: #4a5270;
-    --label-tertiary: #767e9a;
+    /* a11y : #767e9a donnait 3,88:1 (44 nœuds). Aligné sur --text-3. */
+    --label-tertiary: #5f6782;
     --accent-primary: var(--accent);
     --accent-secondary: var(--accent-hover);
     --background-primary: var(--bg);

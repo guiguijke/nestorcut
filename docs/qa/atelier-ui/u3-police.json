@@ -1,0 +1,18 @@
+{
+  "newsletter": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "color": "rgb(26, 35, 64)"
+  },
+  "suppression-projet": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "color": "rgb(26, 35, 64)"
+  },
+  "resultat": {
+    "fontFamily": "Inter, system-ui, -apple-system, sans-serif",
+    "color": "rgb(26, 35, 64)"
+  },
+  "resultat-sans-la-regle": {
+    "fontFamily": "\"Times New Roman\"",
+    "color": "rgb(0, 0, 0)"
+  }
+}

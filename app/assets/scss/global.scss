@@ -1,3 +1,11 @@
+// ATTENTION : ce fichier n'est PAS une feuille globale. Il est injecte par
+// vite (`additionalData`, nuxt.config.js) en tete de chaque bloc
+// <style lang="scss" scoped>, et le compilateur SFC suffixe le dernier
+// selecteur de chaque regle avec l'attribut de portee du composant. Une
+// regle `body { ... }` y devient `body[data-v-...]` : morte. La police du
+// corps est donc posee sur `body` dans app/assets/css/main.css (la seule
+// feuille reellement globale) — c'est ce qui rend les dialogues teleportes
+// lisibles (U3 passe 3).
 .main {
     font-size: var(--fs-13);
     font-family: $font_body;

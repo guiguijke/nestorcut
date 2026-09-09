@@ -1,0 +1,26 @@
+{
+  "trigger": {
+    "tag": "button",
+    "testid": "result-report-btn",
+    "label": "Nesting report",
+    "insideModal": false
+  },
+  "focusAfterOpen": {
+    "tag": "button",
+    "testid": null,
+    "label": "close modal",
+    "insideModal": true
+  },
+  "tabStaysInModal": true,
+  "tabSteps": 40,
+  "shiftTabStaysInModal": true,
+  "shiftTabSteps": 10,
+  "escapeClosesModal": true,
+  "focusAfterClose": {
+    "tag": "button",
+    "testid": "result-report-btn",
+    "label": "Nesting report",
+    "insideModal": false
+  },
+  "focusReturnedToTrigger": true
+}

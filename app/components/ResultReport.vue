@@ -42,6 +42,27 @@
                     <div class="summary__bar-fill" :style="{ width: `${densityPct}%` }" />
                 </div>
             </div>
+            <!-- U3 passe 3 : l'etat de placement etait une phrase centree
+                 orpheline entre l'en-tete et la carte. C'est un badge
+                 d'etat, aligne a gauche, sous la densite. -->
+            <div class="result-report__state" data-testid="result-state">
+                <UiBadge
+                    v-if="resultModalData.requested === resultModalData.placed"
+                    tone="ok"
+                    dot
+                    data-testid="badge-all-placed"
+                >
+                    {{ t('result.allPlaced') }}
+                </UiBadge>
+                <template v-else>
+                    <UiBadge tone="warn" dot data-testid="badge-partial-placed">
+                        {{ t('result.placed', { n: resultModalData.placed }) }}
+                    </UiBadge>
+                    <span class="result-report__state-note">
+                        {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
+                    </span>
+                </template>
+            </div>
         </header>
             <div v-if="isHaveError" class="modal__name modal__info info">
                 <span class="info__label">
@@ -56,25 +77,6 @@
                 <span class="info__label">
                     {{ t('result.placed', { n: resultModalData.placed }) }}
                 </span>
-            </div>
-            <div
-                v-if="!isHaveError"
-                class="modal__info info"
-            >
-                <span
-                    v-if="resultModalData.requested === resultModalData.placed"
-                    class="info__label"
-                >
-                    {{ t('result.allPlaced') }}
-                </span>
-                <template v-else>
-                    <span class="info__label">
-                        {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
-                    </span>
-                    <span class="info__label">
-                        {{ t('result.placed', { n: resultModalData.placed }) }}
-                    </span>
-                </template>
             </div>
             <div
                 v-if="!isHaveError && activeReport"
@@ -105,9 +107,15 @@
                     <span class="report__label">{{ t('report.material') }}</span>
                     <span class="report__value">{{ materialFormats }}</span>
                 </div>
+                <!-- a11y : une zone qui défile doit être atteignable au
+                     clavier (axe « scrollable-region-focusable » en mobile,
+                     ou le tableau n'est jamais lisible sans souris). -->
                 <div
                     v-if="reportSheets.length"
                     class="report__table-wrap"
+                    tabindex="0"
+                    role="region"
+                    :aria-label="t('report.material')"
                 >
                     <table class="report__table">
                         <thead>
@@ -115,8 +123,8 @@
                                 <th>{{ t('report.sheet.num') }}</th>
                                 <th>{{ t('report.sheet.format') }}</th>
                                 <th>{{ t('report.sheet.parts') }}</th>
-                                <th>{{ t('report.sheet.used') }}</th>
-                                <th>{{ t('report.sheet.free') }}</th>
+                                <th class="report__col-area">{{ t('report.sheet.used') }}</th>
+                                <th class="report__col-area">{{ t('report.sheet.free') }}</th>
                                 <th>{{ t('report.sheet.density') }}</th>
                                 <th>{{ t('report.sheet.offcut') }}</th>
                             </tr>
@@ -124,22 +132,31 @@
                         <tbody>
                             <tr v-for="s in reportSheets" :key="s.index" data-testid="report-row">
                                 <td>{{ s.index + 1 }}</td>
-                                <td>{{ fmtLength(s.widthMm) }} × {{ fmtLength(s.heightMm) }}</td>
+                                <td class="report__cell-sheet">
+                                    {{ fmtLengthValue(s.widthMm) }} × {{ fmtLengthValue(s.heightMm) }} {{ unitLabel }}
+                                    <!-- Volet etroit : « Utilise » et « Libre »
+                                         ne sont pas perdus, ils passent en
+                                         ligne secondaire sous le format. -->
+                                    <span class="report__sheet-sub" data-testid="report-row-areas">
+                                        {{ t('report.sheet.used') }} {{ fmtArea(s.partsAreaMm2) }}
+                                        · {{ t('report.sheet.free') }} {{ fmtArea(s.freeAreaMm2) }}
+                                    </span>
+                                </td>
                                 <td>{{ s.partCount }}</td>
-                                <td>
+                                <td class="report__col-area">
                                     <span class="report__area">{{ fmtAreaStacked(s.partsAreaMm2).main }}</span>
                                     <span v-if="fmtAreaStacked(s.partsAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.partsAreaMm2).sub }}</span>
                                 </td>
-                                <td>
+                                <td class="report__col-area">
                                     <span class="report__area">{{ fmtAreaStacked(s.freeAreaMm2).main }}</span>
                                     <span v-if="fmtAreaStacked(s.freeAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.freeAreaMm2).sub }}</span>
                                 </td>
                                 <td>{{ s.densityPct != null ? fmtPercent(s.densityPct) : '—' }}</td>
-                                <td>
+                                <td class="report__cell-offcut">
                                     <template v-if="s.offcut">
                                         {{ fmtLengthValue(s.offcut.widthMm) }} × {{ fmtLengthValue(s.offcut.heightMm) }} {{ unitLabel }}
                                         <span
-                                            class="report__badge"
+                                            class="report__badge report__badge--block"
                                             :class="{ 'report__badge--scrap': !s.offcut.reusable }"
                                         >
                                             {{ s.offcut.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap') }}
@@ -158,87 +175,34 @@
                     <span>{{ t('report.holesFilled', { n: activeReport.holesFilled }) }}</span>
                 </div>
                 <!-- Plan 2026-09-05 §1.2c : verdict unique — un résultat non
-                     découpage n'affiche JAMAIS de badge vert. -->
-                <div v-if="isUnfit" class="report__unfit">
-                    <div class="report__unfit-title">{{ t('report.unfit.title') }}</div>
-                    <div class="report__unfit-detail">
-                        {{ t('report.unfit.detail', {
-                            n: unfitData.overflowMm != null
-                                ? fmtLengthValue(unfitData.overflowMm, unitLabel.value === '"' ? 4 : 2)
-                                : null,
-                            unit: unitLabel,
-                        }) }}
-                    </div>
-                    <ul class="report__unfit-levers">
-                        <li v-if="unfitData.sheetsNeeded">
-                            {{ t('report.unfit.sheetsNeeded', { n: unfitData.sheetsNeeded }) }}
-                        </li>
-                        <li v-if="unfitData.maxParts != null">
-                            {{ t('report.unfit.maxParts', { n: unfitData.maxParts }) }}
-                        </li>
-                        <li v-if="unfitData.maxSpacingMm != null">
-                            {{ t('report.unfit.maxSpacing', { v: unfitData.maxSpacingMm }) }}
-                        </li>
-                    </ul>
-                    <div class="report__unfit-actions">
-                        <MainButton
-                            :label="t('report.unfit.addSheet')"
-                            :size="sizeType.s"
-                            :theme="themeType.primary"
-                            @click="$emit('unfit-add-sheet')"
-                        />
-                        <MainButton
-                            v-if="unfitData.maxSpacingMm != null"
-                            :label="t('report.unfit.reduceSpacing', { v: unfitData.maxSpacingMm })"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            @click="$emit('unfit-reduce-spacing', unfitData.maxSpacingMm)"
-                        />
-                    </div>
-                </div>
-                <!-- Z3 (vérif 2026-09-05) : solution partielle UTILE — le
-                     résultat posé est découpage (pas de rouge), mais
-                     l'utilisateur sait quoi faire du reste : leviers sous le
-                     badge « n pièces non placées ». -->
-                <div
-                    v-if="isPartial && partialHasLevers"
-                    class="report__partial"
+                     découpage n'affiche JAMAIS de badge vert.
+                     U3 passe 3 : les bandeaux maison `report__unfit` /
+                     `report__partial` sont remplacés par `CapacityPanel`,
+                     le composant des leviers chiffrés de la page projet —
+                     mêmes leviers, mêmes actions, une seule implémentation.
+                     Le partiel garde son ton ambre (Z3). -->
+                <CapacityPanel
+                    v-if="isUnfit && capacityPanel"
+                    :panel="capacityPanel"
+                    tone="danger"
+                    :title="t('report.unfit.title')"
+                    :detail="unfitDetail"
+                    :show-retry="false"
+                    data-testid="report-unfit"
+                    @add-sheet="$emit('unfit-add-sheet')"
+                    @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
+                />
+                <CapacityPanel
+                    v-else-if="isPartial && partialHasLevers && capacityPanel"
+                    :panel="capacityPanel"
+                    tone="warn"
+                    :title="t('report.partial.title', { n: partialUnplacedCount })"
+                    :detail="t('report.partial.detail')"
+                    :show-retry="false"
                     data-testid="report-partial"
-                >
-                    <div class="report__partial-title">
-                        {{ t('report.partial.title', {
-                            n: partialUnplacedCount,
-                        }) }}
-                    </div>
-                    <div class="report__partial-detail">{{ t('report.partial.detail') }}</div>
-                    <ul class="report__unfit-levers">
-                        <li v-if="unfitData.sheetsNeeded">
-                            {{ t('report.unfit.sheetsNeeded', { n: unfitData.sheetsNeeded }) }}
-                        </li>
-                        <li v-if="unfitData.maxParts != null">
-                            {{ t('report.unfit.maxParts', { n: unfitData.maxParts }) }}
-                        </li>
-                        <li v-if="unfitData.maxSpacingMm != null">
-                            {{ t('report.unfit.maxSpacing', { v: unfitData.maxSpacingMm }) }}
-                        </li>
-                    </ul>
-                    <div class="report__unfit-actions">
-                        <MainButton
-                            v-if="unfitData.sheetsNeeded"
-                            :label="t('report.unfit.addSheet')"
-                            :size="sizeType.s"
-                            :theme="themeType.primary"
-                            @click="$emit('unfit-add-sheet')"
-                        />
-                        <MainButton
-                            v-if="unfitData.maxSpacingMm != null"
-                            :label="t('report.unfit.reduceSpacing', { v: unfitData.maxSpacingMm })"
-                            :size="sizeType.s"
-                            :theme="themeType.secondary"
-                            @click="$emit('unfit-reduce-spacing', unfitData.maxSpacingMm)"
-                        />
-                    </div>
-                </div>
+                    @add-sheet="$emit('unfit-add-sheet')"
+                    @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
+                />
                 <div class="report__badges" data-testid="report-badges">
                     <span
                         v-for="badge in reportBadges"
@@ -384,6 +348,17 @@ const postPassLines = computed(() => props.d.postPassLines)
 const hasTechDetails = computed(() => props.d.hasTechDetails)
 const discardedCount = computed(() => props.d.discardedCount)
 const currentDxfs = computed(() => props.d.currentDxfs)
+const capacityPanel = computed(() => props.d.capacityPanel)
+// Le detail du refus : le depassement mesure quand on l'a.
+const unfitDetail = computed(() => {
+    const u = unref(unfitData) || {}
+    return t('report.unfit.detail', {
+        n: u.overflowMm != null
+            ? fmtLengthValue(u.overflowMm, unref(unitLabel) === '"' ? 4 : 2)
+            : null,
+        unit: unref(unitLabel),
+    })
+})
 const headlineTitle = computed(() => props.d.headlineTitle)
 const activeStrategyExplain = computed(() => props.d.activeStrategyExplain)
 const name = computed(() => props.d.name)
@@ -419,6 +394,20 @@ defineExpose({ reportEl })
         padding-bottom: var(--sp-2);
         border-bottom: 1px solid var(--separator-secondary);
         text-align: left;
+    }
+
+    /* U3 passe 3 : etat de placement — badge, aligne a gauche. */
+    &__state {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--sp-2);
+        margin-top: var(--sp-2);
+    }
+
+    &__state-note {
+        font-size: var(--fs-12);
+        color: var(--label-tertiary);
     }
 
     /* Le slug etait une ligne morte : c'est un bouton « Copier
@@ -503,48 +492,6 @@ defineExpose({ reportEl })
         background-color: var(--accent-primary);
     }
 }
-.report__unfit {
-    grid-column: 1 / -1;
-    border: 1px solid var(--danger);
-    background: rgba(220, 38, 38, 0.08);
-    border-radius: var(--radius-l);
-    padding: 10px 12px;
-    margin: 6px 0;
-}
-.report__unfit-title {
-    color: var(--danger);
-    font-weight: 600;
-}
-.report__unfit-levers {
-    margin: 6px 0 0 18px;
-    padding: 0;
-}
-.report__unfit-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 8px;
-    flex-wrap: wrap;
-}
-
-/* Z3 (vérif 2026-09-05) : solution partielle — ambre, pas rouge : le
-   résultat posé est utilisable et découpage. */
-.report__partial {
-    grid-column: 1 / -1;
-    border: 1px solid var(--warn);
-    background: rgba(217, 119, 6, 0.08);
-    border-radius: var(--radius-l);
-    padding: 10px 12px;
-    margin: 6px 0;
-}
-.report__partial-title {
-    color: var(--warn);
-    font-weight: 600;
-}
-.report__partial-detail {
-    margin-top: 2px;
-    font-size: var(--fs-12);
-}
-
 .modal {
     &__name {
         display: flex;
@@ -645,8 +592,10 @@ defineExpose({ reportEl })
         border-radius: var(--radius-l);
         font-size: var(--fs-12);
         font-weight: 700;
-        background-color: color-mix(in srgb, var(--system-green, rgb(46, 125, 50)) 12%, transparent);
-        color: var(--system-green, rgb(46, 125, 50));
+        /* a11y : rgb(46,125,50) sur son propre fond teinté = 4,23:1.
+           `--ok` (#157036) donne 5,09:1 — c'est aussi le vert de la charte. */
+        background-color: color-mix(in srgb, var(--ok) 12%, transparent);
+        color: var(--ok);
 
         &--ko {
             background-color: color-mix(in srgb, var(--error-border, rgb(198, 40, 40)) 12%, transparent);
@@ -679,17 +628,43 @@ defineExpose({ reportEl })
         font-size: var(--fs-14);
     }
 
+    /* U3 passe 3 : le tableau s'adapte a la LARGEUR DU VOLET (requete de
+       conteneur), pas a celle de la fenetre. Sous 1200 px de volet il
+       tombe a cinq colonnes — #, Tole, Pieces, Densite, Chute — et
+       « Utilise » / « Libre » passent en ligne secondaire sous le format :
+       rien n'est rogne et il n'y a pas de defilement horizontal cache. */
     &__table-wrap {
+        container-type: inline-size;
         overflow-x: auto;
         margin-bottom: 8px;
     }
 
+    &__col-area {
+        display: none;
+    }
+
+    /* Dans un volet etroit ces deux cellules RESPIRENT sur deux lignes :
+       c'est ce qui fait tenir les cinq colonnes sans rien rogner. */
+    &__sheet-sub {
+        display: block;
+        font-size: var(--fs-12);
+        color: var(--label-tertiary);
+        white-space: normal;
+    }
+
+    &__cell-sheet,
+    &__cell-offcut {
+        white-space: normal;
+        min-width: 92px;
+    }
+
+    &__badge--block {
+        display: inline-block;
+        margin-top: 2px;
+    }
+
     &__table {
         width: 100%;
-        /* U3 passe 2 : dans le volet 1/3 le tableau a 7 colonnes ne tient
-           pas — il DEFILE dans son conteneur (report__table-wrap) au lieu
-           d'etre rogne a droite. */
-        min-width: 620px;
         border-collapse: collapse;
         font-size: var(--fs-13);
         font-variant-numeric: tabular-nums;
@@ -717,6 +692,25 @@ defineExpose({ reportEl })
 
         tbody tr:not(:last-child) td {
             border-bottom: 1px solid var(--fill-tertiary);
+        }
+
+        td {
+            vertical-align: top;
+        }
+    }
+
+    @container (min-width: 1200px) {
+        .report__col-area {
+            display: table-cell;
+        }
+
+        .report__sheet-sub {
+            display: none;
+        }
+
+        .report__badge--block {
+            display: inline;
+            margin-top: 0;
         }
     }
 

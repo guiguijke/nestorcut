@@ -1,6 +1,26 @@
 /* U0 : jetons de design « atelier » — l'unique source des couleurs. */
 @import url('./tokens.css');
 
+/*
+ * U3 passe 3 : la police du corps est posee sur `body`, pas seulement sur
+ * `.main`. `DialogWrapper` teleporte vers <body> : hors de `.main`, TOUT
+ * dialogue (resultat, newsletter, suppression de compte) retombait sur la
+ * police serif par defaut du navigateur.
+ *
+ * Elle ne peut PAS vivre dans app/assets/scss/global.scss : ce fichier est
+ * un PRELUDE de preprocesseur (nuxt.config, vite additionalData) injecte en
+ * tete de chaque bloc <style lang="scss" scoped>, ou le compilateur SFC
+ * suffixe le dernier selecteur de chaque regle. `.main` y survit parce que
+ * l'element porte l'attribut de portee (`.main[data-v-...]`, 94 occurrences
+ * dans le CSS bati) ; `body`, lui, n'est l'element d'aucun composant : la
+ * regle serait ecrite `body[data-v-...]` et ne matcherait jamais.
+ */
+body {
+    font-family: var(--font-body);
+    color: var(--text);
+    line-height: 1.45;
+}
+
 /* Base reset — the design was built on Tailwind's preflight, which was
    removed together with Tailwind in the Nuxt 4 migration. */
 *,

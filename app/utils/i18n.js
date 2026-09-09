@@ -247,6 +247,7 @@ const dict = {
         'nest.capacity.refunded': 'The nesting was not charged.',
         // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
         'results.expired': 'Expired (24 h purge)',
+        'file.quantity': 'Quantity for {name}',
         'files.expired': 'Expired (24 h purge) — re-upload this file to nest it again',
         'files.importFailed': 'Import failed',
         // Régime privacy (création + pastille projet).
@@ -327,6 +328,7 @@ const dict = {
         'live.layouts': 'layouts',
         'live.layoutsTitle': 'Full packing rebuilds tried so far — each one places every part',
         'live.cores': 'cores',
+        'live.elapsed': 'elapsed',
         'live.elapsedTitle': 'Elapsed time',
         'live.score': 'density',
         'live.scoreTitle': 'Sheet utilization of the current best layout',
@@ -507,6 +509,7 @@ const dict = {
         'result.sheetCountOne': '1 sheet',
         'result.copySlug': 'Copy file name',
         'result.copyId': 'Copy identifier',
+        'result.fitView': 'Fit',
         'result.slugCopied': 'Identifier copied',
         'results.cancelling': 'Cancelling…',
 
@@ -949,6 +952,7 @@ const dict = {
         'nest.capacity.refunded': "L'imbrication n'a pas été facturée.",
         // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
         'results.expired': "Expiré (purge 24 h)",
+        'file.quantity': 'Quantité pour {name}',
         'files.expired': "Expiré (purge 24 h) — réimportez ce fichier pour le nester à nouveau",
         'files.importFailed': "Échec de l'import",
         // Régime privacy (création + pastille projet).
@@ -1029,6 +1033,7 @@ const dict = {
         'live.layouts': 'agencements',
         'live.layoutsTitle': "Reconstructions complètes de l'imbrication — chaque essai replace toutes les pièces",
         'live.cores': 'cœurs',
+        'live.elapsed': 'écoulé',
         'live.elapsedTitle': 'Temps écoulé',
         'live.score': 'densité',
         'live.scoreTitle': "Utilisation de la tôle du meilleur agencement actuel",
@@ -1209,6 +1214,7 @@ const dict = {
         'result.sheetCountOne': '1 tôle',
         'result.copySlug': 'Copier le nom de fichier',
         "result.copyId": "Copier l'identifiant",
+        'result.fitView': 'Ajuster',
         'result.slugCopied': 'Identifiant copié',
         'results.cancelling': 'Annulation…',
 

@@ -761,3 +761,125 @@ après-solve 63 ms, CLS 0,0246.
 
 **Pas de déploiement** — attente du GO visuel. Le socle P6 (`485a491`)
 partira avec.
+
+### U3 passe 2 — GO visuel partiel (vérificateur, 09/09, `2c6995b`) ; passe 3 de finition avant déploiement
+
+La structure est la bonne : plein écran, deux volets, le rapport défile et pas le dialogue, onglets en tête, densité en grand chiffre, mobile empilé. Verrous relus (vitest 517, `qa-c02c03` sur `data-testid`, harnais 900/900, après-solve 63 ms). **Un défaut préexistant rendu évident par la planche, et qui touche toute la prod** : le dialogue est rendu dans la police serif par défaut du navigateur. Cause lue : `global.scss` pose `font-family: $font_body` sur `.main` seulement, et `DialogWrapper` téléporte vers `body` — tout dialogue (résultats, newsletter, suppression de compte) sort du périmètre de la police. Décision a11y : **oui, ajouter `@axe-core/playwright` en dépendance de développement** (arbitrage délégué) — c'est le seul moyen de tenir les verrous 0 sérieuse écrits au plan.
+
+**Passe 3 (un commit, GO visuel, puis déploiement app avec le socle P6)** :
+
+1. **Police du dialogue** : `font-family: $font_body` et `color: var(--text)` posés sur `body` dans `global.scss` (la règle `.main` peut rester) ; vérifier sur la modale de résultats, la modale newsletter et le dialogue de suppression ; capture avant / après de la modale.
+2. **UiSegmented** (`ui/UiSegmented.vue`) : `white-space: nowrap` sur les segments — « Color preview / DXF view » se replie sur deux lignes dans la barre d'outils.
+3. **Tableau par tôle** dans le volet rapport : plus de colonne rognée (« 60. »). Sous 1 200 px de volet : colonnes `#`, Tôle, Pièces, Densité, Chute ; « Utilisé » et « Libre » passent en info-bulle ou en ligne secondaire. Aucun défilement horizontal invisible.
+4. **« All parts are placed »** : ligne d'état sous la densité, alignée à gauche, en `UiBadge` succès (vert contour) — pas une phrase centrée orpheline.
+5. **Partiel / refus** : `CapacityPanel` réutilisé dans le volet rapport pour `isUnfit` (leviers chiffrés), à la place du bloc `report__unfit` maison ; verrou : harnais en configuration refus (`QA_EXPECT=refusal`) capture `u3-refus.png`.
+6. **Stats live en `UiStat`** dans l'en-tête de la vue live (temps, densité, layouts, cœurs), plan U2 reporté deux fois — dernière fois.
+7. **Zoom molette + glisser** dans la visionneuse (borné ×0,5 – ×8, double-clic = ajuster) ; « ajuster » dans la barre d'outils.
+8. **a11y** : `npm i -D @axe-core/playwright`, script `scripts/qa-a11y.mjs` (pages : home, projet, modale résultats desktop et mobile, auth) qui écrit `docs/qa/ui-pro-2026-09-07/a11y-{page}.json` ; verrou **0 violation sérieuse ou critique** ; focus piégé, Échap ferme, retour de focus au déclencheur mesurés par le même script sur la modale.
+9. Captures refaites : `u3-modal-clair`, `u3-modal-sombre`, `u3-modal-mobile`, `u3-rapport`, `u3-refus`, `u3-live-stats`. Harnais deux configurations, `qa-c02c03`, `resultQuality.test.js`, md5 des SVG.
+
+Note de méthode : pour la capture prod du badge « Démo », l'agent a créé puis supprimé un compte sur la production. Sans dommage et proprement nettoyé, mais **toute écriture en production hors déploiement se demande avant**, au propriétaire — la règle vaut pour les comptes de test comme pour le reste.
+
+
+#### U3 passe 3 — finition (09/09), les neuf points
+
+Règle de méthode acceptée en tête de passe : **toute écriture en
+production hors déploiement se demande d'abord au propriétaire, comptes de
+test compris.**
+
+| Point | Livré | Preuve |
+|---|---|---|
+| 1. Police du corps | `font-family: var(--font-body)` + `color: var(--text)` + `line-height` posés sur **`body`** | `font-family` calculée sur `.modal-body` : **Inter** pour les trois dialogues (résultat, newsletter, suppression de projet) ; la même règle neutralisée à l'exécution rend `"Times New Roman"` — `docs/qa/atelier-ui/u3-police.json`, captures `u3-police-{avant,apres,newsletter,suppression}.png` |
+| 2. Segments | `white-space: nowrap` sur `.ui-seg__opt` ; la classe morte `.view-toggle` (styles d'avant `UiSegmented`) supprimée | « Color preview / DXF view » sur une ligne, `u3-modal-clair.png` |
+| 3. Tableau par tôle | **requête de conteneur** sur `.report__table-wrap` : cinq colonnes (`#`, Tôle, Pièces, Densité, Chute) sous 1 200 px de **volet**, sept au-delà ; « Utilisé » et « Libre » passent en ligne secondaire sous le format ; format compacté (`1000 × 1000 mm` au lieu de `1000 mm × 1000 mm`) ; cellules format et chute autorisées à respirer sur deux lignes | `TABLE FIT: {"wrapClientWidth":469,"tableScrollWidth":469,"overflowPx":0,"visibleColumns":["#","Sheet","Parts","Density","Offcut"]}` (`table-fit.json`) — **0 px de débordement**, plus aucune colonne rognée |
+| 4. « All parts are placed » | `UiBadge` ton succès, aligné à gauche, sous la densité (`data-testid="result-state"`) ; en partiel, badge `warn` + le décompte demandé | `u3-rapport.png` |
+| 5. Partiel / refus | `CapacityPanel` réutilisé dans le volet rapport, **même modèle** `capacityPanelModel` que la page projet (planchers d'espacement, garde de kerf, « ajouter une tôle » dérivé des réglages courants) ; le composant gagne `tone` (`warn` pour le partiel, Z3), `title`, `detail`, `showRetry` ; les bandeaux maison `report__unfit` / `report__partial` et leurs styles sont supprimés | harnais en configuration refus : `CAPACITY LEVERS: ["About 2 sheets needed…","About 471 parts max…","About 0 mm max spacing…"]`, actions add-sheet + retry, `u3-refus.png` |
+| 6. Stats live | en-tête de `LiveNestingView` en `UiStat` : **écoulé, densité, tôles, cœurs** (le compteur de cœurs animé passe par un `slot` ajouté à `UiStat`) | `u3-live-stats.png` — `15.2s ELAPSED · 55.4% DENSITY · 2 SHEETS · ×4 CORES` |
+| 7. Zoom molette + glisser | sur l'aperçu couleur (le mode DXF a la navigation de `dxf-viewer`), borné ×0,5 – ×8, zoom centré sur le curseur, double-clic ou « Ajuster » remet à plat ; **au repos aucune transformation n'est écrite** | `ZOOM: {"transformAuRepos":"none","buteeHaute":{"a":8},"apresGlisser":{"e":122,"f":46},"buteeBasse":{"a":0.5},"boutonAjuster":true,"transformApresAjuster":"none","boutonAjusterApres":0}` (`zoom.json`) — glisser de 120 × 40 px rendu exactement |
+| 8. a11y | `@axe-core/playwright` en dépendance de développement, `scripts/qa-a11y.mjs` (auth, home, projet, modale desktop, modale mobile) | **0 violation, tous impacts confondus, sur les cinq pages** (`docs/qa/ui-pro-2026-09-07/a11y-*.json`) ; `a11y-modal-focus.json` : focus piégé sur 40 Tab et 10 Maj+Tab, Échap ferme, focus rendu au déclencheur |
+| 9. Captures | `u3-modal-clair`, `u3-modal-sombre`, `u3-modal-mobile`, `u3-rapport`, `u3-refus`, `u3-live-stats` | toutes reprises sur le build final |
+
+**Ce que le point 1 a réellement demandé.** La règle **ne peut pas** vivre
+dans `app/assets/scss/global.scss` : ce fichier n'est pas une feuille
+globale, c'est un **prélude de préprocesseur** injecté par vite
+(`additionalData`) en tête de chaque bloc `<style lang="scss" scoped>`, où
+le compilateur SFC suffixe le dernier sélecteur de chaque règle. `.main` y
+survit parce que l'élément porte l'attribut de portée — **94 occurrences de
+`.main[data-v-…]` dans le CSS bâti** ; `body` n'est l'élément d'aucun
+composant, la règle serait écrite `body[data-v-…]` et ne matcherait jamais.
+Elle est donc posée dans `app/assets/css/main.css`, la seule feuille
+réellement globale, et `global.scss` porte le commentaire qui explique
+pourquoi — c'est un piège à documenter, pas un détail de rangement.
+
+**Ce que le point 8 a coûté, et qui n'était pas prévu.** Le premier passage
+d'axe a rendu **9 violations sérieuses ou critiques**, dont aucune ne vient
+de U3 : ce sont les jetons de couleur eux-mêmes. Corrigé au niveau des
+jetons, en gardant la teinte :
+
+| Jeton / surface | Avant | Après | Contraste |
+|---|---|---|---|
+| `--accent` (texte ET fond du bouton primaire) | `#007bff` | `#0069d9` (l'ancien `--accent-hover`) | 3,98 → **5,22** sur blanc ; 3,83 → **5,03** pour le libellé posé dessus |
+| `--accent-hover` | `#0069d9` | `#0057b8` | — |
+| `--text-3` | `#6d7590` | `#5f6782` | 4,40 → **5,40** |
+| `--label-tertiary` (alias legacy, 44 nœuds) | `#767e9a` | `#5f6782` | 3,88 → **5,40** (et 3,52 → 4,90 sur carte en retrait) |
+| Badges de verdict du rapport | `rgb(46,125,50)` | `var(--ok)` `#157036` | 4,23 → **5,09** |
+| Pied de page (surface toujours sombre) | jetons du thème clair | palette explicite redéfinie sur `.footer` (AGENTS #21) | 2,11 → **10,56** |
+
+Deux défauts de balisage avec : le compteur de quantité des fiches fichier
+n'avait **aucun nom accessible** (`aria-label` ajouté), et le conteneur du
+tableau qui défile n'était **pas atteignable au clavier**
+(`tabindex="0"` + `role="region"`).
+
+**Le bouton « désactivé » ne l'était pas.** `MainButton` ne posait que la
+classe `button--disabled` (`pointer-events: none`) : la souris était
+bloquée, mais le bouton restait dans l'ordre de tabulation, activable au
+clavier, et annoncé actif par un lecteur d'écran. L'attribut `disabled`
+(ou `aria-disabled` + `tabindex="-1"` sur un `<a>`) est désormais posé.
+Effet de bord mesuré : le harnais, qui lisait `isDisabled()`, cliquait
+depuis la passe 2 sur une flèche « tôle suivante » morte et perdait
+**30 s par clic** — 16 captures au lieu de 4 et six minutes de banc pour
+rien. Corrigé des deux côtés (attribut + lecture de la classe en secours).
+
+**Le refus n'était pas détectable par le harnais.** `QA_EXPECT=refusal`
+attendait `.content__error`, que `[slug].vue` ne rend justement **pas**
+quand le panneau de capacité s'affiche (`v-if="localComputeError &&
+!capacityPanel"`) : un refus déjà à l'écran partait en **721 s de timeout**.
+Le harnais lit maintenant `[data-testid="capacity-panel"]` — refus détecté
+en **2,2 s**.
+
+**Verrous rejoués sur le build final** : `npx nuxt build` vert ;
+`npx vitest run` **517/517** (dont `resultQuality.test.js` inchangé) ;
+`qa-c02c03-modal.mjs` **intégralement vert** ; `qa-a11y.mjs` **GO** ;
+harnais **deux configurations** — espacement 0,1 (900/900, long task max
+65 ms, CLS 0,0278) et espacement 2 (900/900, long task max 70 ms, CLS
+0,0269), `bodyScrollTop 0` et `scrollHeight == clientHeight` dans les deux.
+
+**md5 des SVG de tôle** : les empreintes **diffèrent**, et il faut le dire
+précisément — chaque passage du harnais crée un projet neuf, donc des
+slugs de fichiers neufs, donc une **palette de pièces** différente. Mesure
+faite fichier par fichier entre les deux builds : **587 / 587 attributs
+`d` identiques**, **587 / 587 `transform` identiques**, taille d'octets
+identique ; le seul écart porte sur `fill` / `stroke`. C'est exactement
+l'exclusion « hors nom de zip et couleurs de pièces » déjà actée en passe 1.
+La géométrie exportée n'a pas bougé.
+
+**Non-faits, énoncés :**
+
+1. Le `CapacityPanel` du **volet rapport** (cas `isUnfit` / `isPartial`)
+   n'a **pas** été vu à l'écran : produire un résultat non découpable ou
+   partiel sur commande n'est pas à ma portée avec le corpus de banc. Le
+   composant et son modèle sont vérifiés par la configuration refus de la
+   page ; le branchement dans le rapport est relu, pas capturé.
+2. Le thème sombre n'est **pas** passé à axe (le script audite le thème
+   clair) — `u3-modal-sombre.png` reste une relecture à l'œil.
+3. `playwright` n'est toujours **pas** déclaré dans `package.json` (il
+   était déjà installé hors verrou) : seul `@axe-core/playwright` l'est.
+   Le déclarer ferait télécharger les navigateurs à chaque build d'image
+   (`npm install` en étape de build) — arbitrage à trancher à part.
+4. Résidu de charte noté pour U4 : les badges de verdict du rapport et le
+   badge de la vue live gardent `--radius-l` (8 px) alors que la charte
+   pose 2 px pour les badges — non touché ici pour ne pas brouiller la
+   comparaison visuelle de cette passe.
+
+**Pas de déploiement** — attente du GO visuel. Le socle P6 (`485a491`)
+part avec.

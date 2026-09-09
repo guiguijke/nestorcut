@@ -5,10 +5,11 @@
     <div
         v-if="panel"
         class="capacity-panel"
+        :class="`capacity-panel--${tone}`"
         data-testid="capacity-panel"
     >
-        <div class="capacity-panel__title">{{ t('nest.capacity.title') }}</div>
-        <p class="capacity-panel__refunded">{{ t('nest.capacity.refunded') }}</p>
+        <div class="capacity-panel__title">{{ title || t('nest.capacity.title') }}</div>
+        <p class="capacity-panel__refunded">{{ detail || t('nest.capacity.refunded') }}</p>
         <ul class="capacity-panel__levers">
             <li v-if="panel.levers.sheetsNeeded">
                 {{ t('report.unfit.sheetsNeeded', { n: panel.levers.sheetsNeeded }) }}
@@ -41,6 +42,7 @@
                 @click="$emit('reduce-spacing')"
             />
             <MainButton
+                v-if="showRetry"
                 :label="t('nest.capacity.retry')"
                 :size="sizeType.s"
                 :theme="themeType.secondary"
@@ -57,6 +59,14 @@ import { themeType } from '~~/constants/theme.constants'
 
 defineProps({
     panel: { type: Object, default: null },
+    // U3 passe 3 : le meme panneau sert le refus de la page projet (rouge,
+    // « non facture », bouton Relancer) ET le volet rapport de la modale —
+    // ou un resultat PARTIEL est ambre (Z3 : le pose est decoupable, jamais
+    // de rouge) et ou « Relancer » ferait doublon avec « Reessayer ».
+    tone: { type: String, default: 'danger' }, // danger | warn
+    title: { type: String, default: '' },
+    detail: { type: String, default: '' },
+    showRetry: { type: Boolean, default: true },
 })
 defineEmits(['add-sheet', 'reduce-spacing', 'retry'])
 const { t } = useLocale()
@@ -70,6 +80,13 @@ const { t } = useLocale()
     border: solid 1px var(--error-border);
     border-radius: var(--radius-l);
     max-width: 42rem;
+
+    /* Z3 : imbrication PARTIELLE = ambre. Le rouge est reserve au resultat
+       non decoupable. */
+    &--warn {
+        background-color: var(--warn-bg);
+        border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+    }
 
     &__title {
         font-size: var(--fs-14);

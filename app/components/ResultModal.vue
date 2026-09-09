@@ -47,6 +47,7 @@ import { SQMM_PER_SQIN } from '~/utils/units'
 import { displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
+import { capacityPanelModel } from '~/utils/capacityPanel'
 
 // Z1/Z3 (vérif 2026-09-05) : actions correctives des bandeaux unfit /
 // partiel — écoutées par UserResults (ajout tôle / réduction espacement).
@@ -55,7 +56,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing'])
 const { getters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
 const { t, fmtPercent, fmtNumber } = useLocale()
-const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel } = useUnit()
+const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
 // passent par les contenus persistés (localDownloads), jamais par une URL
@@ -162,6 +163,29 @@ const unfitData = computed(() => {
         reason: jobUnfit?.reason ?? (overflowMm != null ? 'strip' : 'layout'),
     }
 })
+// U3 passe 3 : le volet rapport reutilise `CapacityPanel` (le panneau de
+// leviers de la page projet) pour le refus et le partiel. Le MODELE est le
+// meme (`capacityPanelModel`) : memes planchers d'espacement, meme garde de
+// kerf, meme calcul de « ajouter une tole » a partir des reglages courants
+// du projet — plus de seconde implementation dans le rapport.
+const capacityPanel = computed(() => {
+    const u = unref(unfitData)
+    if (!u) return null
+    const p = filesStore.getters.params || {}
+    const num = (v) => Number(String(v ?? '0').replace(',', '.')) || 0
+    return capacityPanelModel({
+        reason: u.reason,
+        sheetsNeeded: u.sheetsNeeded,
+        maxPartsAtSpacing: u.maxParts,
+        maxSpacingForFitMm: u.maxSpacingMm,
+        unplaced: u.unplaced,
+    }, {
+        sheets: p.sheets || [],
+        spaceMm: displayToMm(num(p.space)),
+        kerfMm: displayToMm(num(p.kerf)),
+    })
+})
+
 const isInProgress = computed(() => {
     const status = unref(resultModalData).status
     return status === statusType.unfinished || status === statusType.pending
@@ -615,6 +639,7 @@ const bundle = computed(() => ({
     partialHasLevers: unref(partialHasLevers),
     partialUnplacedCount: unref(partialUnplacedCount),
     unfitData: unref(unfitData),
+    capacityPanel: unref(capacityPanel),
     hasColorPreview: unref(hasColorPreview),
     showColorPreview: unref(showColorPreview),
     viewMode: unref(viewMode),

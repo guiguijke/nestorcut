@@ -8,20 +8,44 @@
                 {{ bestFitsSheet ? t('live.feasible') : t('live.searching') }}
             </span>
             <span class="live__spacer" />
-            <span v-if="elapsedSec != null" class="live__stat" :title="t('live.elapsedTitle')">
-                {{ formatElapsed(elapsedSec) }}
-            </span>
-            <span v-if="scoreLabel" class="live__stat live__stat--accent" :title="t('live.scoreTitle')">
-                {{ scoreLabel }} <span class="live__stat-suffix">{{ t('live.score') }}</span>
-            </span>
-            <!-- C12 (audit UX 2026-09-05) : le compteur « n combinaisons »
-                 est retiré — itérations de recuit BPP et évaluations
-                 separator SPP n'y sont pas comparables et le nombre n'était
-                 pas crédible comme indicateur de qualité. -->
-            <span v-if="cores" class="live__stat" :title="t('nest.coresTitle', { n: cores })">
-                <CoresSpinner :cores="cores" :size="16" show-count />
-                <span class="live__stat-suffix">{{ t('live.cores') }}</span>
-            </span>
+            <!-- U3 passe 3 (plan U2 reporté deux fois) : les statistiques de
+                 l'en-tête live sont des `UiStat` — valeur en chiffres
+                 tabulaires SOUS un libellé visible (AGENTS #24 : jamais un
+                 nombre nu).
+                 C12 (audit UX 2026-09-05) : le compteur « n combinaisons »
+                 reste retiré — itérations de recuit BPP et évaluations
+                 separator SPP ne sont pas comparables. -->
+            <div class="live__stats" data-testid="live-stats">
+                <UiStat
+                    v-if="elapsedSec != null"
+                    :value="formatElapsed(elapsedSec)"
+                    :label="t('live.elapsed')"
+                    :title="t('live.elapsedTitle')"
+                    data-testid="live-stat-elapsed"
+                />
+                <UiStat
+                    v-if="scoreLabel"
+                    class="live__stat--accent"
+                    :value="scoreLabel"
+                    :label="t('live.score')"
+                    :title="t('live.scoreTitle')"
+                    data-testid="live-stat-density"
+                />
+                <UiStat
+                    v-if="sheetCount"
+                    :value="sheetCount"
+                    :label="t('live.sheets')"
+                    data-testid="live-stat-sheets"
+                />
+                <UiStat
+                    v-if="cores"
+                    :label="t('live.cores')"
+                    :title="t('nest.coresTitle', { n: cores })"
+                    data-testid="live-stat-cores"
+                >
+                    <CoresSpinner :cores="cores" :size="16" show-count />
+                </UiStat>
+            </div>
         </div>
 
         <div class="live__body">
@@ -541,6 +565,14 @@ function formatScore(density) {
     return fmtPercent(n * 100);
 }
 
+// U3 passe 3 : nombre de tôles du meilleur agencement courant (BPP) —
+// « layouts » de l'en-tête du plan.
+const sheetCount = computed(() => {
+    const live = best.value || props.result?.liveLayout;
+    const n = Number(live?.bins);
+    return Number.isFinite(n) && n > 0 ? n : null;
+})
+
 const scoreLabel = computed(() => {
     const live = best.value || props.result?.liveLayout;
     return live?.density != null ? formatScore(live.density) : null;
@@ -608,24 +640,15 @@ const formatElapsed = (sec) => {
         flex: 1;
     }
 
-    &__stat {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        font-size: var(--fs-12);
-        color: var(--label-secondary);
-        font-variant-numeric: tabular-nums;
-
-        &--accent {
-            font-weight: 700;
-            color: var(--accent-primary);
-        }
+    /* U3 passe 3 : rangée de UiStat alignée à droite de l'en-tête. */
+    &__stats {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--sp-4);
     }
 
-    &__stat-suffix {
-        font-size: var(--fs-12);
-        font-weight: 500;
-        color: var(--label-tertiary);
+    &__stat--accent :deep(.ui-stat__value) {
+        color: var(--accent-primary);
     }
 
     &__body {
