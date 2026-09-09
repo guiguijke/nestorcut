@@ -261,8 +261,17 @@ pub fn run_bpp_mem(
     // tôle) et le biais du constructif est un multiplicateur faible : la
     // direction est un objectif de SOLVEUR, elle se règle ici, pas dans un
     // post-pass −X côté Python/JS.
-    for run in exported.iter_mut() {
-        run.finish = finish_partial_sheet(&ext_instance, run, config, &started, sink);
+    //
+    // EN PARALLÈLE, comme les walks : la finition coûte jusqu'à 15 s par
+    // walk et il y en a `n_workers` (8 en qualité) — en série c'était
+    // +90 s de temps de job sur la démo, mesuré. Le calcul ne dépend que
+    // du run et de sa seed, donc le résultat est identique à l'ordre
+    // d'exécution près (le déterminisme reste vérifié par L2).
+    let plans = map_workers(exported.len(), |i| {
+        plan_finish(&ext_instance, &exported[i], config)
+    });
+    for (run, plan) in exported.iter_mut().zip(plans.into_iter()) {
+        run.finish = apply_finish(&ext_instance, run, plan, config, &started, sink);
     }
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
         Ok(merged) => {
@@ -464,6 +473,19 @@ fn ext_layout_event(run: &BpRun, started: &Instant) -> String {
 ///
 /// Ne touche ni l'affectation des pièces aux tôles, ni les autres layouts,
 /// ni le schéma d'export (champs additifs seulement).
+/// Ce qu'une finition a calculé, sans rien avoir muté : calculable en
+/// parallèle (elle ne dépend que du run et de sa seed).
+pub struct FinishPlan {
+    idx: usize,
+    /// Poses SPP re-mappées, ou `None` quand la finition renonce.
+    placed: Option<Vec<ExtPlacedItem>>,
+    before: Extent,
+    after: Extent,
+    elapsed_ms: u64,
+    reason: &'static str,
+}
+
+/// Compatibilité tests : plan + application en un appel.
 pub fn finish_partial_sheet(
     ext_instance: &ExtBPInstance,
     run: &mut BpRun,
@@ -471,6 +493,62 @@ pub fn finish_partial_sheet(
     started: &Instant,
     sink: &EventSink,
 ) -> Option<serde_json::Value> {
+    let plan = plan_finish(ext_instance, run, config);
+    apply_finish(ext_instance, run, plan, config, started, sink)
+}
+
+/// Applique un plan : remplace les poses, recalcule le remnant, émet la
+/// frame live, et rend la trace `finish`.
+fn apply_finish(
+    ext_instance: &ExtBPInstance,
+    run: &mut BpRun,
+    plan: Option<FinishPlan>,
+    config: &EngineConfig,
+    started: &Instant,
+    sink: &EventSink,
+) -> Option<serde_json::Value> {
+    let plan = plan?;
+    let kept = if plan.placed.is_some() { "spp" } else { "bpp" };
+    if let Some(placed) = plan.placed {
+        run.solution.layouts[plan.idx].placed_items = placed;
+        let item_pts: Vec<Vec<(f32, f32)>> = ext_instance
+            .items
+            .iter()
+            .map(|it| shape_points(&it.base.shape))
+            .collect();
+        run.cost.remnant = run
+            .solution
+            .layouts
+            .iter()
+            .filter_map(|l| {
+                ext_instance
+                    .bins
+                    .iter()
+                    .find(|b| b.base.id == l.container_id)
+                    .map(|b| ext_layout_remnant(b, l, &item_pts))
+            })
+            .fold(0.0_f64, f64::max);
+        // Frame live finale (V14) : même schéma que `layout_event`.
+        if config.live_events() {
+            sink(&ext_layout_event(run, started));
+        }
+    }
+    Some(finish_report(
+        plan.idx,
+        run.bias.as_str(),
+        &plan.before,
+        &plan.after,
+        plan.elapsed_ms,
+        kept,
+        plan.reason,
+    ))
+}
+
+fn plan_finish(
+    ext_instance: &ExtBPInstance,
+    run: &BpRun,
+    config: &EngineConfig,
+) -> Option<FinishPlan> {
     // 1. Tôle partielle : taux de remplissage minimal, ex æquo → index le
     //    plus haut. Rien à finir si le run laisse des pièces non placées.
     if run.cost.unplaced > 0 {
@@ -605,10 +683,15 @@ pub fn finish_partial_sheet(
     // 4. Résolution — sink MUET : aucun événement SPP ne doit sortir d'un job
     //    BPP (le worker Python et engine.worker.js lisent le flux).
     let silent: EventSink = Arc::new(|_: &str| {});
-    let keep = |reason: &str| -> Option<serde_json::Value> {
-        Some(finish_report(
-            idx, run.bias.as_str(), &before, &before, &t_start, "bpp", reason,
-        ))
+    let keep = |reason: &'static str| -> Option<FinishPlan> {
+        Some(FinishPlan {
+            idx,
+            placed: None,
+            before,
+            after: before,
+            elapsed_ms: t_start.elapsed().as_millis() as u64,
+            reason,
+        })
     };
     let Ok(out) = crate::spp::run_spp_mem(sp_instance, &cfg, &silent) else {
         return keep("spp run failed");
@@ -655,41 +738,20 @@ pub fn finish_partial_sheet(
         return keep("spp layout exceeds the sheet");
     }
 
-    // 6. Remplacement des poses (container_id inchangé) + remnant recalculé.
-    run.solution.layouts[idx].placed_items = placed;
-    let after = Extent {
-        x_min: x_min.max(0.0),
-        y_min: y_min.max(0.0),
-        x_max,
-        y_max,
-    };
-    run.cost.remnant = run
-        .solution
-        .layouts
-        .iter()
-        .filter_map(|l| {
-            ext_instance
-                .bins
-                .iter()
-                .find(|b| b.base.id == l.container_id)
-                .map(|b| ext_layout_remnant(b, l, &item_pts))
-        })
-        .fold(0.0_f64, f64::max);
-
-    // 7. Frame live finale (V14) : même schéma que `layout_event`.
-    if config.live_events() {
-        sink(&ext_layout_event(run, started));
-    }
-
-    Some(finish_report(
+    // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
+    Some(FinishPlan {
         idx,
-        run.bias.as_str(),
-        &before,
-        &after,
-        &t_start,
-        "spp",
-        "",
-    ))
+        placed: Some(placed),
+        before,
+        after: Extent {
+            x_min: x_min.max(0.0),
+            y_min: y_min.max(0.0),
+            x_max,
+            y_max,
+        },
+        elapsed_ms: t_start.elapsed().as_millis() as u64,
+        reason: "",
+    })
 }
 
 #[derive(Clone, Copy)]
@@ -729,7 +791,7 @@ fn finish_report(
     bias: &str,
     before: &Extent,
     after: &Extent,
-    t_start: &Instant,
+    elapsed_ms: u64,
     kept: &str,
     reason: &str,
 ) -> serde_json::Value {
@@ -744,7 +806,7 @@ fn finish_report(
             "xMin": after.x_min, "yMin": after.y_min,
             "xMax": after.x_max, "yMax": after.y_max,
         },
-        "elapsedMs": t_start.elapsed().as_millis() as u64,
+        "elapsedMs": elapsed_ms,
         "kept": kept,
         "reason": reason,
     })

@@ -2038,6 +2038,9 @@ def _nesting_process_impl(doc):
         alternatives.append({
             "seed": engine_alt.get("seed"),
             "strategy": strategy,
+            # Plan « dernière tôle » : trace de la finition (champ ADDITIF,
+            # absent des anciens jobs — l'UI ne l'affiche que s'il existe).
+            "finish": engine_alt.get("finish"),
             "density": (totals["densityPct"] / 100.0)
                 if totals.get("densityPct") is not None else density,
             # Share of sheet actually consumed (used bbox / sheet area,

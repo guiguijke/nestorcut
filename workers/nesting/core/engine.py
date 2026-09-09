@@ -204,6 +204,9 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
             # classe bottom) — champ additif du merge, utilisé par le pass
             # structurel pour comparer sur le bon axe.
             "used_height": alt.get("used_height"),
+            # Plan « dernière tôle » : trace de la finition de la tôle
+            # partielle (additive ; absente des moteurs antérieurs).
+            "finish": alt.get("finish"),
             "solution": _normalize_solution(problem_type, solution),
             "metrics": {
                 "density": alt.get("density") or solution.get("density"),

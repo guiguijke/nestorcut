@@ -1117,6 +1117,9 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
                 : null,
             cost: alt.cost ?? alt.solution?.cost ?? null,
             layoutCount: layouts.length,
+            // Plan « dernière tôle » : trace de la finition de la tôle
+            // partielle (champ ADDITIF, miroir main.py).
+            finish: alt.finish ?? null,
             svgs: art.sheets || [],
             report: {
                 ...verify,
