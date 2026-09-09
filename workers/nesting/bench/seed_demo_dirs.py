@@ -134,6 +134,17 @@ def main():
               f"{(p.get('xMin') or 0):>7.1f} {(p.get('xMax') or 0):>7.1f} "
               f"{(p.get('yMin') or 0):>7.1f} {(p.get('yMax') or 0):>7.1f} "
               f"{(p.get('densityPct') or 0):>6.1f}  {badges}")
+    print("")
+    print("[bench] finition de la tôle partielle (moteur) :")
+    for a in out:
+        f = a.get("finish")
+        if not f:
+            print(f"  {a['strategy']:9} finish absent")
+            continue
+        b, af = f["before"], f["after"]
+        print(f"  {a['strategy']:9} tôle {f['sheet']} kept={f['kept']:4} {f.get('reason') or ''}"
+              f"  avant x≤{b['xMax']:7.1f} y≤{b['yMax']:7.1f}"
+              f"  après x≤{af['xMax']:7.1f} y≤{af['yMax']:7.1f}  ({f['elapsedMs']} ms)")
     print("@@RESULT@@" + json.dumps({"slug": slug, "placed": doc.get("placed"),
                                      "timeTaken": doc.get("timeTaken"),
                                      "alternatives": out}) + "@@END@@", flush=True)
@@ -147,6 +158,24 @@ def main():
                 errs.append(f"{name}: badges de vérification non verts")
             if p.get("xMin") is None or p["xMin"] > 2 * SPACE + 1 or p["yMin"] > 2 * SPACE + 1:
                 errs.append(f"{name}: tôle partielle non ancrée au coin (xMin {p.get('xMin')}, yMin {p.get('yMin')})")
+        # Verrou APPLES-TO-APPLES : chaque direction contre SA PROPRE
+        # entrée. La comparaison croisée ci-dessous n'est valable que si les
+        # trois tôles partielles portent des pièces comparables — ce n'est
+        # pas garanti (chaque direction est un walk différent, donc une
+        # affectation pièces→tôles différente : une tôle qui hérite d'une
+        # pièce de 300 mm ne peut pas faire une bande plus étroite).
+        for name, a in by.items():
+            f = a.get("finish")
+            if not f:
+                errs.append(f"{name}: aucune trace de finition (finish absent)")
+                continue
+            if f["kept"] != "spp":
+                errs.append(f"{name}: finition non appliquée (kept={f['kept']}, {f.get('reason')})")
+                continue
+            axis = "yMax" if name == "bottom" else "xMax"
+            if f["after"][axis] > f["before"][axis] + 2 * SPACE:
+                errs.append(f"{name}: {axis} en régression "
+                            f"({f['before'][axis]:.1f} -> {f['after'][axis]:.1f})")
         if {"left", "bottom", "balanced"} <= set(by):
             xm = {k: by[k]["partial"]["xMax"] for k in by}
             ym = {k: by[k]["partial"]["yMax"] for k in by}

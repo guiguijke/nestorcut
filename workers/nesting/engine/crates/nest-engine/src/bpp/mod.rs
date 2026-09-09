@@ -267,8 +267,32 @@ pub fn run_bpp_mem(
     // +90 s de temps de job sur la démo, mesuré. Le calcul ne dépend que
     // du run et de sa seed, donc le résultat est identique à l'ordre
     // d'exécution près (le déterminisme reste vérifié par L2).
+    //
+    // Et SEULEMENT sur les runs qui seront exportés : la fusion ne retient
+    // que le champion de chaque classe active (même règle que
+    // `merge_bp_runs`) — finir les 8 walks quand 3 sont livrés, c'est
+    // multiplier le coût par 2,7 pour rien.
+    let feasible_exists = exported.iter().any(|r| r.cost.unplaced == 0);
+    let mut to_finish = vec![false; exported.len()];
+    for b in biases.iter() {
+        let champ = exported
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| r.bias == *b && (!feasible_exists || r.cost.unplaced == 0))
+            .min_by(|(_, a), (_, c)| {
+                a.cost.cmp_key().cmp(&c.cost.cmp_key()).then(a.seed.cmp(&c.seed))
+            })
+            .map(|(i, _)| i);
+        if let Some(i) = champ {
+            to_finish[i] = true;
+        }
+    }
     let plans = map_workers(exported.len(), |i| {
-        plan_finish(&ext_instance, &exported[i], config)
+        if to_finish[i] {
+            plan_finish(&ext_instance, &exported[i], config)
+        } else {
+            None
+        }
     });
     for (run, plan) in exported.iter_mut().zip(plans.into_iter()) {
         run.finish = apply_finish(&ext_instance, run, plan, config, &started, sink);
