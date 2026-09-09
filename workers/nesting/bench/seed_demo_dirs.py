@@ -172,6 +172,18 @@ def main():
             if f["kept"] != "spp":
                 errs.append(f"{name}: finition non appliquée (kept={f['kept']}, {f.get('reason')})")
                 continue
+            # L'axe de la direction : x pour left, y pour bottom, et pour
+            # balanced le critère du plan lui-même — max(x/W, y/H), le
+            # « bloc de coin » (un bloc n'a pas UN axe).
+            if name == "balanced":
+                bef = max(f["before"]["xMax"] / SHEET["width"],
+                          f["before"]["yMax"] / SHEET["height"])
+                aft = max(f["after"]["xMax"] / SHEET["width"],
+                          f["after"]["yMax"] / SHEET["height"])
+                if aft > bef + 1e-3:
+                    errs.append(f"{name}: max(x/W, y/H) en régression "
+                                f"({bef:.3f} -> {aft:.3f})")
+                continue
             axis = "yMax" if name == "bottom" else "xMax"
             if f["after"][axis] > f["before"][axis] + 2 * SPACE:
                 errs.append(f"{name}: {axis} en régression "
