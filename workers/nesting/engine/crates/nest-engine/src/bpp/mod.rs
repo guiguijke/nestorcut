@@ -820,8 +820,19 @@ fn plan_finish(
     // dans un layout jagua du bin : les collisions y sont mesurées sur les
     // formes GONFLÉES de `min_item_separation`, donc un gap sous
     // l'espacement EST une collision. Échec → le layout BPP est conservé.
-    if !poses_are_feasible(instance, layout.container_id, &placed, bx0, by0) {
-        return keep("infeasible");
+    // Seul le rejet « pair » compte. Un rejet « sheet » est un FAUX POSITIF
+    // mesuré : sur `b_demo` la classe `left` sort à 336,7 mm de front avec
+    // une pièce au CONTACT du contour — la carte de collision déflate le
+    // conteneur de space/2 (piège #49) et la phase 2 transposée rend des
+    // coordonnées à ~1e-4 du bord, ce qui suffit à faire contact. Le
+    // containment réel est déjà contrôlé plus haut sur les anneaux BRUTS
+    // (±1e-3 de la tôle), et `insideSheet` le remesure en aval. On note le
+    // contact dans la trace, on ne jette pas une finition correcte pour ça.
+    let mut sheet_contact = false;
+    match infeasibility_of(instance, layout.container_id, &placed, bx0, by0) {
+        None => {}
+        Some("sheet") => sheet_contact = true,
+        Some(_) => return keep("infeasible: pair"),
     }
 
     // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
@@ -837,7 +848,7 @@ fn plan_finish(
             y_max,
         },
         elapsed_ms: ms,
-        reason: "",
+        reason: if sheet_contact { "sheet-contact" } else { "" },
         phases: phases_of(&collected, ms),
     })
 }
@@ -856,12 +867,24 @@ pub fn poses_are_feasible(
     bx0: f32,
     by0: f32,
 ) -> bool {
-    let Some(bin) = instance.bins().find(|b| b.id == container_id as usize) else {
-        // Bin inconnu : on ne sait pas juger, on ne rejette pas.
-        return true;
-    };
-    let mut probe = Layout::new(bin.container.clone());
-    for pi in placed {
+    infeasibility_of(instance, container_id, placed, bx0, by0).is_none()
+}
+
+/// Comme [`poses_are_feasible`], mais dit CE QUI cloche : `"sheet"` (une
+/// pièce seule collisionne déjà le contour de la tôle) ou `"pair"` (deux
+/// pièces sont plus proches que l'espacement promis). La distinction n'est
+/// pas cosmétique : un rejet « sheet » signalerait une garde trop stricte
+/// (le contour est déflaté de space/2 à l'import, piège #49), un rejet
+/// « pair » est le défaut que la garde existe pour attraper.
+pub fn infeasibility_of(
+    instance: &BPInstance,
+    container_id: u64,
+    placed: &[ExtPlacedItem],
+    bx0: f32,
+    by0: f32,
+) -> Option<&'static str> {
+    let bin = instance.bins().find(|b| b.id == container_id as usize)?;
+    let to_int = |pi: &ExtPlacedItem| {
         let item = instance.item(pi.item_id as usize);
         let ext_dt = DTransformation::new(
             pi.transformation.rotation.to_radians(),
@@ -870,10 +893,26 @@ pub fn poses_are_feasible(
                 pi.transformation.translation.1 - by0,
             ),
         );
-        let d_transf = ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform);
+        (item, ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform))
+    };
+    let mut probe = Layout::new(bin.container.clone());
+    for pi in placed {
+        let (item, d_transf) = to_int(pi);
         probe.place_item(item, d_transf);
     }
-    probe.is_feasible()
+    if probe.is_feasible() {
+        return None;
+    }
+    // Une pièce SEULE dans la tôle qui collisionne déjà : c'est le contour.
+    for pi in placed {
+        let (item, d_transf) = to_int(pi);
+        let mut solo = Layout::new(bin.container.clone());
+        solo.place_item(item, d_transf);
+        if !solo.is_feasible() {
+            return Some("sheet");
+        }
+    }
+    Some("pair")
 }
 
 /// Ventilation des phases de la finition, lue dans les événements collectés
