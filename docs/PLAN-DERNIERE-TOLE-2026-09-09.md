@@ -499,3 +499,117 @@ déploiement complet worker + app + wasm + homelab.
 x_max **493,3 → 435,2** (`kept=spp`, 16,4 s), ancrée à 2,0 / 2,0 ; tôle 1
 inchangée [2 ; 988]. La finition tient donc aussi dans la configuration
 à 2 mm ; le coût de 16 s par finition est confirmé.
+
+## 9. Rapport tranche 1-bis (implémenteur, 10/09)
+
+Commits : `b0751eb` (les cinq points + ménage), `fc51a0c4` (garde de
+faisabilité affinée), `d1b201a2` (documents du vérificateur). **Non
+déployé.** Image worker et app reconstruites, `ASSERT IMAGES=HEAD: OK`.
+
+### 9.1 Le temps, qui était le motif du NO-GO
+
+| Mesure | Référence (avant) | Tranche 1-bis | Verrou |
+|---|---|---|---|
+| Harnais navigateur, espacement 0,1 (×3) | 21,3 / 21,4 / 21,4 s | **30,4 / 30,3 / 30,4 s** — **+9 s** | ≤ +16 s ✅ |
+| Harnais navigateur, espacement 2 (×3) | 24,4 s (1 passage) | **30,4 / 30,4 / 30,4 s** — **+6 s** | ≤ +16 s ✅ |
+| Banc serveur, temps de job (×3) | 20-25 s | **40 / 35 / 40 s** | (pas de verrou 1-bis) |
+| Démo navigateur, `left` / `bottom` / `balanced` | 148 / 191 / 191 s (09/09) | **74 / 65 / 102 s** | — |
+
+Le navigateur passe donc de **+33 s à +9 s** : une seule finition par job au
+lieu de huit. Le compte se lit directement dans le record — **un seul objet
+`finish`** par job dans les six passages du harnais, et le pool n'émet
+**qu'un seul** événement `bpp-finish` (verrouillé par `localPool.test.js`,
+qui compte l'événement et les frames séparément).
+
+Qualité inchangée là où elle compte : tôle partielle du harnais
+**x_max 347,7 / 347,5 / 347,8** à 0,1 (verrou ≤ 349,1) et
+**437,4 / 437,4 / 437,0** à 2 (verrou < 517,7 ; le vérificateur mesurait
+435,2 sur son poste).
+
+### 9.2 La table des phases — ce que le plafond paie réellement
+
+Elle ne dit pas la même chose selon le job, et c'est le résultat :
+
+| Job | p1 (largeur) | p2 (compaction transposée) | améliorations p1 / p2 | arrêt |
+|---|---|---|---|---|
+| Harnais 0,1 (×3) | **15,5 s** | **0,14 s** | 14-15 / 1 | budget |
+| Harnais 2 (×3) | **15,3 s** | **0,19 s** | 16 / 1 | budget |
+| Démo `left` | 2,2 s | **13,2 s** | 2 / 10 | budget |
+| Démo `bottom` | 2,2 s | 2,6 s (**4,7 s au total**) | 2 / 2 | **plateau** |
+| Démo `balanced` | 6,1 s | 7,5 s | 3 / 5 | plateau |
+
+Sur le harnais (900 pièces, une seule direction) **la phase 1 mange tout le
+plafond et la phase 2 reçoit 140 à 190 ms** — la compaction transposée n'a
+pas lieu. Sur la démo (304 pièces, 24 formes) le partage est inverse, et
+`bottom` s'arrête de lui-même à 4,7 s. Un plafond unique ne convient donc pas
+aux deux ; je ne propose pas de valeur, c'était l'objet de la tranche.
+
+### 9.3 La garde de faisabilité a servi deux fois — et ce n'est pas le budget
+
+Elle a d'abord révélé un **faux positif de ma première version** : sur
+`b_demo`, `left` sortait `kept=bpp / infeasible` alors que le défaut n'était
+pas une paire mais un **contact avec le contour** de la tôle (la carte de
+collision déflate le conteneur de space/2, piège #49, et la phase 2
+transposée rend des coordonnées à ~1e-4 du bord). `infeasibility_of` dit
+maintenant laquelle des deux causes s'applique : **seul « pair » rejette**,
+« sheet » est noté dans la trace (`reason: "sheet-contact"`, `kept` reste
+`spp`). Le containment réel reste contrôlé sur les anneaux BRUTS (±1e-3) et
+remesuré par `insideSheet` en aval.
+
+Puis elle a attrapé **deux vraies violations de paire**, avec le plafond de
+15 s — donc **le 1,849 mm n'était pas un effet du budget de 7 s** :
+
+| Occurrence | Job | Direction | Effet |
+|---|---|---|---|
+| 1 | banc serveur, passage 3 | `balanced` | `kept=bpp`, `reason="infeasible: pair"` — layout moteur conservé, badges verts |
+| 2 | démo navigateur | `balanced` | idem |
+
+**Compteur `kept=bpp reason=infeasible` : 2 sur 18 exécutions de direction**
+(L3 ×3 = 9, L4 ×6, L5 ×3). Le plan tolère « ≤ 1 sur 12 » : nous sommes au
+même taux, au-dessus en valeur absolue. **Les deux occurrences sont sur
+`balanced`** — c'est le chemin que j'ai construit en corridor de hauteur
+(§7 écart 2), avec gravité et `column_fill` dans un corridor serré : le
+suspect désigné est là, pas dans le budget. Sans la garde, ces deux tôles
+partaient telles quelles (c'est ce qui s'est passé le 09/09 à 7 s).
+
+Verrou dédié : `finish_rejects_infeasible_strip` — deux carrés à 2,5 mm
+acceptés, à 1,8 mm rejetés, à 10 mm des bords pour isoler la distance entre
+pièces du contact au contour.
+
+### 9.4 Verrous rejoués
+
+| Verrou | Résultat |
+|---|---|
+| **L1** `lock_last_sheet.py` | **tenu** — `kept=spp` ×3 (`left` avec `sheet-contact` noté), ancrage 2,0 mm, left x_max minimal, bottom y_max minimal, balanced max(x/W, y/H) minimal |
+| **L2** `determinism_lock.py` | **natif ≡ wasm**, tolérance 0, SHA `04944ada…` — **la MÊME valeur qu'avant la tranche** : ni la garde, ni le drapeau, ni le collecteur ne changent la géométrie livrée |
+| **L3** `seed_demo_dirs.py BENCH_ASSERT=1` ×3 | **2 passages sur 3** — le troisième tombe sur le rejet `balanced` ci-dessus (badges verts, 304/304, 2 tôles) |
+| **L4** harnais ×3 en 0,1 et ×3 en 2 | **tenu** (temps, x_max, 900/900, long task après solve 0-59 ms) |
+| **L5** démo ×3 directions | `kept=spp` sur `left` (x 113,0 — identique à la planche du 09/09) et `bottom` (y 153,0) ; `balanced` rejeté. Captures refaites |
+| cargo `nest-engine` | **80** + 1 ignoré (nouveau : `finish_rejects_infeasible_strip`) |
+| vitest | **514** |
+| pytest nesting | **220** + 2 skipped (−1 : le test de `_compact_receivers`) |
+
+### 9.5 Écarts et non-faits
+
+1. **Point 2 du §8.3 appliqué AVANT `merge_bp_runs`, pas après.** Finir les
+   alternatives déjà construites obligerait à reconstruire le JSON de sortie.
+   Je sélectionne les champions avec la règle EXACTE de `merge_bp_runs`
+   (coût lexicographique, seed en tie-break, faisables d'abord) puis je
+   finis, puis je fusionne — c'est ce que fait le chemin natif, donc « même
+   fonction, même résultat » comme demandé. `finish_exported_runs` est la
+   fonction unique appelée des deux côtés.
+2. **Verrou L5 « mêmes x/y max ± 5 mm à seed égale » non vérifiable** : la
+   démo navigateur tire un master seed neuf à chaque job, les seeds ne sont
+   pas égales d'un passage à l'autre. `left` retombe exactement sur 113,0,
+   `bottom` sort à 153,0 contre 124,1 le 09/09 — écart de tirage, pas de
+   régression (badges verts, forme conforme).
+3. **Compteur d'infaisabilité au-dessus de la tolérance** (2/18 contre
+   « ≤ 1 sur 12 ») — inscrit ici avec sa trace, comme demandé. Je n'ai pas
+   cherché la cause dans le SPP : la tranche interdit toute décision de
+   plafond et la garde contient le défaut.
+4. **`.testparts/` est passé au `.gitignore`.** AGENTS.md le décrit comme
+   ignoré ; il ne l'était pas. Le corpus d'import (phase C) y a déposé
+   18 Mio, dont des fichiers LibreDWG en GPL v3 : un `git add -A` les
+   publiait.
+5. **Non-fait** : `verify_l4a_corpus.sh` 11/11 et la régénération des
+   benchmarks publics — étape de déploiement, elle attend le GO.
