@@ -738,14 +738,27 @@ fn plan_finish(
     // couperait la trajectoire ailleurs).
     if cfg.sa_max_iterations.is_some() {
         // §12.3.4 : sans horloge, la finition va au bout de sa borne de
-        // TRAVAIL — mesuré 190 / 203 / 456 s par biais, soit ~25 min pour
-        // L1 (deux exécutions des trois biais). La borne d'exploration
-        // passe donc de 30 à 10 échecs consécutifs EN MODE DÉTERMINISTE
-        // seulement : c'est du travail en moins, donc une géométrie
-        // différente — le SHA de L2 change une fois, écrit au rapport.
-        // La production ne pose jamais `sa_max_iterations`.
+        // TRAVAIL — 190 / 203 / 456 s par biais avant cette tranche, soit
+        // ~25 min pour L1 (deux exécutions des trois biais). La borne
+        // d'exploration descend donc à 4 échecs consécutifs EN MODE
+        // DÉTERMINISTE seulement ; la production ne pose jamais
+        // `sa_max_iterations`, elle n'est pas concernée.
+        //
+        // Valeur choisie sur MESURE (fixture b_demo, un biais par ligne,
+        // temps de finition et étendue obtenue) :
+        //
+        //   borne 30 : left 190 s              (référence 1-ter)
+        //   borne 10 : left 112 s / x 263,0    balanced 285 s / 603,4
+        //   borne  4 : left  52 s / x 263,0    balanced 160 s / 602,3
+        //   borne  2 : left  25 s / x 263,0    balanced 103 s / 614,5
+        //
+        // 4 est le dernier palier SANS perte : la géométrie y est celle de
+        // la borne 30 sur les trois biais. À 2, `balanced` recule de 1,2 %
+        // (max(x/W, y/H) 0,242 → 0,245) pour gagner 3 minutes sur L1 — un
+        // échange que je ne fais pas sans arbitrage, il est au rapport.
+        // Le SHA de L2 change une fois : moins de travail, autre trajectoire.
         if cfg.explore_max_conseq_failed_attempts.is_none() {
-            cfg.explore_max_conseq_failed_attempts = Some(10);
+            cfg.explore_max_conseq_failed_attempts = Some(4);
         }
         if cfg.compress_failure_decay.is_none() {
             cfg.compress_failure_decay = Some(0.7);
