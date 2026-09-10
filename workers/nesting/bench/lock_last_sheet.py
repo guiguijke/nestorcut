@@ -50,6 +50,28 @@ def sheet_size(instance):
     return max(xs) - min(xs), max(ys) - min(ys)
 
 
+def stable_part(finish):
+    """Part REPRODUCTIBLE d'une trace de finition : géométrie et verdict.
+
+    Les durées (`elapsedMs`, `phases.p1Ms/p2Ms`) sont du temps mur, et les
+    compteurs d'améliorations comptent des événements émis sous throttle
+    temporel : ni les unes ni les autres ne peuvent être identiques d'une
+    exécution à l'autre, même en mode borné-travail. Ce qui doit l'être,
+    c'est le RÉSULTAT — poses et décision.
+    """
+    if not finish:
+        return None
+    return {
+        "sheet": finish.get("sheet"),
+        "bias": finish.get("bias"),
+        "kept": finish.get("kept"),
+        "reason": finish.get("reason"),
+        "before": finish.get("before"),
+        "after": finish.get("after"),
+        "stop": (finish.get("phases") or {}).get("stop"),
+    }
+
+
 def run_bias(bin_path, bias):
     cfg = json.load(open(os.path.join(FIXTURE, "config_det.json")))
     cfg["biases"] = [bias]
@@ -77,8 +99,21 @@ def main(argv):
     print(f"[L1] fixture b_demo — tôle {W:.0f} x {H:.0f}, binaire {bin_path}")
 
     rows = {}
+    repeat_errs = []
     for bias in BIASES:
+        # §10.4.3 : mode borné-TRAVAIL — deux exécutions du même biais
+        # doivent rendre une trace `finish` IDENTIQUE. La version 1-bis
+        # laissait la patience de plateau en temps : `balanced` rendait
+        # 628 × 361 un jour et 618 × 369 la veille sur le même fixture.
         alt = run_bias(bin_path, bias)
+        alt2 = run_bias(bin_path, bias)
+        if stable_part(alt.get("finish")) != stable_part(alt2.get("finish")):
+            repeat_errs.append(
+                "%s : deux executions donnent des `finish` DIFFERENTS\n"
+                "      #1 %s\n      #2 %s" % (
+                    bias,
+                    json.dumps(stable_part(alt.get("finish")), sort_keys=True),
+                    json.dumps(stable_part(alt2.get("finish")), sort_keys=True)))
         fin = alt.get("finish")
         rows[bias] = {"alt": alt, "finish": fin}
         if not fin:
@@ -90,7 +125,7 @@ def main(argv):
         print(f"      après  x [{a['xMin']:8.1f} ; {a['xMax']:8.1f}]  y [{a['yMin']:8.1f} ; {a['yMax']:8.1f}]"
               f"   ({fin['elapsedMs']} ms)")
 
-    errs = []
+    errs = list(repeat_errs)
     for bias in BIASES:
         fin = rows[bias]["finish"]
         if not fin:

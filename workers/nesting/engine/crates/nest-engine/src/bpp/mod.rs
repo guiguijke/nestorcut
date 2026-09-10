@@ -21,6 +21,7 @@ use jagua_rs::probs::spp::io::ext_repr::{
 };
 use jagua_rs::entities::Layout;
 use jagua_rs::geometry::DTransformation;
+use jagua_rs::io::ext_repr::{ExtContainer, ExtSPolygon};
 use jagua_rs::io::import::ext_to_int_transformation;
 use jagua_rs::probs::bpp::entities::BPInstance;
 use std::sync::{Arc, Mutex};
@@ -737,6 +738,13 @@ fn plan_finish(
         if cfg.compress_failure_decay.is_none() {
             cfg.compress_failure_decay = Some(0.7);
         }
+        // §10.4.3 : borné en TRAVAIL veut dire AUCUNE horloge. La patience
+        // de plateau restait en temps et le budget en secondes : la
+        // finition s'arrêtait à un endroit différent selon la machine
+        // (`balanced` rendait 628 × 361 un jour, 618 × 369 la veille, même
+        // fixture). Mêmes valeurs que `run_spp_mem` en mode déterministe.
+        cfg.plateau_patience_sec = None;
+        cfg.time_budget_sec = 86_400;
     }
 
     // 4. Résolution — sink MUET : aucun événement SPP ne doit sortir d'un job
@@ -753,11 +761,14 @@ fn plan_finish(
         }
     });
     let budget_ms = cfg.time_budget_sec * 1000;
+    let work_bounded = cfg.sa_max_iterations.is_some();
     let phases_of = |events: &Arc<Mutex<Vec<String>>>, total_ms: u64| -> serde_json::Value {
         let lines = events.lock().map(|v| v.clone()).unwrap_or_default();
-        phases_from(&lines, total_ms, budget_ms)
+        phases_from(&lines, total_ms, budget_ms, work_bounded)
     };
+    let sp_dump = sp_instance.clone();
     let keep = |reason: &'static str| -> Option<FinishPlan> {
+        dump_rejection(reason, run.bias.as_str(), &sp_dump, &cfg, None);
         let ms = t_start.elapsed().as_millis() as u64;
         Some(FinishPlan {
             idx,
@@ -828,10 +839,16 @@ fn plan_finish(
     // containment réel est déjà contrôlé plus haut sur les anneaux BRUTS
     // (±1e-3 de la tôle), et `insideSheet` le remesure en aval. On note le
     // contact dans la trace, on ne jette pas une finition correcte pour ça.
-    let mut sheet_contact = false;
-    match infeasibility_of(instance, layout.container_id, &placed, bx0, by0) {
+    match infeasibility_of(
+        instance,
+        ext_instance,
+        config,
+        layout.container_id,
+        &placed,
+        (bx0, by0, bx1, by1),
+    ) {
         None => {}
-        Some("sheet") => sheet_contact = true,
+        Some("sheet") => return keep("infeasible: sheet"),
         Some(_) => return keep("infeasible: pair"),
     }
 
@@ -848,7 +865,7 @@ fn plan_finish(
             y_max,
         },
         elapsed_ms: ms,
-        reason: if sheet_contact { "sheet-contact" } else { "" },
+        reason: "",
         phases: phases_of(&collected, ms),
     })
 }
@@ -862,64 +879,213 @@ fn plan_finish(
 /// `bx0`/`by0` = origine de l'AABB du bin (les poses SPP sont ancrées en 0).
 pub fn poses_are_feasible(
     instance: &BPInstance,
+    ext_instance: &ExtBPInstance,
+    config: &EngineConfig,
     container_id: u64,
     placed: &[ExtPlacedItem],
-    bx0: f32,
-    by0: f32,
+    bin_aabb: (f32, f32, f32, f32),
 ) -> bool {
-    infeasibility_of(instance, container_id, placed, bx0, by0).is_none()
+    infeasibility_of(instance, ext_instance, config, container_id, placed, bin_aabb).is_none()
 }
 
-/// Comme [`poses_are_feasible`], mais dit CE QUI cloche : `"sheet"` (une
-/// pièce seule collisionne déjà le contour de la tôle) ou `"pair"` (deux
-/// pièces sont plus proches que l'espacement promis). La distinction n'est
-/// pas cosmétique : un rejet « sheet » signalerait une garde trop stricte
-/// (le contour est déflaté de space/2 à l'import, piège #49), un rejet
-/// « pair » est le défaut que la garde existe pour attraper.
+/// §10.4.2 : tolérance retirée à l'espacement pour juger le contact au
+/// contour. Le contour est déflaté de space/2 à l'import et la phase 2
+/// transposée rend des coordonnées à ~1e-4 du bord : exiger `space` tout
+/// rond rejetterait des finitions correctes.
+const SHEET_MARGIN_SLACK: f32 = 0.05;
+
+/// Comme [`poses_are_feasible`], mais dit CE QUI cloche.
+///
+/// §10.4.1 — LES PAIRES D'ABORD. La version 1-bis rendait `"sheet"` dès
+/// qu'une pièce seule touchait le contour, SANS avoir regardé les paires :
+/// le contact au contour étant fréquent (deux des trois biais de L1 le
+/// portent), un chevauchement pouvait passer derrière lui. La vérification
+/// de paire se fait donc dans un conteneur AGRANDI de 2·space : le contour
+/// ne peut plus y être la cause, seule une paire trop proche déclenche.
+///
+/// §10.4.2 — le contact au contour est ensuite BORNÉ : l'AABB brute de
+/// chaque pièce doit garder `space − 0,05 mm` des quatre bords du bin.
+///
+/// Rend `None` si tout va bien, `Some("pair")` ou `Some("sheet")` sinon.
 pub fn infeasibility_of(
     instance: &BPInstance,
+    ext_instance: &ExtBPInstance,
+    config: &EngineConfig,
     container_id: u64,
     placed: &[ExtPlacedItem],
-    bx0: f32,
-    by0: f32,
+    bin_aabb: (f32, f32, f32, f32),
 ) -> Option<&'static str> {
-    let bin = instance.bins().find(|b| b.id == container_id as usize)?;
-    let to_int = |pi: &ExtPlacedItem| {
-        let item = instance.item(pi.item_id as usize);
-        let ext_dt = DTransformation::new(
-            pi.transformation.rotation.to_radians(),
-            (
-                pi.transformation.translation.0 - bx0,
-                pi.transformation.translation.1 - by0,
-            ),
-        );
-        (item, ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform))
+    let (bx0, by0, bx1, by1) = bin_aabb;
+    let space = config.min_item_separation.unwrap_or(0.0).max(0.0);
+
+    // 1. Paires — conteneur agrandi, le contour est hors de cause.
+    let sc = config.sparrow_config();
+    let importer = Importer::new(
+        sc.cde_config,
+        sc.poly_simpl_tolerance,
+        sc.min_item_separation,
+        sc.narrow_concavity_cutoff_ratio,
+    );
+    let pad = 2.0 * space + 1.0;
+    let (w, h) = (bx1 - bx0 + 2.0 * pad, by1 - by0 + 2.0 * pad);
+    let roomy = ExtContainer {
+        id: 0,
+        shape: jagua_rs::io::ext_repr::ExtShape::SimplePolygon(ExtSPolygon(vec![
+            (-pad, -pad),
+            (w - pad, -pad),
+            (w - pad, h - pad),
+            (-pad, h - pad),
+            (-pad, -pad),
+        ])),
+        zones: vec![],
     };
-    let mut probe = Layout::new(bin.container.clone());
-    for pi in placed {
-        let (item, d_transf) = to_int(pi);
-        probe.place_item(item, d_transf);
+    if let Ok(container) = importer.import_container(&roomy) {
+        let mut probe = Layout::new(container);
+        for pi in placed {
+            let item = instance.item(pi.item_id as usize);
+            let ext_dt = DTransformation::new(
+                pi.transformation.rotation.to_radians(),
+                (
+                    pi.transformation.translation.0 - bx0,
+                    pi.transformation.translation.1 - by0,
+                ),
+            );
+            probe.place_item(
+                item,
+                ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
+            );
+        }
+        if !probe.is_feasible() {
+            return Some("pair");
+        }
     }
-    if probe.is_feasible() {
-        return None;
+    // Conteneur agrandi non importable (ne devrait pas arriver) : on
+    // retombe sur le contrôle dans le bin réel, qui ne peut que sur-rejeter.
+    else if let Some(bin) = instance.bins().find(|b| b.id == container_id as usize) {
+        let mut probe = Layout::new(bin.container.clone());
+        for pi in placed {
+            let item = instance.item(pi.item_id as usize);
+            let ext_dt = DTransformation::new(
+                pi.transformation.rotation.to_radians(),
+                (
+                    pi.transformation.translation.0 - bx0,
+                    pi.transformation.translation.1 - by0,
+                ),
+            );
+            probe.place_item(
+                item,
+                ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
+            );
+        }
+        if !probe.is_feasible() {
+            return Some("pair");
+        }
     }
-    // Une pièce SEULE dans la tôle qui collisionne déjà : c'est le contour.
+
+    // 2. Contour : marge BRUTE d'au moins space − 0,05 mm sur les 4 bords.
+    let item_pts: Vec<Vec<(f32, f32)>> = ext_instance
+        .items
+        .iter()
+        .map(|it| shape_points(&it.base.shape))
+        .collect();
+    let min_margin = (space - SHEET_MARGIN_SLACK).max(0.0);
     for pi in placed {
-        let (item, d_transf) = to_int(pi);
-        let mut solo = Layout::new(bin.container.clone());
-        solo.place_item(item, d_transf);
-        if !solo.is_feasible() {
+        let Some(pts) = item_pts.get(pi.item_id as usize) else {
+            continue;
+        };
+        let Some((x0, y0, x1, y1)) = placed_aabb(pts, &pi.transformation) else {
+            continue;
+        };
+        if x0 - bx0 < min_margin
+            || y0 - by0 < min_margin
+            || bx1 - x1 < min_margin
+            || by1 - y1 < min_margin
+        {
             return Some("sheet");
         }
     }
-    Some("pair")
+    None
+}
+
+/// §10.4.4 — `NEST_FINISH_DUMP=<dir>` (natif) : à chaque REJET, écrit
+/// l'instance SPP, la config de finition et la solution rejetée, pour
+/// rejouer le cas hors du job. Silencieux si la variable est absente ou si
+/// l'écriture échoue ; jamais dans le chemin wasm (pas de système de
+/// fichiers). Purement observationnel.
+#[cfg(not(target_arch = "wasm32"))]
+fn dump_rejection(
+    reason: &str,
+    bias: &str,
+    sp_instance: &ExtSPInstance,
+    cfg: &EngineConfig,
+    solution: Option<&ExtSPSolution>,
+) {
+    let Ok(dir) = std::env::var("NEST_FINISH_DUMP") else {
+        return;
+    };
+    if dir.is_empty() {
+        return;
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let base = format!("{dir}/finish-{bias}-{}-{stamp}", reason.replace([' ', ':'], "_"));
+    // Instance et config REJOUABLES telles quelles par le CLI natif :
+    //   nest-engine -i <base>-instance.json -c <base>-config.json -s out -p spp
+    // (EngineConfig ne dérive que Deserialize : la config est reconstruite
+    // champ par champ, ceux qui pilotent la finition.)
+    let cfg_json = serde_json::json!({
+        "time_budget_sec": cfg.time_budget_sec,
+        "prng_seed": cfg.prng_seed,
+        "n_alternatives": cfg.n_alternatives,
+        "n_workers": cfg.n_workers,
+        "separator_workers": cfg.separator_workers,
+        "max_strip_width": cfg.max_strip_width,
+        "min_item_separation": cfg.min_item_separation,
+        "poly_simpl_tolerance": cfg.poly_simpl_tolerance,
+        "narrow_concavity_cutoff": cfg.narrow_concavity_cutoff,
+        "two_phase": cfg.two_phase,
+        "phase1_ratio": cfg.phase1_ratio,
+        "phase2_slack_mm": cfg.phase2_slack_mm,
+        "gravity": cfg.gravity,
+        "column_fill": cfg.column_fill,
+        "biases": cfg.biases,
+        "plateau_patience_sec": cfg.plateau_patience_sec,
+        "explore_ratio": cfg.explore_ratio,
+        "explore_max_conseq_failed_attempts": cfg.explore_max_conseq_failed_attempts,
+        "compress_failure_decay": cfg.compress_failure_decay,
+        "sa_max_iterations": cfg.sa_max_iterations,
+        "live_events": false,
+    });
+    if let Ok(t) = serde_json::to_string_pretty(sp_instance) {
+        let _ = std::fs::write(format!("{base}-instance.json"), t);
+    }
+    if let Ok(t) = serde_json::to_string_pretty(&cfg_json) {
+        let _ = std::fs::write(format!("{base}-config.json"), t);
+    }
+    let meta = serde_json::json!({ "reason": reason, "bias": bias, "solution": solution });
+    if let Ok(t) = serde_json::to_string_pretty(&meta) {
+        let _ = std::fs::write(format!("{base}-meta.json"), t);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn dump_rejection(
+    _reason: &str,
+    _bias: &str,
+    _sp_instance: &ExtSPInstance,
+    _cfg: &EngineConfig,
+    _solution: Option<&ExtSPSolution>,
+) {
 }
 
 /// Ventilation des phases de la finition, lue dans les événements collectés
 /// (§8.3.5) : le marqueur `phase` sépare la minimisation de largeur (p1) de
 /// la compaction transposée (p2) ; une « amélioration » est un événement de
 /// progression dont la largeur de bande descend strictement.
-fn phases_from(events: &[String], total_ms: u64, budget_ms: u64) -> serde_json::Value {
+fn phases_from(events: &[String], total_ms: u64, budget_ms: u64, work_bounded: bool) -> serde_json::Value {
     let mut p2_start: Option<u64> = None;
     let (mut p1_impr, mut p2_impr) = (0u32, 0u32);
     let mut best: Option<f64> = None;
@@ -958,7 +1124,15 @@ fn phases_from(events: &[String], total_ms: u64, budget_ms: u64) -> serde_json::
         "p2Improvements": p2_impr,
         // « budget » = la finition a consommé son plafond ; « plateau » =
         // elle s'est arrêtée avant (patience ou convergence).
-        "stop": if budget_ms > 0 && total_ms + 1000 >= budget_ms { "budget" } else { "plateau" },
+        // En mode borné-travail il n'y a plus d'horloge du tout : dire
+        // « plateau » y serait faux (le budget est à 24 h par construction).
+        "stop": if work_bounded {
+            "work"
+        } else if budget_ms > 0 && total_ms + 1000 >= budget_ms {
+            "budget"
+        } else {
+            "plateau"
+        },
     })
 }
 
@@ -1116,6 +1290,18 @@ mod finish_tests {
         }
     }
 
+    /// Config d'espacement 2 mm, sans simplification — les gardes se jugent
+    /// sur des formes exactes.
+    fn space_cfg() -> EngineConfig {
+        serde_json::from_value(serde_json::json!({
+            "time_budget_sec": 5,
+            "prng_seed": 1,
+            "min_item_separation": 2.0,
+            "poly_simpl_tolerance": null,
+        }))
+        .unwrap()
+    }
+
     fn finish_cfg() -> EngineConfig {
         serde_json::from_value(serde_json::json!({
             "time_budget_sec": 12,
@@ -1264,13 +1450,7 @@ mod finish_tests {
     #[test]
     fn finish_rejects_infeasible_strip() {
         let inst = square_instance(2);
-        let cfg: EngineConfig = serde_json::from_value(serde_json::json!({
-            "time_budget_sec": 5,
-            "prng_seed": 1,
-            "min_item_separation": 2.0,
-            "poly_simpl_tolerance": null,
-        }))
-        .unwrap();
+        let cfg = space_cfg();
         let instance = imported(&inst, &cfg);
         // Décollées du bord : à l'import jagua DÉFLATE aussi le conteneur de
         // space/2 (piège #49) — une pièce à exactement `space` du bord est
@@ -1280,18 +1460,68 @@ mod finish_tests {
             item_id: 0,
             transformation: ExtTransformation { rotation: 0.0, translation: (10.0 + x, 10.0) },
         };
+        let aabb = (0.0, 0.0, SHEET, SHEET);
         // Légal : 2,5 mm d'espace pour 2,0 promis. NB : à EXACTEMENT 2,0 les
         // formes gonflées de space/2 se TOUCHENT, et un contact est une
         // collision pour la CDE de jagua (piège #57) — un solveur ne rend
         // donc jamais ce cas comme faisable.
         assert!(
-            poses_are_feasible(&instance, 0, &[pose(0.0), pose(SIDE + 2.5)], 0.0, 0.0),
+            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 2.5)], aabb),
             "2,5 mm d'espacement doit passer"
         );
         // 0,2 mm de trop près : 1,8 mm au lieu de 2,0.
         assert!(
-            !poses_are_feasible(&instance, 0, &[pose(0.0), pose(SIDE + 1.8)], 0.0, 0.0),
+            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 1.8)], aabb),
             "1,8 mm pour 2,0 promis doit être rejeté"
+        );
+    }
+
+    /// §10.4.1 : une paire trop proche doit être vue MÊME si une pièce
+    /// touche le contour. La version 1-bis rendait « sheet » (non bloquant)
+    /// dès le premier contact, sans regarder les paires — un chevauchement
+    /// passait derrière lui.
+    #[test]
+    fn finish_rejects_pair_even_with_sheet_contact() {
+        let inst = square_instance(3);
+        let cfg = space_cfg();
+        let instance = imported(&inst, &cfg);
+        let aabb = (0.0, 0.0, SHEET, SHEET);
+        let at = |x: f32, y: f32| ExtPlacedItem {
+            item_id: 0,
+            transformation: ExtTransformation { rotation: 0.0, translation: (x, y) },
+        };
+        // Une pièce COLLÉE au bord (contact) + deux pièces à 1,8 mm ailleurs.
+        let poses = [at(0.0, 0.0), at(10.0, 100.0), at(10.0 + SIDE + 1.8, 100.0)];
+        assert_eq!(
+            infeasibility_of(&instance, &inst, &cfg, 0, &poses, aabb),
+            Some("pair"),
+            "la paire doit primer sur le contact au contour"
+        );
+    }
+
+    /// §10.4.2 : un contact au contour PROFOND (pièce au bord de tôle) est
+    /// rejeté — on ne livre pas une pièce à moins de l'espacement du bord.
+    #[test]
+    fn finish_rejects_deep_sheet_contact() {
+        let inst = square_instance(2);
+        let cfg = space_cfg();
+        let instance = imported(&inst, &cfg);
+        let aabb = (0.0, 0.0, SHEET, SHEET);
+        let at = |x: f32, y: f32| ExtPlacedItem {
+            item_id: 0,
+            transformation: ExtTransformation { rotation: 0.0, translation: (x, y) },
+        };
+        // Pièces largement séparées : aucune paire en cause.
+        assert_eq!(
+            infeasibility_of(&instance, &inst, &cfg, 0, &[at(0.0, 100.0), at(100.0, 100.0)], aabb),
+            Some("sheet"),
+            "une pièce au bord (marge 0) doit être rejetée"
+        );
+        // À 2,0 mm du bord : au-dessus du plancher space − 0,05.
+        assert_eq!(
+            infeasibility_of(&instance, &inst, &cfg, 0, &[at(2.0, 100.0), at(100.0, 100.0)], aabb),
+            None,
+            "2,0 mm du bord pour 2,0 promis doit passer"
         );
     }
 
