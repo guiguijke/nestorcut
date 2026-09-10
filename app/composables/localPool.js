@@ -132,7 +132,12 @@ function liveSheets(payload) {
  * toujours biases[0]). */
 function workerEngineConfig(payload, w, isSpp) {
     const base = payload?.engineConfig || {}
-    const cfg = { ...base, n_workers: 1, separator_workers: 1 }
+    // Plan « dernière tôle » §8.3.3 : les WALKS ne finissent PAS leur tôle
+    // partielle. La fusion n'en retient qu'une par classe : huit walks qui
+    // finissent chacun la leur, c'est huit fois le même travail dont sept
+    // sont jetés (+33 s mesurés au harnais). La finition se fait une seule
+    // fois, dans `merge_alternatives` (merge.rs), sur les runs retenus.
+    const cfg = { ...base, n_workers: 1, separator_workers: 1, finish_partial_sheet: false }
     if (Array.isArray(base.biases) && base.biases.length) {
         const active = dirBiases(base.biases)
         cfg.biases = [active[w % active.length]]
@@ -660,7 +665,15 @@ function checkAllSettled(jobSlug, pool, payload) {
 // mort, pool.settle jamais appelé, promesse jamais résolue, slot de calcul
 // occupé à vie). Un timeout de merge réessaie une fois sur un autre
 // survivant puis livre le premier run survivant tel quel (dégradé, borné).
-const MERGE_TIMEOUT_MS = 30_000
+// §8.3.3 : le merge FINIT désormais la tôle partielle de chaque alternative
+// retenue (jusqu'à 16 s chacune, mesuré) — un timeout fixe de 30 s coupait
+// la fusion en plein travail et livrait un résultat dégradé.
+const MERGE_BASE_TIMEOUT_MS = 30_000
+const MERGE_PER_ALT_MS = 16_000
+export function mergeTimeoutMs(nAlternatives) {
+    const n = Math.max(1, Math.trunc(Number(nAlternatives) || 1))
+    return MERGE_BASE_TIMEOUT_MS + n * MERGE_PER_ALT_MS
+}
 const MERGE_MAX_ATTEMPTS = 2
 
 function postMerge(jobSlug, pool, payload) {
@@ -705,6 +718,9 @@ function postMerge(jobSlug, pool, payload) {
     pool.mergeTarget = target
     const mergeId = `merge:${jobSlug}`
     target.mergeId = mergeId
+    // §8.3.3 : la fusion finit la dernière tôle — la vue doit dire ce qui se
+    // passe, sinon l'écran se fige sur le dernier layout pendant ~16 s.
+    pool.onLive?.({ type: 'progress', stage: 'bpp-finish' })
     target.worker.postMessage({
         id: mergeId,
         jobSlug,
@@ -729,5 +745,5 @@ function postMerge(jobSlug, pool, payload) {
         // (postMerge gère les deux via alive/tentatives).
         target.dead = true
         postMerge(jobSlug, pool, payload)
-    }, MERGE_TIMEOUT_MS)
+    }, mergeTimeoutMs(payload?.engineConfig?.n_alternatives))
 }

@@ -1086,54 +1086,6 @@ def _relay_candidates_in_bands(layouts, recv_i, candidates, items_by_id,
     return moved
 
 
-def _compact_receivers(layouts, items_by_id, bin_dims, space, stats=None):
-    """V3 (vérif 2026-09-04, étape 3.1) : compaction généralisée aux tôles
-    RECEVEUSES. En first-fit par tôle, le moteur remplit lui-même les
-    bandes de la tôle 1 avec des fans en désordre — l'AABB atteint les
-    bords, residual_bands n'a plus de rectangle propre et le lattice
-    remplace moins qu'avant (449 fans contre 474 à space 2). Ici : ancre
-    = hôtes + nichées (immobiles), libres = TOUT le reste détaché puis
-    re-posé derrière l'ancre. Acceptation : front (AABB.maxx) ≤ avant à
-    0,5 mm près, sinon restauration complète."""
-    moved_total = 0
-    compacted = 0
-    for sheet_i in range(len(layouts)):
-        last = layouts[sheet_i]
-        units, free = _helix_units_and_free(last, items_by_id)
-        if not free:
-            continue
-        if not _sheet_needs_compaction(last, units, free, items_by_id, space):
-            continue
-        before = layout_aabb(last, items_by_id)
-        if before is None:
-            continue
-        before_count = len(last.get("placed_items", []))
-        snapshot = copy.deepcopy(last.get("placed_items", []))
-        try:
-            moved = _relay_frees_behind_anchor(
-                layouts, sheet_i, free, [], items_by_id, bin_dims, space)
-            after = layout_aabb(last, items_by_id)
-            after_count = len(last.get("placed_items", []))
-            # W1 (vérif 2026-09-04) + §5.1 : invariant GÉNÉRIQUE « jamais
-            # pire que l'état d'entrée » — compte de pièces ET front.
-            # L'ancienne acceptation sur le front seul laissait passer une
-            # re-pose au lattice qui PERD des pièces (receveuse pleine :
-            # le front est au bord de toute façon) : 583-586 pièces et
-            # chute 580 au lieu de 590 / 600.
-            if (after is not None and after[2] > before[2] + 0.5
-                    or after_count < before_count):
-                last["placed_items"] = copy.deepcopy(snapshot)
-                continue
-            if moved:
-                moved_total += moved
-                compacted += 1
-        except _CompactRollback as rb:
-            last["placed_items"] = copy.deepcopy(snapshot)
-    if stats is not None:
-        stats["compactReceivers"] = compacted
-    return moved_total
-
-
 def _compact_last_sheet(layouts, sheet_i, items_by_id, bin_dims, space,
                         stats=None, regrid=True):
     """Compaction −X de la tôle donneuse (constats 2026-09-02). Le moteur

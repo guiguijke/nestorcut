@@ -1146,42 +1146,6 @@ function mergeFillCompactReceivers(layouts, donorI, partsById, sheetDimsOf, spac
     return movedTotal
 }
 
-function compactReceivers(layouts, partsById, sheetDimsOf, space, payload, stats = null) {
-    let movedTotal = 0
-    let compacted = 0
-    for (let sheetI = 0; sheetI < layouts.length; sheetI++) {
-        const last = layouts[sheetI]
-        const { units, free } = helixUnitsAndFree(last, partsById)
-        if (!free.length) continue
-        if (!sheetNeedsCompaction(last, units, free, partsById, space)) continue
-        const before = layoutAabb(last, partsById)
-        if (!before) continue
-        const beforeCount = (last.placed_items || []).length
-        const snapshot = JSON.parse(JSON.stringify(last.placed_items || []))
-        try {
-            const moved = relayFreesBehindAnchor(layouts, sheetI, free, [],
-                partsById, sheetDimsOf, space, payload)
-            const after = layoutAabb(last, partsById)
-            const afterCount = (last.placed_items || []).length
-            // W1 (vérif 2026-09-04) + §5.1 : invariant « jamais pire que
-            // l'état d'entrée » — compte ET front (miroir Python).
-            if ((after && after[2] > before[2] + 0.5) || afterCount < beforeCount) {
-                last.placed_items = JSON.parse(JSON.stringify(snapshot))
-                continue
-            }
-            if (moved) {
-                movedTotal += moved
-                compacted++
-            }
-        } catch (e) {
-            if (e !== COMPACT_ROLLBACK) throw e
-            last.placed_items = JSON.parse(JSON.stringify(snapshot))
-        }
-    }
-    if (stats) stats.compactReceivers = compacted
-    return movedTotal
-}
-
 // D6 (audit 2026-09-03) : sentinelle — le catch de compaction ne doit
 // avaler QUE le rollback délibéré, JAMAIS une TypeError (c'est ainsi que
 // le bug `const moved` est resté invisible).

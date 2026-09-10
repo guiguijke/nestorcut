@@ -585,6 +585,9 @@ const scoreLabel = computed(() => {
 const stageLabel = computed(() => {
     const stage = resolveLiveStage(props.result, best.value?.stage);
     if (!stage) return t('results.nesting');
+    // Plan « dernière tôle » §8.3.3 : la fusion refait la tôle partielle
+    // dans la direction demandée — ça dure, il faut le dire.
+    if (stage === 'bpp-finish') return t('live.finishing');
     const key = `progress.stage.${stage}`;
     const translated = t(key);
     return translated === key ? stage : translated;

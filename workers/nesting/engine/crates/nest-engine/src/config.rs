@@ -103,6 +103,13 @@ pub struct EngineConfig {
     /// AB1 (L2-bis) : plancher d'itérations de la patience P3 (défaut 30).
     #[serde(default)]
     pub sa_stop_floor: Option<usize>,
+    /// BPP only : finition de la tôle partielle (plan « dernière tôle »).
+    /// Absent = ACTIVE (comportement natif). `false` sur les walks du pool
+    /// navigateur : la finition y est faite UNE fois, à la fusion, sur les
+    /// alternatives retenues — sinon les huit walks finissent chacun la
+    /// leur alors que la fusion n'en garde qu'une par classe (+33 s mesurés).
+    #[serde(default)]
+    pub finish_partial_sheet: Option<bool>,
     /// P4 — exposant du biais d'éjection par aire du séparateur GLS
     /// (0/absent = historique). La perte conteneur pondérée d'un item est
     /// multipliée par (aire/médiane)^β, clampée [0.25, 4] : à pénétration
@@ -150,6 +157,10 @@ impl EngineConfig {
     }
     pub fn live_events(&self) -> bool {
         self.live_events.unwrap_or(false)
+    }
+    /// Finition de la tôle partielle : active sauf `Some(false)`.
+    pub fn finish_enabled(&self) -> bool {
+        self.finish_partial_sheet.unwrap_or(true)
     }
     pub fn n_workers(&self) -> usize {
         self.n_workers.unwrap_or_else(|| {

@@ -653,6 +653,35 @@ fn merge_bp_json(
     }
 
     let biases = config.dir_biases();
+    // Plan « dernière tôle » §8.3.2 : la finition de la tôle partielle se
+    // fait ICI pour le pool navigateur — une seule fois, sur le champion de
+    // chaque classe (celui que la fusion retient), et pas dans chacun des
+    // huit walks. Même fonction qu'en natif, donc même résultat. Un run qui
+    // porte déjà `finish` (walk sans le drapeau à faux, flux serveur) n'est
+    // pas refini.
+    if config.finish_enabled() && bp_runs.iter().any(|r| r.finish.is_none()) {
+        let sparrow_config = config.sparrow_config();
+        let importer = jagua_rs::io::import::Importer::new(
+            sparrow_config.cde_config,
+            sparrow_config.poly_simpl_tolerance,
+            sparrow_config.min_item_separation,
+            sparrow_config.narrow_concavity_cutoff_ratio,
+        );
+        match jagua_rs::probs::bpp::io::import_instance(&importer, &ext_instance) {
+            Ok(instance) => {
+                let started = jagua_rs::Instant::now();
+                let silent: crate::progress::EventSink = std::sync::Arc::new(|_: &str| {});
+                crate::bpp::finish_exported_runs(
+                    &ext_instance, &instance, &mut bp_runs, &biases, config, &started, &silent,
+                );
+            }
+            // Instance illisible : on fusionne sans finir plutôt que
+            // d'échouer — le post-pass Python/JS reprend la main.
+            Err(e) => {
+                let _ = e;
+            }
+        }
+    }
     let merged = merge_bp_runs(&ext_instance, &bp_runs, &biases, config.n_alternatives)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(serde_json::json!({

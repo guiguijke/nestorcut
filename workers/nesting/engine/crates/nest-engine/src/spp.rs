@@ -303,6 +303,19 @@ pub fn run_spp_mem(
     // shape. Legacy jobs (no `biases` in config) keep the historical
     // two-phase flow below.
     if config.biases.is_some() {
+        // Plan « dernière tôle » §8.3.5 : marqueur de PHASE dans le flux
+        // d'événements. Purement observationnel (AGENTS #14b) et additif —
+        // le worker Python ignore les types inconnus, engine.worker.js ne
+        // route que les types explicites. Il sert au collecteur de la
+        // finition BPP à ventiler p1 / p2 (le plafond de budget se décide
+        // sur ces chiffres, pas à vue).
+        let phase_evt = |n: u8| {
+            sink(&format!(
+                "{{\"type\":\"phase\",\"n\":{},\"elapsed_ms\":{}}}",
+                n,
+                started.elapsed().as_millis()
+            ));
+        };
         let biases = config.dir_biases();
         let explore = config.explore_ratio;
         let gravity_on = config.gravity();
@@ -335,6 +348,7 @@ pub fn run_spp_mem(
                     // Historical behaviour: width-min, then transposed height
                     // compaction when a sheet bound exists.
                     DirBias::LeftFirst => {
+                        phase_evt(1);
                         let (s1, s1_evals) = optimize_one(
                             &instance, &sparrow_config,
                             if two_phase { b1 } else { budget },
@@ -359,6 +373,7 @@ sink,
                         let t_ext = transpose_instance(&ext_instance, corridor);
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
+                        phase_evt(2);
                         let (s2, s2_evals) = optimize_one(
                             &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
@@ -403,6 +418,7 @@ sink,
                         let t_ext = transpose_instance(&ext_instance, mw);
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
+                        phase_evt(1);
                         let (s1, s1_evals) = optimize_one(
                             &t_instance, &sparrow_config,
                             if two_phase { b1 } else { budget },
@@ -429,6 +445,7 @@ sink,
                         ext2.strip_height = height_corridor;
                         let inst2 =
                             jagua_rs::probs::spp::io::import_instance(&importer, &ext2).ok()?;
+                        phase_evt(2);
                         let (s2, s2_evals) = optimize_one(
                             &inst2, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
@@ -466,6 +483,7 @@ sink,
                             );
                             return Some(ClassRun { seed, bias, solution: s, evals });
                         };
+                        phase_evt(1);
                         let (s1, s1_evals) = optimize_one(
                             &instance, &sparrow_config,
                             if two_phase { b1 } else { budget },
@@ -501,6 +519,7 @@ sink,
                         let t_ext = transpose_instance(&ext_instance, corridor);
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
+                        phase_evt(2);
                         let (s2, s2_evals) = optimize_one(
                             &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,

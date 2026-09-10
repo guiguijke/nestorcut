@@ -19,7 +19,11 @@ use jagua_rs::probs::bpp::io::ext_repr::{ExtBPInstance, ExtBPSolution, ExtBin};
 use jagua_rs::probs::spp::io::ext_repr::{
     ExtItem as SpExtItem, ExtSPInstance, ExtSPSolution,
 };
-use std::sync::Arc;
+use jagua_rs::entities::Layout;
+use jagua_rs::geometry::DTransformation;
+use jagua_rs::io::import::ext_to_int_transformation;
+use jagua_rs::probs::bpp::entities::BPInstance;
+use std::sync::{Arc, Mutex};
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
 use serde::{Deserialize, Serialize};
@@ -255,48 +259,15 @@ pub fn run_bpp_mem(
         })
         .collect();
 
-    // Plan « dernière tôle » (2026-09-09) §3.1 : la tôle partielle de CHAQUE
-    // walk est refaite en SPP de la même direction, avant la fusion. Le coût
-    // du recuit n'a pas de direction (il minimise l'aire de l'AABB de la
-    // tôle) et le biais du constructif est un multiplicateur faible : la
-    // direction est un objectif de SOLVEUR, elle se règle ici, pas dans un
-    // post-pass −X côté Python/JS.
-    //
-    // EN PARALLÈLE, comme les walks : la finition coûte jusqu'à 15 s par
-    // walk et il y en a `n_workers` (8 en qualité) — en série c'était
-    // +90 s de temps de job sur la démo, mesuré. Le calcul ne dépend que
-    // du run et de sa seed, donc le résultat est identique à l'ordre
-    // d'exécution près (le déterminisme reste vérifié par L2).
-    //
-    // Et SEULEMENT sur les runs qui seront exportés : la fusion ne retient
-    // que le champion de chaque classe active (même règle que
-    // `merge_bp_runs`) — finir les 8 walks quand 3 sont livrés, c'est
-    // multiplier le coût par 2,7 pour rien.
-    let feasible_exists = exported.iter().any(|r| r.cost.unplaced == 0);
-    let mut to_finish = vec![false; exported.len()];
-    for b in biases.iter() {
-        let champ = exported
-            .iter()
-            .enumerate()
-            .filter(|(_, r)| r.bias == *b && (!feasible_exists || r.cost.unplaced == 0))
-            .min_by(|(_, a), (_, c)| {
-                a.cost.cmp_key().cmp(&c.cost.cmp_key()).then(a.seed.cmp(&c.seed))
-            })
-            .map(|(i, _)| i);
-        if let Some(i) = champ {
-            to_finish[i] = true;
-        }
-    }
-    let plans = map_workers(exported.len(), |i| {
-        if to_finish[i] {
-            plan_finish(&ext_instance, &exported[i], config)
-        } else {
-            None
-        }
-    });
-    for (run, plan) in exported.iter_mut().zip(plans.into_iter()) {
-        run.finish = apply_finish(&ext_instance, run, plan, config, &started, sink);
-    }
+    // Plan « dernière tôle » §3.1 / §8.3 : la tôle partielle des runs qui
+    // seront EXPORTÉS est refaite en SPP de la même direction, avant la
+    // fusion. Le coût du recuit n'a pas de direction et le biais du
+    // constructif est un multiplicateur faible : la direction est un
+    // objectif de SOLVEUR, elle se règle ici, pas dans un post-pass −X.
+    finish_exported_runs(
+        &ext_instance, instance, &mut exported, &biases, config, &started, sink,
+    );
+
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
         Ok(merged) => {
             sink(&format!(
@@ -497,6 +468,66 @@ fn ext_layout_event(run: &BpRun, started: &Instant) -> String {
 ///
 /// Ne touche ni l'affectation des pièces aux tôles, ni les autres layouts,
 /// ni le schéma d'export (champs additifs seulement).
+/// Applique la finition aux runs qui seront EXPORTÉS — le champion de
+/// chaque classe active, même règle que `merge_bp_runs`. UN SEUL
+/// emplacement, partagé par le solve natif et par la fusion du pool
+/// navigateur (`merge::merge_alternatives_json`) : sans cela les huit walks
+/// du pool finissaient chacun leur tôle alors que la fusion n'en garde
+/// qu'une par classe (+33 s mesurés au harnais, §8.2).
+///
+/// Un run qui porte déjà `finish` n'est PAS refini (champ additif : sa
+/// présence signe une finition faite par le walk).
+pub fn finish_exported_runs(
+    ext_instance: &ExtBPInstance,
+    instance: &BPInstance,
+    exported: &mut [BpRun],
+    biases: &[DirBias],
+    config: &EngineConfig,
+    started: &Instant,
+    sink: &EventSink,
+) {
+    if !config.finish_enabled() {
+        return;
+    }
+    let feasible_exists = exported.iter().any(|r| r.cost.unplaced == 0);
+    let mut to_finish = vec![false; exported.len()];
+    for b in biases.iter() {
+        let champ = exported
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| {
+                r.bias == *b
+                    && r.finish.is_none()
+                    && (!feasible_exists || r.cost.unplaced == 0)
+            })
+            .min_by(|(_, a), (_, c)| {
+                a.cost.cmp_key().cmp(&c.cost.cmp_key()).then(a.seed.cmp(&c.seed))
+            })
+            .map(|(i, _)| i);
+        if let Some(i) = champ {
+            to_finish[i] = true;
+        }
+    }
+    if !to_finish.iter().any(|b| *b) {
+        return;
+    }
+    // EN PARALLÈLE, comme les walks : le calcul ne dépend que du run et de
+    // sa seed, le résultat est donc indépendant de l'ordre d'exécution (le
+    // verrou de déterminisme L2 le vérifie).
+    let plans = map_workers(exported.len(), |i| {
+        if to_finish[i] {
+            plan_finish(ext_instance, instance, &exported[i], config)
+        } else {
+            None
+        }
+    });
+    for (run, plan) in exported.iter_mut().zip(plans.into_iter()) {
+        if plan.is_some() {
+            run.finish = apply_finish(ext_instance, run, plan, config, started, sink);
+        }
+    }
+}
+
 /// Ce qu'une finition a calculé, sans rien avoir muté : calculable en
 /// parallèle (elle ne dépend que du run et de sa seed).
 pub struct FinishPlan {
@@ -507,17 +538,19 @@ pub struct FinishPlan {
     after: Extent,
     elapsed_ms: u64,
     reason: &'static str,
+    phases: serde_json::Value,
 }
 
 /// Compatibilité tests : plan + application en un appel.
 pub fn finish_partial_sheet(
     ext_instance: &ExtBPInstance,
+    instance: &BPInstance,
     run: &mut BpRun,
     config: &EngineConfig,
     started: &Instant,
     sink: &EventSink,
 ) -> Option<serde_json::Value> {
-    let plan = plan_finish(ext_instance, run, config);
+    let plan = plan_finish(ext_instance, instance, run, config);
     apply_finish(ext_instance, run, plan, config, started, sink)
 }
 
@@ -565,11 +598,13 @@ fn apply_finish(
         plan.elapsed_ms,
         kept,
         plan.reason,
+        plan.phases,
     ))
 }
 
 fn plan_finish(
     ext_instance: &ExtBPInstance,
+    instance: &BPInstance,
     run: &BpRun,
     config: &EngineConfig,
 ) -> Option<FinishPlan> {
@@ -706,15 +741,32 @@ fn plan_finish(
 
     // 4. Résolution — sink MUET : aucun événement SPP ne doit sortir d'un job
     //    BPP (le worker Python et engine.worker.js lisent le flux).
-    let silent: EventSink = Arc::new(|_: &str| {});
+    // §8.3.5 : le sink muet devient un COLLECTEUR — les marqueurs de phase
+    // et les événements de progression de la finition ne sortent pas du job
+    // BPP (le worker Python et engine.worker.js lisent le flux), mais ils
+    // servent à ventiler p1 / p2 dans la trace.
+    let collected: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let sink_store = collected.clone();
+    let silent: EventSink = Arc::new(move |line: &str| {
+        if let Ok(mut v) = sink_store.lock() {
+            v.push(line.to_owned());
+        }
+    });
+    let budget_ms = cfg.time_budget_sec * 1000;
+    let phases_of = |events: &Arc<Mutex<Vec<String>>>, total_ms: u64| -> serde_json::Value {
+        let lines = events.lock().map(|v| v.clone()).unwrap_or_default();
+        phases_from(&lines, total_ms, budget_ms)
+    };
     let keep = |reason: &'static str| -> Option<FinishPlan> {
+        let ms = t_start.elapsed().as_millis() as u64;
         Some(FinishPlan {
             idx,
             placed: None,
             before,
             after: before,
-            elapsed_ms: t_start.elapsed().as_millis() as u64,
+            elapsed_ms: ms,
             reason,
+            phases: phases_of(&collected, ms),
         })
     };
     let Ok(out) = crate::spp::run_spp_mem(sp_instance, &cfg, &silent) else {
@@ -762,7 +814,18 @@ fn plan_finish(
         return keep("spp layout exceeds the sheet");
     }
 
+    // §8.3.4 — GARDE DE FAISABILITÉ. Le contrôle de bornes ci-dessus ne voit
+    // que la tôle : il a laissé passer, à budget réduit, une tôle mesurée à
+    // 1,849 mm d'espacement pour 2,0 promis (§8.2.3). On REJOUE les poses
+    // dans un layout jagua du bin : les collisions y sont mesurées sur les
+    // formes GONFLÉES de `min_item_separation`, donc un gap sous
+    // l'espacement EST une collision. Échec → le layout BPP est conservé.
+    if !poses_are_feasible(instance, layout.container_id, &placed, bx0, by0) {
+        return keep("infeasible");
+    }
+
     // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
+    let ms = t_start.elapsed().as_millis() as u64;
     Some(FinishPlan {
         idx,
         placed: Some(placed),
@@ -773,8 +836,90 @@ fn plan_finish(
             x_max,
             y_max,
         },
-        elapsed_ms: t_start.elapsed().as_millis() as u64,
+        elapsed_ms: ms,
         reason: "",
+        phases: phases_of(&collected, ms),
+    })
+}
+
+/// §8.3.4 — REJOUE des poses externes dans un layout jagua du bin et rend
+/// leur faisabilité. Les collisions y sont mesurées sur les formes GONFLÉES
+/// de `min_item_separation` : un écart sous l'espacement promis EST une
+/// collision, ce que le simple contrôle de bornes ne voyait pas (une tôle à
+/// 1,849 mm pour 2,0 promis est passée, §8.2.3).
+///
+/// `bx0`/`by0` = origine de l'AABB du bin (les poses SPP sont ancrées en 0).
+pub fn poses_are_feasible(
+    instance: &BPInstance,
+    container_id: u64,
+    placed: &[ExtPlacedItem],
+    bx0: f32,
+    by0: f32,
+) -> bool {
+    let Some(bin) = instance.bins().find(|b| b.id == container_id as usize) else {
+        // Bin inconnu : on ne sait pas juger, on ne rejette pas.
+        return true;
+    };
+    let mut probe = Layout::new(bin.container.clone());
+    for pi in placed {
+        let item = instance.item(pi.item_id as usize);
+        let ext_dt = DTransformation::new(
+            pi.transformation.rotation.to_radians(),
+            (
+                pi.transformation.translation.0 - bx0,
+                pi.transformation.translation.1 - by0,
+            ),
+        );
+        let d_transf = ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform);
+        probe.place_item(item, d_transf);
+    }
+    probe.is_feasible()
+}
+
+/// Ventilation des phases de la finition, lue dans les événements collectés
+/// (§8.3.5) : le marqueur `phase` sépare la minimisation de largeur (p1) de
+/// la compaction transposée (p2) ; une « amélioration » est un événement de
+/// progression dont la largeur de bande descend strictement.
+fn phases_from(events: &[String], total_ms: u64, budget_ms: u64) -> serde_json::Value {
+    let mut p2_start: Option<u64> = None;
+    let (mut p1_impr, mut p2_impr) = (0u32, 0u32);
+    let mut best: Option<f64> = None;
+    for line in events {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        match v.get("type").and_then(serde_json::Value::as_str) {
+            Some("phase") => {
+                if v.get("n").and_then(serde_json::Value::as_u64) == Some(2) {
+                    p2_start = v.get("elapsed_ms").and_then(serde_json::Value::as_u64);
+                    best = None; // repère transposé : nouvelle échelle
+                }
+            }
+            Some("progress") => {
+                if let Some(w) = v.get("strip_width").and_then(serde_json::Value::as_f64) {
+                    let improved = best.map(|b| w < b - 1e-6).unwrap_or(true);
+                    if improved {
+                        best = Some(w);
+                        if p2_start.is_some() {
+                            p2_impr += 1;
+                        } else {
+                            p1_impr += 1;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let p1_ms = p2_start.unwrap_or(total_ms).min(total_ms);
+    serde_json::json!({
+        "p1Ms": p1_ms,
+        "p2Ms": total_ms.saturating_sub(p1_ms),
+        "p1Improvements": p1_impr,
+        "p2Improvements": p2_impr,
+        // « budget » = la finition a consommé son plafond ; « plateau » =
+        // elle s'est arrêtée avant (patience ou convergence).
+        "stop": if budget_ms > 0 && total_ms + 1000 >= budget_ms { "budget" } else { "plateau" },
     })
 }
 
@@ -818,6 +963,7 @@ fn finish_report(
     elapsed_ms: u64,
     kept: &str,
     reason: &str,
+    phases: serde_json::Value,
 ) -> serde_json::Value {
     serde_json::json!({
         "sheet": sheet,
@@ -833,6 +979,7 @@ fn finish_report(
         "elapsedMs": elapsed_ms,
         "kept": kept,
         "reason": reason,
+        "phases": phases,
     })
 }
 
@@ -943,12 +1090,26 @@ mod finish_tests {
         Arc::new(|_: &str| {})
     }
 
+    /// Instance jagua de la fixture — la garde de faisabilité (§8.3.4) en a
+    /// besoin pour rejouer les poses dans un layout du bin.
+    fn imported(ext: &ExtBPInstance, cfg: &EngineConfig) -> BPInstance {
+        let sc = cfg.sparrow_config();
+        let importer = jagua_rs::io::import::Importer::new(
+            sc.cde_config,
+            sc.poly_simpl_tolerance,
+            sc.min_item_separation,
+            sc.narrow_concavity_cutoff_ratio,
+        );
+        jagua_rs::probs::bpp::io::import_instance(&importer, ext).expect("instance importable")
+    }
+
     #[test]
     fn finish_left_reduces_x_max() {
         let inst = square_instance(4);
         let mut run = run_with(spread_layout(), DirBias::LeftFirst);
         let started = Instant::now();
-        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+        let instance = imported(&inst, &finish_cfg());
+        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit s'appliquer (une tôle, 4 pièces, 16 % de remplissage)");
         assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
         let before = rep["before"]["xMax"].as_f64().unwrap();
@@ -967,7 +1128,8 @@ mod finish_tests {
         let inst = square_instance(4);
         let mut run = run_with(spread_layout(), DirBias::BottomFirst);
         let started = Instant::now();
-        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+        let instance = imported(&inst, &finish_cfg());
+        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit s'appliquer");
         assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
         let before = rep["before"]["yMax"].as_f64().unwrap();
@@ -1040,7 +1202,8 @@ mod finish_tests {
             .collect();
         let mut run = run_with(layout, DirBias::LeftFirst);
         let started = Instant::now();
-        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
+        let instance = imported(&inst, &finish_cfg());
+        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit rendre une trace même quand elle renonce");
         assert_eq!(rep["kept"], "bpp", "hors tôle accepté : {rep}");
         assert!(
@@ -1053,6 +1216,44 @@ mod finish_tests {
             .map(|p| p.transformation.translation)
             .collect();
         assert_eq!(before_poses, after_poses, "le layout BPP a été modifié malgré le refus");
+    }
+
+
+    /// §8.3.4 : deux carrés à 1,8 mm l'un de l'autre pour 2,0 promis — la
+    /// garde doit les REJETER (le contrôle de bornes, lui, les acceptait :
+    /// ils sont dans la tôle). Écart de 0,2 mm, celui du constat 8.2.3.
+    #[test]
+    fn finish_rejects_infeasible_strip() {
+        let inst = square_instance(2);
+        let cfg: EngineConfig = serde_json::from_value(serde_json::json!({
+            "time_budget_sec": 5,
+            "prng_seed": 1,
+            "min_item_separation": 2.0,
+            "poly_simpl_tolerance": null,
+        }))
+        .unwrap();
+        let instance = imported(&inst, &cfg);
+        // Décollées du bord : à l'import jagua DÉFLATE aussi le conteneur de
+        // space/2 (piège #49) — une pièce à exactement `space` du bord est
+        // au contact, et un contact est une collision. On isole donc la
+        // distance ENTRE PIÈCES, à 10 mm des bords.
+        let pose = |x: f32| ExtPlacedItem {
+            item_id: 0,
+            transformation: ExtTransformation { rotation: 0.0, translation: (10.0 + x, 10.0) },
+        };
+        // Légal : 2,5 mm d'espace pour 2,0 promis. NB : à EXACTEMENT 2,0 les
+        // formes gonflées de space/2 se TOUCHENT, et un contact est une
+        // collision pour la CDE de jagua (piège #57) — un solveur ne rend
+        // donc jamais ce cas comme faisable.
+        assert!(
+            poses_are_feasible(&instance, 0, &[pose(0.0), pose(SIDE + 2.5)], 0.0, 0.0),
+            "2,5 mm d'espacement doit passer"
+        );
+        // 0,2 mm de trop près : 1,8 mm au lieu de 2,0.
+        assert!(
+            !poses_are_feasible(&instance, 0, &[pose(0.0), pose(SIDE + 1.8)], 0.0, 0.0),
+            "1,8 mm pour 2,0 promis doit être rejeté"
+        );
     }
 
     /// `ext_layout_remnant` (formes d'origine, repère externe) doit rendre la

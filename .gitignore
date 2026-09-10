@@ -82,3 +82,7 @@ workers/nesting/bench/out_*.png
 .qa-pw/
 # spike : copie locale non suivie (wasm de dev, payloads)
 spike/
+
+# Corpus de test local (DXF de banc et d'import) — jamais dans le dépôt :
+# volumineux, et licences hétérogènes (LibreDWG GPL v3 dans le corpus import).
+.testparts/

@@ -812,27 +812,8 @@ class TestW1W2GenericAcceptance:
     acceptée que si, pour chaque tôle touchée : pièces_after ≥
     pièces_before ET front_after ≤ front_before + 0,5 mm."""
 
-    @pytest.mark.skipif(not HAS_SHAPELY, reason="shapely")
-    def test_w1_receiver_never_loses_parts(self):
-        # Receveuse PLEINE (front au bord) : la re-pose au lattice qui ne
-        # re-pose pas tout doit être REFUSÉE — l'ancienne acceptation sur
-        # le front seul la laissait passer (583-586 pièces au banc).
-        from core.residual import _compact_receivers, _sheet_needs_compaction
-        hosts = [pi(0, 52.0 + 102 * (k % 9), 52.0 + 102 * (k // 9))
-                 for k in range(81)]
-        # fans éparses jusqu'au bord droit (front ≈ bord)
-        fans = [pi(1, 940.0, 2.0 + 32 * k) for k in range(30)]
-        l0 = layout(hosts + fans)
-        before_count = len(l0["placed_items"])
-        before_front = layout_aabb(l0, BY_ID)[2]
-        stats = {}
-        _compact_receivers([l0], BY_ID, BIN, 2.0, stats=stats)
-        after_count = len(l0["placed_items"])
-        after_front = layout_aabb(l0, BY_ID)[2]
-        assert after_count >= before_count, (
-            f"W1 : {after_count} < {before_count} pièces après receveuse")
-        assert after_front <= before_front + 0.5, (
-            f"W1 : front {after_front:.1f} > {before_front:.1f} + 0,5")
+    # Plan « derniere tole » §8.3 (menage) : `_compact_receivers` etait
+    # morte en production (aucun appelant hors ce test) — retiree avec lui.
 
     @pytest.mark.skipif(not HAS_SHAPELY, reason="shapely")
     def test_w2_donor_compact_layout_is_noop(self):

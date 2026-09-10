@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+    mergeTimeoutMs,
     runPool,
     cancelPool,
     deriveSeed,
@@ -341,9 +342,14 @@ describe('runPool walks=4 (pool + merge moteur)', () => {
             }
             worker.emit({ ok: true, jobSlug: msg.jobSlug, result: engineOut(w), memory: { pagesBefore: 1, pagesAfter: 2 } })
         }
-        const seen = []
-        const out = await runPool('job-live', makePayload({ walks: 4 }), { onLive: (evt) => seen.push(evt) })
+        const all = []
+        const out = await runPool('job-live', makePayload({ walks: 4 }), { onLive: (evt) => all.push(evt) })
         expect(out.ok).toBe(true)
+        // Plan « dernière tôle » §8.3.3 : le pool annonce aussi la finition
+        // de la dernière tôle avant de poster la fusion — on ne compte ici
+        // que les FRAMES.
+        expect(all.filter((e) => e.stage === 'bpp-finish')).toHaveLength(1)
+        const seen = all.filter((e) => e.type === 'layout')
         expect(seen).toHaveLength(1)
         expect(seen[0].worker).toBe(2)
         expect(seen[0].isSpp).toBe(true)
@@ -528,8 +534,12 @@ describe('runPool — merge vers un worker mort : jamais d\'impasse (verrou R-4)
         MockWorker.instances[0].emit({ ok: true, jobSlug: 'job-merge-timeout', result: engineOut(0) })
         MockWorker.instances[1].emit({ ok: true, jobSlug: 'job-merge-timeout', result: engineOut(1) })
         expect(mergePosted(0)).toBe(true)
-        // 30 s de silence : la cible est déclarée perdue, nouveau merge.
+        // §8.3.3 : la fusion FINIT la tôle partielle de chaque alternative
+        // retenue (jusqu'à 16 s chacune) — le timeout suit le nombre
+        // d'alternatives, sinon il coupe la fusion en plein travail.
         await vi.advanceTimersByTimeAsync(30_000)
+        expect(mergePosted(1)).toBe(false)   // pas encore : le budget court
+        await vi.advanceTimersByTimeAsync(mergeTimeoutMs(3) - 30_000)
         expect(mergePosted(1)).toBe(true)
         MockWorker.instances[1].emit({
             id: 'merge:job-merge-timeout',
