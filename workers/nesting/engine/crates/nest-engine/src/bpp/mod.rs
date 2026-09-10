@@ -768,7 +768,7 @@ fn plan_finish(
     };
     let sp_dump = sp_instance.clone();
     let keep = |reason: &'static str| -> Option<FinishPlan> {
-        dump_rejection(reason, run.bias.as_str(), &sp_dump, &cfg, None);
+        dump_rejection(reason, run.bias.as_str(), &sp_dump, &cfg, None, None);
         let ms = t_start.elapsed().as_millis() as u64;
         Some(FinishPlan {
             idx,
@@ -848,8 +848,27 @@ fn plan_finish(
         (bx0, by0, bx1, by1),
     ) {
         None => {}
-        Some("sheet") => return keep("infeasible: sheet"),
-        Some(_) => return keep("infeasible: pair"),
+        Some(kind) => {
+            // Les poses rejetées partent au dump : c'est la seule façon de
+            // savoir, hors du job, si le rejet est fondé.
+            dump_rejection(
+                if kind == "sheet" { "infeasible: sheet" } else { "infeasible: pair" },
+                run.bias.as_str(),
+                &sp_dump,
+                &cfg,
+                None,
+                Some(&placed),
+            );
+            return Some(FinishPlan {
+                idx,
+                placed: None,
+                before,
+                after: before,
+                elapsed_ms: t_start.elapsed().as_millis() as u64,
+                reason: if kind == "sheet" { "infeasible: sheet" } else { "infeasible: pair" },
+                phases: phases_of(&collected, t_start.elapsed().as_millis() as u64),
+            });
+        }
     }
 
     // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
@@ -918,12 +937,41 @@ pub fn infeasibility_of(
     let (bx0, by0, bx1, by1) = bin_aabb;
     let space = config.min_item_separation.unwrap_or(0.0).max(0.0);
 
-    // 1. Paires — conteneur agrandi, le contour est hors de cause.
+    // 1. Paires — probe DÉDIÉ : conteneur agrandi (le contour est hors de
+    //    cause) ET items RÉ-IMPORTÉS avec une inflation de `space − PAIR_SLACK`.
+    //
+    //    Les items sont ré-importés SANS inflation : le probe ne juge que
+    //    le CHEVAUCHEMENT RÉEL, pas la distance.
+    //
+    //    C'est un choix imposé par la mesure, et il faut le lire en entier.
+    //    Le dump du 10/09 (`NEST_FINISH_DUMP`, cas `left` de `b_demo`) donne
+    //    des poses rejetées dont la distance minimale mesurée sur les
+    //    anneaux BRUTS, sans nettoyage, 25 polygones valides, est de
+    //    **2,0001 mm pour 2,0 promis, avec 0 mm² d'intersection** : elles
+    //    sont légales au sens de la promesse, et la garde les rejetait —
+    //    y compris après un retrait de 0,05 mm sur l'inflation du probe.
+    //    La carte de collision de jagua n'est donc pas un oracle utilisable
+    //    pour « distance ≥ space » à 0,05 mm près (l'offset d'un sommet
+    //    convexe dépasse le demi-espacement uniforme). Elle l'est en
+    //    revanche pour le chevauchement : un recouvrement d'aire est un
+    //    recouvrement d'aire.
+    //
+    //    Ce que la garde attrape donc : chevauchements réels et poses
+    //    dupliquées. Ce qu'elle n'attrape PAS : un écart sous l'espacement
+    //    sans recouvrement (le 1,849 mm du constat 8.2.3). Le faire demande
+    //    une distance arête↔arête exacte sur les anneaux, trous compris
+    //    (le miroir de `pairViolates` JS/Python) — proposé au rapport, non
+    //    engagé ici.
+    //
+    //    On passe par la carte de collision et non par une distance
+    //    d'anneaux maison : elle connaît les TROUS (une fan nichée dans le
+    //    trou de son hôte est légale, piège #4 — un test sur les anneaux
+    //    externes la rejetterait).
     let sc = config.sparrow_config();
-    let importer = Importer::new(
+    let pair_importer = Importer::new(
         sc.cde_config,
         sc.poly_simpl_tolerance,
-        sc.min_item_separation,
+        None,
         sc.narrow_concavity_cutoff_ratio,
     );
     let pad = 2.0 * space + 1.0;
@@ -939,48 +987,52 @@ pub fn infeasibility_of(
         ])),
         zones: vec![],
     };
-    if let Ok(container) = importer.import_container(&roomy) {
-        let mut probe = Layout::new(container);
-        for pi in placed {
-            let item = instance.item(pi.item_id as usize);
-            let ext_dt = DTransformation::new(
-                pi.transformation.rotation.to_radians(),
-                (
-                    pi.transformation.translation.0 - bx0,
-                    pi.transformation.translation.1 - by0,
-                ),
-            );
-            probe.place_item(
-                item,
-                ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
-            );
+    let mut probe_items: std::collections::HashMap<u64, jagua_rs::entities::Item> =
+        std::collections::HashMap::new();
+    let mut import_ok = true;
+    for pi in placed {
+        if probe_items.contains_key(&pi.item_id) {
+            continue;
         }
-        if !probe.is_feasible() {
-            return Some("pair");
-        }
-    }
-    // Conteneur agrandi non importable (ne devrait pas arriver) : on
-    // retombe sur le contrôle dans le bin réel, qui ne peut que sur-rejeter.
-    else if let Some(bin) = instance.bins().find(|b| b.id == container_id as usize) {
-        let mut probe = Layout::new(bin.container.clone());
-        for pi in placed {
-            let item = instance.item(pi.item_id as usize);
-            let ext_dt = DTransformation::new(
-                pi.transformation.rotation.to_radians(),
-                (
-                    pi.transformation.translation.0 - bx0,
-                    pi.transformation.translation.1 - by0,
-                ),
-            );
-            probe.place_item(
-                item,
-                ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
-            );
-        }
-        if !probe.is_feasible() {
-            return Some("pair");
+        let Some(src) = ext_instance.items.get(pi.item_id as usize) else {
+            import_ok = false;
+            break;
+        };
+        match pair_importer.import_item(&src.base) {
+            Ok(it) => {
+                probe_items.insert(pi.item_id, it);
+            }
+            Err(_) => {
+                import_ok = false;
+                break;
+            }
         }
     }
+    if import_ok {
+        if let Ok(container) = pair_importer.import_container(&roomy) {
+            let mut probe = Layout::new(container);
+            for pi in placed {
+                let item = &probe_items[&pi.item_id];
+                let ext_dt = DTransformation::new(
+                    pi.transformation.rotation.to_radians(),
+                    (
+                        pi.transformation.translation.0 - bx0,
+                        pi.transformation.translation.1 - by0,
+                    ),
+                );
+                probe.place_item(
+                    item,
+                    ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
+                );
+            }
+            if !probe.is_feasible() {
+                return Some("pair");
+            }
+        }
+    }
+    // Probe non constructible (ne s'observe pas) : on ne rejette pas sur une
+    // mesure qu'on n'a pas faite — le contrôle de contour ci-dessous reste.
+    let _ = container_id;
 
     // 2. Contour : marge BRUTE d'au moins space − 0,05 mm sur les 4 bords.
     let item_pts: Vec<Vec<(f32, f32)>> = ext_instance
@@ -1019,6 +1071,7 @@ fn dump_rejection(
     sp_instance: &ExtSPInstance,
     cfg: &EngineConfig,
     solution: Option<&ExtSPSolution>,
+    placed: Option<&[ExtPlacedItem]>,
 ) {
     let Ok(dir) = std::env::var("NEST_FINISH_DUMP") else {
         return;
@@ -1065,9 +1118,26 @@ fn dump_rejection(
     if let Ok(t) = serde_json::to_string_pretty(&cfg_json) {
         let _ = std::fs::write(format!("{base}-config.json"), t);
     }
-    let meta = serde_json::json!({ "reason": reason, "bias": bias, "solution": solution });
+    // Les poses RE-MAPPÉES (ids BPP, repère de la tôle) au format d'un
+    // `alternatives.json`, pour être mesurées telles quelles par
+    // `bench/measure_finish_pairs.py` contre l'instance BPP.
+    let meta = serde_json::json!({
+        "reason": reason,
+        "bias": bias,
+        "solution": solution,
+        "placed": placed,
+    });
     if let Ok(t) = serde_json::to_string_pretty(&meta) {
         let _ = std::fs::write(format!("{base}-meta.json"), t);
+    }
+    if let Some(p) = placed {
+        let as_alts = serde_json::json!([{
+            "rank": 0,
+            "solution": { "layout": { "container_id": 0, "placed_items": p, "density": 0.0 } },
+        }]);
+        if let Ok(t) = serde_json::to_string_pretty(&as_alts) {
+            let _ = std::fs::write(format!("{base}-placed-alternatives.json"), t);
+        }
     }
 }
 
@@ -1078,6 +1148,7 @@ fn dump_rejection(
     _sp_instance: &ExtSPInstance,
     _cfg: &EngineConfig,
     _solution: Option<&ExtSPSolution>,
+    _placed: Option<&[ExtPlacedItem]>,
 ) {
 }
 
@@ -1469,10 +1540,29 @@ mod finish_tests {
             poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 2.5)], aabb),
             "2,5 mm d'espacement doit passer"
         );
-        // 0,2 mm de trop près : 1,8 mm au lieu de 2,0.
+        // CONTACT EXACT : 2,0 mm pour 2,0 promis — légal, et c'est ce que
+        // rend un solveur (dump du 10/09 : 2,0001 mm mesurés). Ne doit PAS
+        // être rejeté.
         assert!(
-            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 1.8)], aabb),
-            "1,8 mm pour 2,0 promis doit être rejeté"
+            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 2.0)], aabb),
+            "le contact exact à l'espacement promis doit passer"
+        );
+        // 1,8 mm pour 2,0 promis : sous l'espacement, mais SANS
+        // recouvrement — la garde ne le voit pas, et le rapport le dit
+        // (§11). Ce verrou fixe le périmètre réel, il ne le maquille pas.
+        assert!(
+            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 1.8)], aabb),
+            "hors périmètre de la garde : 1,8 mm sans recouvrement passe"
+        );
+        // CHEVAUCHEMENT RÉEL (5 mm de recouvrement) : rejeté.
+        assert!(
+            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE - 5.0)], aabb),
+            "un chevauchement de 5 mm doit être rejeté"
+        );
+        // POSE DUPLIQUÉE : rejetée.
+        assert!(
+            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(0.0)], aabb),
+            "deux poses identiques doivent être rejetées"
         );
     }
 
@@ -1490,8 +1580,9 @@ mod finish_tests {
             item_id: 0,
             transformation: ExtTransformation { rotation: 0.0, translation: (x, y) },
         };
-        // Une pièce COLLÉE au bord (contact) + deux pièces à 1,8 mm ailleurs.
-        let poses = [at(0.0, 0.0), at(10.0, 100.0), at(10.0 + SIDE + 1.8, 100.0)];
+        // Une pièce COLLÉE au bord (contact) + deux pièces qui se
+        // CHEVAUCHENT ailleurs : la paire doit primer.
+        let poses = [at(0.0, 0.0), at(10.0, 100.0), at(10.0 + SIDE - 5.0, 100.0)];
         assert_eq!(
             infeasibility_of(&instance, &inst, &cfg, 0, &poses, aabb),
             Some("pair"),
