@@ -220,6 +220,90 @@ fn balanced_width(area: f32, sheet_h: f32, sheet_w: f32) -> f32 {
     (-dh + disc.sqrt()) / 2.0
 }
 
+/// §12.3.3 — MESURE d'espacement des alternatives livrées, en TRACE.
+///
+/// Le mode directions livre une alternative par classe. La promesse
+/// « distance ≥ space » est tenue par le solveur via l'inflation jagua,
+/// mais l'inflation travaille sur des formes simplifiées : elle n'est pas
+/// un oracle (§11.2). On mesure donc les alternatives exactement, avec
+/// l'oracle du dépôt, et on ÉCRIT ce qu'on trouve dans l'événement `done`.
+///
+/// Pourquoi une trace et pas un rejet : ici il n'existe pas de repli. En
+/// finition, rejeter veut dire « garder le layout BPP » ; sur un job
+/// mono-tôle, rejeter voudrait dire ne rien livrer. On mesure d'abord la
+/// fréquence sur le corpus, la décision d'un repli vient après.
+fn spacing_violations(
+    ext_instance: &ExtSPInstance,
+    alternatives: &[serde_json::Value],
+    config: &EngineConfig,
+) -> Vec<serde_json::Value> {
+    let space = config.min_item_separation.unwrap_or(0.0).max(0.0);
+    if space <= 0.0 {
+        return Vec::new(); // aucune promesse d'espacement à tenir
+    }
+    let limit = (space - crate::bpp::PAIR_SLACK).max(0.0);
+    let base: Vec<Vec<crate::geometry_check::Rings>> = ext_instance
+        .items
+        .iter()
+        .map(|it| crate::geometry_check::rings_of_shape(&it.base.shape))
+        .collect();
+    let mut out = Vec::new();
+    for (rank, alt) in alternatives.iter().enumerate() {
+        let Some(placed) = alt
+            .get("solution")
+            .and_then(|s| s.get("layout"))
+            .and_then(|l| l.get("placed_items"))
+            .and_then(|p| p.as_array())
+        else {
+            continue;
+        };
+        let mut rings = Vec::with_capacity(placed.len());
+        for pi in placed {
+            let Some(id) = pi.get("item_id").and_then(|v| v.as_u64()) else {
+                continue;
+            };
+            let Some(src) = base.get(id as usize) else {
+                continue;
+            };
+            let rot = pi
+                .get("transformation")
+                .and_then(|t| t.get("rotation"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0) as f32;
+            let tr = pi
+                .get("transformation")
+                .and_then(|t| t.get("translation"))
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    (
+                        a.first().and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                        a.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0) as f32,
+                    )
+                })
+                .unwrap_or((0.0, 0.0));
+            let t = jagua_rs::io::ext_repr::ExtTransformation {
+                rotation: rot,
+                translation: tr,
+            };
+            for r in src {
+                rings.push(crate::geometry_check::place_rings(r, &t));
+            }
+        }
+        let (d, pair) =
+            crate::geometry_check::min_pair_distance_upto(&rings, space + 1.0);
+        if d < limit {
+            out.push(serde_json::json!({
+                "rank": rank,
+                "bias": alt.get("bias").cloned().unwrap_or(serde_json::Value::Null),
+                "minDistanceMm": (d * 10_000.0).round() / 10_000.0,
+                "limitMm": (limit * 10_000.0).round() / 10_000.0,
+                "pair": pair.map(|(a, b)| serde_json::json!([a, b])),
+            }));
+        }
+    }
+    out
+}
+
 pub fn run_spp_mem(
     ext_instance: ExtSPInstance,
     config: &EngineConfig,
@@ -635,12 +719,16 @@ sink,
         )
         .expect("feasible solutions exist but none exported");
 
+        // §12.3.3 : ce qui est LIVRÉ est mesuré, et ce qui est mesuré est
+        // écrit — champ additif, un tableau vide quand tout est conforme.
+        let violations = spacing_violations(&ext_instance, &merged.output.alternatives, config);
         sink(&format!(
-            "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{}}}",
+            "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{},\"spacing_violations\":{}}}",
             merged.best_strip_width,
             merged.best_density,
             merged.output.alternatives.len(),
-            started.elapsed().as_secs()
+            started.elapsed().as_secs(),
+            serde_json::to_string(&violations).unwrap_or_else(|_| "[]".to_owned())
         ));
         return Ok(merged.output);
     }

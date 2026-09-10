@@ -19,11 +19,6 @@ use jagua_rs::probs::bpp::io::ext_repr::{ExtBPInstance, ExtBPSolution, ExtBin};
 use jagua_rs::probs::spp::io::ext_repr::{
     ExtItem as SpExtItem, ExtSPInstance, ExtSPSolution,
 };
-use jagua_rs::entities::Layout;
-use jagua_rs::geometry::DTransformation;
-use jagua_rs::io::ext_repr::{ExtContainer, ExtSPolygon};
-use jagua_rs::io::import::ext_to_int_transformation;
-use jagua_rs::probs::bpp::entities::BPInstance;
 use std::sync::{Arc, Mutex};
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
@@ -266,7 +261,7 @@ pub fn run_bpp_mem(
     // constructif est un multiplicateur faible : la direction est un
     // objectif de SOLVEUR, elle se règle ici, pas dans un post-pass −X.
     finish_exported_runs(
-        &ext_instance, instance, &mut exported, &biases, config, &started, sink,
+        &ext_instance, &mut exported, &biases, config, &started, sink,
     );
 
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
@@ -480,7 +475,6 @@ fn ext_layout_event(run: &BpRun, started: &Instant) -> String {
 /// présence signe une finition faite par le walk).
 pub fn finish_exported_runs(
     ext_instance: &ExtBPInstance,
-    instance: &BPInstance,
     exported: &mut [BpRun],
     biases: &[DirBias],
     config: &EngineConfig,
@@ -517,7 +511,7 @@ pub fn finish_exported_runs(
     // verrou de déterminisme L2 le vérifie).
     let plans = map_workers(exported.len(), |i| {
         if to_finish[i] {
-            plan_finish(ext_instance, instance, &exported[i], config)
+            plan_finish(ext_instance, &exported[i], config)
         } else {
             None
         }
@@ -545,18 +539,23 @@ pub struct FinishPlan {
     /// `NEST_FINISH_DUMP` n'existe qu'en natif (pas de système de fichiers
     /// en wasm). Borné : une tôle partielle, quelques dizaines de poses.
     rejected: Option<serde_json::Value>,
+    /// §12.3 — distance minimale MESURÉE entre pièces de la tôle finie
+    /// (oracle exact `geometry_check`, anneaux d'origine trous compris).
+    /// `None` quand aucune mesure n'a eu lieu (finition abandonnée avant).
+    /// Livrée dans la trace : c'est le chiffre qui rend la garde auditable
+    /// et la parité avec shapely vérifiable.
+    min_pair_mm: Option<f32>,
 }
 
 /// Compatibilité tests : plan + application en un appel.
 pub fn finish_partial_sheet(
     ext_instance: &ExtBPInstance,
-    instance: &BPInstance,
     run: &mut BpRun,
     config: &EngineConfig,
     started: &Instant,
     sink: &EventSink,
 ) -> Option<serde_json::Value> {
-    let plan = plan_finish(ext_instance, instance, run, config);
+    let plan = plan_finish(ext_instance, run, config);
     apply_finish(ext_instance, run, plan, config, started, sink)
 }
 
@@ -606,12 +605,12 @@ fn apply_finish(
         plan.reason,
         plan.phases,
         plan.rejected,
+        plan.min_pair_mm,
     ))
 }
 
 fn plan_finish(
     ext_instance: &ExtBPInstance,
-    instance: &BPInstance,
     run: &BpRun,
     config: &EngineConfig,
 ) -> Option<FinishPlan> {
@@ -738,8 +737,15 @@ fn plan_finish(
     // temps, sinon le verrou natif ≡ wasm tombe (une machine plus lente
     // couperait la trajectoire ailleurs).
     if cfg.sa_max_iterations.is_some() {
+        // §12.3.4 : sans horloge, la finition va au bout de sa borne de
+        // TRAVAIL — mesuré 190 / 203 / 456 s par biais, soit ~25 min pour
+        // L1 (deux exécutions des trois biais). La borne d'exploration
+        // passe donc de 30 à 10 échecs consécutifs EN MODE DÉTERMINISTE
+        // seulement : c'est du travail en moins, donc une géométrie
+        // différente — le SHA de L2 change une fois, écrit au rapport.
+        // La production ne pose jamais `sa_max_iterations`.
         if cfg.explore_max_conseq_failed_attempts.is_none() {
-            cfg.explore_max_conseq_failed_attempts = Some(30);
+            cfg.explore_max_conseq_failed_attempts = Some(10);
         }
         if cfg.compress_failure_decay.is_none() {
             cfg.compress_failure_decay = Some(0.7);
@@ -774,7 +780,7 @@ fn plan_finish(
     };
     let sp_dump = sp_instance.clone();
     let keep = |reason: &'static str| -> Option<FinishPlan> {
-        dump_rejection(reason, run.bias.as_str(), &sp_dump, &cfg, None, None);
+        dump_rejection(reason, run.bias.as_str(), &sp_dump, &cfg, None, None, None, None);
         let ms = t_start.elapsed().as_millis() as u64;
         Some(FinishPlan {
             idx,
@@ -785,6 +791,7 @@ fn plan_finish(
             reason,
             phases: phases_of(&collected, ms),
             rejected: None,
+            min_pair_mm: None,
         })
     };
     let Ok(out) = crate::spp::run_spp_mem(sp_instance, &cfg, &silent) else {
@@ -832,92 +839,81 @@ fn plan_finish(
         return keep("spp layout exceeds the sheet");
     }
 
-    // §8.3.4 — GARDE DE FAISABILITÉ. Le contrôle de bornes ci-dessus ne voit
-    // que la tôle : il a laissé passer, à budget réduit, une tôle mesurée à
-    // 1,849 mm d'espacement pour 2,0 promis (§8.2.3). On REJOUE les poses
-    // dans un layout jagua du bin : les collisions y sont mesurées sur les
-    // formes GONFLÉES de `min_item_separation`, donc un gap sous
-    // l'espacement EST une collision. Échec → le layout BPP est conservé.
-    // Seul le rejet « pair » compte. Un rejet « sheet » est un FAUX POSITIF
-    // mesuré : sur `b_demo` la classe `left` sort à 336,7 mm de front avec
-    // une pièce au CONTACT du contour — la carte de collision déflate le
-    // conteneur de space/2 (piège #49) et la phase 2 transposée rend des
-    // coordonnées à ~1e-4 du bord, ce qui suffit à faire contact. Le
-    // containment réel est déjà contrôlé plus haut sur les anneaux BRUTS
-    // (±1e-3 de la tôle), et `insideSheet` le remesure en aval. On note le
-    // contact dans la trace, on ne jette pas une finition correcte pour ça.
-    let mut pair_suspect = false;
-    match infeasibility_of(
-        instance,
-        ext_instance,
-        config,
-        layout.container_id,
-        &placed,
-        (bx0, by0, bx1, by1),
-    ) {
-        None => {}
-        // « pair » ne REJETTE PLUS : trois calibrations du probe (gonflé à
-        // `space`, à `space − 0,05`, pas gonflé du tout) ont chacune rejeté
-        // des agencements que la mesure exacte déclare LÉGAUX — deux fois,
-        // indépendamment :
-        //   • natif, `b_demo`/`left` : distance minimale 2,0001 mm pour 2,0
-        //     promis, 0 mm² d'intersection (anneaux bruts, sans nettoyage) ;
-        //   • navigateur, harnais espacement 0,1 : les trois passages 1-bis
-        //     ont livré la finition avec `spacingOk: true` et
-        //     `smallestGapMm: 0.1` — exactement la promesse — mesurés par la
-        //     vérification du pipeline lui-même.
-        // La carte de collision de jagua n'est pas un oracle de « distance ≥
-        // space » : elle travaille sur des formes simplifiées et gonflées
-        // dont l'offset dépasse le demi-espacement aux sommets convexes, et
-        // l'inflation referme les canaux capillaires des pièces à trous
-        // (piège #2) — un hôte redevient plein et sa fan nichée le
-        // « chevauche ». Jeter une finition correcte coûte de la qualité
-        // pour rien : le verdict devient une TRACE.
-        //
-        // Ce qui reste donc à faire pour tenir §10.4.1 : l'oracle EXACT,
-        // distance arête↔arête sur les anneaux avec trous — le miroir de
-        // `pairViolates` (JS et Python). Estimé au rapport §11, non engagé.
-        Some("pair") => {
-            pair_suspect = true;
-        }
-        Some(kind) => {
-            // Les poses rejetées partent au dump : c'est la seule façon de
-            // savoir, hors du job, si le rejet est fondé.
-            dump_rejection(
-                if kind == "sheet" { "infeasible: sheet" } else { "infeasible: pair" },
-                run.bias.as_str(),
-                &sp_dump,
-                &cfg,
-                None,
-                Some(&placed),
-            );
-            let _ = kind;
-            let poses = rejected_poses(&placed);
-            let ms = t_start.elapsed().as_millis() as u64;
-            dump_rejection(
-                "infeasible: sheet",
-                run.bias.as_str(),
-                &sp_dump,
-                &cfg,
-                None,
-                Some(&placed),
-            );
-            return Some(FinishPlan {
-                idx,
-                placed: None,
-                before,
-                after: before,
-                elapsed_ms: ms,
-                reason: "infeasible: sheet",
-                phases: phases_of(&collected, ms),
-                rejected: Some(serde_json::json!({ "poses": poses })),
-            });
-        }
+    // §12.3 — GARDE DE FAISABILITÉ, SUR MESURE EXACTE.
+    //
+    // Le contrôle de bornes ci-dessus ne voit que la tôle : il a laissé
+    // passer, à budget réduit, une tôle mesurée à 1,849 mm d'espacement pour
+    // 2,0 promis (§8.2.3). Les tranches 1-bis et 1-ter ont essayé de le
+    // rattraper avec la carte de collision de jagua (poses rejouées dans un
+    // layout, formes gonflées de `min_item_separation`) : trois calibrations,
+    // trois séries de FAUX POSITIFS sur des agencements mesurés légaux —
+    // 2,0001 mm pour 2,0 promis et 0 mm² d'intersection en natif,
+    // `spacingOk: true` / gap 0,1 mm côté navigateur (§11.2). La carte de
+    // collision n'est pas un oracle de « distance ≥ space » : formes
+    // simplifiées puis gonflées, offset d'un sommet convexe supérieur au
+    // demi-espacement, et canaux capillaires REFERMÉS par l'inflation
+    // (piège #2) — un hôte redevient plein et sa fan nichée le « chevauche ».
+    //
+    // La garde mesure donc elle-même, exactement : distance ARÊTE↔ARÊTE sur
+    // les anneaux d'origine, TROUS COMPRIS, avec containment
+    // (`geometry_check::material_distance`, même sémantique que
+    // `shapely.Polygon.distance`, la référence du pipeline — parité
+    // verrouillée par `bench/oracle_parity.py`). Sous
+    // `space − PAIR_SLACK`, la finition est REJETÉE et le layout BPP
+    // conservé ; le chiffre part dans la trace dans tous les cas.
+    let min_pair = pair_min_distance_upto(ext_instance, &placed, space_of(config) + 1.0);
+    let pair_limit = (space_of(config) - PAIR_SLACK).max(0.0);
+    let sheet_bad = sheet_margin_violated(ext_instance, &placed, (bx0, by0, bx1, by1), config);
+    if min_pair < pair_limit || sheet_bad {
+        let reason: &'static str = if min_pair < pair_limit {
+            "infeasible: pair"
+        } else {
+            "infeasible: sheet"
+        };
+        dump_rejection(
+            reason,
+            run.bias.as_str(),
+            &sp_dump,
+            &cfg,
+            None,
+            Some(&placed),
+            Some(ext_instance),
+            Some(min_pair),
+        );
+        let poses = rejected_poses(&placed);
+        let ms = t_start.elapsed().as_millis() as u64;
+        return Some(FinishPlan {
+            idx,
+            placed: None,
+            before,
+            after: before,
+            elapsed_ms: ms,
+            reason,
+            phases: phases_of(&collected, ms),
+            rejected: Some(serde_json::json!({
+                "minDistanceMm": (min_pair * 10_000.0).round() / 10_000.0,
+                "limitMm": (pair_limit * 10_000.0).round() / 10_000.0,
+                "poses": poses,
+            })),
+            min_pair_mm: Some(min_pair),
+        });
     }
 
     // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
+    // Le dump d'une finition ACCEPTÉE sert à la parité de l'oracle
+    // (`bench/oracle_parity.py` : mesure Rust contre shapely sur les
+    // layouts livrés) — silencieux sans `NEST_FINISH_DUMP`.
+    dump_rejection(
+        "accepted",
+        run.bias.as_str(),
+        &sp_dump,
+        &cfg,
+        None,
+        Some(&placed),
+        Some(ext_instance),
+        Some(min_pair),
+    );
     let ms = t_start.elapsed().as_millis() as u64;
-    let placed_trace: Vec<ExtPlacedItem> = if pair_suspect { placed.clone() } else { Vec::new() };
     Some(FinishPlan {
         idx,
         placed: Some(placed),
@@ -929,17 +925,10 @@ fn plan_finish(
             y_max,
         },
         elapsed_ms: ms,
-        reason: if pair_suspect { "pair-suspect" } else { "" },
+        reason: "",
         phases: phases_of(&collected, ms),
-        // Suspicion de paire : les poses sont LIVRÉES (la mesure exacte les
-        // déclare légales) mais tracées, pour qu'un doute soit auditable
-        // sans relancer le job — y compris depuis le navigateur, où le dump
-        // fichier n'existe pas.
-        rejected: if pair_suspect {
-            Some(serde_json::json!({ "pairSuspect": true, "poses": rejected_poses(&placed_trace) }))
-        } else {
-            None
-        },
+        rejected: None,
+        min_pair_mm: Some(min_pair),
     })
 }
 
@@ -959,23 +948,18 @@ fn rejected_poses(placed: &[ExtPlacedItem]) -> Vec<serde_json::Value> {
         .collect()
 }
 
-/// §8.3.4 — REJOUE des poses externes dans un layout jagua du bin et rend
-/// leur faisabilité. Les collisions y sont mesurées sur les formes GONFLÉES
-/// de `min_item_separation` : un écart sous l'espacement promis EST une
-/// collision, ce que le simple contrôle de bornes ne voyait pas (une tôle à
-/// 1,849 mm pour 2,0 promis est passée, §8.2.3).
-///
-/// `bx0`/`by0` = origine de l'AABB du bin (les poses SPP sont ancrées en 0).
-pub fn poses_are_feasible(
-    instance: &BPInstance,
-    ext_instance: &ExtBPInstance,
-    config: &EngineConfig,
-    container_id: u64,
-    placed: &[ExtPlacedItem],
-    bin_aabb: (f32, f32, f32, f32),
-) -> bool {
-    infeasibility_of(instance, ext_instance, config, container_id, placed, bin_aabb).is_none()
+/// Espacement demandé (mm), jamais négatif.
+fn space_of(config: &EngineConfig) -> f32 {
+    config.min_item_separation.unwrap_or(0.0).max(0.0)
 }
+
+/// §12.3 — tolérance de mesure de la garde de paires. La promesse est
+/// « distance ≥ space » ; on ne rejette qu'en dessous de `space − 0,01 mm`,
+/// la même tolérance que la vérification aval
+/// (`nest-report::verify_layout` : `spacingOk = gap >= space − 0,01`) — les
+/// deux doivent dire la même chose du même layout, sinon le moteur jette ce
+/// que le rapport aurait déclaré bon, ou l'inverse.
+pub const PAIR_SLACK: f32 = 0.01;
 
 /// §10.4.2 : tolérance retirée à l'espacement pour juger le contact au
 /// contour. Le contour est déflaté de space/2 à l'import et la phase 2
@@ -983,134 +967,66 @@ pub fn poses_are_feasible(
 /// rond rejetterait des finitions correctes.
 const SHEET_MARGIN_SLACK: f32 = 0.05;
 
-/// Comme [`poses_are_feasible`], mais dit CE QUI cloche.
-///
-/// §10.4.1 — LES PAIRES D'ABORD. La version 1-bis rendait `"sheet"` dès
-/// qu'une pièce seule touchait le contour, SANS avoir regardé les paires :
-/// le contact au contour étant fréquent (deux des trois biais de L1 le
-/// portent), un chevauchement pouvait passer derrière lui. La vérification
-/// de paire se fait donc dans un conteneur AGRANDI de 2·space : le contour
-/// ne peut plus y être la cause, seule une paire trop proche déclenche.
-///
-/// §10.4.2 — le contact au contour est ensuite BORNÉ : l'AABB brute de
-/// chaque pièce doit garder `space − 0,05 mm` des quatre bords du bin.
-///
-/// Rend `None` si tout va bien, `Some("pair")` ou `Some("sheet")` sinon.
-pub fn infeasibility_of(
-    instance: &BPInstance,
+/// Anneaux POSÉS (extérieur + trous, repère de la tôle) des poses données.
+/// Les trous comptent : une fan nichée dans le trou de son hôte est LÉGALE
+/// (piège #4) et un test sur les seuls anneaux extérieurs la rejetterait.
+fn placed_rings(
     ext_instance: &ExtBPInstance,
-    config: &EngineConfig,
-    container_id: u64,
+    placed: &[ExtPlacedItem],
+) -> Vec<crate::geometry_check::Rings> {
+    let base: Vec<Vec<crate::geometry_check::Rings>> = ext_instance
+        .items
+        .iter()
+        .map(|it| crate::geometry_check::rings_of_shape(&it.base.shape))
+        .collect();
+    let mut out = Vec::with_capacity(placed.len());
+    for pi in placed {
+        let Some(rings) = base.get(pi.item_id as usize) else {
+            continue;
+        };
+        for r in rings {
+            out.push(crate::geometry_check::place_rings(r, &pi.transformation));
+        }
+    }
+    out
+}
+
+/// §12.3 — distance MINIMALE entre matières de pièces posées, mesurée
+/// exactement (arête↔arête, trous soustraits, containment). C'est l'oracle
+/// que la carte de collision de jagua ne sait pas être (§11.2). `INFINITY`
+/// s'il y a moins de deux pièces.
+pub fn pair_min_distance(ext_instance: &ExtBPInstance, placed: &[ExtPlacedItem]) -> f32 {
+    pair_min_distance_upto(ext_instance, placed, f32::INFINITY)
+}
+
+/// Comme [`pair_min_distance`], plafonnée (voir
+/// `geometry_check::min_pair_distance_upto`) : au-delà du plafond la valeur
+/// exacte ne change aucune décision, et le plafond évite de payer une
+/// distance d'anneaux sur des paires lointaines.
+pub fn pair_min_distance_upto(
+    ext_instance: &ExtBPInstance,
+    placed: &[ExtPlacedItem],
+    ceiling: f32,
+) -> f32 {
+    let rings = placed_rings(ext_instance, placed);
+    crate::geometry_check::min_pair_distance_upto(&rings, ceiling).0
+}
+
+/// §10.4.2 — une pièce trop près du CONTOUR. Arithmétique exacte sur l'AABB
+/// BRUTE : la matière doit garder `space − 0,05 mm` des quatre bords du bin.
+fn sheet_margin_violated(
+    ext_instance: &ExtBPInstance,
     placed: &[ExtPlacedItem],
     bin_aabb: (f32, f32, f32, f32),
-) -> Option<&'static str> {
+    config: &EngineConfig,
+) -> bool {
     let (bx0, by0, bx1, by1) = bin_aabb;
-    let space = config.min_item_separation.unwrap_or(0.0).max(0.0);
-
-    // 1. Paires — probe DÉDIÉ : conteneur agrandi (le contour est hors de
-    //    cause) ET items RÉ-IMPORTÉS avec une inflation de `space − PAIR_SLACK`.
-    //
-    //    Les items sont ré-importés SANS inflation : le probe ne juge que
-    //    le CHEVAUCHEMENT RÉEL, pas la distance.
-    //
-    //    C'est un choix imposé par la mesure, et il faut le lire en entier.
-    //    Le dump du 10/09 (`NEST_FINISH_DUMP`, cas `left` de `b_demo`) donne
-    //    des poses rejetées dont la distance minimale mesurée sur les
-    //    anneaux BRUTS, sans nettoyage, 25 polygones valides, est de
-    //    **2,0001 mm pour 2,0 promis, avec 0 mm² d'intersection** : elles
-    //    sont légales au sens de la promesse, et la garde les rejetait —
-    //    y compris après un retrait de 0,05 mm sur l'inflation du probe.
-    //    La carte de collision de jagua n'est donc pas un oracle utilisable
-    //    pour « distance ≥ space » à 0,05 mm près (l'offset d'un sommet
-    //    convexe dépasse le demi-espacement uniforme). Elle l'est en
-    //    revanche pour le chevauchement : un recouvrement d'aire est un
-    //    recouvrement d'aire.
-    //
-    //    Ce que la garde attrape donc : chevauchements réels et poses
-    //    dupliquées. Ce qu'elle n'attrape PAS : un écart sous l'espacement
-    //    sans recouvrement (le 1,849 mm du constat 8.2.3). Le faire demande
-    //    une distance arête↔arête exacte sur les anneaux, trous compris
-    //    (le miroir de `pairViolates` JS/Python) — proposé au rapport, non
-    //    engagé ici.
-    //
-    //    On passe par la carte de collision et non par une distance
-    //    d'anneaux maison : elle connaît les TROUS (une fan nichée dans le
-    //    trou de son hôte est légale, piège #4 — un test sur les anneaux
-    //    externes la rejetterait).
-    let sc = config.sparrow_config();
-    let pair_importer = Importer::new(
-        sc.cde_config,
-        sc.poly_simpl_tolerance,
-        None,
-        sc.narrow_concavity_cutoff_ratio,
-    );
-    let pad = 2.0 * space + 1.0;
-    let (w, h) = (bx1 - bx0 + 2.0 * pad, by1 - by0 + 2.0 * pad);
-    let roomy = ExtContainer {
-        id: 0,
-        shape: jagua_rs::io::ext_repr::ExtShape::SimplePolygon(ExtSPolygon(vec![
-            (-pad, -pad),
-            (w - pad, -pad),
-            (w - pad, h - pad),
-            (-pad, h - pad),
-            (-pad, -pad),
-        ])),
-        zones: vec![],
-    };
-    let mut probe_items: std::collections::HashMap<u64, jagua_rs::entities::Item> =
-        std::collections::HashMap::new();
-    let mut import_ok = true;
-    for pi in placed {
-        if probe_items.contains_key(&pi.item_id) {
-            continue;
-        }
-        let Some(src) = ext_instance.items.get(pi.item_id as usize) else {
-            import_ok = false;
-            break;
-        };
-        match pair_importer.import_item(&src.base) {
-            Ok(it) => {
-                probe_items.insert(pi.item_id, it);
-            }
-            Err(_) => {
-                import_ok = false;
-                break;
-            }
-        }
-    }
-    if import_ok {
-        if let Ok(container) = pair_importer.import_container(&roomy) {
-            let mut probe = Layout::new(container);
-            for pi in placed {
-                let item = &probe_items[&pi.item_id];
-                let ext_dt = DTransformation::new(
-                    pi.transformation.rotation.to_radians(),
-                    (
-                        pi.transformation.translation.0 - bx0,
-                        pi.transformation.translation.1 - by0,
-                    ),
-                );
-                probe.place_item(
-                    item,
-                    ext_to_int_transformation(&ext_dt, &item.shape_orig.pre_transform),
-                );
-            }
-            if !probe.is_feasible() {
-                return Some("pair");
-            }
-        }
-    }
-    // Probe non constructible (ne s'observe pas) : on ne rejette pas sur une
-    // mesure qu'on n'a pas faite — le contrôle de contour ci-dessous reste.
-    let _ = container_id;
-
-    // 2. Contour : marge BRUTE d'au moins space − 0,05 mm sur les 4 bords.
+    let min_margin = (space_of(config) - SHEET_MARGIN_SLACK).max(0.0);
     let item_pts: Vec<Vec<(f32, f32)>> = ext_instance
         .items
         .iter()
         .map(|it| shape_points(&it.base.shape))
         .collect();
-    let min_margin = (space - SHEET_MARGIN_SLACK).max(0.0);
     for pi in placed {
         let Some(pts) = item_pts.get(pi.item_id as usize) else {
             continue;
@@ -1123,8 +1039,48 @@ pub fn infeasibility_of(
             || bx1 - x1 < min_margin
             || by1 - y1 < min_margin
         {
-            return Some("sheet");
+            return true;
         }
+    }
+    false
+}
+
+/// Les poses tiennent-elles la promesse d'espacement, entre elles et vis à
+/// vis du contour ?
+pub fn poses_are_feasible(
+    ext_instance: &ExtBPInstance,
+    config: &EngineConfig,
+    placed: &[ExtPlacedItem],
+    bin_aabb: (f32, f32, f32, f32),
+) -> bool {
+    infeasibility_of(ext_instance, config, placed, bin_aabb).is_none()
+}
+
+/// Comme [`poses_are_feasible`], mais dit CE QUI cloche.
+///
+/// §12.3 — LES DEUX CONTRÔLES SONT DES MESURES EXACTES, dans cet ordre :
+///
+/// 1. `"pair"` — distance minimale entre matières < `space − PAIR_SLACK`,
+///    mesurée arête↔arête sur les anneaux d'origine, trous compris
+///    (`geometry_check::material_distance`). Les paires passent d'abord :
+///    la version 1-bis rendait `"sheet"` dès qu'une pièce touchait le
+///    contour, sans avoir regardé les paires, et un chevauchement pouvait
+///    passer derrière ce contact.
+/// 2. `"sheet"` — une AABB brute à moins de `space − 0,05 mm` d'un bord.
+///
+/// Rend `None` si tout va bien.
+pub fn infeasibility_of(
+    ext_instance: &ExtBPInstance,
+    config: &EngineConfig,
+    placed: &[ExtPlacedItem],
+    bin_aabb: (f32, f32, f32, f32),
+) -> Option<&'static str> {
+    let ceiling = space_of(config) + 1.0;
+    if pair_min_distance_upto(ext_instance, placed, ceiling) < (space_of(config) - PAIR_SLACK).max(0.0) {
+        return Some("pair");
+    }
+    if sheet_margin_violated(ext_instance, placed, bin_aabb, config) {
+        return Some("sheet");
     }
     None
 }
@@ -1142,6 +1098,8 @@ fn dump_rejection(
     cfg: &EngineConfig,
     solution: Option<&ExtSPSolution>,
     placed: Option<&[ExtPlacedItem]>,
+    ext_instance: Option<&ExtBPInstance>,
+    min_pair_mm: Option<f32>,
 ) {
     let Ok(dir) = std::env::var("NEST_FINISH_DUMP") else {
         return;
@@ -1191,11 +1149,35 @@ fn dump_rejection(
     // Les poses RE-MAPPÉES (ids BPP, repère de la tôle) au format d'un
     // `alternatives.json`, pour être mesurées telles quelles par
     // `bench/measure_finish_pairs.py` contre l'instance BPP.
+    // Formes des pièces POSÉES, indexées par leur id BPP (celui des poses) :
+    // le dump devient mesurable seul, sans le job qui l'a produit. C'est ce
+    // que consomme `bench/oracle_parity.py`.
+    let item_shapes: Option<serde_json::Value> = ext_instance.map(|ext| {
+        let mut ids: Vec<u64> = placed
+            .map(|p| p.iter().map(|pi| pi.item_id).collect())
+            .unwrap_or_default();
+        ids.sort_unstable();
+        ids.dedup();
+        serde_json::Value::Array(
+            ids.iter()
+                .filter_map(|id| {
+                    ext.items.get(*id as usize).map(|it| {
+                        serde_json::json!({ "id": id, "shape": it.base.shape })
+                    })
+                })
+                .collect(),
+        )
+    });
     let meta = serde_json::json!({
         "reason": reason,
         "bias": bias,
         "solution": solution,
         "placed": placed,
+        "itemShapes": item_shapes,
+        "spaceMm": cfg.min_item_separation,
+        // Ce que le MOTEUR a mesuré (oracle exact, plafonné à space + 1 mm) :
+        // la valeur que la parité compare à shapely.
+        "engineMinDistanceMm": min_pair_mm.map(|d| (d * 10_000.0).round() / 10_000.0),
     });
     if let Ok(t) = serde_json::to_string_pretty(&meta) {
         let _ = std::fs::write(format!("{base}-meta.json"), t);
@@ -1219,6 +1201,8 @@ fn dump_rejection(
     _cfg: &EngineConfig,
     _solution: Option<&ExtSPSolution>,
     _placed: Option<&[ExtPlacedItem]>,
+    _ext_instance: Option<&ExtBPInstance>,
+    _min_pair_mm: Option<f32>,
 ) {
 }
 
@@ -1319,6 +1303,7 @@ fn finish_report(
     reason: &str,
     phases: serde_json::Value,
     rejected: Option<serde_json::Value>,
+    min_pair_mm: Option<f32>,
 ) -> serde_json::Value {
     serde_json::json!({
         "sheet": sheet,
@@ -1336,6 +1321,7 @@ fn finish_report(
         "reason": reason,
         "phases": phases,
         "rejected": rejected,
+        "minDistanceMm": min_pair_mm.map(|d| (d * 10_000.0).round() / 10_000.0),
     })
 }
 
@@ -1458,26 +1444,13 @@ mod finish_tests {
         Arc::new(|_: &str| {})
     }
 
-    /// Instance jagua de la fixture — la garde de faisabilité (§8.3.4) en a
-    /// besoin pour rejouer les poses dans un layout du bin.
-    fn imported(ext: &ExtBPInstance, cfg: &EngineConfig) -> BPInstance {
-        let sc = cfg.sparrow_config();
-        let importer = jagua_rs::io::import::Importer::new(
-            sc.cde_config,
-            sc.poly_simpl_tolerance,
-            sc.min_item_separation,
-            sc.narrow_concavity_cutoff_ratio,
-        );
-        jagua_rs::probs::bpp::io::import_instance(&importer, ext).expect("instance importable")
-    }
 
     #[test]
     fn finish_left_reduces_x_max() {
         let inst = square_instance(4);
         let mut run = run_with(spread_layout(), DirBias::LeftFirst);
         let started = Instant::now();
-        let instance = imported(&inst, &finish_cfg());
-        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit s'appliquer (une tôle, 4 pièces, 16 % de remplissage)");
         assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
         let before = rep["before"]["xMax"].as_f64().unwrap();
@@ -1496,8 +1469,7 @@ mod finish_tests {
         let inst = square_instance(4);
         let mut run = run_with(spread_layout(), DirBias::BottomFirst);
         let started = Instant::now();
-        let instance = imported(&inst, &finish_cfg());
-        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit s'appliquer");
         assert_eq!(rep["kept"], "spp", "finition rejetée : {rep}");
         let before = rep["before"]["yMax"].as_f64().unwrap();
@@ -1570,8 +1542,7 @@ mod finish_tests {
             .collect();
         let mut run = run_with(layout, DirBias::LeftFirst);
         let started = Instant::now();
-        let instance = imported(&inst, &finish_cfg());
-        let rep = finish_partial_sheet(&inst, &instance, &mut run, &finish_cfg(), &started, &silent())
+        let rep = finish_partial_sheet(&inst, &mut run, &finish_cfg(), &started, &silent())
             .expect("la finition doit rendre une trace même quand elle renonce");
         assert_eq!(rep["kept"], "bpp", "hors tôle accepté : {rep}");
         assert!(
@@ -1590,51 +1561,61 @@ mod finish_tests {
     /// §8.3.4 : deux carrés à 1,8 mm l'un de l'autre pour 2,0 promis — la
     /// garde doit les REJETER (le contrôle de bornes, lui, les acceptait :
     /// ils sont dans la tôle). Écart de 0,2 mm, celui du constat 8.2.3.
+    /// §12.3 — LE VERROU DE LA MESURE EXACTE. La garde ne rejoue plus les
+    /// poses dans la carte de collision de jagua (trois calibrations, trois
+    /// séries de faux positifs sur des agencements mesurés légaux, §11.2) :
+    /// elle mesure la distance arête↔arête sur les anneaux d'origine.
+    ///
+    /// Le cas qui change de verdict est le troisième : **1,8 mm pour 2,0
+    /// promis, sans recouvrement**, était hors de portée de la garde (§11.4)
+    /// et il est maintenant REJETÉ. C'est l'objet de la tranche.
     #[test]
-    fn finish_rejects_infeasible_strip() {
+    fn finish_rejects_gap_under_space_even_without_overlap() {
         let inst = square_instance(2);
         let cfg = space_cfg();
-        let instance = imported(&inst, &cfg);
-        // Décollées du bord : à l'import jagua DÉFLATE aussi le conteneur de
-        // space/2 (piège #49) — une pièce à exactement `space` du bord est
-        // au contact, et un contact est une collision. On isole donc la
-        // distance ENTRE PIÈCES, à 10 mm des bords.
+        // Décollées du bord : on isole la distance ENTRE PIÈCES du contrôle
+        // de contour, qui est un verrou distinct.
         let pose = |x: f32| ExtPlacedItem {
             item_id: 0,
             transformation: ExtTransformation { rotation: 0.0, translation: (10.0 + x, 10.0) },
         };
         let aabb = (0.0, 0.0, SHEET, SHEET);
-        // Légal : 2,5 mm d'espace pour 2,0 promis. NB : à EXACTEMENT 2,0 les
-        // formes gonflées de space/2 se TOUCHENT, et un contact est une
-        // collision pour la CDE de jagua (piège #57) — un solveur ne rend
-        // donc jamais ce cas comme faisable.
+        let feasible = |poses: &[ExtPlacedItem]| poses_are_feasible(&inst, &cfg, poses, aabb);
         assert!(
-            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 2.5)], aabb),
+            feasible(&[pose(0.0), pose(SIDE + 2.5)]),
             "2,5 mm d'espacement doit passer"
         );
-        // CONTACT EXACT : 2,0 mm pour 2,0 promis — légal, et c'est ce que
-        // rend un solveur (dump du 10/09 : 2,0001 mm mesurés). Ne doit PAS
-        // être rejeté.
+        // Exactement l'espacement promis : légal (la tolérance de la garde
+        // est `space − 0,01`, celle du rapport aval — les deux doivent dire
+        // la même chose du même layout).
         assert!(
-            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 2.0)], aabb),
-            "le contact exact à l'espacement promis doit passer"
+            feasible(&[pose(0.0), pose(SIDE + 2.0)]),
+            "2,0 mm pour 2,0 promis doit passer"
         );
-        // 1,8 mm pour 2,0 promis : sous l'espacement, mais SANS
-        // recouvrement — la garde ne le voit pas, et le rapport le dit
-        // (§11). Ce verrou fixe le périmètre réel, il ne le maquille pas.
+        // Le cas du §8.2.3, désormais attrapé DANS le moteur.
         assert!(
-            poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE + 1.8)], aabb),
-            "hors périmètre de la garde : 1,8 mm sans recouvrement passe"
+            !feasible(&[pose(0.0), pose(SIDE + 1.8)]),
+            "1,8 mm pour 2,0 promis doit être rejeté, recouvrement ou pas"
         );
-        // CHEVAUCHEMENT RÉEL (5 mm de recouvrement) : rejeté.
+        // Juste sous la tolérance : 1,985 mm.
         assert!(
-            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(SIDE - 5.0)], aabb),
+            !feasible(&[pose(0.0), pose(SIDE + 1.985)]),
+            "1,985 mm doit être rejeté (tolérance 0,01)"
+        );
+        assert!(
+            !feasible(&[pose(0.0), pose(SIDE - 5.0)]),
             "un chevauchement de 5 mm doit être rejeté"
         );
-        // POSE DUPLIQUÉE : rejetée.
         assert!(
-            !poses_are_feasible(&instance, &inst, &cfg, 0, &[pose(0.0), pose(0.0)], aabb),
+            !feasible(&[pose(0.0), pose(0.0)]),
             "deux poses identiques doivent être rejetées"
+        );
+        // Et le CHIFFRE, pas seulement le verdict : c'est lui qui part dans
+        // la trace et que `bench/oracle_parity.py` compare à shapely.
+        let d = pair_min_distance(&inst, &[pose(0.0), pose(SIDE + 2.5)]);
+        assert!(
+            (d - 2.5).abs() < 1e-3,
+            "distance mesurée {d} au lieu de 2,5 mm"
         );
     }
 
@@ -1643,16 +1624,13 @@ mod finish_tests {
     /// contact, sans regarder les paires — un chevauchement passait derrière
     /// lui.
     ///
-    /// NB sur le nom : c'est la DÉTECTION et son ordre qui sont verrouillés
-    /// ici. La POLITIQUE, elle, ne rejette plus sur « pair » — trois
-    /// calibrations ont rejeté des agencements mesurés légaux (§11) : le
-    /// verdict est devenu une trace (`reason: "pair-suspect"`). Le rejet ne
-    /// concerne plus que le contour.
+    /// §12.3 : le rejet sur « pair » est RÉTABLI, sur mesure exacte — la
+    /// trace de la tranche 1-ter n'était qu'un pis-aller le temps d'avoir
+    /// un oracle qui ne produise pas de faux positifs.
     #[test]
     fn finish_rejects_pair_even_with_sheet_contact() {
         let inst = square_instance(3);
         let cfg = space_cfg();
-        let instance = imported(&inst, &cfg);
         let aabb = (0.0, 0.0, SHEET, SHEET);
         let at = |x: f32, y: f32| ExtPlacedItem {
             item_id: 0,
@@ -1662,7 +1640,7 @@ mod finish_tests {
         // CHEVAUCHENT ailleurs : la paire doit primer.
         let poses = [at(0.0, 0.0), at(10.0, 100.0), at(10.0 + SIDE - 5.0, 100.0)];
         assert_eq!(
-            infeasibility_of(&instance, &inst, &cfg, 0, &poses, aabb),
+            infeasibility_of(&inst, &cfg, &poses, aabb),
             Some("pair"),
             "la paire doit primer sur le contact au contour"
         );
@@ -1674,7 +1652,6 @@ mod finish_tests {
     fn finish_rejects_deep_sheet_contact() {
         let inst = square_instance(2);
         let cfg = space_cfg();
-        let instance = imported(&inst, &cfg);
         let aabb = (0.0, 0.0, SHEET, SHEET);
         let at = |x: f32, y: f32| ExtPlacedItem {
             item_id: 0,
@@ -1682,13 +1659,13 @@ mod finish_tests {
         };
         // Pièces largement séparées : aucune paire en cause.
         assert_eq!(
-            infeasibility_of(&instance, &inst, &cfg, 0, &[at(0.0, 100.0), at(100.0, 100.0)], aabb),
+            infeasibility_of(&inst, &cfg, &[at(0.0, 100.0), at(100.0, 100.0)], aabb),
             Some("sheet"),
             "une pièce au bord (marge 0) doit être rejetée"
         );
         // À 2,0 mm du bord : au-dessus du plancher space − 0,05.
         assert_eq!(
-            infeasibility_of(&instance, &inst, &cfg, 0, &[at(2.0, 100.0), at(100.0, 100.0)], aabb),
+            infeasibility_of(&inst, &cfg, &[at(2.0, 100.0), at(100.0, 100.0)], aabb),
             None,
             "2,0 mm du bord pour 2,0 promis doit passer"
         );
