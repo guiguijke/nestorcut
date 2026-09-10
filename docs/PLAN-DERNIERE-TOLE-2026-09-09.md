@@ -1156,3 +1156,30 @@ mesure exacte la fait disparaître (`reason` vide, `minDistanceMm` = 0,1000
 5. **Déploiement** : le moteur a changé, donc corpus 11/11 sur l'image
    publiée, benchmarks publics régénérés, worker + app + wasm dans la même
    fenêtre et homelab — après votre GO.
+
+## 15. Vérification tranche 2 (vérificateur, 10/09, `eb43defb`) — GO déploiement, fin du chantier
+
+Rejoué sur le poste, images worker et app reconstruites à HEAD
+(`ASSERT IMAGES=HEAD: OK`) :
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 89 + 1 ignoré |
+| L2 `determinism_lock.py` | natif ≡ wasm, tolérance 0, `a1bd8810…` (valeur annoncée) |
+| L1 `lock_last_sheet.py` avec `NEST_FINISH_DUMP` | tenu, `kept=spp` ×3 ; left 263,0, bottom 828,7 × 263,0, balanced 602,3 × 368,7 (mêmes valeurs que le rapport, au dixième) |
+| Parité oracle `oracle_parity.py` sur mes 6 dumps | **tenue** : écart max **5,8e−5 mm**, 0 désaccord de valeur, 0 de verdict, 0 rejet (note : sous Git Bash le montage docker exige `MSYS_NO_PATHCONV=1`, sinon `/data` est vide et le verrou échoue à raison) |
+| L3 `seed_demo_dirs.py BENCH_ASSERT=1` ×1 | tenu ; `kept=spp` ×3, ancrage 2,0, badges verts ; exemption plancher matière imprimée (balanced 260 pour 263, left 130 pour 133) |
+| L4 harnais 0,1 ×1 au repos | 900/900, **21 s**, une finition, x_max 396,3 → 347,7, `minDistanceMm` 0,1000 = `smallestGapMm` 0,1, `reason` vide, long task après solve 55 ms |
+
+**Arbitrages (délégués, informés)** : borne de travail déterministe **4
+conservée** (dernier palier sans perte ; l'objectif « L1 < 5 min » est
+abandonné, 9,6 min acceptés — aucun effet en production) ; `spacing_violations`
+reste une trace jusqu'à une fréquence mesurée non nulle ; la trace
+navigateur non affichée est un résidu d'observabilité, pas un défaut.
+
+**GO déploiement tranche 2** (procédure §12.4 : corpus 11/11 sur l'image
+publiée, benchmarks publics régénérés, worker + app + wasm dans la même
+fenêtre, homelab, contrôles en lecture seule). Après ce déploiement, le
+chantier « dernière tôle » est **clos** ; le badge rouge 1/8 du §13.3 est
+couvert par la garde exacte si sa cause est la tôle finie, et par
+l'outillage `measure_svg_gaps.py` sinon.
