@@ -817,3 +817,75 @@ ce que tracer au lieu de rejeter permet de voir.
    (`assert_overflow_head.py`).
 3. Le corpus d'import n'a toujours que **4 fichiers issus d'une vraie
    CAO** : `specs/import-corpus/` n'existe pas sur ce poste.
+
+## 12. Vérification tranche 1-ter (vérificateur, 10/09, `a3c4d378`) — décision sur l'oracle, GO déploiement
+
+### 12.1 Rejeu vérificateur
+
+Images worker et app reconstruites à HEAD (`ASSERT IMAGES=HEAD: OK`, wasm
+servi = dépôt `d4f35e79…`).
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 82 + 1 ignoré |
+| L2 `determinism_lock.py` | natif ≡ wasm, tolérance 0, `ee837411…` (valeur annoncée) |
+| L3 `seed_demo_dirs.py BENCH_ASSERT=1` ×1 | `kept=spp` ×3, ancrage 2,0 mm, badges verts, 304/304, 2 tôles, job 35 s ; bottom 1663 → 117,5 (y), balanced 341×568 → 234×621. Le verrou **croisé** tombe sur ce tirage : la tôle −X ne porte que 15 pièces dont une de 300 mm — plancher matière (x 302 → 303, y 546 → 422). Le verrou apples-to-apples tient. À corriger au banc : exempter la comparaison croisée quand la plus grande dimension minimale d'une pièce de la tôle ≥ 0,95 × x_max |
+| L4 harnais 0,1 ×1 au repos | 900/900, durée de calcul **21 s** (référence 21,4 s), une seule finition, x_max **396,3 → 347,8**, `pair-suspect` tracé et **mesuré `spacingOk: true`, gap 0,1** par la vérification aval, long task après solve 54 ms, badges verts |
+
+Résultat : la finition livre les trois formes, ancrées, dans les temps,
+sans régression mesurable. **GO déploiement** avec la politique de
+garde du §12.2.
+
+### 12.2 Décision sur le point 1 (arbitrage délégué, informé au propriétaire)
+
+La mesure de l'implémenteur est acceptée : la carte de collision de jagua
+n'est pas un oracle de distance, et une garde qui rejette des agencements
+légaux (2,0001 mm mesurés, `spacingOk: true` en aval) est pire qu'une
+trace. « pair » en trace, rejet sur le contour seul : **accepté**.
+
+Ce que ça laisse ouvert — un écart sous l'espacement **sans**
+recouvrement — n'est **pas une exposition nouvelle** : la finition passe
+par le même `run_spp_mem` que tout job mono-tôle, qui n'a jamais eu
+d'oracle de distance non plus, et la vérification aval mesure et affiche
+le cas (`spacingOk: false`). Le déploiement ne dépend donc pas de
+l'oracle exact. **L'oracle exact est engagé en tranche 2**, parce que la
+promesse « ≥ space » doit être tenue par le moteur pour tout ce qu'il
+livre, finition et mono-tôle compris.
+
+### 12.3 Tranche 2 — oracle de distance exact (après déploiement, ~1 j)
+
+1. `nest-engine` : `ring_min_distance(a: &[(f32,f32)], b: &[(f32,f32)])
+   -> f32` arête↔arête (0 si croisement propre — piège #55), plus
+   point-dans-polygone pour le containment (fan nichée dans le trou de
+   son hôte, piège #4 : distance calculée contre les anneaux **de trou**
+   de l'hôte, pas son anneau externe). Module `geometry_check.rs`.
+2. **Validation contre la référence, pas contre l'intuition** :
+   `bench/measure_finish_pairs.py` (shapely) est la référence ; verrou
+   `bench/oracle_parity.py` : sur ≥ 50 layouts (dumps `NEST_FINISH_DUMP`
+   des trois biais de `b_demo`, corpus 11 cas, harnais deux
+   configurations), `|d_rust − d_shapely| ≤ 1e−3 mm` pour la distance
+   minimale de chaque layout, et même verdict `< space − 0,01`.
+3. Politique : dans la finition, `d_min < space − 0,01` ⇒ `kept = "bpp"`,
+   `reason = "pair"` (rejet redevenu réel, sur mesure exacte) ; dans
+   `run_spp_mem` mode directions, une classe dont le champion viole la
+   distance est **tracée** (`spacing_violation` dans l'événement `done`)
+   — pas de rejet sans repli mono-tôle, on mesure d'abord la fréquence
+   sur le corpus avant de décider un repli.
+4. Effet de bord du mode borné-travail : les finitions déterministes
+   durent 190-456 s (L1 ~25 min, L2 plusieurs minutes). Borner le
+   **travail** de la finition en det (`explore_max_conseq_failed_attempts`
+   de la finition à 10, `compress_failure_decay` inchangé) pour ramener
+   L1 sous 5 min ; le SHA de L2 change une fois, noté.
+5. Verrous : parité oracle ≥ 50/50 ; L1 ×2 ; L2 ; L3 ×3 ; compteur
+   `reason=pair` rapporté (0 attendu au plafond 15 s) ; suites.
+
+### 12.4 Déploiement (après GO ci-dessous)
+
+Livraison **moteur** : `verify_l4a_corpus.sh` 11/11 après
+`docker compose up -d --force-recreate nesting-worker` ; benchmarks
+publics régénérés (`densities_corpus.py`, version affichée = commit
+déployé) ; déploiement worker + app + wasm dans la même fenêtre (piège
+#33b) ; homelab `docker compose pull && up -d --force-recreate` +
+`assert_overflow_head.py` ; `NEST_COMPUTE_TOKENS` aligné. Contrôle prod
+en lecture seule : démo, trois directions, capture de la tôle partielle
+de chacune → `docs/qa/derniere-tole-2026-09-09/prod-{left,bottom,balanced}.png`.
