@@ -391,3 +391,111 @@ dépassement de temps, ou descendre le plafond après avoir compris ce
   benchmarks publics — ils appartiennent à l'étape de déploiement, qui
   attend le GO.
 
+
+## 8. Vérification (vérificateur, 10/09, `2d61efb`) — GO qualité, NO-GO déploiement ; tranche 1-bis
+
+### 8.1 Rejoué sur le poste (image worker et app reconstruites à HEAD, `ASSERT IMAGES=HEAD: OK`)
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 79 + 1 ignoré, 0 échec |
+| L1 `lock_last_sheet.py` (natif, det, 3 biais) | tenu ; `kept=spp` ×3 ; left 336,7 → 263,0 (plancher matière : une pièce de 263 mm sur la tôle) ; balanced 987×278 → 618×369 ; bottom sans gain (262,2 → 263,0), imprimé |
+| L2 `determinism_lock.py` | natif ≡ wasm, SHA `04944ada…` identiques, tolérance 0 |
+| L3 `seed_demo_dirs.py` `BENCH_ASSERT=1` (1 passage vérificateur) | tenu : left x ≤ 83,4 ; bottom y ≤ 128,9 ; balanced 252 × 654 ; ancrage 2,0 mm partout ; badges verts ; 2 tôles ; job 35 s (référence 20-25 s) |
+| L5 planches | left = bande le long de Y (x ≤ 113), bottom = bande le long de X (y ≤ 124), balanced = bloc de coin 244 × 629 — les trois formes sont distinctes et conformes |
+| L4 harnais espacement 2 (non rejoué par l'implémenteur) | voir 8.4 |
+
+Les résultats de qualité sont **validés** : la direction s'applique enfin à
+la tôle partielle, ancrée au coin. Les écarts au périmètre 1 à 6 du
+rapport §7 sont acceptés (compaction conservée pour l'alternative grille ;
+`balanced` par corridor `sqrt(aire · H / W)` ; constante ; signature ;
+verrou bottom « pas de régression » ; verrou apples-to-apples).
+
+### 8.2 Pourquoi pas de déploiement en l'état
+
+1. **Temps navigateur +33 s** : chaque walk wasm (8 par job) finit sa
+   propre tôle partielle, alors que la fusion n'en retient qu'un par
+   classe. Le serveur ne finit déjà que les champions de classe ; le
+   navigateur doit faire pareil, au même endroit du code.
+2. **Une finition consomme tout son plafond** (9,9 / 15,3 / 15,5 s sur la
+   démo, 20,8 s en mode borné-travail) : la phase 2 hérite du temps
+   restant (P5) et le plateau ne l'arrête pas sur 30 pièces. Le plafond
+   est donc le coût, pas une borne.
+3. **1,849 mm d'espacement à 7 s de plafond** : la finition n'a aucune
+   garde de faisabilité au-delà des bornes de tôle. `poly_simpl_tolerance`
+   vaut 0,001 en production : ce n'est pas la simplification, c'est un
+   vrai chevauchement de 0,15 mm des formes gonflées, livré tel quel.
+   Quelle qu'en soit l'origine (post-passes gravité / `column_fill` de
+   la phase 2, coupure de budget), la promesse d'espacement ne peut pas
+   dépendre du budget.
+
+Décision sur la question posée (accepter le temps ou baisser le plafond) :
+**ni l'un ni l'autre en l'état**. On finit une seule fois par alternative
+retenue, on garde la faisabilité par construction, et on mesure ensuite
+le temps réel avant de toucher au plafond.
+
+### 8.3 Tranche 1-bis — consigne fermée
+
+**Moteur, un seul emplacement pour la finition** :
+
+1. `EngineConfig` (`config.rs`) gagne `finish_partial_sheet: Option<bool>`
+   (absent = actif). `run_bpp_mem` ne finit que si le drapeau n'est pas
+   `Some(false)` (comportement natif inchangé : champions de classe).
+2. `merge.rs::merge_alternatives_json` (chemin wasm du pool) : après
+   `merge_bp_runs`, appliquer `finish_partial_sheet` à **chaque
+   alternative retenue** dont le run n'a pas déjà `finish` (champ
+   additif présent = déjà finie), avec `engineConfig` de l'entrée et la
+   seed du run (déjà parsée en u64). Même fonction, même résultat qu'en
+   natif : la fusion retient le champion de classe que le natif finit.
+3. `app/composables/localPool.js` : `workerEngineConfig` pose
+   `finish_partial_sheet: false` sur chaque walk ; le `merge` porte
+   `engineConfig` complet (déjà le cas) ; `MERGE_TIMEOUT_MS` devient
+   `30_000 + n_alternatives × 16_000` ; avant `postMessage` du merge, le
+   pool émet vers la vue un événement `{ type: 'progress', stage:
+   'bpp-finish' }` et `LiveNestingView` affiche « Finition de la
+   dernière tôle » (clé i18n `live.finishing`, FR/EN) jusqu'au règlement.
+4. **Garde de faisabilité dans `plan_finish`** : reconstruire un
+   `Layout` jagua du bin (import de l'instance BPP déjà en mémoire :
+   `instance.container(bin_id)`), `place_item` de chaque pose re-mappée
+   (conversion externe → interne via `pre_transform` de l'item, inverse
+   de `int_to_ext_transformation`), puis `layout.is_feasible()` ; faux →
+   `kept = "bpp"`, `reason = "infeasible"`. Test cargo
+   `finish_rejects_infeasible_strip` (pose SPP artificiellement décalée
+   de 0,2 mm sur une paire → rejet).
+5. **Trace des phases** dans `finish` : `phases: { p1Ms, p2Ms,
+   p1Improvements, p2Improvements, stop: "plateau" | "budget" }`
+   (`run_spp_mem` expose déjà ce qu'il faut dans ses événements ; les
+   lire par le sink muet remplacé par un collecteur). Aucune décision de
+   plafond dans cette tranche : la table des phases sur L3 ×3 et la démo
+   navigateur ×3 décidera à la vérification.
+
+**Ménage** : `_compact_receivers` (Python) est morte en production (seul
+un test l'appelle) — la retirer avec son test ; miroir JS si présent.
+
+**Verrous de la tranche 1-bis** (en plus de L1, L2, L3 ×3 rejoués tels
+quels) :
+
+- L4 harnais **deux configurations** ×3 au repos : 900/900, long task
+  après solve < 100 ms, durée de calcul ≤ référence + 16 s (une seule
+  finition, 1 direction) — référence 21,4 s (0,1) et 24,4 s (2) ; tôle
+  partielle x_max ≤ 349,1 (0,1) et < 517,7 (2).
+- L5 démo navigateur ×3 directions : `kept=spp`, formes identiques à la
+  planche du 09/09 (mêmes x/y max ± 5 mm à seed égale), temps de calcul
+  ≤ référence 21,3 s + 16 s ; un seul événement `bpp-finish` par job.
+- Compteur `kept=bpp reason=infeasible` = **0** sur L3 ×3, L4 ×6, L5 ×3
+  (toute occurrence est rapportée avec sa trace, elle ne bloque pas si
+  ≤ 1 sur 12 mais elle est inscrite au registre).
+- L2 déterminisme : inchangé (le drapeau absent = actif ; le verrou
+  compare le CLI natif et `run_nesting` wasm, tous deux avec finition).
+- vitest, pytest, cargo : comptes rapportés.
+
+Puis rapport en §9, GO vérificateur, benchmarks régénérés (moteur), et
+déploiement complet worker + app + wasm + homelab.
+
+### 8.4 Harnais espacement 2 (vérificateur, 10/09, un passage au repos, app locale servant le wasm `9d45dea6…`)
+
+900/900, 2 alternatives (grille + −X), durée de calcul **33 s** (référence
+24,4 s : +8,6 s), long task après solve 68 ms. Tôle partielle de −X :
+x_max **493,3 → 435,2** (`kept=spp`, 16,4 s), ancrée à 2,0 / 2,0 ; tôle 1
+inchangée [2 ; 988]. La finition tient donc aussi dans la configuration
+à 2 mm ; le coût de 16 s par finition est confirmé.

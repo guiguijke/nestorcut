@@ -101,7 +101,7 @@ ces outils.
 
 | # | Action | Type |
 |---|---|---|
-| 0 | **Dernière tôle multi-tôles** (priorité absolue owner, 09/09) : la direction choisie ne s'applique pas à la tôle partielle (démo : −X / −Y / équilibré rendent le même amas) — cause à trois niveaux, décision « tôle partielle = SPP de la même direction dans le moteur », compaction −X retirée des deux langues ; consigne `PLAN-DERNIERE-TOLE-2026-09-09.md` | Implémenteur (moteur), vérificateur |
+| 0 | **Dernière tôle multi-tôles** (priorité absolue owner, 09/09) : la direction choisie ne s'applique pas à la tôle partielle (démo : −X / −Y / équilibré rendent le même amas) — cause à trois niveaux, décision « tôle partielle = SPP de la même direction dans le moteur », compaction −X retirée des deux langues ; consigne `PLAN-DERNIERE-TOLE-2026-09-09.md`. **10/09 : tranche 1 livrée `2d61efb`, GO qualité (trois formes conformes, ancrées), NO-GO déploiement — tranche 1-bis (§8.3 : une finition par alternative retenue, garde de faisabilité, trace des phases) avant déploiement** | Implémenteur (moteur), vérificateur |
 | 1 | **Webhook Stripe live** : confirmer par une session Stripe (événement test livré) et l'écrire dans le registre — sans lui, aucun paiement récurrent ne survit | Ops critique (owner) |
 | 2 | **Jalon utilisateurs** : envoyer la campagne feedback FR, caler 5 entretiens d'atelier (guide `JALON-UTILISATEURS-T1-2026-09-06.md`) ; re-mesurer inscrits / payants / rétention | Owner |
 | 3 | Homelab : recréer **à froid** le conteneur WireGuard tiré le 08/09 (hors déploiement moteur, les trois workers derrière lui), contrôle tunnel + `assert_overflow_head.py` | Ops (agent, sur feu vert owner) |
