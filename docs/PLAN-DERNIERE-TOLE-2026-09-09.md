@@ -613,3 +613,79 @@ pièces du contact au contour.
    publiait.
 5. **Non-fait** : `verify_l4a_corpus.sh` 11/11 et la régénération des
    benchmarks publics — étape de déploiement, elle attend le GO.
+
+## 10. Vérification tranche 1-bis (vérificateur, 10/09, `eaf11ff7`) — temps réglé, NO-GO déploiement pour deux trous de la garde ; tranche 1-ter
+
+### 10.1 Rejoué sur le poste (images worker et app reconstruites à HEAD, `ASSERT IMAGES=HEAD: OK`, wasm servi = dépôt `164ed3d4…`)
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 80 + 1 ignoré |
+| L2 `determinism_lock.py` | natif ≡ wasm, SHA `04944ada…` (inchangé) |
+| L1 `lock_last_sheet.py` | tenu — mais `balanced` rend **628,0 × 360,8** là où le même fixture en mode déterministe donnait **617,6 × 368,6** le 09/09 : la finition `balanced` n'est pas reproductible d'une version à l'autre en mode borné-travail (voir 10.2, point 3) |
+| L3 `seed_demo_dirs.py BENCH_ASSERT=1` ×2 | passage 1 tenu (left 123, bottom 118, balanced 303 × 574, phases : left et balanced s'arrêtent au plateau en 6-9 s, bottom au budget) ; **passage 2 : `balanced` rejeté `infeasible: pair`** → 3e occurrence connue, toutes sur `balanced` (2 sur 6 au banc serveur, 1 sur 3 en démo navigateur) ; left et bottom : 0 sur 12 |
+| L4 harnais 0,1 (1 passage au repos) | voir 10.3 |
+
+Le temps est réglé (une finition par alternative, +6 à +9 s navigateur
+mesurés par l'implémenteur, table des phases lisible). Le point 2 appliqué
+avant la fusion avec la règle exacte des champions est accepté.
+
+### 10.2 Ce qui bloque encore le déploiement
+
+1. **La garde masque les paires dès qu'une pièce touche le contour.**
+   `infeasibility_of` rend `"sheet"` (non bloquant) dès qu'UNE pièce seule
+   collisionne avec le conteneur déflaté, **sans avoir vérifié les paires**.
+   Or le contact au contour est fréquent (2 des 3 biais de L1 le portent) :
+   un layout avec contact ET chevauchement de paire passe aujourd'hui.
+2. **Le contact au contour n'est pas borné.** « sheet » est accepté quelle
+   que soit sa profondeur ; seul le containment brut (±1e−3) le limite.
+   Une pièce peut donc être livrée à moins de `space` du bord de tôle.
+3. **`balanced` produit des paires infaisables une fois sur trois** et
+   dérive en mode déterministe. Cause non cherchée (la tranche
+   l'interdisait). Le suspect est le chemin corridor : `gravity_for_bias`
+   et `column_fill` dans un corridor de hauteur `ty`, et la patience de
+   plateau **en temps** (P5) qui reste active en mode borné-travail — la
+   finition peut donc s'arrêter à un autre endroit selon la machine.
+
+### 10.3 Harnais 0,1 (vérificateur, un passage au repos)
+
+900/900, durée de calcul **24 s**, un seul objet `finish` dans le record,
+aucun événement parasite ; tôle partielle −X x_max **396,3 → 348,7**
+(verrou ≤ 349,1), ancrée 0,1 / 0,1 ; long task après solve 72 ms ; phases
+p1 15,8 s / p2 0,19 s, arrêt au budget (même profil que l'implémenteur :
+sur 374 pièces la phase 1 consomme le plafond et améliore encore).
+
+### 10.4 Tranche 1-ter — consigne fermée (petite, avant déploiement)
+
+1. **Paires d'abord, contour ensuite** (`infeasibility_of`) : la
+   vérification de paire se fait avec un filtre de hasards qui **exclut le
+   conteneur** (`HazardFilter` jagua sur la clé du bin, ou probe dans un
+   conteneur agrandi de 2·space) ; `"pair"` rejette toujours, même en
+   présence d'un contact. Test cargo `finish_rejects_pair_even_with_sheet_contact`.
+2. **Contact au contour borné** : `"sheet"` n'est accepté que si l'AABB
+   BRUTE de chaque pièce garde ≥ `space − 0,05 mm` des quatre bords du bin
+   ; sinon rejet `reason = "sheet"`. Test `finish_rejects_deep_sheet_contact`.
+3. **Mode borné-travail vraiment borné** : quand `sa_max_iterations` est
+   `Some`, la config de finition pose `plateau_patience_sec = None` et
+   `time_budget_sec = 86 400` (comme `run_spp_mem` en det). L1 exécute
+   chaque biais **deux fois** et exige des `finish` identiques (JSON
+   égal) ; L2 doit rester à `04944ada…` ou la nouvelle valeur est
+   expliquée (le changement de config det est une raison valable, à
+   écrire).
+4. **Cause des paires `balanced`** : variable `NEST_FINISH_DUMP=<dir>`
+   (natif) qui écrit, pour tout rejet, l'instance SPP, la config de
+   finition et la solution rejetée ; rejouer le rejet du banc L3 ; mesurer
+   la paire (distance, pièces) et dire quel pas l'a produite : solve
+   phase 1, phase 2 transposée, `gravity_for_bias`, `column_fill`
+   (comparer les poses après chaque pas). Règle de décision : si le pas
+   fautif est un post-pass (gravité ou `column_fill`), le désactiver
+   **dans la finition pour les trois biais** (`cfg.gravity = Some(false)`
+   et/ou `cfg.column_fill = Some(false)`) et remesurer ; si c'est le
+   solve lui-même, rapporter avec le dump, sans décision.
+5. Verrous : L1 ×2 identiques ; L2 ; L3 ×3 `BENCH_ASSERT=1` avec compteur
+   `infeasible` = **0 sur 9** ; L5 ×3 = 0 sur 3 ; L4 deux configurations
+   ×1 (temps ≤ référence + 16 s, un seul `finish`) ; cargo, vitest, pytest.
+   Si après le point 4 le compteur n'est pas nul, le rapport le dit et le
+   déploiement se décide au registre avec le taux mesuré.
+
+Puis rapport §11, GO, benchmarks régénérés, déploiement complet.
