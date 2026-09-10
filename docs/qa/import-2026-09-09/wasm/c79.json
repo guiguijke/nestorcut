@@ -1,0 +1,53 @@
+{
+  "id": "c79",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "TEXT",
+  "unitDeclared": 6,
+  "unitDetected": "m",
+  "scaleApplied": 1000,
+  "entities": {
+    "LWPOLYLINE": 2,
+    "TEXT": 2,
+    "INSERT": 3,
+    "ATTRIB": 3
+  },
+  "parts": 1,
+  "holes": 2,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 3,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 14.129,
+  "extra": {
+    "file": "c79__libredwg_2010_gh209_1.dxf",
+    "path": ".testparts/corpus/c79__libredwg_2010_gh209_1.dxf",
+    "bytes": 272831,
+    "sha256": "e1df4235b1f156ad1210cb32b3752952c4d677e1401e617d33cfbb637495e718",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 8,
+    "warnings": [
+      "skipped entity TEXT",
+      "skipped entity ATTRIB",
+      "skipped entity SEQEND",
+      "skipped entity ATTRIB",
+      "skipped entity SEQEND",
+      "skipped entity ATTRIB",
+      "skipped entity SEQEND",
+      "skipped entity TEXT"
+    ],
+    "canonicalMs": 1.333,
+    "canonicalBytes": 1004,
+    "gate": null
+  }
+}

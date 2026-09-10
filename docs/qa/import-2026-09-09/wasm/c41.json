@@ -1,0 +1,42 @@
+{
+  "id": "c41",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "SPLINE": 1,
+    "ELLIPSE": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 1,
+  "splinesHandled": "sampled",
+  "ms": 5.984,
+  "extra": {
+    "file": "c41__curves_closed.dxf",
+    "path": ".testparts/corpus/c41__curves_closed.dxf",
+    "bytes": 19198,
+    "sha256": "d90e5084eaa126b6dfa1ca3318adfd36804e94eaf22f9236b6d93c1d8546b3c1",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 1,
+    "warnings": [],
+    "canonicalMs": 0.868,
+    "canonicalBytes": 314,
+    "gate": null
+  }
+}

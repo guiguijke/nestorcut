@@ -1,0 +1,42 @@
+{
+  "id": "c06",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 6,
+  "unitDetected": "m",
+  "scaleApplied": 1000,
+  "entities": {
+    "LWPOLYLINE": 1,
+    "CIRCLE": 2
+  },
+  "parts": 1,
+  "holes": 2,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 243.366,
+  "extra": {
+    "file": "c06___src_holed.dxf",
+    "path": ".testparts/corpus/c06___src_holed.dxf",
+    "bytes": 18762,
+    "sha256": "ebd7001c1aaad9f1f0236244d61a9c446a1b93014a07181454c68e739b2db8b7",
+    "acadVer": "AC1027",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 3,
+    "warnings": [],
+    "canonicalMs": 0.704,
+    "canonicalBytes": 504,
+    "gate": null
+  }
+}

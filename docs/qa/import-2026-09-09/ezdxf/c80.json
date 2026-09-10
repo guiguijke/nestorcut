@@ -1,0 +1,28 @@
+{
+  "id": "c80",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "ACAD_PROXY_ENTITY": 25,
+    "DIMENSION": 14,
+    "HATCH": 1,
+    "INSERT": 1,
+    "LINE": 4,
+    "MTEXT": 3,
+    "TEXT": 1
+  },
+  "parts": 5,
+  "holes": 1,
+  "openContours": 106,
+  "openContoursClosed": null,
+  "blocksFlattened": 1,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 259
+}

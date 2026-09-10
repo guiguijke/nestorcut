@@ -1,0 +1,50 @@
+{
+  "id": "c62",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "DIMENSION",
+  "unitDeclared": 0,
+  "unitDetected": "assumed-mm",
+  "scaleApplied": 1,
+  "entities": {
+    "CIRCLE": 1,
+    "DIMENSION": 5,
+    "ARC": 1,
+    "LINE": 2
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 3.95,
+  "extra": {
+    "file": "c62__libredwg_r2.6_dim.dxf",
+    "path": ".testparts/corpus/c62__libredwg_r2.6_dim.dxf",
+    "bytes": 9072,
+    "sha256": "1a224776631c313cbe06c9a29bc0b05c68e147e117ae8393229190ce09a13fd8",
+    "acadVer": "AC1003",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 4,
+    "warnings": [
+      "skipped entity DIMENSION",
+      "skipped entity DIMENSION",
+      "skipped entity DIMENSION",
+      "skipped entity DIMENSION",
+      "skipped entity DIMENSION"
+    ],
+    "canonicalMs": 0.532,
+    "canonicalBytes": 504,
+    "gate": null
+  }
+}

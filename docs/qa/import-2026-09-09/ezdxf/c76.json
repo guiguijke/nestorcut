@@ -1,0 +1,25 @@
+{
+  "id": "c76",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "CIRCLE": 1,
+    "LINE": 3,
+    "LWPOLYLINE": 1,
+    "TEXT": 1
+  },
+  "parts": 3,
+  "holes": 0,
+  "openContours": 0,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 17
+}

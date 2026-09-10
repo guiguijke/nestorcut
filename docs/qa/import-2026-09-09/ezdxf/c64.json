@@ -1,0 +1,20 @@
+{
+  "id": "c64",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "refused",
+  "error": "Entity count is 0",
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {},
+  "parts": null,
+  "holes": null,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4
+}

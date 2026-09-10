@@ -1,0 +1,22 @@
+{
+  "id": "c08",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1.0,
+  "entities": {
+    "LWPOLYLINE": 3
+  },
+  "parts": 2,
+  "holes": 1,
+  "openContours": 0,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 7
+}

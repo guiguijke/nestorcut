@@ -1,0 +1,41 @@
+{
+  "id": "c13",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "LWPOLYLINE": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4.012,
+  "extra": {
+    "file": "c13__marine_lpl_002.dxf",
+    "path": ".testparts/corpus/c13__marine_lpl_002.dxf",
+    "bytes": 18468,
+    "sha256": "7ea7cb984249197a25b9bf72552fc54b5dc188320134f8f0dc50eb31c10cea72",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 1,
+    "warnings": [],
+    "canonicalMs": 1.263,
+    "canonicalBytes": 304,
+    "gate": null
+  }
+}

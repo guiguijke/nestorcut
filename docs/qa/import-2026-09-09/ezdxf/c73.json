@@ -1,0 +1,31 @@
+{
+  "id": "c73",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "3DFACE": 2,
+    "ARC": 2,
+    "ATTDEF": 2,
+    "DIMENSION": 9,
+    "INSERT": 19,
+    "LINE": 10,
+    "POINT": 1,
+    "POLYLINE": 16,
+    "SOLID": 1,
+    "TEXT": 2
+  },
+  "parts": 6,
+  "holes": 14,
+  "openContours": 1337,
+  "openContoursClosed": null,
+  "blocksFlattened": 19,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 1055
+}

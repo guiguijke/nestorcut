@@ -1,0 +1,27 @@
+{
+  "id": "c81",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "refused",
+  "error": "ValueError: DXF exploded to more than 4000 entities",
+  "failingEntity": null,
+  "unitDeclared": 1,
+  "unitDetected": "inch",
+  "scaleApplied": 25.4,
+  "entities": {
+    "CIRCLE": 3,
+    "DIMENSION": 12,
+    "INSERT": 43,
+    "LINE": 55,
+    "LWPOLYLINE": 3,
+    "MTEXT": 1
+  },
+  "parts": null,
+  "holes": null,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 43,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 0
+}

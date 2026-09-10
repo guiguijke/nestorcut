@@ -1,0 +1,39 @@
+{
+  "id": "c82",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "refused",
+  "error": "gate: localImport.unsupportedType (extension \".dxfb\")",
+  "failingEntity": null,
+  "unitDeclared": null,
+  "unitDetected": null,
+  "scaleApplied": null,
+  "entities": null,
+  "parts": null,
+  "holes": null,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": null,
+  "splines": null,
+  "splinesHandled": null,
+  "ms": null,
+  "extra": {
+    "file": "c82__libredwg_example_2000.dxfb",
+    "path": ".testparts/corpus/c82__libredwg_example_2000.dxfb",
+    "bytes": 925636,
+    "sha256": "6630c1c66c5b071374107a4fda46d686d5daedcb275e351878229cdb40870b5b",
+    "acadVer": "binary",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": null,
+    "warnings": null,
+    "canonicalMs": null,
+    "canonicalBytes": null,
+    "gate": "unsupportedType"
+  }
+}

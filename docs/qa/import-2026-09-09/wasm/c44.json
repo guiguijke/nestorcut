@@ -1,0 +1,44 @@
+{
+  "id": "c44",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "HATCH",
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "LWPOLYLINE": 1,
+    "HATCH": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4.194,
+  "extra": {
+    "file": "c44__hatch_pattern.dxf",
+    "path": ".testparts/corpus/c44__hatch_pattern.dxf",
+    "bytes": 18926,
+    "sha256": "c95ea3e75f636c6038dcb72b8cccc89cd5401a9375f2ef60225eb05cef43f0c2",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 1,
+    "warnings": [
+      "skipped entity HATCH"
+    ],
+    "canonicalMs": 0.736,
+    "canonicalBytes": 320,
+    "gate": null
+  }
+}

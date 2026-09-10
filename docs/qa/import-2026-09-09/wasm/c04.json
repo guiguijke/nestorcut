@@ -1,0 +1,42 @@
+{
+  "id": "c04",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "assumed-mm",
+  "scaleApplied": 1,
+  "entities": {
+    "CIRCLE": 4,
+    "POLYLINE": 232
+  },
+  "parts": 169,
+  "holes": 50,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 541.587,
+  "extra": {
+    "file": "c04__Top_Face_Marking_Final.dxf",
+    "path": ".testparts/corpus/c04__Top_Face_Marking_Final.dxf",
+    "bytes": 724298,
+    "sha256": "ad0f2828fe1288e6be3cb2bb0012abb4713e7896ffedf640823921e839f6da12",
+    "acadVer": "AC1009",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 236,
+    "warnings": [],
+    "canonicalMs": 11.397,
+    "canonicalBytes": 1182241,
+    "gate": null
+  }
+}

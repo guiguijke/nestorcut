@@ -1,0 +1,46 @@
+{
+  "id": "c84",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "TEXT",
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "CIRCLE": 1,
+    "TEXT": 1,
+    "LWPOLYLINE": 1,
+    "LINE": 3
+  },
+  "parts": 3,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 6.328,
+  "extra": {
+    "file": "c84__libredwg_sample_2000.dxf",
+    "path": ".testparts/corpus/c84__libredwg_sample_2000.dxf",
+    "bytes": 214241,
+    "sha256": "4b81b4de8331c808495b1ea42754986207a4e16256750d334dd54f96b9762feb",
+    "acadVer": "AC1015",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 5,
+    "warnings": [
+      "skipped entity TEXT"
+    ],
+    "canonicalMs": 1.074,
+    "canonicalBytes": 961,
+    "gate": null
+  }
+}

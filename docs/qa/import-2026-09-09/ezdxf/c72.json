@@ -1,0 +1,27 @@
+{
+  "id": "c72",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "ACAD_PROXY_ENTITY": 1,
+    "IMAGE": 5,
+    "LEADER": 1,
+    "LINE": 1,
+    "LWPOLYLINE": 1,
+    "MTEXT": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": 4,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 37
+}

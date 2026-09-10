@@ -1,0 +1,25 @@
+{
+  "id": "c62",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "ARC": 1,
+    "CIRCLE": 1,
+    "DIMENSION": 5,
+    "LINE": 2
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": 22,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 13
+}

@@ -147,3 +147,24 @@ Champ non mesuré par un importeur = `null`, jamais omis.
   occurrences de `#007bff` → `#0069d9`, remplacement mécanique. Fait
   quand : `grep -c 007bff public/diagrams/*.svg` = 0 partout et deux
   diagrammes relus à l'œil en ligne.
+
+## 7. Point vérificateur (10/09) sur les lots A, B, C livrés (`eaf11ff7`)
+
+- **Lot A** : 85 DXF, 8 familles — mais **4 seulement viennent d'un flux
+  CAO réel** (propriétaire), 55 sont produits par le projet. Le lot D
+  doit donc **stratifier** toutes ses statistiques en « réels » /
+  « synthétiques » et le taux « lu sans réparation » ne se publie que sur
+  les réels. Le propriétaire fournit les fichiers des entretiens dans
+  `specs/import-corpus/` ; l'agent les intègre (hash + provenance) avant
+  le lot D.
+- **Lots B et C** : les deux coureurs tournent, mais n'ont été passés que
+  sur `.testparts/` (2 fichiers chacun). Le critère « fait quand » exigeait
+  le corpus entier : **passer les 85 fichiers dans les deux coureurs**
+  (`docs/qa/import-2026-09-09/{wasm,ezdxf}/<id>.json`) avant d'ouvrir D.
+- Deux constats déjà exploitables, à porter au lot D avec leur fichier
+  témoin : (1) un contour à **gap 0,3 mm n'est pas refermé et disparaît
+  sans message** (perte silencieuse de pièce — le pire des cas pour
+  l'utilisateur) ; (2) l'import **SVG coûte ~4,3 s pour 6 entités**.
+- `.testparts/` est désormais ignoré par git (il ne l'était pas ; AGENTS
+  le disait). Aucun fichier du corpus n'est entré dans le dépôt (vérifié :
+  0 DXF/DWG ajouté au commit).

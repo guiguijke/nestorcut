@@ -1,0 +1,42 @@
+{
+  "id": "c40",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "LWPOLYLINE": 1,
+    "CIRCLE": 1
+  },
+  "parts": 1,
+  "holes": 1,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4.548,
+  "extra": {
+    "file": "c40__chan_tiny_hole.dxf",
+    "path": ".testparts/corpus/c40__chan_tiny_hole.dxf",
+    "bytes": 18603,
+    "sha256": "4cb8c277995457bd717339c8941c9a8eabcc935d9f0537b06443e0871ef0028d",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 2,
+    "warnings": [],
+    "canonicalMs": 0.746,
+    "canonicalBytes": 393,
+    "gate": null
+  }
+}

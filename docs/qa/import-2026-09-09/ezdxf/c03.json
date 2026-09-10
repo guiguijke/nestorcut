@@ -1,0 +1,25 @@
+{
+  "id": "c03",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1.0,
+  "entities": {
+    "ARC": 7,
+    "CIRCLE": 4,
+    "LINE": 177,
+    "LWPOLYLINE": 200
+  },
+  "parts": 151,
+  "holes": 70,
+  "openContours": 9,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 2283
+}

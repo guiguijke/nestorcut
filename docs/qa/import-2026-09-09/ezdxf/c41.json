@@ -1,0 +1,22 @@
+{
+  "id": "c41",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1.0,
+  "entities": {
+    "ELLIPSE": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": 0,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 9
+}

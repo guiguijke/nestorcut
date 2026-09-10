@@ -1,0 +1,62 @@
+{
+  "id": "c68",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "TEXT",
+  "unitDeclared": 0,
+  "unitDetected": "assumed-mm",
+  "scaleApplied": 1,
+  "entities": {
+    "POINT": 1,
+    "LINE": 1,
+    "ARC": 1,
+    "CIRCLE": 1,
+    "TEXT": 1,
+    "TRACE": 1,
+    "INSERT": 2,
+    "SHAPE": 1,
+    "SOLID": 1,
+    "ATTDEF": 1,
+    "ATTRIB": 1,
+    "POLYLINE": 1,
+    "DIMENSION": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 2,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 3.8,
+  "extra": {
+    "file": "c68__libredwg_r11_entities-2d.dxf",
+    "path": ".testparts/corpus/c68__libredwg_r11_entities-2d.dxf",
+    "bytes": 8606,
+    "sha256": "b117265132358935916e646f7affadb43875afc4b17df079f9637afcbc725147",
+    "acadVer": "AC1009",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 7,
+    "warnings": [
+      "skipped entity TEXT",
+      "skipped entity TRACE",
+      "skipped entity SHAPE",
+      "skipped entity SOLID",
+      "skipped entity ATTDEF",
+      "skipped entity ATTRIB",
+      "skipped entity SEQEND",
+      "skipped entity DIMENSION"
+    ],
+    "canonicalMs": 0.523,
+    "canonicalBytes": 929,
+    "gate": null
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "id": "c83",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "refused",
+  "error": "probe DXFStructureError: Invalid group code \"AutoCAD Binary DXF\" at line 1.",
+  "failingEntity": null,
+  "unitDeclared": null,
+  "unitDetected": null,
+  "scaleApplied": null,
+  "entities": null,
+  "parts": null,
+  "holes": null,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": null,
+  "splines": null,
+  "splinesHandled": null,
+  "ms": 0
+}

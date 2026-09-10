@@ -1,0 +1,22 @@
+{
+  "id": "c67",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "refused",
+  "error": "Closed parts is 0",
+  "failingEntity": null,
+  "unitDeclared": 0,
+  "unitDetected": "unitless",
+  "scaleApplied": 1.0,
+  "entities": {
+    "INSERT": 1
+  },
+  "parts": 0,
+  "holes": 0,
+  "openContours": 1,
+  "openContoursClosed": null,
+  "blocksFlattened": 1,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 5
+}

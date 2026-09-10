@@ -1,0 +1,55 @@
+{
+  "id": "c72",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "repaired",
+  "error": null,
+  "failingEntity": "LEADER",
+  "unitDeclared": 0,
+  "unitDetected": "assumed-mm",
+  "scaleApplied": 1,
+  "entities": {
+    "LEADER": 1,
+    "MTEXT": 1,
+    "ACAD_PROXY_ENTITY": 1,
+    "LINE": 1,
+    "LWPOLYLINE": 1,
+    "IMAGE": 5
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4.897,
+  "extra": {
+    "file": "c72__libredwg_r14_Leader.dxf",
+    "path": ".testparts/corpus/c72__libredwg_r14_Leader.dxf",
+    "bytes": 93138,
+    "sha256": "dc9e77c88cfe0b6b234e4eb051419b1d1b33bc105771048e9163ce562d3aed87",
+    "acadVer": "AC1014",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 2,
+    "warnings": [
+      "skipped entity LEADER",
+      "skipped entity MTEXT",
+      "skipped entity ACAD_PROXY_ENTITY",
+      "skipped entity IMAGE",
+      "skipped entity IMAGE",
+      "skipped entity IMAGE",
+      "skipped entity IMAGE",
+      "skipped entity IMAGE"
+    ],
+    "canonicalMs": 0.93,
+    "canonicalBytes": 680,
+    "gate": null
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "id": "c53",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 5,
+  "unitDetected": "cm",
+  "scaleApplied": 10,
+  "entities": {
+    "LWPOLYLINE": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 4.456,
+  "extra": {
+    "file": "c53__units_cm.dxf",
+    "path": ".testparts/corpus/c53__units_cm.dxf",
+    "bytes": 18486,
+    "sha256": "ca18a5b73892c2eb17db543f2e234e61ff543bffebaac18ccc553deec4a26840",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 1,
+    "warnings": [],
+    "canonicalMs": 0.86,
+    "canonicalBytes": 322,
+    "gate": null
+  }
+}

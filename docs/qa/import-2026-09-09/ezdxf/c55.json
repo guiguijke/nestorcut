@@ -1,0 +1,22 @@
+{
+  "id": "c55",
+  "importer": "ezdxf",
+  "version": "eaf11ff7",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 1,
+  "unitDetected": "inch",
+  "scaleApplied": 25.4,
+  "entities": {
+    "LWPOLYLINE": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": 0,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 0,
+  "splinesHandled": null,
+  "ms": 9
+}

@@ -1,0 +1,43 @@
+{
+  "id": "c50",
+  "importer": "wasm",
+  "version": "eaf11ff7-dirty",
+  "status": "read",
+  "error": null,
+  "failingEntity": null,
+  "unitDeclared": 4,
+  "unitDetected": "mm",
+  "scaleApplied": 1,
+  "entities": {
+    "ELLIPSE": 1,
+    "SPLINE": 1,
+    "ARC": 1
+  },
+  "parts": 1,
+  "holes": 0,
+  "openContours": null,
+  "openContoursClosed": null,
+  "blocksFlattened": 0,
+  "splines": 1,
+  "splinesHandled": "sampled",
+  "ms": 14.007,
+  "extra": {
+    "file": "c50__stress_open_curves.dxf",
+    "path": ".testparts/corpus/c50__stress_open_curves.dxf",
+    "bytes": 18907,
+    "sha256": "7aa56c9097b939ab1559ac7369a9c69ab45db6e81721476795cca45accde4725",
+    "acadVer": "AC1024",
+    "format": "dxf",
+    "bundle": {
+      "js": "public/geometry/nest_geometry.js",
+      "wasmSha256": "cf44b60f2a50ee0036165adbd4723eedd60efa7c2ce768b2ff74d89b59a6350e",
+      "wasmBytes": 652743
+    },
+    "tol": 0.01,
+    "entityCount": 2,
+    "warnings": [],
+    "canonicalMs": 0.823,
+    "canonicalBytes": 406,
+    "gate": null
+  }
+}
