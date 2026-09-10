@@ -1,0 +1,91 @@
+{
+ "space": 2.0,
+ "strategy": "bottom",
+ "finish": {
+  "after": {
+   "xMax": 1482.7607421875,
+   "xMin": 2.1457366943359375,
+   "yMax": 113.04663848876953,
+   "yMin": 2.0000057220458984
+  },
+  "before": {
+   "xMax": 641.3440551757812,
+   "xMin": 2.005018711090088,
+   "yMax": 327.75048828125,
+   "yMin": 2.003662109375
+  },
+  "bias": "bottom",
+  "elapsedMs": 15440,
+  "kept": "spp",
+  "minDistanceMm": 2.0000998973846436,
+  "phases": {
+   "p1Improvements": 7,
+   "p1Ms": 11050,
+   "p2Improvements": 6,
+   "p2Ms": 4390,
+   "stop": "budget"
+  },
+  "reason": "",
+  "rejected": null,
+  "sheet": 1
+ },
+ "report": {
+  "spacingOk": false,
+  "smallestGapMm": 1.883,
+  "overlapFree": true,
+  "insideSheet": true,
+  "verifyStatus": "measured",
+  "duplicatePoses": 0
+ },
+ "sheets": [
+  {
+   "index": 0,
+   "partCount": 271,
+   "densityPct": 72.5
+  },
+  {
+   "index": 1,
+   "partCount": 33,
+   "densityPct": 2.9
+  }
+ ],
+ "mesureParTole": [
+  {
+   "tole": 0,
+   "pieces": 271,
+   "ecartPaires": 1.883,
+   "pairesSousSeuil": 1,
+   "ecartBord": 2.002,
+   "cause": "paires",
+   "verdict": "SOUS LE SEUIL"
+  },
+  {
+   "tole": 1,
+   "pieces": 33,
+   "ecartPaires": 2.0002,
+   "pairesSousSeuil": 0,
+   "ecartBord": 2.0,
+   "cause": "bord de tôle",
+   "verdict": "OK"
+  }
+ ],
+ "pireePaire": {
+  "a": {
+   "bounds": [
+    2.13,
+    2395.98,
+    422.13,
+    2695.98
+   ]
+  },
+  "b": {
+   "bounds": [
+    44.13,
+    2494.1,
+    134.13,
+    2654.1
+   ]
+  }
+ },
+ "outil": "workers/nesting/bench/measure_svg_gaps.py sur les SVG livrés (anneaux bruts)"
+}

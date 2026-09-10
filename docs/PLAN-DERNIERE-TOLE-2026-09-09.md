@@ -1183,3 +1183,129 @@ fenêtre, homelab, contrôles en lecture seule). Après ce déploiement, le
 chantier « dernière tôle » est **clos** ; le badge rouge 1/8 du §13.3 est
 couvert par la garde exacte si sa cause est la tôle finie, et par
 l'outillage `measure_svg_gaps.py` sinon.
+
+## 16. Déploiement de la tranche 2 (implémenteur, 10/09)
+
+**Déployé** : `b6e9082d` (app, worker, wasm, homelab). Le contenu moteur est
+celui de `e51e294c` qui a produit le corpus et les benchmarks —
+`git diff e51e294c..b6e9082d -- workers public/engine` est **vide**, seul
+`data/benchmarks.js` sépare les deux commits.
+
+### 16.1 Ordre suivi (§12.4)
+
+1. **Corpus 11/11 OK sur l'image PUBLIÉE** (`ghcr.io/…:e51e294c`, deux
+   workers dédiés tirés du registre, workers locaux arrêtés) — vérifiée
+   porteuse du nouveau moteur avant de semer (`minDistanceMm` et
+   `spacing_violations` présents dans le binaire).
+2. **Benchmarks publics régénérés** sur ce run : **les neuf densités
+   publiées sont IDENTIQUES** au run `179b126`. C'est le résultat attendu —
+   la garde exacte ne déplace aucune pièce, elle mesure. T-F revient à
+   89 sur 90 : ce cas oscille d'une pièce selon le tirage (88, 89, 88 sur
+   l'image précédente, 89 ici), la série est écrite au-dessus du cas pour
+   qu'on ne lise pas une oscillation comme une régression.
+3. **Worker + app + wasm dans la même fenêtre** (piège #33b) : `pull` puis
+   `up -d` sur Hetzner. Mongo **n'a pas été recréé** cette fois (up depuis
+   3 h) — l'effet de bord du §13.2 venait d'un nouveau digest `mongo:7`,
+   pas de la procédure.
+4. **Homelab** : `pull` + `up -d --force-recreate`, puis
+   **`ASSERT OVERFLOW=HEAD: OK`**.
+5. **app-ci est VERT sur `main`** (point 2 de la consigne) : voir §16.4.
+
+### 16.2 Contrôles après déploiement (lecture seule)
+
+| Contrôle | Mesure |
+|---|---|
+| digest worker **prod** | `sha256:3a0c5031…` |
+| digest worker **homelab** | `sha256:3a0c5031…` — **le même** |
+| binaire moteur prod | porte `minDistanceMm` **et** `spacing_violations` |
+| `core/main.py` prod | `f1fe1bfd…` = HEAD |
+| wasm moteur servi | `cb87f45a…` = dépôt HEAD, **avec et sans** cache-buster |
+| wasm géométrie servi | `583f24b2…` = HEAD |
+| `/benchmarks` | affiche **e51e294 / 2026-09-10** |
+| Pages | `/`, `/plans`, `/benchmarks`, `/licences`, `/privacy` → 200 |
+| `compute_pool` | total **28**, used 0 ; aucun job en attente |
+| Journaux | app connectée, démo semée, purge OK ; worker en polling, aucune erreur |
+
+### 16.3 Le badge rouge du §13.3 est LOCALISÉ — et ce n'est pas la finition
+
+Le contrôle de l'artefact déployé (démo trois directions sur les images
+publiées, en local faute de compte de production) a **reproduit le défaut**,
+cette fois sur `bottom`, et l'instrumentation du §13.3 a fait son travail :
+le harnais a écrit le chiffre **et** les poses.
+
+| | Mesure |
+|---|---|
+| Rapport du job | `spacingOk: false`, `smallestGapMm` **1,883 mm** pour 2,0 promis (`overlapFree` et `insideSheet` verts, 304/304) |
+| **Trace de la finition** | `kept=spp`, `reason` vide, **`minDistanceMm` 2,0001 mm** |
+| **Tôle 1** (celle que la finition refait, 33 pièces) | paires **2,0002 mm**, bord **2,000 mm** → **conforme** |
+| **Tôle 0** (dense, 271 pièces, **jamais touchée par la finition**) | paires **1,883 mm**, **1 paire sous le seuil**, bord 2,002 → **sous le seuil** |
+| Paire fautive (anneaux BRUTS, 0 polygone invalide) | une pièce de 420 × 300 mm et une de 90 × 160 mm **logée dans son AABB** — donc un hôte et une pièce nichée |
+
+**Conclusion, mesurée et non déduite : l'écart ne vient ni de la finition,
+ni de sa garde.** Il est sur la tôle dense, que la finition ne touche pas ;
+et sur la tôle qu'elle refait, sa propre mesure (2,0001) est confirmée par
+la vérification aval. La tranche 2 n'a donc pas « raté » ce cas : il est
+ailleurs.
+
+**Où, précisément, reste à établir.** Deux mécanismes sont candidats, et je
+ne tranche pas sans la mesure qui les sépare :
+
+1. **le solve lui-même** : le navigateur simplifie les anneaux à
+   `SIMPLIFY_MM = 0,05` avant de les envoyer (`localPayloadBuilder`), et
+   jagua gonfle de `space/2` sur ces anneaux simplifiés — une pose exacte à
+   2,0 sur les formes simplifiées peut mesurer ~1,90 sur les anneaux bruts
+   que le DXF livre. 1,883 est **en dessous** de cette borne (2 × 0,05 +
+   marge), donc ce mécanisme seul ne suffit pas à l'expliquer ;
+2. **un post-pass** (hole-fill ou bandes résiduelles) : la paire fautive est
+   un hôte et sa pièce nichée, ce qui désigne ce chemin ; mais le repli de
+   tolérance de `validateReturn` est `space − 2 × 0,05` = **1,90**, donc
+   1,883 aurait dû y être refusé aussi.
+
+Aucun des deux ne rend compte du chiffre à lui seul — c'est exactement
+pourquoi je ne conclus pas. **La mesure qui discrimine** : comparer les
+poses de cette paire AVANT post-pass (`window.__lastSolveResult`, déjà
+dumpé par `qa-e2e-local-2sheets.mjs`) et après livraison. Une demi-journée
+avec ses verrous. **Non engagé** : votre consigne est de n'ouvrir aucun
+chantier sans votre mot.
+
+**Ce que ça coûte aujourd'hui, en clair** : sur un job multi-tôles du
+navigateur, une paire de la tôle DENSE peut sortir sous l'espacement promis
+d'environ 0,12 mm, sans recouvrement. La vérification l'affiche
+(`spacingOk: false`, badge rouge, écart chiffré) — l'utilisateur n'est pas
+trompé, mais la promesse n'est pas tenue sur ce tirage. Fréquence observée
+aujourd'hui : **2 sur 12** exécutions de la démo navigateur (une sur
+`balanced` avant la tranche 2, une sur `bottom` après). Le serveur, lui,
+n'a produit **aucun** cas sur 15 passages du banc L3 (45 exécutions de
+direction).
+
+Pièces au dossier : `t2prod-bottom-rouge.png`, `t2prod-finish.json`,
+`t2prod-ecart-bottom.json` (mesure par tôle).
+
+### 16.4 app-ci réparé, avec sa cause
+
+Correctif du plan d'import §6 appliqué (`esbuild: { tsconfigRaw: '{}' }`)
+et **vérifié dans les deux sens** en masquant `admin/.nuxt`, la condition
+exacte du runner :
+
+- sans le correctif : `TSConfckParseError … Cannot find module
+  './.nuxt/tsconfig.json'`, 1 fichier en échec, **507** tests ;
+- avec : 48 fichiers, **514/514**.
+
+Et une cause de fond que le plan ne mentionnait pas :
+**`vitest.config.js` n'était pas dans les chemins déclencheurs d'app-ci** —
+le correctif qui répare la CI ne la déclenchait donc pas. Ajouté, avec
+`package.json` / `package-lock.json` côté `push` (ils n'y étaient que sur
+`pull_request`). **`app-ci` est vert sur `main`** (2 min 13, run
+`34512629091`) : le critère « fait quand » est atteint.
+
+### 16.5 Non-faits
+
+1. **Captures sur `app.nestorcut.com`** : toujours bloquées par
+   l'authentification (pas de compte de production, et je n'en crée pas).
+   La planche vient des images publiées rejouées en local.
+2. **Cause exacte du 1,883 mm** : localisée (tôle dense, paire hôte/pièce
+   nichée), mécanisme non tranché, mesure discriminante chiffrée et non
+   engagée (§16.3).
+3. **Diagrammes du site marketing** (plan d'import §6, second point) : les
+   64 occurrences de `#007bff` sont toujours là — non demandé dans cette
+   consigne, non fait.

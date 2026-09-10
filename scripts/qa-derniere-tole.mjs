@@ -21,6 +21,8 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const OUT = process.env.QA_OUT || path.join(ROOT, 'docs', 'qa', 'derniere-tole-2026-09-09')
 fs.mkdirSync(OUT, { recursive: true })
 
+// Espacement demandé par le harnais : kerf 0 + 2 × sécurité 1.
+const SPACE_MM = 2
 const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a)
 const browser = await chromium.launch({ headless: true })
 const page = await (await browser.newContext({
@@ -56,7 +58,7 @@ try {
     if (String(await countInput.inputValue()) !== '3') {
         await countInput.fill('3'); await countInput.blur()
     }
-    // Espacement effectif 2 mm : kerf 0 + sécurité 1.
+    // Espacement effectif 2 mm : kerf 0 + sécurité 1 (SPACE_MM ci-dessus).
     const kerf = page.locator('label.input', { hasText: 'Kerf' }).locator('.input__value')
     await kerf.fill('0'); await kerf.blur()
     const safety = page.locator('label.input', { hasText: 'Safety' }).locator('.input__value')
@@ -177,10 +179,14 @@ try {
                 recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
                 const rr = recs[0] || {}
                 const a = (rr.alternatives || []).find((x) => x.strategy === strategy)
-                return { space: rr.params?.space ?? null, alternative: a || null }
+                return { alternative: a || null }
             }, DIRS[d])
             const file = path.join(OUT, `spacing-fail-${DIRS[d]}.json`)
-            fs.writeFileSync(file, JSON.stringify(dump, null, 1))
+            // L'espacement vient du HARNAIS (kerf 0 + sécurité 1 = 2 mm),
+            // pas du record : celui-ci ne porte pas les paramètres, et un
+            // dump sans espacement fait comparer l'outil de mesure à un
+            // seuil de 0 — son verdict ne veut alors rien dire.
+            fs.writeFileSync(file, JSON.stringify({ space: SPACE_MM, ...dump }, null, 1))
             log(`espacement ROUGE : poses écrites dans ${path.basename(file)}`)
         }
         const f = alt.finish
