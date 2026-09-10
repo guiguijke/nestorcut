@@ -65,11 +65,13 @@ try {
     // (`DEMO_MAX_DIRECTIONS = 1`, shared/constants/demo.constants.js) : le
     // sélecteur y est un radio. On fait donc TROIS calculs, un par
     // direction — c'est ce que voit l'utilisateur de la démo.
-    const DIRS = ['left', 'bottom', 'balanced']
+    // QA_DIRS permet de rejouer UNE direction (diagnostic) — défaut : les trois.
+    const ALL_DIRS = ['left', 'bottom', 'balanced']
+    const DIRS = (process.env.QA_DIRS || ALL_DIRS.join(',')).split(',').map((s) => s.trim())
     const rows = []
     for (let d = 0; d < DIRS.length; d++) {
         const dirOpts = page.locator('.compute__options').first().locator('.compute__option')
-        await dirOpts.nth(d).click()
+        await dirOpts.nth(ALL_DIRS.indexOf(DIRS[d])).click()
         await page.waitForTimeout(400)
         const actives = []
         for (let i = 0; i < await dirOpts.count(); i++) {
@@ -113,6 +115,13 @@ try {
                     finish: a.finish || null,
                     overlapFree: a.report?.overlapFree, spacingOk: a.report?.spacingOk,
                     insideSheet: a.report?.insideSheet,
+                    // Un badge rouge sans son CHIFFRE n'est pas un constat :
+                    // `spacingOk` est faux dès que le plus petit écart mesuré
+                    // (paires ET bord de tôle, nest-report::verify_layout)
+                    // tombe sous space − 0,01.
+                    smallestGapMm: a.report?.smallestGapMm ?? null,
+                    verifyStatus: a.report?.verifyStatus ?? null,
+                    duplicatePoses: a.report?.duplicatePoses ?? null,
                     sheets: (a.report?.sheets || []).map((s) => ({
                         index: s.index, parts: s.partCount, densityPct: s.densityPct,
                     })),
@@ -150,12 +159,37 @@ try {
         }
         await page.locator('[data-testid="viewer-stage"]').first()
             .screenshot({ path: path.join(OUT, `demo-${DIRS[d]}.png`) })
+        // Badge d'espacement rouge : on sort les POSES, sinon le constat
+        // s'arrête à « c'est rouge » et la cause reste invisible (quelle
+        // tôle, quelle paire, ou un simple bord de tôle).
+        if (alt.spacingOk === false) {
+            const dump = await page.evaluate(async (strategy) => {
+                const db = await new Promise((res, rej) => {
+                    const req = indexedDB.open('nestorcut-local')
+                    req.onsuccess = () => res(req.result)
+                    req.onerror = () => rej(req.error)
+                })
+                const recs = await new Promise((res, rej) => {
+                    const r = db.transaction('results', 'readonly').objectStore('results').getAll()
+                    r.onsuccess = () => res(r.result || [])
+                    r.onerror = () => rej(r.error)
+                })
+                recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+                const rr = recs[0] || {}
+                const a = (rr.alternatives || []).find((x) => x.strategy === strategy)
+                return { space: rr.params?.space ?? null, alternative: a || null }
+            }, DIRS[d])
+            const file = path.join(OUT, `spacing-fail-${DIRS[d]}.json`)
+            fs.writeFileSync(file, JSON.stringify(dump, null, 1))
+            log(`espacement ROUGE : poses écrites dans ${path.basename(file)}`)
+        }
         const f = alt.finish
         log(`${DIRS[d].padEnd(9)} ${wallSec.toFixed(0)}s  tôle ${target}  `
             + (f ? `kept=${f.kept} avant x≤${f.before.xMax.toFixed(1)} y≤${f.before.yMax.toFixed(1)}`
                  + ` après x≤${f.after.xMax.toFixed(1)} y≤${f.after.yMax.toFixed(1)} (${f.elapsedMs} ms)`
                  : 'finish absent')
-            + `  badges ${alt.overlapFree}/${alt.spacingOk}/${alt.insideSheet}`)
+            + `  badges ${alt.overlapFree}/${alt.spacingOk}/${alt.insideSheet}`
+            + `  écart min ${alt.smallestGapMm ?? '?'} mm (${alt.verifyStatus ?? '?'})`)
         await page.keyboard.press('Escape')
         await page.waitForTimeout(1200)
     }

@@ -889,3 +889,127 @@ déployé) ; déploiement worker + app + wasm dans la même fenêtre (piège
 `assert_overflow_head.py` ; `NEST_COMPUTE_TOKENS` aligné. Contrôle prod
 en lecture seule : démo, trois directions, capture de la tôle partielle
 de chacune → `docs/qa/derniere-tole-2026-09-09/prod-{left,bottom,balanced}.png`.
+
+## 13. Déploiement du lot « dernière tôle » (implémenteur, 10/09)
+
+**Déployé** : `f48ac8dd` (app, worker, wasm, homelab). Le contenu moteur
+est celui de `179b126` qui a produit les benchmarks —
+`git diff 179b1264..f48ac8dd -- workers public/engine` est **vide**, seul
+`data/benchmarks.js` sépare les deux commits.
+
+### 13.1 Ordre suivi (§12.4)
+
+1. `docker compose up -d --force-recreate nesting-worker`, puis
+   **`verify_l4a_corpus.sh` : CORPUS 11/11 OK** sur l'image reconstruite à
+   HEAD (T-A 900/900, tôles [587, 313] — la référence ; T-F partiel et T-J
+   refus attendus).
+2. Images publiées par le workflow « Build and publish Docker images »,
+   puis **corpus rejoué sur l'IMAGE PUBLIÉE** (`ghcr.io/…:179b126`, deux
+   workers dédiés, workers compose arrêtés) : **11/11 OK** de nouveau.
+3. **Benchmarks publics régénérés** (`densities_corpus.py` sur ce run) :
+   **huit des neuf densités publiées sont identiques** au run `b0c36f3`.
+   La finition ne refait que la tôle la MOINS remplie d'un job
+   multi-tôles, et le corpus public tourne en une seule direction (−X),
+   déjà l'axe de l'ancienne compaction : c'est le résultat attendu, pas une
+   absence d'effet. Seul **T-F** bouge d'une pièce (89 → 88 sur 90,
+   densité 89,0 → 88,0) ; mesuré **trois fois** sur cette image (88, 89,
+   88) avant d'être écrit — bruit d'affectation du BPP sur un stock serré,
+   noté en commentaire au-dessus du cas.
+4. **Worker + app + wasm dans la même fenêtre** (piège #33b) :
+   `docker compose pull && up -d` sur Hetzner.
+5. **Homelab** : `pull` + `up -d --force-recreate` puis
+   **`ASSERT OVERFLOW=HEAD: OK`**.
+
+### 13.2 Contrôles après déploiement (lecture seule)
+
+| Contrôle | Mesure |
+|---|---|
+| wasm moteur servi par `app.nestorcut.com` | `0cb846ee…` = dépôt HEAD, avec ET sans cache-buster (`cf-cache-status: DYNAMIC`, aucune copie CDN périmée — piège 14i) |
+| wasm géométrie servi | `583f24b2…` = dépôt HEAD |
+| wasm dans le conteneur app | `0cb846ee…` |
+| `core/main.py` du worker prod | `f1fe1bfd…` = HEAD |
+| binaire moteur du worker prod | contient `pair-suspect` — donc postérieur à `bd2c9bca` |
+| digest worker **prod** | `sha256:e2952edf…` |
+| digest worker **homelab** | `sha256:e2952edf…` — **le même**, la file n'est plus servie par deux moteurs |
+| `compute_pool` | total **28**, used 0 ; `NEST_COMPUTE_TOKENS=28` des deux côtés |
+| Pages | `/`, `/plans`, `/benchmarks`, `/licences` → 200 ; `/benchmarks` affiche **179b126 / 2026-09-10** |
+| Journaux | app connectée à Mongo, démo semée, purge passée ; worker en polling, aucune erreur |
+
+**Effet de bord à connaître** : `docker compose pull` tire aussi `mongo:7`,
+donc `up -d` a **recréé le conteneur Mongo** (volume intact, `healthy` en
+6 s, app reconnectée immédiatement). C'est la procédure du runbook telle
+qu'écrite ; l'éviter demande d'épingler le digest de `mongo:7` dans le
+compose — décision owner, non prise ici.
+
+### 13.3 Les trois directions sur l'artefact déployé — et un badge rouge
+
+**Ce que je n'ai pas fait comme demandé** : les captures ne sont pas prises
+sur `app.nestorcut.com`. `/project/demo` est derrière le middleware `auth`,
+il n'existe pas de démo anonyme, et je n'ai pas de compte de production —
+or créer un compte de test en prod est précisément ce qui a été interdit
+le 09/09. J'ai donc fait tourner **l'image publiée** (celle de prod, mêmes
+octets) sur la pile locale et rejoué la démo, trois directions :
+`publie-{left,bottom,balanced}.png`, `publie-finish.json`.
+
+| Direction | Tôle partielle | Finition | Badges | Écart min mesuré |
+|---|---|---|---|---|
+| `left` | 93,2 × 2026,6 | `kept=spp`, 167,8 → 93,2 en x, plateau | verts | 2 mm |
+| `bottom` | 1473,0 × 109,9 | `kept=spp`, 224,6 → 109,9 en y, plateau | verts | 2 mm |
+| `balanced` | 302,9 × 484,0 | `kept=spp`, 546,0 → 484,0 en y, plateau | **`spacingOk: false`** | (non capturé) |
+
+`balanced` a rendu **une fois** un layout que la vérification aval mesure
+sous l'espacement : `overlapFree: true`, `insideSheet: true`, 304/304,
+`finish.reason` **vide** (la garde du moteur n'a rien suspecté). Ce tirage
+est celui de la pièce de 300 mm (15 pièces, x_max 302).
+
+**Rejoué sept fois de plus sur la même image : sept fois VERT**, écart
+minimal mesuré **2,000 mm** à chaque fois — la promesse exactement. Le
+défaut est donc réel et **d'une occurrence sur huit**, non reproduit.
+
+**Ce que je ne sais pas encore, et que je n'invente pas** : la
+vérification (`nest-report::verify_layout`) prend le minimum de DEUX
+familles — écart entre pièces ET écart au bord de tôle — sur TOUTES les
+tôles. Un badge rouge ne dit donc ni la famille, ni la tôle : la tôle 0,
+dense, n'est pas touchée par la finition. Sans le chiffre ni les poses de
+ce passage, l'attribuer à la finition serait une supposition.
+
+**Ce que j'ai livré pour que le prochain rouge soit un constat** :
+
+- le harnais L5 rapporte désormais `smallestGapMm`, `verifyStatus` et
+  `duplicatePoses` — un badge sans son chiffre n'est pas une mesure — et
+  **dumpe les poses** (`spacing-fail-<dir>.json`) dès que le badge tombe ;
+  `QA_DIRS` permet de rejouer une seule direction ;
+- `workers/nesting/bench/measure_svg_gaps.py` mesure les SVG de tôles
+  LIVRÉS (anneaux bruts, trous compris, shapely) et **sépare les deux
+  familles** que le rapport confond en un seul minimum, tôle par tôle,
+  avec la paire fautive et la pièce la plus proche du bord.
+
+C'est exactement l'exposition écrite au §11.2 — l'écart sous l'espacement
+sans recouvrement n'est plus attrapé par le moteur, seulement mesuré et
+affiché en aval. La tranche 2 (§12.3) est donc le bon endroit pour la
+fermer, et sa parité oracle ≥ 50 layouts donnera la fréquence chiffrée.
+
+### 13.4 Point 3 : exemption du plancher matière au banc (§12.1)
+
+`piece_floor` rend la plus grande « dimension minimale » d'une pièce de la
+tôle (min(w, h) de l'AABB par entité — avec les rotations 0/90 du banc,
+une pièce ne peut pas occuper moins sur un axe). Si ce plancher atteint
+**0,95 × l'étendue objective** de la direction (x pour `left`, y pour
+`bottom`, le côté étroit du bloc pour `balanced`), la comparaison croisée
+est **exemptée avec ses chiffres imprimés** — jamais en silence. Les
+verrous apples-to-apples restent inchangés. Rejoué une fois : sur un
+tirage à 34 pièces, aucun plancher, la comparaison croisée **tient**
+(left 83,4 · bottom 136,4 · balanced 236,6 × 610,6, `kept=spp` ×3).
+
+### 13.5 Non-faits
+
+1. **Captures sur app.nestorcut.com** : bloquées par l'authentification,
+   voir §13.3. À faire par le propriétaire, ou avec un accès qu'il fournit.
+2. **Cause du badge rouge de `balanced`** : non établie (1 sur 8, non
+   reproduit) ; l'outillage de mesure est en place.
+3. **`app-ci` est rouge depuis le 08/09** (5 exécutions) : `admin/tsconfig.json`
+   étend `./.nuxt/tsconfig.json`, absent du runner faute de `nuxt prepare`
+   pour l'admin avant vitest. Le workflow qui PUBLIE les images
+   (« Build and publish Docker images ») est vert — le déploiement n'en
+   dépend pas. Hors périmètre du lot, signalé.
+4. Épinglage du digest `mongo:7` dans le compose (§13.2) : décision owner.

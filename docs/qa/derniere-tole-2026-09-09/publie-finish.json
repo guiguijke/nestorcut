@@ -1,0 +1,152 @@
+[
+  {
+    "direction": "left",
+    "wallSec": 65,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "left",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 93.17724609375,
+        "xMin": 2.000005006790161,
+        "yMax": 2026.570556640625,
+        "yMin": 2.1181106567382812
+      },
+      "before": {
+        "xMax": 167.83009338378906,
+        "xMin": 2.0018436908721924,
+        "yMax": 1130.681396484375,
+        "yMin": 2.0066604614257812
+      },
+      "bias": "left",
+      "elapsedMs": 7255,
+      "kept": "spp",
+      "phases": {
+        "p1Improvements": 2,
+        "p1Ms": 2181,
+        "p2Improvements": 3,
+        "p2Ms": 5074,
+        "stop": "plateau"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 274,
+        "densityPct": 72.7
+      },
+      {
+        "index": 1,
+        "parts": 30,
+        "densityPct": 2.6
+      }
+    ]
+  },
+  {
+    "direction": "bottom",
+    "wallSec": 71,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "bottom",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 1472.981201171875,
+        "xMin": 2.000091552734375,
+        "yMax": 109.89339447021484,
+        "yMin": 2.0000247955322266
+      },
+      "before": {
+        "xMax": 850.0106201171875,
+        "xMin": 2.0265464782714844,
+        "yMax": 224.55343627929688,
+        "yMin": 2.0053024291992188
+      },
+      "bias": "bottom",
+      "elapsedMs": 13603,
+      "kept": "spp",
+      "phases": {
+        "p1Improvements": 5,
+        "p1Ms": 7581,
+        "p2Improvements": 4,
+        "p2Ms": 6022,
+        "stop": "plateau"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 271,
+        "densityPct": 72.7
+      },
+      {
+        "index": 1,
+        "parts": 33,
+        "densityPct": 2.7
+      }
+    ]
+  },
+  {
+    "direction": "balanced",
+    "wallSec": 69,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "balanced",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 302.8853759765625,
+        "xMin": 2.0000813007354736,
+        "yMax": 484.0062561035156,
+        "yMin": 2.0013296604156494
+      },
+      "before": {
+        "xMax": 302.0006103515625,
+        "xMin": 2.000579833984375,
+        "yMax": 546.010498046875,
+        "yMin": 2.0042898654937744
+      },
+      "bias": "balanced",
+      "elapsedMs": 4459,
+      "kept": "spp",
+      "phases": {
+        "p1Improvements": 2,
+        "p1Ms": 2155,
+        "p2Improvements": 2,
+        "p2Ms": 2304,
+        "stop": "plateau"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": false,
+    "insideSheet": true,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 289,
+        "densityPct": 72.9
+      },
+      {
+        "index": 1,
+        "parts": 15,
+        "densityPct": 2.5
+      }
+    ]
+  }
+]
