@@ -1,8 +1,9 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit 179b126, run 2026-09-10 15:40 UTC — celui du GO
- * « dernière tôle »). Extraction : workers/nesting/bench/densities_corpus.py.
+ * Docker PUBLIÉES (commit e51e294, run 2026-09-10 18:20 UTC — celui du GO
+ * de la tranche 2, oracle de distance exact). Extraction :
+ * workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
  * multi-tôles, 1 direction –X, fillHoles on, 4 cœurs, budget 90 s), semé
@@ -17,16 +18,15 @@ export const BENCHMARKS = {
         // Image Docker PUBLIÉE qui a produit les chiffres (workflow
         // « Build and publish Docker images »), régénérée à chaque
         // livraison moteur (AGENTS.md §6). Run du 2026-09-10 sur
-        // ghcr.io/…/nest2d-nesting-worker:179b126 (lot « dernière tôle » :
-        // la tôle partielle est refaite en SPP de la direction demandée) :
-        // corpus 11/11 OK, T-A [587, 313]. HUIT des NEUF densités
-        // publiées sont IDENTIQUES au run précédent (b0c36f3) — la finition ne touche que
-        // la tôle la moins remplie d'un job multi-tôles, et le corpus
-        // public tourne en une seule direction (−X), déjà l'axe de
-        // l'ancienne compaction. Seul T-F bouge d'UNE pièce (89 → 88 sur
-        // 90) : stock serré, bruit d'affectation du BPP mesuré trois fois
-        // sur cette image (88, 89, 88), pas un effet du moteur.
-        version: '179b126',
+        // ghcr.io/…/nest2d-nesting-worker:e51e294 (tranche 2 : la garde de
+        // la finition mesure la distance arête↔arête exacte et rejette sous
+        // l'espacement promis) : corpus 11/11 OK, T-A [587, 313].
+        // Les NEUF densités publiées sont IDENTIQUES au run 179b126 —
+        // y compris T-F, revenu à 89 pièces sur 90 : ce cas oscille d'UNE
+        // pièce selon le tirage du BPP (mesuré 88, 89, 88 sur 179b126 puis
+        // 89 sur e51e294), stock serré, sans rapport avec le moteur. Le
+        // chiffre publié reste celui du run de vérification daté ci-dessus.
+        version: 'e51e294',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
@@ -120,17 +120,17 @@ export const BENCHMARKS = {
             },
             sheets: '1000×1000 + 2000×1000',
             spaceMm: 1.0,
-            placed: 88,
+            placed: 89,
             requested: 90,
             layouts: 2,
-            densityPct: 88.0,
+            densityPct: 89.0,
             smallestGapMm: 1.0,
             verdict: 'partial',
-            // Stock serre : le nombre de pieces posees oscille de UNE
-            // piece entre deux executions (88 ou 89 sur 90, mesure trois
-            // fois sur l'image 179b126) — bruit d'affectation du BPP, pas
-            // une difference de moteur. Le chiffre publie est celui du run
-            // de verification date ci-dessus.
+            // Stock serré : le nombre de pièces posées oscille d'UNE pièce
+            // selon le tirage (88 ou 89 sur 90 — mesuré 88, 89, 88 sur
+            // l'image 179b126, 89 sur e51e294) : bruit d'affectation du BPP,
+            // pas une différence de moteur. Le chiffre publié est celui du
+            // run de vérification daté ci-dessus.
         },
         {
             id: 'G',
