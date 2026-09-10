@@ -8,28 +8,29 @@
     "layoutCount": 2,
     "finish": {
       "after": {
-        "xMax": 113.00129699707031,
-        "xMin": 2.0000393390655518,
-        "yMax": 1419.2625732421875,
-        "yMin": 2.1464385986328125
+        "xMax": 122.993408203125,
+        "xMin": 2.0000126361846924,
+        "yMax": 1126.5528564453125,
+        "yMin": 2.000246524810791
       },
       "before": {
-        "xMax": 212.8857879638672,
-        "xMin": 2.000994920730591,
-        "yMax": 915.18359375,
-        "yMin": 2.14813232421875
+        "xMax": 290.5864562988281,
+        "xMin": 2.001178741455078,
+        "yMax": 615.3802490234375,
+        "yMin": 2.0116615295410156
       },
       "bias": "left",
-      "elapsedMs": 15329,
+      "elapsedMs": 15237,
       "kept": "spp",
       "phases": {
         "p1Improvements": 2,
-        "p1Ms": 2162,
+        "p1Ms": 2126,
         "p2Improvements": 10,
-        "p2Ms": 13167,
+        "p2Ms": 13111,
         "stop": "budget"
       },
       "reason": "",
+      "rejected": null,
       "sheet": 1
     },
     "overlapFree": true,
@@ -38,47 +39,48 @@
     "sheets": [
       {
         "index": 0,
-        "parts": 272,
-        "densityPct": 72.6
+        "parts": 274,
+        "densityPct": 72.9
       },
       {
         "index": 1,
-        "parts": 32,
-        "densityPct": 2.8
+        "parts": 30,
+        "densityPct": 2.5
       }
     ]
   },
   {
     "direction": "bottom",
-    "wallSec": 65,
+    "wallSec": 74,
     "placed": 304,
     "requested": 304,
     "strategy": "bottom",
     "layoutCount": 2,
     "finish": {
       "after": {
-        "xMax": 1026.321044921875,
-        "xMin": 2.0019378662109375,
-        "yMax": 152.9959716796875,
-        "yMin": 2.0000972747802734
+        "xMax": 1445.6173095703125,
+        "xMin": 2.0000476837158203,
+        "yMax": 115.32166290283203,
+        "yMin": 2.000001907348633
       },
       "before": {
-        "xMax": 1177.615966796875,
-        "xMin": 2.0028533935546875,
-        "yMax": 152.0098876953125,
-        "yMin": 2.0098876953125
+        "xMax": 297.7827453613281,
+        "xMin": 2.011021375656128,
+        "yMax": 700.5745239257812,
+        "yMin": 2.1901473999023438
       },
       "bias": "bottom",
-      "elapsedMs": 4737,
+      "elapsedMs": 15317,
       "kept": "spp",
       "phases": {
-        "p1Improvements": 2,
-        "p1Ms": 2158,
-        "p2Improvements": 2,
-        "p2Ms": 2579,
-        "stop": "plateau"
+        "p1Improvements": 7,
+        "p1Ms": 8963,
+        "p2Improvements": 7,
+        "p2Ms": 6354,
+        "stop": "budget"
       },
       "reason": "",
+      "rejected": null,
       "sheet": 1
     },
     "overlapFree": true,
@@ -87,47 +89,48 @@
     "sheets": [
       {
         "index": 0,
-        "parts": 280,
-        "densityPct": 72.6
+        "parts": 268,
+        "densityPct": 72.5
       },
       {
         "index": 1,
-        "parts": 24,
+        "parts": 36,
         "densityPct": 2.8
       }
     ]
   },
   {
     "direction": "balanced",
-    "wallSec": 102,
+    "wallSec": 73,
     "placed": 304,
     "requested": 304,
     "strategy": "balanced",
     "layoutCount": 2,
     "finish": {
       "after": {
-        "xMax": 729.917724609375,
-        "xMin": 2.0076897144317627,
-        "yMax": 262.71124267578125,
-        "yMin": 2.0090560913085938
+        "xMax": 231.78182983398438,
+        "xMin": 2.0001862049102783,
+        "yMax": 591.6666870117188,
+        "yMin": 2.0000762939453125
       },
       "before": {
-        "xMax": 729.917724609375,
-        "xMin": 2.0076897144317627,
-        "yMax": 262.71124267578125,
-        "yMin": 2.0090560913085938
+        "xMax": 200.38572692871094,
+        "xMin": 2.0037262439727783,
+        "yMax": 879.7578735351562,
+        "yMin": 2.0031089782714844
       },
       "bias": "balanced",
-      "elapsedMs": 13613,
-      "kept": "bpp",
+      "elapsedMs": 15344,
+      "kept": "spp",
       "phases": {
-        "p1Improvements": 3,
-        "p1Ms": 6134,
-        "p2Improvements": 5,
-        "p2Ms": 7479,
-        "stop": "plateau"
+        "p1Improvements": 9,
+        "p1Ms": 12434,
+        "p2Improvements": 3,
+        "p2Ms": 2910,
+        "stop": "budget"
       },
-      "reason": "infeasible: pair",
+      "reason": "",
+      "rejected": null,
       "sheet": 1
     },
     "overlapFree": true,
@@ -136,13 +139,13 @@
     "sheets": [
       {
         "index": 0,
-        "parts": 280,
-        "densityPct": 72.5
+        "parts": 273,
+        "densityPct": 72.9
       },
       {
         "index": 1,
-        "parts": 24,
-        "densityPct": 2.9
+        "parts": 31,
+        "densityPct": 2.5
       }
     ]
   }

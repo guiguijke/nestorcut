@@ -689,3 +689,131 @@ sur 374 pièces la phase 1 consomme le plafond et améliore encore).
    déploiement se décide au registre avec le taux mesuré.
 
 Puis rapport §11, GO, benchmarks régénérés, déploiement complet.
+
+## 11. Rapport tranche 1-ter (implémenteur, 10/09)
+
+Commits : `74f5e6f6` (§10 du vérificateur), `76092d90` (points 1 à 4),
+`73bcc95b` puis `bd2c9bca` (les deux recalibrations de la garde imposées
+par la mesure). **Non déployé.** Images reconstruites,
+`ASSERT IMAGES=HEAD: OK` avant chaque banc, poste au repos.
+
+### 11.1 Les trois points de forme : tenus
+
+| Point | Résultat mesuré |
+|---|---|
+| **1. Paires d'abord** | La détection ne peut plus être masquée par un contact : probe dédié dans un conteneur agrandi de 2·space, items ré-importés. Verrou `finish_rejects_pair_even_with_sheet_contact` (une pièce collée au bord + deux pièces qui se chevauchent → verdict `pair`). **Votre trou n°1 est confirmé** : en 1-bis, `left` sur `b_demo` passait derrière son `sheet-contact` |
+| **2. Contact au contour borné** | L'AABB **brute** de chaque pièce doit garder `space − 0,05 mm` des quatre bords, sinon rejet `reason = "sheet"`. Arithmétique exacte, **aucun faux positif** sur 14 exécutions de direction. Verrou `finish_rejects_deep_sheet_contact` (marge 0 rejetée, 2,0 mm pour 2,0 promis acceptée) |
+| **3. Borné-travail sans horloge** | `plateau_patience_sec = None` et `time_budget_sec = 86 400` dès que `sa_max_iterations` est posé. **Géométrie reproductible au dernier chiffre** : deux exécutions des trois biais rendent les mêmes `before`/`after`. La dérive `balanced` (628 × 361 contre 618 × 369) a disparu |
+
+Deux corrections de méthode dans mes propres verrous :
+
+- le verrou de reproductibilité comparait le JSON `finish` **entier**,
+  durées comprises. `elapsedMs` est du temps mur et les compteurs
+  d'améliorations comptent des événements émis sous throttle temporel :
+  ni les uns ni les autres ne peuvent être identiques, et l'exiger rendait
+  le verrou intenable pour rien. Il porte désormais sur la **géométrie et
+  le verdict** ;
+- `phases.stop` rend `"work"` en mode borné-travail : annoncer « plateau »
+  avec un budget de 24 h serait faux.
+
+**Effet de bord assumé du point 3** : c'était la patience *en temps* qui
+bornait la finition en déterministe. Sans elle, elle va à sa borne de
+travail : **190 / 203 / 456 s** par biais au lieu de 8 à 21 s, donc L1
+dure ~25 min. **Aucune conséquence en production** — `sa_max_iterations`
+n'existe que dans les fixtures de banc et le verrou de déterminisme.
+
+### 11.2 Le point 4 a retourné la garde, et c'est le résultat du lot
+
+Le dump a servi immédiatement : le rejet `left` de `b_demo` est
+**reproductible** en mode déterministe, sans attendre la loterie du banc.
+
+**Étape 1 — votre règle de décision ne s'applique pas.** Les quatre
+variantes rejouées sur l'instance SPP dumpée (telle quelle, sans
+`gravity`, sans `column_fill`, sans les deux) rendent le **même verdict de
+mesure** : `pairsUnderSpace: 0`, distance minimale **2,0001 mm pour 2,0
+promis**. Aucun post-pass n'est fautif — il n'y a pas de faute.
+
+**Étape 2 — mesure sur les poses REJETÉES elles-mêmes** (dumpées puis
+passées à l'outil qui produit `spacingOk`, `measure_finish_pairs.py`) :
+anneaux **bruts**, sans nettoyage `buffer(0)`, **25 polygones valides**,
+**distance minimale 2,0001 mm, 0,0000 mm² d'intersection**. L'agencement
+était légal ; ma garde le jetait.
+
+**Étape 3 — deuxième constat, indépendant, côté navigateur.** Le harnais à
+0,1 rejetait aussi. Or les trois passages de la tranche 1-bis ont **livré**
+cette même finition, et la vérification du pipeline l'a mesurée
+**`spacingOk: true`, `smallestGapMm: 0.1`** — exactement la promesse, sur
+les trois passages.
+
+**Conclusion : la carte de collision de jagua n'est pas un oracle de
+« distance ≥ space ».** Elle travaille sur des formes simplifiées puis
+gonflées (l'offset d'un sommet convexe dépasse le demi-espacement
+uniforme), et l'inflation **referme les canaux capillaires** des pièces à
+trous (piège #2) — un hôte redevient plein et sa fan nichée le
+« chevauche ». Trois calibrations essayées, trois fois des faux positifs :
+
+| Calibration du probe | Résultat |
+|---|---|
+| gonflé à `space`, avec l'échappatoire « sheet » (1-bis) | masque les paires derrière un contact — le trou que vous avez trouvé |
+| gonflé à `space`, paires d'abord (1-ter) | rejette `left` de `b_demo`, **mesuré légal à 2,0001 mm** |
+| gonflé à `space − 0,05` | rejette encore le même cas (seuil mesuré entre 2,00 et 2,02) |
+| **sans inflation** (chevauchement seul) | rejette le harnais 0,1, **mesuré `spacingOk: true`, gap 0,1** |
+
+**Ce que j'ai livré** : « pair » devient une **TRACE** —
+`reason: "pair-suspect"` plus les poses suspectes, bornées, y compris côté
+navigateur où le dump fichier n'existe pas — et n'empêche plus la
+livraison. Le **rejet** ne concerne plus que le contour (point 2), exact
+et sans faux positif. Le verrou cargo du point 1 garde la **détection** et
+son ordre ; son commentaire dit que la politique, elle, est une trace.
+
+**Ce que ça coûte, écrit sans détour** : l'écart sous l'espacement **sans
+recouvrement** — le 1,849 mm du §8.2.3 — **n'est pas attrapé par le
+moteur**. Il l'est en aval par la vérification, qui l'affiche
+(`spacingOk: false`, badge rouge), sans écarter l'alternative.
+
+**Ce qu'il faudrait pour tenir §10.4.1** : l'oracle **exact**, distance
+**arête↔arête** sur les anneaux avec trous — le miroir de `pairViolates`,
+qui existe déjà en JS et en Python. jagua expose `Edge` mais **aucune**
+distance arête↔arête : il faut l'écrire, plus un test de
+point-dans-polygone pour les fans nichées (piège #4), et le confronter à
+la mesure du pipeline sur le corpus. **Estimé une demi-journée avec ses
+verrous. Non engagé** : je ne livre pas un oracle géométrique maison en
+fin de tranche sans pouvoir le valider contre la mesure de référence —
+le piège #55 rappelle qu'une distance sommet→arête ne voit pas deux
+arêtes qui se croisent en leur milieu.
+
+### 11.3 Verrous du §10.4.5
+
+| Verrou | Résultat |
+|---|---|
+| **L1** `lock_last_sheet.py`, ×2 par biais | **tenu** — `kept=spp` ×3, géométrie identique au dernier chiffre entre les deux exécutions de chaque biais |
+| **L2** `determinism_lock.py` | **natif ≡ wasm**, tolérance 0, SHA **`ee837411…`**, stable sur deux passages |
+| **L3** `seed_demo_dirs.py BENCH_ASSERT=1` ×3 | **tenu 3/3** — `kept=spp` sur les 9 exécutions de direction, badges verts, ancrage 2,0 mm, 2 tôles, 304/304, job 35 s |
+| **L4** harnais 0,1 (×1) | **30,4 s** (référence 21,4 → **+9 s**, verrou ≤ +16) ; tôle partielle **347,7 mm** (verrou ≤ 349,1) ; **une seule finition** ; long task après solve 0 ms ; `spacingOk: true`, gap 0,1 |
+| **L4** harnais 2 (×1) | **30,4 s** (référence 24,4 → **+6 s**) ; tôle partielle **437,6 mm** (verrou < 517,7) ; une seule finition ; `spacingOk: true`, gap 2 |
+| **L5** démo ×3 directions | **tenu** — `kept=spp` ×3, badges verts, 304/304 ; left 123,0 × 1126,6, bottom **1445,6 × 115,3**, balanced 231,8 × 591,7 ; **74 / 74 / 73 s** contre 148 / 191 / 191 s le 09/09 |
+| **Compteur `kept=bpp reason=infeasible`** | **0 sur 14** (L3 ×9, L4 ×2, L5 ×3) — le verrou demandait 0 sur 9 + 3 |
+| cargo / vitest / pytest nesting | **82** + 1 ignoré / **514** / **220** + 2 skipped |
+
+Le SHA de L2 change deux fois dans cette tranche, chaque fois pour une
+raison écrite : d'abord la config déterministe sans horloge (point 3),
+ensuite la finition de `left` de nouveau **appliquée** au lieu d'être
+rejetée par la garde (front 336,7 → 263,0 mm). C'est la correction
+elle-même, pas un effet de bord.
+
+Une seule occurrence de `pair-suspect` sur les 14 : le harnais à 0,1 — et
+la vérification du pipeline mesure cette livraison `spacingOk: true`,
+gap 0,1. La trace est donc une **fausse suspicion**, et c'est exactement
+ce que tracer au lieu de rejeter permet de voir.
+
+### 11.4 Non-faits
+
+1. **§10.4.1 n'est pas tenu au sens strict** : « pair » ne rejette plus.
+   Motif mesuré ci-dessus ; l'oracle qui le tiendrait est chiffré et non
+   engagé. La décision vous revient avant déploiement.
+2. `verify_l4a_corpus.sh` 11/11 et la régénération des benchmarks publics
+   (le moteur a changé) : étape de déploiement, elles attendent le GO —
+   avec le worker, l'app, le wasm, et la fin sur le homelab
+   (`assert_overflow_head.py`).
+3. Le corpus d'import n'a toujours que **4 fichiers issus d'une vraie
+   CAO** : `specs/import-corpus/` n'existe pas sur ce poste.
