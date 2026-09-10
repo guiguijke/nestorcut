@@ -1,8 +1,8 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit b0c36f3, run 2026-09-08 14:36 UTC — celui du GO
- * P5). Extraction : workers/nesting/bench/densities_corpus.py.
+ * Docker PUBLIÉES (commit 179b126, run 2026-09-10 15:40 UTC — celui du GO
+ * « dernière tôle »). Extraction : workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
  * multi-tôles, 1 direction –X, fillHoles on, 4 cœurs, budget 90 s), semé
@@ -13,15 +13,20 @@
  */
 export const BENCHMARKS = {
     meta: {
-        runDate: '2026-09-08',
+        runDate: '2026-09-10',
         // Image Docker PUBLIÉE qui a produit les chiffres (workflow
         // « Build and publish Docker images »), régénérée à chaque
-        // livraison moteur (AGENTS.md §6). Run du 2026-09-08 sur
-        // ghcr.io/…/nest2d-nesting-worker:b0c36f3 (P5, plateau SPP
-        // calibré) : corpus 11/11 OK, T-A [587, 313] — les onze densités
-        // publiées sont IDENTIQUES au run précédent (fb5e184 puis
-        // 45c49f3), P5 ne change aucun layout BPP du corpus.
-        version: 'b0c36f3',
+        // livraison moteur (AGENTS.md §6). Run du 2026-09-10 sur
+        // ghcr.io/…/nest2d-nesting-worker:179b126 (lot « dernière tôle » :
+        // la tôle partielle est refaite en SPP de la direction demandée) :
+        // corpus 11/11 OK, T-A [587, 313]. HUIT des NEUF densités
+        // publiées sont IDENTIQUES au run précédent (b0c36f3) — la finition ne touche que
+        // la tôle la moins remplie d'un job multi-tôles, et le corpus
+        // public tourne en une seule direction (−X), déjà l'axe de
+        // l'ancienne compaction. Seul T-F bouge d'UNE pièce (89 → 88 sur
+        // 90) : stock serré, bruit d'affectation du BPP mesuré trois fois
+        // sur cette image (88, 89, 88), pas un effet du moteur.
+        version: '179b126',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
@@ -115,12 +120,17 @@ export const BENCHMARKS = {
             },
             sheets: '1000×1000 + 2000×1000',
             spaceMm: 1.0,
-            placed: 89,
+            placed: 88,
             requested: 90,
             layouts: 2,
-            densityPct: 89.0,
+            densityPct: 88.0,
             smallestGapMm: 1.0,
             verdict: 'partial',
+            // Stock serre : le nombre de pieces posees oscille de UNE
+            // piece entre deux executions (88 ou 89 sur 90, mesure trois
+            // fois sur l'image 179b126) — bruit d'affectation du BPP, pas
+            // une difference de moteur. Le chiffre publie est celui du run
+            // de verification date ci-dessus.
         },
         {
             id: 'G',
