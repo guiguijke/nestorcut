@@ -11,12 +11,20 @@ on:
       - "server/**"
       - "package.json"
       - "package-lock.json"
+      # `vitest.config.js` décide COMMENT les tests tournent : l'exclure des
+      # déclencheurs, c'est ne jamais tester le correctif qui les répare
+      # (constat du 2026-09-10 : le correctif esbuild ne déclenchait pas CI).
+      - "vitest.config.js"
       - ".github/workflows/app-ci.yml"
   push:
     branches: [main]
     paths:
       - "app/**"
       - "server/**"
+      - "package.json"
+      - "package-lock.json"
+      - "vitest.config.js"
+      - ".github/workflows/app-ci.yml"
 
 permissions:
   contents: read
