@@ -540,6 +540,11 @@ pub struct FinishPlan {
     elapsed_ms: u64,
     reason: &'static str,
     phases: serde_json::Value,
+    /// Poses REJETÉES, seulement en cas de rejet : `[[itemId, rot, x, y]]`.
+    /// C'est la seule façon d'auditer un rejet venu du navigateur — le dump
+    /// `NEST_FINISH_DUMP` n'existe qu'en natif (pas de système de fichiers
+    /// en wasm). Borné : une tôle partielle, quelques dizaines de poses.
+    rejected: Option<serde_json::Value>,
 }
 
 /// Compatibilité tests : plan + application en un appel.
@@ -600,6 +605,7 @@ fn apply_finish(
         kept,
         plan.reason,
         plan.phases,
+        plan.rejected,
     ))
 }
 
@@ -778,6 +784,7 @@ fn plan_finish(
             elapsed_ms: ms,
             reason,
             phases: phases_of(&collected, ms),
+            rejected: None,
         })
     };
     let Ok(out) = crate::spp::run_spp_mem(sp_instance, &cfg, &silent) else {
@@ -839,6 +846,7 @@ fn plan_finish(
     // containment réel est déjà contrôlé plus haut sur les anneaux BRUTS
     // (±1e-3 de la tôle), et `insideSheet` le remesure en aval. On note le
     // contact dans la trace, on ne jette pas une finition correcte pour ça.
+    let mut pair_suspect = false;
     match infeasibility_of(
         instance,
         ext_instance,
@@ -848,6 +856,30 @@ fn plan_finish(
         (bx0, by0, bx1, by1),
     ) {
         None => {}
+        // « pair » ne REJETTE PLUS : trois calibrations du probe (gonflé à
+        // `space`, à `space − 0,05`, pas gonflé du tout) ont chacune rejeté
+        // des agencements que la mesure exacte déclare LÉGAUX — deux fois,
+        // indépendamment :
+        //   • natif, `b_demo`/`left` : distance minimale 2,0001 mm pour 2,0
+        //     promis, 0 mm² d'intersection (anneaux bruts, sans nettoyage) ;
+        //   • navigateur, harnais espacement 0,1 : les trois passages 1-bis
+        //     ont livré la finition avec `spacingOk: true` et
+        //     `smallestGapMm: 0.1` — exactement la promesse — mesurés par la
+        //     vérification du pipeline lui-même.
+        // La carte de collision de jagua n'est pas un oracle de « distance ≥
+        // space » : elle travaille sur des formes simplifiées et gonflées
+        // dont l'offset dépasse le demi-espacement aux sommets convexes, et
+        // l'inflation referme les canaux capillaires des pièces à trous
+        // (piège #2) — un hôte redevient plein et sa fan nichée le
+        // « chevauche ». Jeter une finition correcte coûte de la qualité
+        // pour rien : le verdict devient une TRACE.
+        //
+        // Ce qui reste donc à faire pour tenir §10.4.1 : l'oracle EXACT,
+        // distance arête↔arête sur les anneaux avec trous — le miroir de
+        // `pairViolates` (JS et Python). Estimé au rapport §11, non engagé.
+        Some("pair") => {
+            pair_suspect = true;
+        }
         Some(kind) => {
             // Les poses rejetées partent au dump : c'est la seule façon de
             // savoir, hors du job, si le rejet est fondé.
@@ -859,20 +891,33 @@ fn plan_finish(
                 None,
                 Some(&placed),
             );
+            let _ = kind;
+            let poses = rejected_poses(&placed);
+            let ms = t_start.elapsed().as_millis() as u64;
+            dump_rejection(
+                "infeasible: sheet",
+                run.bias.as_str(),
+                &sp_dump,
+                &cfg,
+                None,
+                Some(&placed),
+            );
             return Some(FinishPlan {
                 idx,
                 placed: None,
                 before,
                 after: before,
-                elapsed_ms: t_start.elapsed().as_millis() as u64,
-                reason: if kind == "sheet" { "infeasible: sheet" } else { "infeasible: pair" },
-                phases: phases_of(&collected, t_start.elapsed().as_millis() as u64),
+                elapsed_ms: ms,
+                reason: "infeasible: sheet",
+                phases: phases_of(&collected, ms),
+                rejected: Some(serde_json::json!({ "poses": poses })),
             });
         }
     }
 
     // 6. Le plan : poses re-mappées, à appliquer par `apply_finish`.
     let ms = t_start.elapsed().as_millis() as u64;
+    let placed_trace: Vec<ExtPlacedItem> = if pair_suspect { placed.clone() } else { Vec::new() };
     Some(FinishPlan {
         idx,
         placed: Some(placed),
@@ -884,9 +929,34 @@ fn plan_finish(
             y_max,
         },
         elapsed_ms: ms,
-        reason: "",
+        reason: if pair_suspect { "pair-suspect" } else { "" },
         phases: phases_of(&collected, ms),
+        // Suspicion de paire : les poses sont LIVRÉES (la mesure exacte les
+        // déclare légales) mais tracées, pour qu'un doute soit auditable
+        // sans relancer le job — y compris depuis le navigateur, où le dump
+        // fichier n'existe pas.
+        rejected: if pair_suspect {
+            Some(serde_json::json!({ "pairSuspect": true, "poses": rejected_poses(&placed_trace) }))
+        } else {
+            None
+        },
     })
+}
+
+/// Poses compactes `[[itemId, rot, x, y]]` pour la trace d'un doute ou d'un
+/// rejet. Bornée : une tôle partielle, quelques dizaines de poses.
+fn rejected_poses(placed: &[ExtPlacedItem]) -> Vec<serde_json::Value> {
+    placed
+        .iter()
+        .map(|pi| {
+            serde_json::json!([
+                pi.item_id,
+                (pi.transformation.rotation * 1000.0).round() / 1000.0,
+                (pi.transformation.translation.0 * 1000.0).round() / 1000.0,
+                (pi.transformation.translation.1 * 1000.0).round() / 1000.0,
+            ])
+        })
+        .collect()
 }
 
 /// §8.3.4 — REJOUE des poses externes dans un layout jagua du bin et rend
@@ -1248,6 +1318,7 @@ fn finish_report(
     kept: &str,
     reason: &str,
     phases: serde_json::Value,
+    rejected: Option<serde_json::Value>,
 ) -> serde_json::Value {
     serde_json::json!({
         "sheet": sheet,
@@ -1264,6 +1335,7 @@ fn finish_report(
         "kept": kept,
         "reason": reason,
         "phases": phases,
+        "rejected": rejected,
     })
 }
 
@@ -1566,10 +1638,16 @@ mod finish_tests {
         );
     }
 
-    /// §10.4.1 : une paire trop proche doit être vue MÊME si une pièce
-    /// touche le contour. La version 1-bis rendait « sheet » (non bloquant)
-    /// dès le premier contact, sans regarder les paires — un chevauchement
-    /// passait derrière lui.
+    /// §10.4.1 : une paire trop proche doit être VUE même si une pièce
+    /// touche le contour. La version 1-bis rendait « sheet » dès le premier
+    /// contact, sans regarder les paires — un chevauchement passait derrière
+    /// lui.
+    ///
+    /// NB sur le nom : c'est la DÉTECTION et son ordre qui sont verrouillés
+    /// ici. La POLITIQUE, elle, ne rejette plus sur « pair » — trois
+    /// calibrations ont rejeté des agencements mesurés légaux (§11) : le
+    /// verdict est devenu une trace (`reason: "pair-suspect"`). Le rejet ne
+    /// concerne plus que le contour.
     #[test]
     fn finish_rejects_pair_even_with_sheet_contact() {
         let inst = square_instance(3);
