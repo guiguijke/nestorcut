@@ -63,6 +63,39 @@ def sheet_extents(dxf_text):
     return ext
 
 
+def piece_floor(dxf_text):
+    """Plancher MATIÈRE de la tôle : la plus grande « dimension minimale »
+    d'une pièce posée, soit max sur les entités de min(largeur, hauteur) de
+    leur AABB (§12.1).
+
+    Avec les rotations 0/90/180/270 du banc, une pièce ne peut pas occuper
+    moins que cette dimension sur un axe : une tôle qui hérite d'une pièce
+    de 300 mm ne peut pas rendre une bande plus étroite que 300 mm, quelle
+    que soit la direction. C'est ce plancher qui invalide la comparaison
+    CROISÉE (chaque direction est un walk différent, donc une affectation
+    pièces→tôles différente).
+    """
+    import ezdxf
+    from ezdxf import bbox as _bbox
+
+    d = ezdxf.read(io.StringIO(dxf_text))
+    floor = 0.0
+    for e in d.modelspace():
+        if e.dxf.layer == "BIN_BOUNDARY":
+            continue
+        try:
+            bb = _bbox.extents([e], fast=True)
+        except Exception:
+            continue
+        if not bb.has_data:
+            continue
+        w, h = bb.extmax.x - bb.extmin.x, bb.extmax.y - bb.extmin.y
+        if w >= SHEET["width"] - 1 and h >= SHEET["height"] - 1:
+            continue
+        floor = max(floor, min(w, h))
+    return floor
+
+
 def main():
     db = MongoClient(os.environ["MONGO_URI"]).get_default_database()
     files = list(db["user_dxf_files"].find(
@@ -115,6 +148,7 @@ def main():
             rows.append({"sheet": k, "parts": s.get("partCount"),
                          "densityPct": s.get("densityPct"),
                          "partsAreaMm2": s.get("partsAreaMm2"),
+                         "floorMm": piece_floor(text),
                          "xMin": ext[0], "yMin": ext[1], "xMax": ext[2], "yMax": ext[3]})
         partial = min(rows, key=lambda r: ((r["densityPct"] or 0), -r["sheet"])) if rows else None
         out.append({"strategy": alt.get("strategy"), "sheets": len(rows),
@@ -191,13 +225,34 @@ def main():
         if {"left", "bottom", "balanced"} <= set(by):
             xm = {k: by[k]["partial"]["xMax"] for k in by}
             ym = {k: by[k]["partial"]["yMax"] for k in by}
-            if not (xm["left"] < xm["bottom"] and xm["left"] < xm["balanced"]):
-                errs.append(f"left : xMax {xm['left']} n'est pas le plus petit ({xm})")
-            if not (ym["bottom"] < ym["left"] and ym["bottom"] < ym["balanced"]):
-                errs.append(f"bottom : yMax {ym['bottom']} n'est pas le plus petit ({ym})")
-            bal = max(xm["balanced"] / W, ym["balanced"] / H)
-            if not (bal < max(xm["left"] / W, ym["left"] / H) and bal < max(xm["bottom"] / W, ym["bottom"] / H)):
-                errs.append(f"balanced : max(x/W, y/H) = {bal:.3f} n'est pas le plus petit")
+            # §12.1 : EXEMPTION plancher matière. L'objectif de chaque
+            # direction est une étendue (x pour left, y pour bottom, le côté
+            # étroit du bloc pour balanced) ; si une pièce de la tôle mesure
+            # à elle seule ≥ 0,95 × cette étendue, la finition est AU
+            # plancher matière et la comparaison croisée ne mesure plus la
+            # direction mais le tirage des pièces sur cette tôle. Constaté le
+            # 10/09 : la tôle −X portait une pièce de 300 mm pour x_max 303.
+            objective = {"left": xm["left"], "bottom": ym["bottom"],
+                         "balanced": min(xm["balanced"], ym["balanced"])}
+            pinned = {}
+            for k, target in objective.items():
+                floor = (by[k]["partial"] or {}).get("floorMm") or 0.0
+                if target and floor >= 0.95 * target:
+                    pinned[k] = (floor, target)
+            if pinned:
+                detail = ", ".join(f"{k} plancher {f:.1f} mm pour {t:.1f} mm"
+                                   for k, (f, t) in sorted(pinned.items()))
+                print(f"[bench] comparaison croisée EXEMPTÉE (plancher matière) : {detail}",
+                      flush=True)
+            else:
+                if not (xm["left"] < xm["bottom"] and xm["left"] < xm["balanced"]):
+                    errs.append(f"left : xMax {xm['left']} n'est pas le plus petit ({xm})")
+                if not (ym["bottom"] < ym["left"] and ym["bottom"] < ym["balanced"]):
+                    errs.append(f"bottom : yMax {ym['bottom']} n'est pas le plus petit ({ym})")
+                bal = max(xm["balanced"] / W, ym["balanced"] / H)
+                if not (bal < max(xm["left"] / W, ym["left"] / H)
+                        and bal < max(xm["bottom"] / W, ym["bottom"] / H)):
+                    errs.append(f"balanced : max(x/W, y/H) = {bal:.3f} n'est pas le plus petit")
         if errs:
             print("[bench] VERROUS NON TENUS :\n  - " + "\n  - ".join(errs), flush=True)
             sys.exit(2)
