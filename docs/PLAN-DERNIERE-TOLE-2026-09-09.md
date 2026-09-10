@@ -1013,3 +1013,146 @@ tirage à 34 pièces, aucun plancher, la comparaison croisée **tient**
    (« Build and publish Docker images ») est vert — le déploiement n'en
    dépend pas. Hors périmètre du lot, signalé.
 4. Épinglage du digest `mongo:7` dans le compose (§13.2) : décision owner.
+
+## 14. Rapport tranche 2 — oracle de distance exact (implémenteur, 10/09)
+
+Commits : `2a885c65` (l'oracle et la garde), `f500a280` (borne de travail
+mesurée). **Non déployé** — le moteur a changé, le déploiement demande de
+nouveau corpus, benchmarks publics et homelab, et votre GO.
+
+### 14.1 Ce qui est livré
+
+**L'oracle** (`nest-engine/src/geometry_check.rs`) : distance **arête↔arête**
+entre matières, trous soustraits, containment inclus — la sémantique exacte
+de `shapely.Polygon.distance`, la mesure de référence du pipeline. 0 sur
+croisement (piège #55 : une distance sommet→arête ne voit pas deux arêtes
+qui se croisent en leur milieu). Une pièce nichée dans un TROU se mesure
+contre l'anneau du trou (piège #4), une pièce dans la MATIÈRE rend 0.
+Rotations d'un quart de tour exactes, aucune transcendantale hors angle
+libre (piège 14b).
+
+**La garde de la finition rejette de nouveau une paire**, sur mesure
+exacte, sous `space − 0,01 mm` — la **même tolérance que `spacingOk`** en
+aval, pour que le moteur et le rapport ne puissent pas dire l'inverse l'un
+de l'autre du même layout. **L'écart sous l'espacement sans recouvrement —
+le 1,849 mm du §8.2.3, hors de portée depuis la tranche 1 — est attrapé
+dans le moteur.** Verrou : 2,5 passe, 2,0 passe, **1,8 rejeté**, 1,985
+rejeté, chevauchement rejeté, pose dupliquée rejetée.
+
+**Le chiffre est livré, pas seulement le verdict** : `finish.minDistanceMm`
+dans la trace (serveur ET navigateur), et le dump `NEST_FINISH_DUMP` devient
+auto-suffisant (formes des pièces posées + poses + chiffre mesuré) — c'est
+ce que consomme la parité.
+
+**Le mode directions de `run_spp_mem` mesure ce qu'il livre** :
+`spacing_violations` dans l'événement `done` (champ additif, tableau vide
+quand tout est conforme). Trace et non rejet : en finition, rejeter veut
+dire « garder le layout BPP » ; sur un job mono-tôle, rejeter voudrait dire
+ne rien livrer. On mesure la fréquence d'abord.
+
+**La carte de collision quitte la garde**, et avec elle **l'import jagua
+complet que le thread de fusion du navigateur payait** uniquement pour
+finir une tôle.
+
+### 14.2 Le verrou de parité a attrapé un faux positif dans mon oracle
+
+À écrire en premier parce que c'est le fait marquant de la tranche : la
+**première** version de l'oracle rejetait `left` de `b_demo` en mesurant
+**0,0 mm**. La parité contre shapely sur le même dump (23 pièces, 7 formes
+de 6 à 133 sommets, aucun polygone invalide) donnait **2,0 mm**.
+
+**Cause** : je testais le containment en échantillonnant centroïde, sommets
+et milieux d'arêtes — le miroir du code JS. Or **le centroïde d'aire d'une
+pièce concave tombe hors de la pièce** (un C, un L : la moitié des pièces
+marines de la démo), et il peut tomber dans la matière du voisin. La garde
+concluait « l'une est dans l'autre ». Un point d'épreuve ne vaut que si
+l'on sait de quel côté de la frontière il est.
+
+**Correctif, plus simple que la version fausse** : si les frontières ne se
+croisent pas, la frontière de A est entièrement dedans ou entièrement
+dehors de B — un **sommet** de A suffit à trancher, et un sommet est par
+construction sur la frontière de A. Plus de centroïde, plus
+d'échantillonnage, plus d'epsilon « strictement intérieur », plus
+d'heuristique d'AABB. Vérifié par un miroir Python de l'algorithme corrigé
+contre shapely sur les 9 layouts déjà dumpés (**écart max 0,000000 mm**)
+AVANT de rebâtir les images.
+
+C'est exactement ce que le §12.3.2 demandait : « validation contre la
+référence, pas contre l'intuition ». Sans ce verrou, je livrais une garde
+qui jette des finitions correctes — le défaut de la tranche 1-bis, à
+l'envers.
+
+### 14.3 Verrous du §12.3.5
+
+| Verrou | Résultat |
+|---|---|
+| **Parité oracle** `bench/oracle_parity.py` | **TENUE — 50 layouts**, écart max **0,0001 mm** (tolérance 1e−3), **0 désaccord de valeur, 0 de verdict**. Corpus des layouts : les 11 cas T-A..T-K, la démo (trois directions), et les fixtures à TROUS (`trou100`, `trou600`) — le cas qui piège les distances naïves |
+| **L1** `lock_last_sheet.py` ×2 par biais | **tenu** — `kept=spp` ×3, géométrie identique entre les deux exécutions, ancrage 2,0 mm, **574 s** (contre ~25 min en 1-ter) |
+| **L2** `determinism_lock.py` | **natif ≡ wasm**, tolérance 0, SHA **`a1bd8810…`** (était `ee837411…`) — la borne de travail change, donc la trajectoire : raison écrite avant la mesure, pas après |
+| **L3** `seed_demo_dirs.py BENCH_ASSERT=1` | **15 passages, 15/15 tenus**, **45/45 `kept=spp`**, badges verts, 304/304 |
+| **Compteur `reason=pair`** | **0** — sur **62 layouts finis** mesurés (50 serveur + 12 natifs) |
+| **Corpus** 11 cas | **11/11 OK** |
+| **L4** harnais 0,1 (au repos) | **30,4 s** (réf. 21,4 → +9 s, verrou ≤ +16) ; tôle partielle 396,3 → **348,4** (verrou ≤ 349,1) ; **une finition** ; `minDistanceMm` **0,1000** = `smallestGapMm` **0,1** ; `reason` vide |
+| **L4** harnais 2 (au repos) | **30,4 s** (réf. 24,4 → +6 s) ; 487,7 → **436,8** (verrou < 517,7) ; `minDistanceMm` **2,0000** = `smallestGapMm` **2** |
+| **L5** démo ×3 directions | **3/3 `kept=spp`**, badges verts, 304/304, écart mesuré **2 mm** partout ; left 94,4 × 1470,8, bottom **1497,1 × 116,3**, balanced 236,9 × 621,6 ; 64 / 73 / 74 s |
+| cargo / vitest / pytest nesting | **90** (89 + 1 ignoré ; 7 nouveaux verrous d'oracle) / **514** / **220** + 2 skipped |
+
+**Ce que mesurent les 62 tôles finies**, puisque le chiffre est maintenant
+dans la trace :
+
+| Écart minimal mesuré | Occurrences (espacement demandé 2,0 mm) |
+|---|---|
+| 2,0000 | 23 |
+| 2,0001 | 25 |
+| 2,0002 à 2,0006 | 9 |
+| 1,9999 | 1 (dans la tolérance de 0,01) |
+
+Plus une tôle à 0,1 pour 0,1 demandé et une à 0,5 pour 0,5. **Aucune sous
+la promesse.** La finition tenait donc déjà l'espacement : ce que la
+tranche apporte n'est pas un gain de qualité, c'est la **preuve** — et une
+garde qui ne se trompe plus dans les deux sens.
+
+Le harnais à 0,1 mérite une phrase : en tranche 1-ter, ce cas portait un
+`pair-suspect`, une **fausse suspicion** de la carte de collision. La
+mesure exacte la fait disparaître (`reason` vide, `minDistanceMm` = 0,1000
+= la vérification aval).
+
+### 14.4 Non-faits et écarts
+
+1. **« L1 sous 5 minutes » n'est pas atteint** : 574 s mesurés (9,6 min).
+   La courbe, mesurée biais par biais sur `b_demo` :
+
+   | Borne d'exploration (déterministe) | `left` | `balanced` | L1 |
+   |---|---|---|---|
+   | 30 (1-ter) | 190 s | 456 s | ~25 min |
+   | 10 | 112 s → x 263,0 | 285 s → 603,4 | 17,4 min |
+   | **4 (livré)** | 52 s → x **263,0** | 160 s → **602,3** | **9,6 min** |
+   | 2 | 25 s → x 263,0 | 103 s → **614,5** | ~6,2 min |
+
+   **4 est le dernier palier sans perte** : la géométrie y est celle de la
+   borne 30 sur les trois biais. Descendre à 2 gagne trois minutes et fait
+   reculer `balanced` de 1,2 % (max(x/W, y/H) 0,242 → 0,245) ; passer sous
+   5 min demanderait cette perte, ou de ne vérifier la reproductibilité que
+   sur un biais au lieu de trois. Je n'ai fait ni l'un ni l'autre : rogner
+   un verrou pour tenir un chiffre, c'est perdre le verrou et le chiffre.
+   L'arbitrage vous revient. La production n'est concernée par aucune de
+   ces valeurs (`sa_max_iterations` n'existe qu'au banc et dans L2).
+2. **`spacing_violations` n'a encore rien à montrer** : le tableau est vide
+   sur tout ce que j'ai mesuré. C'est le résultat attendu — et il faut le
+   lire pour ce qu'il est : la fréquence sur le corpus n'est pas
+   « mesurée à zéro », elle est **inférieure à ce que 62 layouts
+   révèlent**. La décision d'un repli en mono-tôle attend cette fréquence.
+3. **La trace navigateur n'est pas affichée** : `spacing_violations` et
+   `minDistanceMm` vivent dans le record IndexedDB et dans l'événement
+   `done`, pas dans l'UI. Le badge d'espacement du rapport reste la seule
+   chose que voit l'utilisateur — c'est délibéré, mais ce n'est pas de
+   l'observabilité produit.
+4. **Le badge rouge du §13.3 (1 sur 8) n'est pas expliqué par cette
+   tranche** : s'il venait d'une paire de la tôle FINIE, la garde exacte le
+   rejetterait désormais et garderait le layout BPP ; s'il venait de la
+   tôle dense que la finition ne touche pas, il reste possible. Non
+   reproduit depuis (L5 ×3, 15 passages L3, harnais ×2, tous verts) ;
+   l'outillage du §13.3 l'attrapera avec ses chiffres.
+5. **Déploiement** : le moteur a changé, donc corpus 11/11 sur l'image
+   publiée, benchmarks publics régénérés, worker + app + wasm dans la même
+   fenêtre et homelab — après votre GO.

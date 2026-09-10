@@ -1,0 +1,164 @@
+[
+  {
+    "direction": "left",
+    "wallSec": 64,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "left",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 94.38932800292969,
+        "xMin": 2.0000109672546387,
+        "yMax": 1470.8492431640625,
+        "yMin": 2.0002939701080322
+      },
+      "before": {
+        "xMax": 103.91241455078125,
+        "xMin": 2.0018088817596436,
+        "yMax": 1874.60107421875,
+        "yMin": 2.000844717025757
+      },
+      "bias": "left",
+      "elapsedMs": 6074,
+      "kept": "spp",
+      "minDistanceMm": 2.0000998973846436,
+      "phases": {
+        "p1Improvements": 2,
+        "p1Ms": 2077,
+        "p2Improvements": 2,
+        "p2Ms": 3997,
+        "stop": "plateau"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "smallestGapMm": 2,
+    "verifyStatus": "measured",
+    "duplicatePoses": 0,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 275,
+        "densityPct": 72.8
+      },
+      {
+        "index": 1,
+        "parts": 29,
+        "densityPct": 2.6
+      }
+    ]
+  },
+  {
+    "direction": "bottom",
+    "wallSec": 73,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "bottom",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 1497.0589599609375,
+        "xMin": 2.000314712524414,
+        "yMax": 116.32379150390625,
+        "yMin": 2.000011444091797
+      },
+      "before": {
+        "xMax": 938.2203369140625,
+        "xMin": 2.028181552886963,
+        "yMax": 225.9651641845703,
+        "yMin": 2.013935089111328
+      },
+      "bias": "bottom",
+      "elapsedMs": 15402,
+      "kept": "spp",
+      "minDistanceMm": 2.0000998973846436,
+      "phases": {
+        "p1Improvements": 13,
+        "p1Ms": 15348,
+        "p2Improvements": 1,
+        "p2Ms": 54,
+        "stop": "budget"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "smallestGapMm": 2,
+    "verifyStatus": "measured",
+    "duplicatePoses": 0,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 268,
+        "densityPct": 72.4
+      },
+      {
+        "index": 1,
+        "parts": 36,
+        "densityPct": 2.9
+      }
+    ]
+  },
+  {
+    "direction": "balanced",
+    "wallSec": 74,
+    "placed": 304,
+    "requested": 304,
+    "strategy": "balanced",
+    "layoutCount": 2,
+    "finish": {
+      "after": {
+        "xMax": 236.9177703857422,
+        "xMin": 2.0000832080841064,
+        "yMax": 621.5632934570312,
+        "yMin": 2.0002288818359375
+      },
+      "before": {
+        "xMax": 212.88816833496094,
+        "xMin": 2.002544403076172,
+        "yMax": 927.1135864257812,
+        "yMin": 2.0036582946777344
+      },
+      "bias": "balanced",
+      "elapsedMs": 15401,
+      "kept": "spp",
+      "minDistanceMm": 2,
+      "phases": {
+        "p1Improvements": 5,
+        "p1Ms": 7733,
+        "p2Improvements": 8,
+        "p2Ms": 7668,
+        "stop": "budget"
+      },
+      "reason": "",
+      "rejected": null,
+      "sheet": 1
+    },
+    "overlapFree": true,
+    "spacingOk": true,
+    "insideSheet": true,
+    "smallestGapMm": 2,
+    "verifyStatus": "measured",
+    "duplicatePoses": 0,
+    "sheets": [
+      {
+        "index": 0,
+        "parts": 270,
+        "densityPct": 72.7
+      },
+      {
+        "index": 1,
+        "parts": 34,
+        "densityPct": 2.7
+      }
+    ]
+  }
+]

@@ -1,0 +1,410 @@
+{
+ "verrou": "bench/oracle_parity.py (Rust vs shapely)",
+ "layouts": 50,
+ "ecartMaxMm": 0.0001,
+ "desaccordsDeValeur": 0,
+ "desaccordsDeVerdict": 0,
+ "rejets": 0,
+ "mesures": [
+  {
+   "dump": "finish-balanced-accepted-1789058318198-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 26,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058355861-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 26,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.000200033187866
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058392793-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 24,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058434235-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 35,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058472014-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 38,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058507045-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 35,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058647860-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 31,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058685066-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 35,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058720735-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 36,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058755689-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 45,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058796426-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 38,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058849379-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 34,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058889773-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 22,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058927706-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 37,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-balanced-accepted-1789058960151-meta.json",
+   "bias": "balanced",
+   "reason": "accepted",
+   "pieces": 27,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058313271-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 28,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0002999305725098
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058350536-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 32,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058392701-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 32,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058426681-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 34,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058471918-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 38,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058501223-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 32,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058647829-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 36,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 1.999899983406067
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058685022-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 39,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.000200033187866
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058720518-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 39,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058747919-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 22,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0002999305725098
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058796181-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 41,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058834117-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 28,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058890093-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 35,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058920152-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 30,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-bottom-accepted-1789058959963-meta.json",
+   "bias": "bottom",
+   "reason": "accepted",
+   "pieces": 29,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058212181-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 238,
+   "spaceMm": 0.10000000149011612,
+   "engineMinDistanceMm": 0.10000000149011612
+  },
+  {
+   "dump": "finish-left-accepted-1789058235339-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 162,
+   "spaceMm": 0.5,
+   "engineMinDistanceMm": 0.5
+  },
+  {
+   "dump": "finish-left-accepted-1789058252608-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 20,
+   "spaceMm": 1.0,
+   "engineMinDistanceMm": 1.0002000331878662
+  },
+  {
+   "dump": "finish-left-accepted-1789058281714-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 402,
+   "spaceMm": 2.4000000953674316,
+   "engineMinDistanceMm": 2.399899959564209
+  },
+  {
+   "dump": "finish-left-accepted-1789058310425-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 30,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058355782-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 38,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058386557-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 26,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058426778-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 30,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058464784-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 25,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058496886-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 24,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.000200033187866
+  },
+  {
+   "dump": "finish-left-accepted-1789058586088-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 298,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058642823-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 33,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058674643-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 33,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058716188-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 34,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058746766-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 36,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058796717-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 29,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0006000995635986
+  },
+  {
+   "dump": "finish-left-accepted-1789058837355-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 40,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0
+  },
+  {
+   "dump": "finish-left-accepted-1789058884402-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 35,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058922097-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 34,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.0000998973846436
+  },
+  {
+   "dump": "finish-left-accepted-1789058955390-meta.json",
+   "bias": "left",
+   "reason": "accepted",
+   "pieces": 29,
+   "spaceMm": 2.0,
+   "engineMinDistanceMm": 2.000200033187866
+  }
+ ]
+}
