@@ -7,7 +7,7 @@
  * les entités par handle depuis ces bytes) et un aperçu SVG (data URI).
  * AUCUN byte ne quitte la machine — DWG refusé (conversion serveur, D-PRV-2).
  */
-import { geoImportFile, geoCanonicalDxf } from './geometryClient'
+import { geoImportFile, geoCanonicalDxf, IMPORT_MAX_ENTITIES } from './geometryClient'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 
@@ -21,9 +21,38 @@ const PART_PALETTE = [
 ]
 const FILL_OPACITY_PREVIEW = 0.18
 
-// Miroir du fileprocessing (MAX_ENTITY_LIMIT, défaut 999) — au-delà, le
-// fichier est refusé côté client comme il le serait côté serveur.
-const MAX_ENTITY_LIMIT = 999
+// Lot 2a : la garde « trop lourd » vit DANS le wasm (plafond d'entités posé
+// avant la décomposition + budget de temps qui arrête le travail) — voir
+// geometryClient.IMPORT_MAX_ENTITIES / IMPORT_TIME_BUDGET_MS, miroirs des
+// constantes Rust et du worker Python. Ici, on ne fait plus que traduire le
+// refus en message : le plafond n'est plus comparé après coup.
+const MAX_ENTITY_LIMIT = IMPORT_MAX_ENTITIES
+
+/** Erreur i18n d'un refus « trop lourd » — la clé porte ses nombres
+ * (piège #24 : un nombre nu est incompréhensible). `entitiesAtLeast` vient
+ * d'une expansion coupée au plafond dur : le message dit « plus de N ». */
+function tooHeavyError(refusal) {
+    const params = {
+        n: refusal?.entities ?? 0,
+        max: refusal?.maxEntities ?? MAX_ENTITY_LIMIT,
+        seconds: Math.round((refusal?.timeBudgetMs ?? 0) / 1000),
+    }
+    let key
+    if (refusal?.reason === 'blockDepth') {
+        // Le serveur refuse aussi (assert_insert_depth) : ne JAMAIS renvoyer
+        // vers un chemin dont on n'a pas vérifié qu'il réussit.
+        key = 'localImport.blockDepth'
+    } else if (refusal?.reason === 'time') {
+        key = 'localImport.tooHeavy'
+    } else {
+        key = refusal?.entitiesAtLeast
+            ? 'localImport.tooManyEntitiesAtLeast'
+            : 'localImport.tooManyEntities'
+    }
+    const err = new Error(key)
+    err.params = params
+    return err
+}
 
 const ACCEPTED_EXTENSIONS = ['.dxf', '.svg']
 
@@ -117,11 +146,11 @@ export async function importLocalFile(file, projectSlug) {
     } catch {
         throw new Error('localImport.parseError')
     }
+    if (imported?.refusal) {
+        throw tooHeavyError(imported.refusal)
+    }
     if (!imported || !Array.isArray(imported.parts)) {
         throw new Error('localImport.parseError')
-    }
-    if ((imported.entity_count ?? 0) > MAX_ENTITY_LIMIT) {
-        throw new Error('localImport.tooManyEntities')
     }
     if (imported.parts.length === 0) {
         throw new Error('localImport.noParts')

@@ -85,6 +85,81 @@ pub fn decompose_to_entities(entities: &[Entity], blocks: &[Block]) -> Vec<Entit
     out
 }
 
+/// Dépassement de l'expansion des INSERT (lot 2a) : plafond dur d'entités
+/// atteint, ou graphe de blocs trop profond / cyclique.
+#[derive(Debug, Clone, Copy)]
+pub struct Overflow {
+    /// Entités émises au moment de l'arrêt (plancher du compte réel).
+    pub entities: usize,
+    pub depth_exceeded: bool,
+}
+
+/// `decompose_to_entities` BORNÉE (lot 2a — garde posée avant la
+/// décomposition, `budget.rs`) : arrêt net au plafond dur d'entités et à la
+/// profondeur d'INSERT, au lieu de saturer la mémoire (ou la pile, sur un
+/// graphe de blocs cyclique) avant le refus. Miroir de `decompose_bounded` +
+/// `assert_insert_depth` (worker_common/geometry/dxf_bounds.py).
+pub fn decompose_to_entities_bounded(
+    entities: &[Entity],
+    blocks: &[Block],
+    ceiling: usize,
+    max_depth: usize,
+) -> Result<Vec<Entity>, Overflow> {
+    let mut out = Vec::new();
+    match decompose_entities_bounded_into(
+        entities,
+        blocks,
+        Affine::identity(),
+        &mut out,
+        ceiling,
+        max_depth,
+        0,
+    ) {
+        Ok(()) => Ok(out),
+        Err(depth_exceeded) => Err(Overflow { entities: out.len(), depth_exceeded }),
+    }
+}
+
+/// Err(true) = profondeur dépassée, Err(false) = plafond d'entités atteint.
+fn decompose_entities_bounded_into(
+    entities: &[Entity],
+    blocks: &[Block],
+    m: Affine,
+    out: &mut Vec<Entity>,
+    ceiling: usize,
+    max_depth: usize,
+    depth: usize,
+) -> Result<(), bool> {
+    if depth > max_depth {
+        return Err(true);
+    }
+    for e in entities {
+        match e {
+            Entity::Insert(ins) => {
+                if let Some(block) = blocks.iter().find(|b| b.name == ins.block) {
+                    let local = insert_affine(block, ins.at, ins.xscale, ins.yscale, ins.rotation);
+                    decompose_entities_bounded_into(
+                        &block.entities,
+                        blocks,
+                        m.then(&local),
+                        out,
+                        ceiling,
+                        max_depth,
+                        depth + 1,
+                    )?;
+                }
+            }
+            _ => {
+                if out.len() >= ceiling {
+                    return Err(false);
+                }
+                out.push(transform_entity(e, m));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn decompose_into(entities: &[Entity], blocks: &[Block], m: Affine, out: &mut Vec<Primitive>) {
     for e in entities {
         match e {

@@ -7,6 +7,7 @@
 
 pub mod assemble;
 pub mod attach;
+pub mod budget;
 pub mod dxf;
 #[cfg(feature = "svg")]
 pub mod svg;
@@ -48,30 +49,138 @@ pub struct ImportResult {
     pub warnings: Vec<String>,
 }
 
+/// Refus « trop lourd » (lot 2a, `docs/PLAN-IMPORT-2026-09-09.md` §9.2) :
+/// le compte d'entités et le temps écoulé VOYAGENT avec le refus — le
+/// message utilisateur les affiche (piège #24 : un nombre nu ne dit rien).
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TooHeavy {
+    pub reason: budget::TooHeavyReason,
+    /// Entités du modelspace, INSERT résolus — le MÊME nombre que
+    /// `ImportResult::entity_count`.
+    pub entities: usize,
+    /// `true` quand `entities` est un PLANCHER : l'expansion a été coupée au
+    /// plafond dur (message « plus de N entités »).
+    pub entities_at_least: bool,
+    pub max_entities: usize,
+    pub elapsed_ms: u64,
+    pub time_budget_ms: u64,
+}
+
 #[derive(Debug)]
 pub enum ImportError {
     /// Unreadable / severely corrupt document (ezdxf recover failure twin).
     Corrupt(String),
+    /// Refus par une borne d'import (plafond d'entités, budget de temps,
+    /// profondeur de blocs) — voir `budget.rs`.
+    TooHeavy(TooHeavy),
 }
 
 impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ImportError::Corrupt(msg) => write!(f, "{msg}"),
+            ImportError::TooHeavy(t) => {
+                let at_least = if t.entities_at_least { "more than " } else { "" };
+                match t.reason {
+                    budget::TooHeavyReason::Entities => write!(
+                        f,
+                        "too heavy for in-browser import: {at_least}{} entities (limit {})",
+                        t.entities, t.max_entities
+                    ),
+                    budget::TooHeavyReason::Time => write!(
+                        f,
+                        "too heavy for in-browser import: {} entities, {} ms time budget exceeded ({} ms)",
+                        t.entities, t.time_budget_ms, t.elapsed_ms
+                    ),
+                    budget::TooHeavyReason::BlockDepth => write!(
+                        f,
+                        "DXF block nesting exceeds {} levels",
+                        budget::MAX_INSERT_DEPTH
+                    ),
+                }
+            }
         }
     }
 }
 impl std::error::Error for ImportError {}
 
+fn too_many_entities(
+    entities: usize,
+    at_least: bool,
+    limits: &budget::Limits,
+    dl: &budget::Deadline,
+) -> ImportError {
+    ImportError::TooHeavy(TooHeavy {
+        reason: budget::TooHeavyReason::Entities,
+        entities,
+        entities_at_least: at_least,
+        max_entities: limits.max_entities,
+        elapsed_ms: dl.elapsed_ms(),
+        time_budget_ms: limits.time_budget_ms,
+    })
+}
+
+fn out_of_time(entities: usize, limits: &budget::Limits, e: budget::Expired) -> ImportError {
+    ImportError::TooHeavy(TooHeavy {
+        reason: budget::TooHeavyReason::Time,
+        entities,
+        entities_at_least: false,
+        max_entities: limits.max_entities,
+        elapsed_ms: e.elapsed_ms,
+        time_budget_ms: limits.time_budget_ms,
+    })
+}
+
 /// Import a DXF document (bytes) to polygon parts in canonical mm.
 /// `flatten_tol` = sagitta/distance tolerance in mm (the job's `flattening`
 /// parameter — 0.01 in production, clamped to ≥ 0.001 like the Python side).
 pub fn import_dxf(bytes: &[u8], flatten_tol: f64) -> Result<ImportResult, ImportError> {
+    import_dxf_limited(bytes, flatten_tol, &budget::Limits::unlimited())
+}
+
+/// `import_dxf` sous les bornes du lot 2a
+/// (`docs/PLAN-IMPORT-2026-09-09.md` §9.2) : plafond d'entités et budget de
+/// temps posés AVANT la décomposition. Le plafond est évalué sur le compte
+/// que rend l'expansion des INSERT — le même que `entity_count`, jamais un
+/// second comptage. Le budget est une échéance contrôlée dans les boucles
+/// chaudes : au-delà, le travail s'ARRÊTE (le défaut C9 était de payer
+/// l'import en entier avant de le jeter).
+pub fn import_dxf_limited(
+    bytes: &[u8],
+    flatten_tol: f64,
+    limits: &budget::Limits,
+) -> Result<ImportResult, ImportError> {
+    let dl = budget::Deadline::new(limits.time_budget_ms);
     let doc = dxf::Document::parse(bytes)?;
-    let (entities, mut warnings) = dxf::flattened_modelspace(&doc);
-    let (linework, w2, entity_count) = assemble::collect_linework(&entities, flatten_tol);
+    let (entities, mut warnings) = dxf::flattened_modelspace_bounded(
+        &doc,
+        limits.expansion_ceiling(),
+        budget::MAX_INSERT_DEPTH,
+    )
+    .map_err(|o| {
+        if o.depth_exceeded {
+            ImportError::TooHeavy(TooHeavy {
+                reason: budget::TooHeavyReason::BlockDepth,
+                entities: o.entities,
+                entities_at_least: true,
+                max_entities: limits.max_entities,
+                elapsed_ms: dl.elapsed_ms(),
+                time_budget_ms: limits.time_budget_ms,
+            })
+        } else {
+            too_many_entities(o.entities, true, limits, &dl)
+        }
+    })?;
+    let count = entities.len();
+    if count > limits.max_entities {
+        return Err(too_many_entities(count, false, limits, &dl));
+    }
+    let (linework, w2, entity_count) = assemble::collect_linework_until(&entities, flatten_tol, &dl)
+        .map_err(|e| out_of_time(count, limits, e))?;
     warnings.extend(w2);
-    let parts = assemble::build_parts(linework, flatten_tol);
+    let parts = assemble::build_parts_until(linework, flatten_tol, &dl)
+        .map_err(|e| out_of_time(count, limits, e))?;
     Ok(ImportResult {
         parts,
         source_units: doc.source_insunits,
@@ -91,15 +200,34 @@ pub fn import_svg(bytes: &[u8], flatten_tol: f64) -> Result<ImportResult, Import
 /// BOM/whitespace then '<' = SVG (XML), anything else = DXF.
 #[cfg(feature = "svg")]
 pub fn import_file(bytes: &[u8], flatten_tol: f64) -> Result<ImportResult, ImportError> {
-    if is_svg_signature(bytes) {
-        return svg::import_svg(bytes, flatten_tol);
-    }
-    import_dxf(bytes, flatten_tol)
+    import_file_limited(bytes, flatten_tol, &budget::Limits::unlimited())
 }
 
 #[cfg(not(feature = "svg"))]
 pub fn import_file(bytes: &[u8], flatten_tol: f64) -> Result<ImportResult, ImportError> {
-    import_dxf(bytes, flatten_tol)
+    import_file_limited(bytes, flatten_tol, &budget::Limits::unlimited())
+}
+
+/// `import_file` sous les bornes du lot 2a — l'entrée du chemin navigateur.
+#[cfg(feature = "svg")]
+pub fn import_file_limited(
+    bytes: &[u8],
+    flatten_tol: f64,
+    limits: &budget::Limits,
+) -> Result<ImportResult, ImportError> {
+    if is_svg_signature(bytes) {
+        return svg::import_svg_limited(bytes, flatten_tol, limits);
+    }
+    import_dxf_limited(bytes, flatten_tol, limits)
+}
+
+#[cfg(not(feature = "svg"))]
+pub fn import_file_limited(
+    bytes: &[u8],
+    flatten_tol: f64,
+    limits: &budget::Limits,
+) -> Result<ImportResult, ImportError> {
+    import_dxf_limited(bytes, flatten_tol, limits)
 }
 
 /// Détection de format par signature de contenu (AGENTS #31) — `true` si SVG.
@@ -139,6 +267,35 @@ pub fn canonical_dxf(bytes: &[u8], _flatten_tol: f64) -> Result<Vec<u8>, ImportE
 pub fn canonical_dxf(bytes: &[u8], _flatten_tol: f64) -> Result<Vec<u8>, ImportError> {
     let doc = dxf::Document::parse(bytes)?;
     Ok(dxf::canonical::canonical_dxf_bytes(&doc))
+}
+
+/// Sortie JSON de l'import BORNÉ, commune aux deux liaisons wasm et au
+/// coureur QA : `{status:"ok", result:{...}}` ou
+/// `{status:"refused", refusal:{...}, message:"..."}`. Un document illisible
+/// reste une ERREUR (jumeau de `localImport.parseError`) ; « trop lourd » est
+/// une réponse, pas une exception — ses nombres doivent arriver au message.
+pub fn guarded_import_json(
+    bytes: &[u8],
+    flatten_tol: f64,
+    limits: &budget::Limits,
+) -> Result<String, ImportError> {
+    match import_file_limited(bytes, flatten_tol, limits) {
+        Ok(result) => serde_json::to_string(&serde_json::json!({
+            "status": "ok",
+            "result": result,
+        }))
+        .map_err(|e| ImportError::Corrupt(format!("{e}"))),
+        Err(ImportError::TooHeavy(t)) => {
+            let message = format!("{}", ImportError::TooHeavy(t));
+            serde_json::to_string(&serde_json::json!({
+                "status": "refused",
+                "refusal": t,
+                "message": message,
+            }))
+            .map_err(|e| ImportError::Corrupt(format!("{e}")))
+        }
+        Err(other) => Err(other),
+    }
 }
 
 #[cfg(test)]

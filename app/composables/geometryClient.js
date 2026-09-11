@@ -48,8 +48,37 @@ function call(op, args) {
 
 const parse = (r) => (r.ok ? JSON.parse(r.result) : r)
 
-export async function geoImportFile(bytes, tol = 0.01) {
-    return parse(await call('import_file', { bytes: Array.from(bytes), tol }))
+/**
+ * Bornes d'import du chemin navigateur (lot 2a,
+ * `docs/PLAN-IMPORT-2026-09-09.md` §9.2). Miroirs EXACTS des constantes
+ * Rust (`nest-import::budget`) et du worker Python (`MAX_ENTITY_LIMIT`,
+ * `IMPORT_TIME_BUDGET_S`) — ne pas diverger.
+ */
+export const IMPORT_MAX_ENTITIES = 10000
+export const IMPORT_TIME_BUDGET_MS = 20000
+
+/**
+ * Import borné : rend l'`ImportResult` (parts/source_units/entity_count/
+ * warnings) quand le fichier passe, `{ refusal }` quand une borne le refuse
+ * (`reason` = entities | time | blockDepth, avec le compte d'entités et le
+ * temps écoulé), `{ ok: false, error }` quand le worker ou le wasm échoue.
+ *
+ * Les bornes sont posées DANS le wasm, avant la décomposition : un refus
+ * « trop lourd » ne coûte plus l'import entier (défaut C9 de la synthèse —
+ * 4,9 s et 7,2 s payés pour un refus).
+ */
+export async function geoImportFile(bytes, tol = 0.01, limits = {}) {
+    const r = parse(
+        await call('import_file_limited', {
+            bytes: Array.from(bytes),
+            tol,
+            maxEntities: limits.maxEntities ?? IMPORT_MAX_ENTITIES,
+            timeBudgetMs: limits.timeBudgetMs ?? IMPORT_TIME_BUDGET_MS,
+        }),
+    )
+    if (!r || r.ok === false) return r
+    if (r.status === 'refused') return { refusal: r.refusal, message: r.message }
+    return r.result
 }
 export async function geoOpenHoles(outer, holes, spaceMm) {
     return parse(await call('open_holes', { json: JSON.stringify({ outer, holes, space_mm: spaceMm }) }))

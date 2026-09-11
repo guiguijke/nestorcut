@@ -184,3 +184,17 @@ pub fn flattened_modelspace(doc: &Document) -> (Vec<flatten::Primitive>, Vec<Str
     let prims = entities.iter().map(decompose::primitive_of).collect();
     (prims, warnings)
 }
+
+/// `flattened_modelspace` BORNÉE (lot 2a) : l'expansion des INSERT s'arrête
+/// au plafond dur et à la profondeur maximale (`budget::Limits`), avant
+/// d'avoir rempli la mémoire de l'onglet. Le compte rendu par `Ok` est celui
+/// que gate `MAX_ENTITY_LIMIT` — un seul comptage, jamais deux.
+pub fn flattened_modelspace_bounded(
+    doc: &Document,
+    ceiling: usize,
+    max_depth: usize,
+) -> Result<(Vec<flatten::Primitive>, Vec<String>), decompose::Overflow> {
+    let (entities, warnings) = canonical::canonical_entities_bounded(doc, ceiling, max_depth)?;
+    let prims = entities.iter().map(decompose::primitive_of).collect();
+    Ok((prims, warnings))
+}

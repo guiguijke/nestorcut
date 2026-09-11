@@ -268,7 +268,10 @@ const dict = {
         'localImport.dwgRejected': 'DWG files are converted on our servers — pick “Our servers” for this file.',
         'localImport.unsupportedType': 'Unsupported file type — DXF or SVG only on this device.',
         'localImport.parseError': 'This file could not be parsed in the browser — try “Our servers”.',
-        'localImport.tooManyEntities': 'This file has too many entities for in-browser import — try “Our servers”.',
+        'localImport.tooManyEntities': 'This file has too many entities for in-browser import ({n} entities, {max} at most) — try “Our servers”.',
+        'localImport.tooManyEntitiesAtLeast': 'This file has too many entities for in-browser import (more than {n} entities) — try “Our servers”.',
+        'localImport.tooHeavy': 'This file is too heavy for in-browser import ({n} entities, over {seconds} s) — try “Our servers”.',
+        'localImport.blockDepth': 'This file nests blocks too deeply to be read — re-save it with the blocks exploded from your CAD.',
         'localImport.noParts': 'No closed part found in this file.',
         'localImport.emptyBrowser': 'These files live in this browser. Empty list: they were imported on another device, or this browser\'s storage was cleared — drop them again below. Nothing was sent to us.',
         // Suppression de projet (J-095) — confirmation + états.
@@ -978,7 +981,10 @@ const dict = {
         'localImport.dwgRejected': "Les fichiers DWG sont convertis sur nos serveurs — choisis « Nos serveurs » pour ce fichier.",
         'localImport.unsupportedType': "Type de fichier non supporté — DXF ou SVG uniquement sur cet appareil.",
         'localImport.parseError': "Ce fichier n'a pas pu être analysé dans le navigateur — essayez « Nos serveurs ».",
-        'localImport.tooManyEntities': "Ce fichier contient trop d'entités pour un import navigateur — essayez « Nos serveurs ».",
+        'localImport.tooManyEntities': "Ce fichier contient trop d'entités pour un import navigateur ({n} entités, {max} au maximum) — essayez « Nos serveurs ».",
+        'localImport.tooManyEntitiesAtLeast': "Ce fichier contient trop d'entités pour un import navigateur (plus de {n} entités) — essayez « Nos serveurs ».",
+        'localImport.tooHeavy': "Fichier trop lourd pour l'import navigateur ({n} entités, plus de {seconds} s) — essayez « Nos serveurs ».",
+        'localImport.blockDepth': "Ce fichier imbrique ses blocs trop profondément pour être lu — ré-enregistrez-le avec les blocs éclatés depuis votre CAO.",
         'localImport.noParts': "Aucune pièce fermée trouvée dans ce fichier.",
         'localImport.emptyBrowser': "Ces fichiers vivent dans ce navigateur. Liste vide : ils ont été importés ailleurs, ou le stockage de ce navigateur a été effacé — déposez-les à nouveau ci-dessous. Rien n'a été envoyé chez nous.",
         // Suppression de projet (J-095) — confirmation + états.

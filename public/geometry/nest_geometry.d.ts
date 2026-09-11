@@ -40,6 +40,14 @@ export function export_svg_sheet(json: string): string;
 export function import_file(bytes: Uint8Array, tol: number): string;
 
 /**
+ * import_file_limited(bytes, tol, max_entities, time_budget_ms) -> JSON
+ * `{status:"ok"|"refused", ...}` : l'import du chemin navigateur AVEC ses
+ * bornes (lot 2a — plafond d'entités posé avant la décomposition, budget de
+ * temps qui ARRÊTE le travail). Le refus porte le nombre d'entités.
+ */
+export function import_file_limited(bytes: Uint8Array, tol: number, max_entities: number, time_budget_ms: number): string;
+
+/**
  * import_svg(bytes, tol) -> JSON ImportResult.
  */
 export function import_svg(bytes: Uint8Array, tol: number): string;
@@ -72,16 +80,17 @@ export interface InitOutput {
     readonly export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly export_svg_sheet: (a: number, b: number) => [number, number, number, number];
     readonly import_file: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly import_file_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly import_svg: (a: number, b: number, c: number) => [number, number, number, number];
     readonly open_holes: (a: number, b: number) => [number, number, number, number];
     readonly pinwheel_capacity: (a: number, b: number) => [number, number, number, number];
     readonly wasm_memory_pages: () => number;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
+    readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
     readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
-    readonly __externref_table_alloc: () => number;
     readonly __wbindgen_start: () => void;
 }
 

@@ -6,7 +6,13 @@ already have exhausted RAM.
 from ezdxf.disassemble import recursive_decompose
 
 MAX_INSERT_DEPTH = 32
-MAX_DECOMPOSED_ENTITIES = 4000
+# Plafond DUR de l'expansion (lot 2a) : 4 000 avant — il refusait un fichier
+# réel de 6 144 entités que le plafond fonctionnel (MAX_ENTITY_LIMIT = 10 000,
+# core/import_budget.py) accepte désormais. Porté à 10 × ce plafond, comme
+# `Limits::expansion_ceiling` en Rust : l'expansion va jusqu'au bout pour que
+# le refus annonce le nombre EXACT d'entités, et coupe au-delà (la garde
+# anti-bombe d'INSERT reste, pentest H-4).
+MAX_DECOMPOSED_ENTITIES = 100000
 
 
 def assert_insert_depth(doc, max_depth=MAX_INSERT_DEPTH):

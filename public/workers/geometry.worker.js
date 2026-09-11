@@ -9,7 +9,7 @@
  * en Array) et pinwheel_capacity (json string) — l'import 100 % client.
  */
 import init, {
-    import_file, open_holes, export_svg_sheet, compute_report,
+    import_file, import_file_limited, open_holes, export_svg_sheet, compute_report,
     export_dxf_sheet,
     canonical_dxf, pinwheel_capacity,
 } from '/geometry/nest_geometry.js'
@@ -25,6 +25,18 @@ self.onmessage = async (event) => {
         switch (op) {
             case 'import_file':
                 result = import_file(new Uint8Array(args.bytes), args.tol ?? 0.01)
+                break
+            case 'import_file_limited':
+                // Lot 2a : import BORNÉ (plafond d'entités posé avant la
+                // décomposition, budget de temps qui arrête le travail).
+                // Rend un JSON {status:"ok"|"refused", …} — un refus n'est
+                // pas une exception, il porte le nombre d'entités.
+                result = import_file_limited(
+                    new Uint8Array(args.bytes),
+                    args.tol ?? 0.01,
+                    args.maxEntities,
+                    args.timeBudgetMs,
+                )
                 break
             case 'open_holes':
                 result = open_holes(args.json)

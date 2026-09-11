@@ -137,7 +137,7 @@
             {{ t(nestSubmitError) }}
         </div>
         <div v-if="localImportError" class="content__error">
-            {{ t(localImportError) }}
+            {{ localImportErrorText }}
         </div>
         <div v-if="sheetCapExceeded" class="content__error">
             {{ t('nest.sheetCapHint') }}
@@ -183,7 +183,7 @@ definePageMeta({
     middleware: "auth",
 });
 
-const { t, tp, fmtPercent } = useLocale()
+const { t, tp, fmtPercent, fmtNumber } = useLocale()
 // Part dims arrive in canonical mm; sheet params are display-unit strings —
 // displayToMm normalizes them for the fit check.
 const { unit, unitLabel, fmtLengthValue, displayToMm } = useUnit()
@@ -483,6 +483,20 @@ const nestRequestError = computed(() => filesGetters.nestRequestError);
 const nestSubmitError = computed(() => filesGetters.nestError);
 const nestBusy = computed(() => filesGetters.nestBusy);
 const localImportError = computed(() => filesGetters.localImportError);
+// Lot 2a : un refus d'import peut porter des nombres (entités, budget) —
+// formatés dans la locale (piège #24 : « 1 200 entités », pas « 1200 »).
+const localImportErrorText = computed(() => {
+    const key = localImportError.value;
+    if (!key) return '';
+    // `filesGetters` est un proxy réactif : il DÉRÉFÉRENCE déjà les refs —
+    // un `.value` ici rend undefined et le message affiche « {n} entités »
+    // (constaté dans le navigateur avant correction).
+    const raw = filesGetters.localImportErrorParams || {};
+    const params = Object.fromEntries(
+        Object.entries(raw).map(([k, v]) => [k, typeof v === 'number' ? fmtNumber(v, 0) : v]),
+    );
+    return t(key, params);
+});
 const demoQuotaReached = computed(() => filesGetters.demoQuotaReached);
 const slug = pageSlug;
 const apiPath = computed(() => API_ROUTES.PROJECT(unref(slug)));

@@ -10,12 +10,14 @@
  *   app/composables/geometryClient.js  ->  geoImportFile(bytes, tol = 0.01)
  *                                          geoCanonicalDxf(bytes, tol = 0.01)
  *
- * L'app (app/composables/localImport.js) enchaîne import_file PUIS
- * canonical_dxf, et applique trois gardes avant d'accepter le fichier :
+ * L'app (app/composables/localImport.js) enchaîne import_file_limited PUIS
+ * canonical_dxf, et applique ses gardes AVANT d'accepter le fichier :
  * extension (.dxf/.svg, .dwg refusé), taille (MAX_UPLOAD_FILE_BYTES = 5 Mio),
- * entity_count > 999 (MAX_ENTITY_LIMIT), parts.length === 0. Le coureur
- * reproduit cette chaîne complète : le statut décrit ce que VOIT
- * l'utilisateur du chemin navigateur, pas seulement le crate.
+ * puis les BORNES D'IMPORT portées par le wasm depuis le lot 2a (plafond de
+ * 10 000 entités posé avant la décomposition, budget de 20 s qui arrête le
+ * travail) et parts.length === 0. Le coureur reproduit cette chaîne
+ * complète : le statut décrit ce que VOIT l'utilisateur du chemin
+ * navigateur, pas seulement le crate.
  *
  * Isolation : chaque fichier est traité dans un PROCESSUS ENFANT avec
  * timeout. Un panic wasm (trap), un OOM, une boucle O(n²) qui ne rend pas la
@@ -49,8 +51,9 @@ const BUNDLE_JS = path.join(ROOT, 'public', 'geometry', 'nest_geometry.js')
 const BUNDLE_WASM = path.join(ROOT, 'public', 'geometry', 'nest_geometry_bg.wasm')
 
 // Miroirs EXACTS des gardes du chemin navigateur (localImport.js /
-// shared/constants/upload.constants.js) — ne pas diverger.
-const MAX_ENTITY_LIMIT = 999
+// geometryClient.js / shared/constants/upload.constants.js) — ne pas diverger.
+const MAX_ENTITY_LIMIT = 10000
+const TIME_BUDGET_MS = 20000
 const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024
 const ACCEPTED_EXTENSIONS = ['.dxf', '.svg']
 const DEFAULT_TOL = 0.01
@@ -266,8 +269,9 @@ async function runOne(file, id, tol) {
 
     let imported = null
     const t0 = performance.now()
+    let outcome = null
     try {
-        imported = JSON.parse(glue.import_file(bytes, tol))
+        outcome = JSON.parse(glue.import_file_limited(bytes, tol, MAX_ENTITY_LIMIT, TIME_BUDGET_MS))
         row.ms = Math.round((performance.now() - t0) * 1000) / 1000
     } catch (err) {
         row.ms = Math.round((performance.now() - t0) * 1000) / 1000
@@ -275,6 +279,19 @@ async function runOne(file, id, tol) {
         row.failingEntity = extractFailingEntity(row.error)
         return row
     }
+    // Lot 2a : un refus « trop lourd » est une RÉPONSE du wasm, avec ses
+    // nombres — la garde ne s'applique plus après coup côté JS.
+    if (outcome && outcome.status === 'refused') {
+        const r = outcome.refusal || {}
+        row.extra.entityCount = Number.isInteger(r.entities) ? r.entities : null
+        row.extra.gate =
+            r.reason === 'time' ? 'tooHeavy'
+                : r.reason === 'blockDepth' ? 'blockDepth'
+                    : 'tooManyEntities'
+        row.error = `gate: localImport.${row.extra.gate} (${outcome.message})`
+        return row
+    }
+    imported = outcome && outcome.result ? outcome.result : outcome
 
     const warnings = Array.isArray(imported.warnings) ? imported.warnings : []
     const parts = Array.isArray(imported.parts) ? imported.parts : []
@@ -292,12 +309,8 @@ async function runOne(file, id, tol) {
         row.splinesHandled = warnings.some((w) => /skipped entity\s+SPLINE/i.test(w)) ? 'refused' : 'sampled'
     }
 
-    // Gardes app postérieures à l'import (localImport.js).
-    if (row.extra.entityCount !== null && row.extra.entityCount > MAX_ENTITY_LIMIT) {
-        row.error = `gate: localImport.tooManyEntities (${row.extra.entityCount} > ${MAX_ENTITY_LIMIT})`
-        row.extra.gate = 'tooManyEntities'
-        return row
-    }
+    // Garde app postérieure à l'import (localImport.js) : le plafond
+    // d'entités, lui, vit désormais DANS le wasm (traité plus haut).
     if (parts.length === 0) {
         row.error = 'gate: localImport.noParts (import_file a rendu 0 pièce)'
         row.extra.gate = 'noParts'

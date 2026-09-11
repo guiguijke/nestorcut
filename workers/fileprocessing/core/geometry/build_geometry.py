@@ -47,7 +47,7 @@ def collect_footprints(drawing: Drawing, tolerance: float) -> List[Tuple[str, Ba
     return footprints
 
 
-def _merge_near_polygons(polygons: List[Polygon], distance: float) -> List[Polygon]:
+def _merge_near_polygons(polygons: List[Polygon], distance: float, deadline=None) -> List[Polygon]:
     """
     Merge polygons that lie within `distance` of each other into single polygons.
 
@@ -76,6 +76,8 @@ def _merge_near_polygons(polygons: List[Polygon], distance: float) -> List[Polyg
             parent[root_a] = root_b
 
     for i in range(count):
+        if deadline is not None:
+            deadline.check(i)
         for j in range(i + 1, count):
             if polygons[i].distance(polygons[j]) <= distance:
                 union(i, j)
@@ -221,7 +223,7 @@ class ClosedPolygon:
         return doc
 
 
-def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
+def build_geometry(drawing: Drawing, tolerance: float, deadline=None) -> List[ClosedPolygon]:
     """
     Build accurate part contours from a DXF drawing.
 
@@ -241,13 +243,21 @@ def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
     that part — smallest containing silhouette wins, so islands nested in a
     hole keep their own entities while the hole's contour travels with the
     enclosing part.
+
+    `deadline` (lot 2a, `core/import_budget.Deadline`) borne le TEMPS : les
+    boucles Python la contrôlent et lèvent `ImportTooHeavy` — l'import
+    s'arrête au budget au lieu d'être payé en entier. Les appels shapely
+    (unary_union, buffer) ne sont pas interruptibles : le contrôle encadre
+    chaque étage, le dépassement possible est celui d'UN appel.
     """
     msp = drawing.modelspace()
 
     linework: List[LineString] = []
     footprints: List[Tuple[str, BaseGeometry]] = []
 
-    for entity in msp:
+    for entity_idx, entity in enumerate(msp):
+        if deadline is not None:
+            deadline.check(entity_idx)
         try:
             dxf_geometry = convert_entity_to_shapely(entity, tolerance)
         except Exception as e:
@@ -283,6 +293,8 @@ def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
     # Snap coordinates to a fine grid so coincident endpoints become exactly
     # equal — this nodes the linework robustly and closes hairline corner gaps
     # without perturbing edges that faces share (which `snap` would break).
+    if deadline is not None:
+        deadline.check()
     merged_lines = set_precision(unary_union(linework), GRID_SIZE)
     noded = unary_union(merged_lines)
     faces = list(polygonize(noded))
@@ -292,6 +304,8 @@ def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
         logger.info("No closed polygons found")
         return []
 
+    if deadline is not None:
+        deadline.check()
     material = _material_faces(faces)
     if not material:
         logger.info("No material faces found")
@@ -317,7 +331,7 @@ def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
     ]
 
     # Merge parts whose contours are within MERGE_DISTANCE of each other.
-    bodies = _merge_near_polygons(bodies, MERGE_DISTANCE)
+    bodies = _merge_near_polygons(bodies, MERGE_DISTANCE, deadline)
 
     # Attach handles. An entity belongs to the part whose MATERIAL body its
     # "ink" touches: closed contours draw their outline (not a filled disk),
@@ -339,7 +353,13 @@ def build_geometry(drawing: Drawing, tolerance: float) -> List[ClosedPolygon]:
 
     result: List[ClosedPolygon] = []
     assigned = {i: [] for i in range(len(silhouettes))}
-    for handle, geom in footprints:
+    for fp_idx, (handle, geom) in enumerate(footprints):
+        # Poste dominant mesuré sur le corpus réel (lot 2a) : 64,7 s des
+        # 66,7 s du pire fichier serveur, en `body.buffer(probe_tol)` refait
+        # à CHAQUE empreinte (3 772 appels à 17 ms). Cause à corriger au
+        # lot 2d ; ici, elle est seulement bornée.
+        if deadline is not None:
+            deadline.check(fp_idx)
         ink = geom.boundary if geom.geom_type == "Polygon" else geom
         hits = [
             (idx, attachment_hits(body, ink))

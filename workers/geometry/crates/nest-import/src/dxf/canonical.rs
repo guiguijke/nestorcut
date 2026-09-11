@@ -84,6 +84,18 @@ pub fn assign_canonical_handles(entities: &mut [Entity]) {
 /// résolus), scale unitaire, handles canoniques. C'est LA source de vérité
 /// commune à l'import (footprints) et à `canonical_dxf` (réémission).
 pub fn canonical_entities(doc: &Document) -> (Vec<Entity>, Vec<String>) {
+    // Chemin historique : aucune borne (CLI, parité, tests).
+    canonical_entities_bounded(doc, usize::MAX, usize::MAX)
+        .unwrap_or_else(|_| unreachable!("expansion non bornée"))
+}
+
+/// `canonical_entities` avec les bornes du lot 2a (plafond dur d'entités et
+/// profondeur d'INSERT) — voir `budget.rs` et `decompose::Overflow`.
+pub fn canonical_entities_bounded(
+    doc: &Document,
+    ceiling: usize,
+    max_depth: usize,
+) -> Result<(Vec<Entity>, Vec<String>), decompose::Overflow> {
     let mut kept: Vec<Entity> = Vec::new();
     let mut warnings = Vec::new();
     for e in &doc.entities {
@@ -94,7 +106,7 @@ pub fn canonical_entities(doc: &Document) -> (Vec<Entity>, Vec<String>) {
             _ => kept.push(e.clone()),
         }
     }
-    let mut flat = decompose::decompose_to_entities(&kept, &doc.blocks);
+    let mut flat = decompose::decompose_to_entities_bounded(&kept, &doc.blocks, ceiling, max_depth)?;
 
     // Unités : decompose D'ABORD, scale uniforme ensuite (AGENTS #26).
     let (factor, unknown) = units::factor_to_mm(doc.source_insunits);
@@ -110,7 +122,7 @@ pub fn canonical_entities(doc: &Document) -> (Vec<Entity>, Vec<String>) {
         }
     }
     assign_canonical_handles(&mut flat);
-    (flat, warnings)
+    Ok((flat, warnings))
 }
 
 /// Scale uniforme au niveau entité (jumeau de `entity.transform(scale_matrix)`

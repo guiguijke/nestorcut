@@ -125,6 +125,7 @@ const state = reactive({
     projectLocal: false,
     // Clé i18n de la dernière erreur d'import navigateur (affichée en page).
     localImportError: '',
+    localImportErrorParams: {},
     lastParams: '',
     // Set when a demo nesting hits the monthly demo quota — shown on the
     // project page instead of the paywall (demo 402s are reason=demo_quota).
@@ -369,6 +370,7 @@ async function addFiles(files, slug) {
         // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
         // byte ne transite par le serveur.
         state.localImportError = ''
+        state.localImportErrorParams = {}
         try {
             const { importLocalFile } = await import('./localImport')
             for (const file of files) {
@@ -376,6 +378,9 @@ async function addFiles(files, slug) {
             }
         } catch (err) {
             state.localImportError = err?.message || 'localImport.parseError'
+            // Lot 2a : les refus « trop lourd » portent leurs nombres
+            // (entités, budget) — le message les affiche.
+            state.localImportErrorParams = err?.params || {}
         }
         await getProject(API_ROUTES.PROJECT(slug))
         return
@@ -664,6 +669,7 @@ export const filesStore = readonly({
         projectDemo: computed(() => state.projectDemo),
         projectLocal: computed(() => state.projectLocal),
         localImportError: computed(() => state.localImportError),
+        localImportErrorParams: computed(() => state.localImportErrorParams),
         filesCount: computed(() =>
             state.filesStatusDone.reduce((acc, curr) => acc + curr.count, 0)
         ),

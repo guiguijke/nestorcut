@@ -300,3 +300,185 @@ relancés sur les 238 fichiers après chaque lot (comptes avant/après) ;
 vitest, pytest fileprocessing, cargo geometry ; harnais navigateur deux
 configurations (l'import du corpus T-A ne doit pas changer) ; GO par lot ;
 déploiement app + wasm géométrie + worker fileprocessing.
+## 9.5 Rapports par lot
+
+### Lot 2a — la garde « trop d'entités » (implémenteur, 11/09)
+
+Commit : `a17e38bd`. **Non déployé** : le wasm géométrie, l'app et le worker
+fileprocessing ont changé — déploiement après votre GO.
+
+#### 9.5.1 Ce qui est livré
+
+La garde n'est plus un plafond de 999 entités posé **après** le travail.
+Les deux importeurs appliquent la même règle, au même endroit du flux :
+
+| | avant | après |
+|---|---|---|
+| plafond d'entités | 999, comparé après l'import complet | **10 000**, évalué sur le compte que rend l'expansion des INSERT, **avant** l'assemblage |
+| budget de temps | aucun | **20 s par fichier**, contrôlé DANS les boucles chaudes : le travail s'arrête au budget |
+| message | « trop d'entités — essayez Nos serveurs » | le même **avec le nombre** (« … 12 345 entités, 10 000 au maximum »), et un message distinct pour le refus de temps |
+| plafond dur d'expansion | 4 000 (`worker_common`, pentest H-4) | **100 000** = 10 × le plafond fonctionnel, pour que le refus annonce le nombre EXACT |
+
+Le compte du plafond est **celui qui alimente déjà `entity_count` /
+`validEntityCount`** — pas un second comptage : c'est la réserve explicite
+du constat C9 de la synthèse (un comptage parallèle déplacerait le seuil
+sur les fichiers limites).
+
+- Rust : `nest-import::budget` (`Limits`, `Deadline`, `TooHeavy`) et
+  `import_file_limited` / `import_dxf_limited` / `import_svg_limited`. Les
+  fonctions historiques restent **sans borne** (CLI, harnais de parité,
+  goldens) et `Limits::unlimited()` rend une sortie identique octet pour
+  octet (verrou dédié).
+- L'échéance est contrôlée **là où le temps passe, mesuré et non supposé**
+  — profil natif du pire fichier réel : `node_segments` 7,4 s (O(n²) sur
+  30 000 arêtes), `attach_handles` ≈ 8,6 s, tout le reste sous 10 ms.
+  Contrôle échantillonné (une lecture d'horloge toutes 16 itérations des
+  boucles externes) ; horloge `web_time` = `std::time` en natif et
+  `performance.now()` en wasm (AGENTS #14c).
+- Python : `core/import_budget.py` (mêmes noms de causes) et
+  `build_geometry(..., deadline=…)`. Le tag de reroute reste
+  `1k_entity_count` ; le détail chiffré part dans un champ **additif**
+  `importRefusal { reason, entityCount, maxEntities, elapsedMs, timeBudgetMs }`.
+- Navigateur : `geometryClient.IMPORT_MAX_ENTITIES` /
+  `IMPORT_TIME_BUDGET_MS`, op worker `import_file_limited`, et les clés
+  `localImport.tooManyEntities` / `tooManyEntitiesAtLeast` / `tooHeavy` /
+  `blockDepth` (FR+EN), nombres formatés dans la locale (piège #24).
+- Les deux bornes sont réglables sans livrer de code (`MAX_ENTITY_LIMIT`,
+  `IMPORT_TIME_BUDGET_S`) : un seuil de produit doit pouvoir bouger.
+- **Garde de profondeur d'INSERT (32) ajoutée côté Rust — elle manquait.**
+  Un graphe de blocs cyclique faisait récurser l'expansion sans fin : pile
+  saturée, worker géométrie mort, et un plafond de comptage n'y change rien
+  (un cycle d'INSERT n'émet aucune entité). C'est le miroir de
+  `assert_insert_depth` (pentest H-4), avec son verrou.
+
+#### 9.5.2 Les deux coureurs sur les 238 fichiers
+
+**153 fichiers réels** (`specs/import-corpus/`, identifiants neutres) :
+
+| | wasm avant | wasm après | ezdxf avant | ezdxf après |
+|---|---:|---:|---:|---:|
+| lus | 140 | **150** | 103 | 103 |
+| « réparés » | 1 | 1 | 47 | 46 |
+| refusés | **12** | **2** | 3 | 4 |
+| temps total | 281,0 s | 109,1 s | 170,7 s | 184,4 s |
+
+**85 fichiers versionnés** (`.testparts/corpus/`) :
+
+| | wasm avant | wasm après | ezdxf avant | ezdxf après |
+|---|---:|---:|---:|---:|
+| lus | 51 | 51 | 48 | 48 |
+| « réparés » | 19 | 21 | 24 | 24 |
+| refusés | **15** | **13** | 13 | 13 |
+| temps total | 28,8 s | 11,4 s | 6,7 s | 16,1 s |
+
+**Les totaux de temps ne sont pas comparables entre campagnes** (état de la
+machine : les mêmes fichiers passent de 12,0 s à 3,9 s sans changement de
+code). Pour attribuer, un A/B dans le MÊME conteneur, budget actif contre
+budget désactivé, sur les 85 fichiers : **14,8 s contre 15,6 s** — le coût
+du contrôle d'échéance n'est pas mesurable. Ce qui se compare d'une
+campagne à l'autre, ce sont les **statuts**, pas les secondes.
+
+**Géométrie livrée : aucune dérive.** Sur tous les fichiers lus avant ET
+après, des deux côtés, `parts` et `holes` sont identiques (238/238). Le
+harnais de parité golden est à 100 % (seuil 99 %) et le verrou de
+déterminisme natif ≡ wasm à 68/68 + 17/17, tolérance 0.
+
+#### 9.5.3 Verrous du §9.2
+
+| Verrou | Résultat |
+|---|---|
+| **les 11 fichiers réels refusés à tort sont lus** | **11/11**, `status: read`, 1,3 à 12,3 s, de 1 112 à 6 144 entités — mêmes pièces et mêmes trous que le serveur |
+| **aucun fichier du corpus ne dépasse 20 s** | **tenu** : maximum mesuré **20,035 s** côté navigateur et **20,5 s** côté serveur. Le dépassement est le temps d'UN appel non interruptible (35 ms en wasm, 545 ms pour un appel shapely). Avant : 67,6 s et 56,9 s |
+| **le refus est instantané** (défaut C9) | plafond d'entités : refus en **7 ms** natif / **20 ms** wasm sur un fichier de 6 144 entités, contre **4,1 s** payés avant |
+| **le message porte le nombre** | verrou Rust (le message contient le compte et le plafond) + verrous JS sur les quatre clés, rendu FR vérifié |
+| **même règle des deux côtés** | plafond d'entités : **identique** (propriété du fichier). Budget de temps : **pas identique en verdict** sur 3 fichiers sur 238 — voir 9.5.4 |
+| suites | vitest **526** (521 + 5), cargo geometry **106** (99 + 7), pytest fileprocessing **42** (35 + 7), pytest common **48** |
+| parité et déterminisme | golden **100 %** (seuil 99 %), natif ≡ wasm **68/68** et **17/17**, tolérance 0 |
+| **la garde vue par l'utilisateur**, vrai navigateur, vrais fichiers | fichier de **1 841 entités importé** (refusé avant le lot) ; fichier lourd **refusé après 20,2 s** avec le message **« This file is too heavy for in-browser import (787 entities, over 20 s) — try “Our servers”. »** — le nombre est là, la carte fichier n'est pas créée |
+| harnais navigateur, deux configurations | **900/900 placées** aux deux espacements (0,1 et 2), `spacingOk: true`, **0 pose dupliquée**, `verifyStatus: measured` ; calcul **24 s**, mur **40,9** et **41,0 s** (bande déjà mesurée sur ce poste : 36,5-40,8 s ; ce lot ne touche ni le moteur ni le post-pass). Le harnais importe ses deux DXF **par la nouvelle garde** : c'est aussi le verrou d'intégration du chemin |
+
+**Ce que le lot change pour un utilisateur**, en une ligne : dix fichiers
+d'atelier sur onze qui revenaient « trop d'entités » s'importent ; le
+onzième aussi (6 144 entités, 1,8 s) ; et l'onglet ne peut plus geler plus
+de 20 s sur un import.
+
+#### 9.5.4 Un verrou demandé qui ne peut pas tenir, et les chiffres qui le disent
+
+Le §9.2 demande que **le fichier de 6 144 entités soit refusé avec son
+message dans les deux importeurs**. Mesuré :
+
+| | navigateur | serveur |
+|---|---:|---:|
+| entités | 6 144 | 6 144 |
+| temps d'import | **1,8 s** | **20,5 s** (arrêté par le budget) |
+| verdict sous la règle livrée | **lu** | refusé (temps) |
+
+Il est **sous le plafond de 10 000 et sous le budget de 20 s côté
+navigateur** : le refuser demanderait un plafond inférieur à 6 144, donc
+qui refuserait encore 6 des 11 fichiers que le §9.1 veut voir lus. Je l'ai
+donc laissé passer côté navigateur — c'est l'objectif du §9.1 (« plus aucun
+refus “trop d'entités” pour un fichier que le serveur lit ») qui tranche,
+pas mon goût.
+
+**Le fond du problème est que le budget de temps n'est pas une propriété du
+fichier**, mais de l'implémentation qui le lit : à budget égal, les deux
+importeurs rendent des verdicts différents sur **3 fichiers sur 238** :
+
+| fichier (id neutre) | entités | navigateur | serveur |
+|---|---:|---|---|
+| R044 | 787 | **refusé** à 20,0 s (lu avant en 67,6 s) | lu en 8,7 s |
+| R036 | 6 144 | lu en 1,8 s | **refusé** à 20,5 s (refusé avant aussi, par le plafond de 4 000) |
+| R028 | 1 784 | lu en 6,5 s | **refusé** à 20,3 s (lu avant en 56,9 s) |
+
+Pour R044, le renvoi « import serveur possible » du message est donc
+**vérifié** (le serveur le lit en 8,7 s) — la règle « ne jamais orienter
+vers un chemin dont on n'a pas vérifié qu'il réussit » est respectée.
+
+**Un seul fichier réel régresse : R028**, lu par le serveur en 56,9 s avant
+ce lot, désormais garé à 20,3 s. Le navigateur le lit en 6,5 s. Deux
+options chiffrées, à votre arbitrage :
+
+- **(a) garder 20 s des deux côtés** (ce qui est livré) : 3 fichiers sur
+  238 en désaccord, 1 régression serveur, et le lot 2d supprime la cause
+  (voir 9.5.5) — après quoi les trois fichiers passent sous 10 s et le
+  désaccord disparaît de lui-même ;
+- **(b) `IMPORT_TIME_BUDGET_S=60` côté serveur** (une ligne de compose,
+  aucun code) : plus aucun refus de temps côté serveur (le plus lent
+  restant est à 8,7 s hors ces deux fichiers), le navigateur garde 20 s,
+  et le message « essayez Nos serveurs » devient vrai pour les trois.
+
+Je n'ai pas tranché seul parce que (b) rend les deux importeurs
+volontairement asymétriques, ce que le §9.1 interdit en toutes lettres.
+
+#### 9.5.5 Non-faits, et ce que la mesure donne au lot 2d
+
+1. **La cause des 57 s côté serveur est trouvée, et ce n'est pas les
+   splines.** cProfile sur le pire fichier : **64,7 s des 66,7 s** sont
+   passées dans `body.buffer(probe_tol)` — **3 772 appels à 17 ms**, parce
+   que l'attachement des handles rebuffe le corps de la pièce **à chaque
+   empreinte** (`build_geometry.py`, boucle des footprints). Le sortir de
+   la boucle est un calcul identique, fait une fois : c'est le lot 2d, je
+   ne l'ai pas fait ici (hors périmètre du 2a).
+2. **Côté navigateur**, le pire fichier se décompose en `node_segments`
+   7,4 s (O(n²), 30 000 arêtes) et `attach_handles` ≈ 8,6 s en natif —
+   × ~4 en wasm. Même conclusion : c'est la matière du lot 2d, pas de
+   l'échantillonnage de splines seul.
+3. **`canonical_dxf` n'est pas borné en profondeur de blocs.** Il n'est
+   appelé qu'après un import borné (donc jamais sur un graphe cyclique),
+   mais l'API wasm l'expose : à border au lot où l'on touchera ce chemin.
+4. **Aucune capture d'écran du message de refus** : aucun fichier des 238
+   n'atteint 10 000 entités, le témoin est donc synthétique (tests) plus
+   les deux fichiers réels refusés par le temps. Les captures de fiche
+   fichier sont le lot 2c.
+5. **Une erreur de ma part, attrapée par la sonde navigateur et non par les
+   tests** : la page projet lisait les paramètres du message via
+   `filesGetters.localImportErrorParams?.value`, or ce getter est un proxy
+   réactif qui déréférence DÉJÀ les refs — le message s'affichait
+   « ({n} entities, over {seconds} s) », placeholders bruts, alors que les
+   suites étaient vertes (elles verrouillent le composable, pas la page).
+   Corrigé, re-vérifié dans le navigateur. La leçon est celle du lot
+   précédent : un verrou qui ne regarde pas ce que l'utilisateur voit ne
+   verrouille pas le message.
+6. **Le corpus réel reste hors dépôt** ; les identifiants R0xx de ce
+   rapport sont le rang du sha256 du fichier, la table de correspondance
+   ne quitte pas la machine.

@@ -12,6 +12,13 @@ from shapely.geometry import Point
 import time
 
 from core.geometry.build_geometry import build_geometry
+from core.import_budget import (
+    Deadline,
+    ImportTooHeavy,
+    REASON_ENTITIES,
+    max_entity_limit_from_env,
+    time_budget_s_from_env,
+)
 from core.format_detect import detect_format
 from core.svg_to_drawing import svg_bytes_to_drawing
 from core.dwg_convert import dwg_bytes_to_dxf_bytes
@@ -203,7 +210,11 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
  
     start_time = time.time()
     drawing = _getting_drawing(doc)
-    closed_parts = build_geometry(drawing, tolerance)
+    closed_parts = build_geometry(
+        drawing,
+        tolerance,
+        deadline=Deadline(import_time_budget_s, len(drawing.modelspace())),
+    )
     
     logger.info("result", extra={
         "closed_parts": len(closed_parts),
@@ -268,10 +279,30 @@ def _set_valid_entity_count(doc):
     
     return entity_count
 
-max_entity_limit = int(os.environ.get("MAX_ENTITY_LIMIT", '999'))
+# Lot 2a (docs/PLAN-IMPORT-2026-09-09.md §9.2) : plafond d'entités relevé à
+# 10 000 (999 refusait 11 fichiers réels que ce worker lit) et budget de temps
+# de 20 s par fichier, contrôlé PENDANT le travail. Miroirs navigateur :
+# geometryClient.IMPORT_MAX_ENTITIES / IMPORT_TIME_BUDGET_MS.
+max_entity_limit = max_entity_limit_from_env()
+import_time_budget_s = time_budget_s_from_env()
 
 settings_logger = setup_logger('settings_logger')
 settings_logger.info("Max entity limit set", extra={"max_entity_limit": max_entity_limit})
+settings_logger.info("Import time budget set", extra={"import_time_budget_s": import_time_budget_s})
+
+
+def _park_too_heavy(doc, heavy, logger):
+    """Fichier refusé par une borne d'import : le tag de reroute reste
+    INCHANGÉ (`1k_entity_count`, connu de la file et de l'UI) et le détail
+    chiffré part dans un champ ADDITIF (piège #19b)."""
+    logger.warning("Import refused: too heavy", extra=heavy.as_dict())
+    db["user_dxf_files"].update_one(
+        {"_id": doc["_id"]},
+        {"$set": {
+            "worker_tag": "1k_entity_count",
+            "importRefusal": heavy.as_dict(),
+        }}
+    )
 
 def process_file(doc):
     _drawing_cache.clear()
@@ -284,13 +315,22 @@ def process_file(doc):
     entity_count = _set_valid_entity_count(doc)
     
     if entity_count > max_entity_limit:
-        db["user_dxf_files"].update_one(
-            {"_id": doc["_id"]},
-            {"$set": {"worker_tag": "1k_entity_count"}}
+        _park_too_heavy(
+            doc,
+            ImportTooHeavy(
+                REASON_ENTITIES,
+                entity_count=entity_count,
+                max_entities=max_entity_limit,
+            ),
+            logger,
         )
         return False
     
-    _close_polygon_from_dxf(doc, "dxf_polygonizer")
+    try:
+        _close_polygon_from_dxf(doc, "dxf_polygonizer")
+    except ImportTooHeavy as heavy:
+        _park_too_heavy(doc, heavy, logger)
+        return False
     
     _make_svg_file(doc)
     

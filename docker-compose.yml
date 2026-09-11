@@ -182,7 +182,11 @@ services:
       # D-PRV-7 : livraison de la DEK vault par job via l'app (ECDH éphémère).
       NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
       WORKER_TAG: normal
-      MAX_ENTITY_LIMIT: 999
+      # Lot 2a : plafond d'entités relevé à 10 000 (999 refusait 11 fichiers
+      # réels que ce worker lit) + budget de temps par fichier, mêmes valeurs
+      # que le chemin navigateur (geometryClient.IMPORT_*).
+      MAX_ENTITY_LIMIT: 10000
+      IMPORT_TIME_BUDGET_S: 20
     security_opt:
       - no-new-privileges:true
     cap_drop:

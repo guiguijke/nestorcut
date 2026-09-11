@@ -305,10 +305,25 @@ pub fn attach_handles(
     bodies: &[Body],
     probe_tol: f64,
 ) -> Vec<Vec<String>> {
+    attach_handles_until(footprints, bodies, probe_tol, &crate::budget::Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `attach_handles` sous ÉCHÉANCE (lot 2a) : la mesure d'encre est en
+/// O(arêtes d'encre × arêtes du corps) — mesurée comme le SECOND poste du
+/// pire fichier réel (≈ 9 s wasm sur un corps à plusieurs milliers de
+/// sommets). Sans contrôle ici, le budget de 20 s était dépassé de 8 s.
+pub fn attach_handles_until(
+    footprints: &[Footprint],
+    bodies: &[Body],
+    probe_tol: f64,
+    dl: &crate::budget::Deadline,
+) -> Result<Vec<Vec<String>>, crate::budget::Expired> {
     let body_bboxes: Vec<[f64; 4]> = bodies.iter().map(|b| bbox_of(b.outer)).collect();
     let mut assigned: Vec<Vec<String>> = vec![Vec::new(); bodies.len()];
 
-    for fp in footprints {
+    for (fp_idx, fp) in footprints.iter().enumerate() {
+        dl.check_at(fp_idx)?;
         if fp.ink.is_empty() {
             continue;
         }
@@ -396,7 +411,7 @@ pub fn attach_handles(
         // sinon : entité hors de toute pièce — handle non attaché (warning
         // de couverture côté Python, jamais une erreur).
     }
-    assigned
+    Ok(assigned)
 }
 
 #[cfg(test)]

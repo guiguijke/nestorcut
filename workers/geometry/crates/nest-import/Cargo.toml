@@ -12,6 +12,7 @@ crate-type = ["rlib", "cdylib"]
 serde = { workspace = true }
 serde_json = { workspace = true }
 libm = { workspace = true }
+web-time = { workspace = true }
 wasm-bindgen = { workspace = true, optional = true }
 roxmltree = { version = "0.20", optional = true }
 

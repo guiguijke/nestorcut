@@ -313,10 +313,27 @@ fn viewbox_transform(
 /// (2F, 30, …, une LWPOLYLINE = un handle) — les mêmes handles que portent
 /// les LWPOLYLINEs synthétisés de `canonical_dxf`, pour l'export par handle.
 pub fn import_svg(bytes: &[u8], flatten_tol: f64) -> Result<ImportResult, ImportError> {
+    import_svg_limited(bytes, flatten_tol, &crate::budget::Limits::unlimited())
+}
+
+/// `import_svg` sous les bornes du lot 2a (plafond d'entités + budget de
+/// temps) — le chemin navigateur accepte le SVG comme le DXF, la garde ne
+/// peut pas ne valoir que pour l'un des deux.
+pub fn import_svg_limited(
+    bytes: &[u8],
+    flatten_tol: f64,
+    limits: &crate::budget::Limits,
+) -> Result<ImportResult, ImportError> {
+    let dl = crate::budget::Deadline::new(limits.time_budget_ms);
     let (prims, mut warnings, entity_count) = svg_primitives(bytes)?;
-    let (linework, w2, _) = crate::assemble::collect_linework(&prims, flatten_tol);
+    if entity_count > limits.max_entities {
+        return Err(crate::too_many_entities(entity_count, false, limits, &dl));
+    }
+    let (linework, w2, _) = crate::assemble::collect_linework_until(&prims, flatten_tol, &dl)
+        .map_err(|e| crate::out_of_time(entity_count, limits, e))?;
     warnings.extend(w2);
-    let parts = crate::assemble::build_parts(linework, flatten_tol);
+    let parts = crate::assemble::build_parts_until(linework, flatten_tol, &dl)
+        .map_err(|e| crate::out_of_time(entity_count, limits, e))?;
     Ok(ImportResult { parts, source_units: 4, entity_count, warnings })
 }
 

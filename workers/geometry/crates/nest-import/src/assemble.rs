@@ -7,6 +7,7 @@
 //! rings — the whole real-world corpus) take the exact fast path; general
 //! noding/union paths are exercised and measured by the parity harness.
 
+use crate::budget::{Deadline, Expired};
 use crate::dxf::flatten::{flatten_primitive, Primitive};
 use crate::Part;
 use std::collections::HashMap;
@@ -53,6 +54,19 @@ pub fn collect_linework(
     prims: &[Primitive],
     tol: f64,
 ) -> (Linework, Vec<String>, usize) {
+    // Deadline::unlimited() n'expire jamais : le Result est toujours Ok.
+    collect_linework_until(prims, tol, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `collect_linework` sous ÉCHÉANCE (lot 2a) : l'échantillonnage des courbes
+/// (`flatten_primitive`) est le premier poste facturé sur un fichier riche en
+/// splines — l'abandon doit pouvoir tomber ici aussi.
+pub fn collect_linework_until(
+    prims: &[Primitive],
+    tol: f64,
+    dl: &Deadline,
+) -> Result<(Linework, Vec<String>, usize), Expired> {
     let mut lw = Linework {
         rings: Vec::new(),
         segments: Vec::new(),
@@ -61,6 +75,7 @@ pub fn collect_linework(
     let warnings = Vec::new();
     let mut count = 0usize;
     for p in prims {
+        dl.check_at(count)?;
         count += 1;
         let handle = p.handle().to_string();
         let pts = flatten_primitive(p, tol);
@@ -87,7 +102,7 @@ pub fn collect_linework(
             }
         }
     }
-    (lw, warnings, count)
+    Ok((lw, warnings, count))
 }
 
 // ---------------------------------------------------------------- noding
@@ -129,6 +144,15 @@ pub fn point_on_segment(p: Pt, a: Pt, b: Pt) -> bool {
 /// O(n²); noded graph edges are then re-snapped so coincident vertices
 /// merge exactly.
 pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
+    node_segments_until(segments, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `node_segments` sous ÉCHÉANCE (lot 2a). C'est LE poste dominant mesuré
+/// sur le corpus réel : 7,4 s des 16 s natifs du pire fichier (30 000 arêtes,
+/// O(n²)), ~5× cela en wasm. Le contrôle est échantillonné sur la boucle
+/// EXTERNE (`Deadline::STRIDE`), dont le corps est déjà en O(n).
+pub fn node_segments_until(segments: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
     // Intersections canoniques par PAIRE (i<j) : le point croisé est calculé
     // UNE fois et partagé par les deux segments — sinon chaque côté le
     // reconstruit avec sa propre formule (ulp différent) et l'adjacence du
@@ -138,6 +162,7 @@ pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
     let mut pair_pts: std::collections::HashMap<(usize, usize), Pt> =
         std::collections::HashMap::new();
     for i in 0..n {
+        dl.check_at(i)?;
         for j in (i + 1)..n {
             let (a1, a2) = segments[i];
             let (b1, b2) = segments[j];
@@ -148,6 +173,7 @@ pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
     }
     let mut out: Vec<(Pt, Pt)> = Vec::new();
     for (i, &(a1, a2)) in segments.iter().enumerate() {
+        dl.check_at(i)?;
         let mut ts: Vec<(f64, Pt)> = Vec::new();
         for (j, &(b1, b2)) in segments.iter().enumerate() {
             if i == j {
@@ -192,7 +218,7 @@ pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
         }
         out.push((prev, a2));
     }
-    out
+    Ok(out)
 }
 
 // ------------------------------------------------------- polygonization
@@ -200,6 +226,16 @@ pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
 /// Minimal faces of a planar segment set via the leftmost-face rule.
 /// Returns rings (closed cycles of vertices). Deterministic.
 pub fn polygonize(rings: &[Vec<Pt>], segments: &[(Pt, Pt)]) -> Vec<Vec<Pt>> {
+    polygonize_until(rings, segments, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `polygonize` sous ÉCHÉANCE (lot 2a).
+pub fn polygonize_until(
+    rings: &[Vec<Pt>],
+    segments: &[(Pt, Pt)],
+    dl: &Deadline,
+) -> Result<Vec<Vec<Pt>>, Expired> {
     // Build undirected edges from rings (consecutive pairs) + segments.
     let mut edges: Vec<(Pt, Pt)> = Vec::new();
     for ring in rings {
@@ -220,7 +256,8 @@ pub fn polygonize(rings: &[Vec<Pt>], segments: &[(Pt, Pt)]) -> Vec<Vec<Pt>> {
             })
     };
     let mut adj: Vec<Vec<usize>> = Vec::new();
-    for &(a, b) in &edges {
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
         let ia = id_of(a, &mut ids, &mut verts);
         let ib = id_of(b, &mut ids, &mut verts);
         if ia == ib {
@@ -240,6 +277,7 @@ pub fn polygonize(rings: &[Vec<Pt>], segments: &[(Pt, Pt)]) -> Vec<Vec<Pt>> {
     // Sort neighbors by angle around each vertex (CCW from +x axis).
     let mut adj_sorted: Vec<Vec<usize>> = adj.clone();
     for (i, nbrs) in adj_sorted.iter_mut().enumerate() {
+        dl.check_at(i)?;
         let c = verts[i];
         nbrs.sort_by(|&x, &y| {
             let ax = libm::atan2(verts[x][1] - c[1], verts[x][0] - c[0]);
@@ -251,7 +289,8 @@ pub fn polygonize(rings: &[Vec<Pt>], segments: &[(Pt, Pt)]) -> Vec<Vec<Pt>> {
     // Leftmost-face walk on directed edges.
     let mut used: HashMap<(usize, usize), bool> = HashMap::new();
     let mut faces: Vec<Vec<Pt>> = Vec::new();
-    for &(a, b) in &edges {
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
         let ia = ids[&(a[0].to_bits(), a[1].to_bits())];
         let ib = ids[&(b[0].to_bits(), b[1].to_bits())];
         if ia == ib {
@@ -303,7 +342,7 @@ pub fn polygonize(rings: &[Vec<Pt>], segments: &[(Pt, Pt)]) -> Vec<Vec<Pt>> {
             }
         }
     }
-    faces
+    Ok(faces)
 }
 
 // ------------------------------------------------------------- measures
@@ -410,9 +449,10 @@ fn dissolve_boundary(
     depths: &[usize],
     probes: &[Pt],
     material: &[usize],
-) -> Option<Vec<(Pt, Pt)>> {
+    dl: &Deadline,
+) -> Result<Option<Vec<(Pt, Pt)>>, Expired> {
     if material.len() <= 1 {
-        return None;
+        return Ok(None);
     }
     let mut counts: HashMap<((u64, u64), (u64, u64)), (Pt, Pt)> = HashMap::new();
     let mut multi: std::collections::HashSet<((u64, u64), (u64, u64))> = std::collections::HashSet::new();
@@ -429,7 +469,8 @@ fn dissolve_boundary(
             }
         }
     };
-    for &mi in material {
+    for (mi_idx, &mi) in material.iter().enumerate() {
+        dl.check_at(mi_idx)?;
         account(&unique[mi]);
         // Holes of this body: cycles one level deeper contained in it.
         for (j, u) in unique.iter().enumerate() {
@@ -452,11 +493,19 @@ fn dissolve_boundary(
         .collect();
     keyed.sort_by(|(ka, _), (kb, _)| ka.cmp(kb));
     let boundary: Vec<(Pt, Pt)> = keyed.into_iter().map(|(_, ab)| ab).collect();
-    Some(boundary)
+    Ok(Some(boundary))
 }
 
 /// Full assembly: linework → parts. Mirrors build_geometry + to_mongo_dict.
 pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
+    build_parts_until(lw, tol, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `build_parts` sous ÉCHÉANCE (lot 2a) : tout le temps d'import d'un fichier
+/// lourd se passe ici (mesuré sur le corpus réel : 16 s des 16,1 s natifs du
+/// pire fichier, dont 7,4 s de `node_segments`).
+pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Part>, Expired> {
     // 1) Noding at FULL precision over EVERYTHING (ring edges + open
     //    segments) — GEOS's first unary_union nodes the whole linework set
     //    together; snapping comes after (set_precision).
@@ -467,7 +516,7 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
         }
     }
     all_edges.extend_from_slice(&lw.segments);
-    let noded_full = node_segments(&all_edges);
+    let noded_full = node_segments_until(&all_edges, dl)?;
 
     // 2) Snap to the 1e-4 grid (set_precision) then drop degenerate edges.
     let mut edges: Vec<(Pt, Pt)> = noded_full
@@ -479,7 +528,7 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
     // polygonizer below sees a clean edge set either way.
     let _ = &mut edges;
 
-    let mut faces = polygonize(&[], &edges);
+    let mut faces = polygonize_until(&[], &edges, dl)?;
     if std::env::var("NI_DEBUG").is_ok() {
         eprintln!("[dbg] rings={} edges={} faces={}", lw.rings.len(), edges.len(), faces.len());
         for f in &faces {
@@ -516,10 +565,13 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
             unique.push(f.clone());
         }
     }
+    dl.check()?;
     let probes: Vec<Pt> = unique.iter().map(|r| interior_probe(r)).collect();
-    let depths: Vec<usize> = (0..unique.len())
-        .map(|i| unique.iter().filter(|u| ring_contains(u, &[probes[i]])).count())
-        .collect();
+    let mut depths: Vec<usize> = Vec::with_capacity(unique.len());
+    for i in 0..unique.len() {
+        dl.check_at(i)?;
+        depths.push(unique.iter().filter(|u| ring_contains(u, &[probes[i]])).count());
+    }
     let material: Vec<usize> = (0..unique.len()).filter(|&i| depths[i] % 2 == 1).collect();
     if std::env::var("NI_DEBUG").is_ok() {
         eprintln!("[dbg] unique={} depths={:?} material={:?}", unique.len(), depths, material);
@@ -533,7 +585,7 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
     //     merge into one body. The union boundary = edges appearing in
     //     EXACTLY ONE material face; re-walking that boundary yields the
     //     bodies (voids become holes naturally).
-    let boundary = dissolve_boundary(&unique, &depths, &probes, &material);
+    let boundary = dissolve_boundary(&unique, &depths, &probes, &material, dl)?;
 
     // 4) Bodies from the boundary: the union outlines are the NEGATIVE-area
     //    cycles of the boundary walk (a body's exterior outline is the
@@ -542,7 +594,7 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
     //    produces ONE self-touching ring, which reproduces the Python weld
     //    (_merge_near_polygons buffer ±0.1) vertex-for-vertex.
     let (unique, depths, probes, material) = if boundary.is_some() {
-        let mut faces2 = polygonize(&[], &boundary.unwrap());
+        let mut faces2 = polygonize_until(&[], &boundary.unwrap(), dl)?;
         faces2.retain(|f| ring_signed_area(f) < -1e-10);
         let mut uniq2: Vec<Vec<Pt>> = Vec::new();
         let mut seen2: std::collections::HashSet<Vec<(u64, u64)>> = std::collections::HashSet::new();
@@ -554,10 +606,13 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
                 uniq2.push(f.clone());
             }
         }
+        dl.check()?;
         let probes2: Vec<Pt> = uniq2.iter().map(|r| interior_probe(r)).collect();
-        let depths2: Vec<usize> = (0..uniq2.len())
-            .map(|i| uniq2.iter().filter(|u| ring_contains(u, &[probes2[i]])).count())
-            .collect();
+        let mut depths2: Vec<usize> = Vec::with_capacity(uniq2.len());
+        for i in 0..uniq2.len() {
+            dl.check_at(i)?;
+            depths2.push(uniq2.iter().filter(|u| ring_contains(u, &[probes2[i]])).count());
+        }
         let mat2: Vec<usize> = (0..uniq2.len()).filter(|&i| depths2[i] % 2 == 1).collect();
         if std::env::var("NI_DEBUG").is_ok() {
             eprintln!("[dbg] pass2 uniq2={} depths2={:?} mat2={:?}", uniq2.len(), depths2, mat2);
@@ -572,7 +627,8 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
 
     // 5) Parts: body ring + holes = cycles one level deeper contained in it.
     let mut parts: Vec<(Vec<Pt>, Vec<Vec<Pt>>)> = Vec::new();
-    for &mi in &material {
+    for (mi_idx, &mi) in material.iter().enumerate() {
+        dl.check_at(mi_idx)?;
         let mut holes: Vec<Vec<Pt>> = Vec::new();
         for (j, u) in unique.iter().enumerate() {
             if j == mi || depths[j] != depths[mi] + 1 {
@@ -605,7 +661,8 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
         .iter()
         .map(|(outer, holes)| crate::attach::Body { outer, holes })
         .collect();
-    let assigned = crate::attach::attach_handles(&lw.footprints, &bodies, tol.max(1e-6));
+    let assigned =
+        crate::attach::attach_handles_until(&lw.footprints, &bodies, tol.max(1e-6), dl)?;
     let mut out: Vec<Part> = Vec::new();
     for ((outer, holes), handles) in parts.into_iter().zip(assigned) {
         let mut ext = reduce_ring(&outer);
@@ -652,7 +709,7 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
         });
     }
     let _ = tol;
-    out
+    Ok(out)
 }
 
 #[cfg(test)]

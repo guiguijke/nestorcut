@@ -84,6 +84,14 @@ from ezdxf import recover
 
 from dxf_utils import read_dxf_file
 from core.geometry.build_geometry import GRID_SIZE, build_geometry
+# Lot 2a : les bornes d'import de PRODUCTION (plafond d'entités + budget de
+# temps). Le coureur doit refuser ce que le worker refuse, pas autre chose.
+from core.import_budget import (
+    Deadline,
+    ImportTooHeavy,
+    max_entity_limit_from_env,
+    time_budget_s_from_env,
+)
 from core.format_detect import detect_format
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
 from worker_common.geometry.units import insunits_code, insunits_to_mm
@@ -315,12 +323,24 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
             record["unitDetected"] = "mm"
             record["scaleApplied"] = 1.0
 
-        if len(drawing.modelspace()) == 0:
+        entity_count = len(drawing.modelspace())
+        if entity_count == 0:
             # Miroir de `_set_valid_entity_count` : le worker échoue ici,
             # avant toute polygonisation.
             record["ms"] = round(elapsed * 1000)
             record["status"] = "refused"
             record["error"] = "Entity count is 0"
+            return record
+
+        # Miroir du plafond d'entités de production (lot 2a) : posé AVANT la
+        # polygonisation, il porte le nombre.
+        max_entities = max_entity_limit_from_env()
+        if entity_count > max_entities:
+            record["ms"] = round(elapsed * 1000)
+            record["status"] = "refused"
+            record["error"] = (
+                f"gate: MAX_ENTITY_LIMIT ({entity_count} > {max_entities})"
+            )
             return record
 
         # 3. Instrumentation (hors chrono) : contours pendants, entité fautive.
@@ -333,9 +353,22 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
         record["openContours"] = linework["openContours"]
         record["failingEntity"] = linework["failingEntity"]
 
-        # 4. Polygonisation : le compte que le worker écrit dans polygonParts.
+        # 4. Polygonisation : le compte que le worker écrit dans polygonParts,
+        #    SOUS le budget de temps de production (lot 2a) — un dépassement
+        #    est un refus, comme en prod, pas une mesure de 57 secondes.
         started = time.perf_counter()
-        closed_parts = build_geometry(drawing, tolerance)
+        try:
+            closed_parts = build_geometry(
+                drawing,
+                tolerance,
+                deadline=Deadline(time_budget_s_from_env(), entity_count),
+            )
+        except ImportTooHeavy as heavy:
+            elapsed += time.perf_counter() - started
+            record["ms"] = round(elapsed * 1000)
+            record["status"] = "refused"
+            record["error"] = f"gate: IMPORT_TIME_BUDGET_S ({heavy})"
+            return record
         mongo_parts = [part.to_mongo_dict() for part in closed_parts]
         mongo_parts = [part for part in mongo_parts if part is not None]
         elapsed += time.perf_counter() - started

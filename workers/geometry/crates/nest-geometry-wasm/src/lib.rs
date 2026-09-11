@@ -25,6 +25,25 @@ pub fn import_file(bytes: &[u8], tol: f64) -> Result<String, JsError> {
     serde_json::to_string(&r).map_err(|e| JsError::new(&format!("{e}")))
 }
 
+/// import_file_limited(bytes, tol, max_entities, time_budget_ms) -> JSON
+/// `{status:"ok"|"refused", ...}` : l'import du chemin navigateur AVEC ses
+/// bornes (lot 2a — plafond d'entités posé avant la décomposition, budget de
+/// temps qui ARRÊTE le travail). Le refus porte le nombre d'entités.
+#[wasm_bindgen]
+pub fn import_file_limited(
+    bytes: &[u8],
+    tol: f64,
+    max_entities: usize,
+    // u32 et non u64 : wasm-bindgen mappe u64 sur BigInt côté JS
+    // (« Cannot convert 20000 to a BigInt ») — piège #16b, un entier qui
+    // traverse la frontière JS reste un `number` ou une string.
+    time_budget_ms: u32,
+) -> Result<String, JsError> {
+    let limits = nest_import::budget::Limits { max_entities, time_budget_ms: time_budget_ms as u64 };
+    nest_import::guarded_import_json(bytes, tol, &limits)
+        .map_err(|e| JsError::new(&format!("{e}")))
+}
+
 /// import_svg(bytes, tol) -> JSON ImportResult.
 #[wasm_bindgen]
 pub fn import_svg(bytes: &[u8], tol: f64) -> Result<String, JsError> {

@@ -19,8 +19,8 @@ upload → Mongo user_dxf_files (status pending)
        - dwg → dwgread (LibreDWG subprocess) → DXF bytes → read_dxf   # SERVEUR ONLY (mission v2)
        - dxf → read_dxf              # (§1.3)
        → écrit copie dans GridFS validDxf (DXF mm canonique, $INSUNITS=4, $MEASUREMENT=1)
-    2. _set_valid_entity_count       # len(modelspace) ; > MAX_ENTITY_LIMIT (env, défaut 999) → worker_tag="1k_entity_count", return False (retry)
-    3. _close_polygon_from_dxf       # build_geometry (§1.4) → polygonParts (coords+holes+handles+color)
+    2. _set_valid_entity_count       # len(modelspace) ; > MAX_ENTITY_LIMIT (env, défaut 10 000 depuis le lot 2a) → worker_tag="1k_entity_count" + importRefusal{reason,entityCount,…}, return False (retry)
+    3. _close_polygon_from_dxf       # build_geometry (§1.4, budget IMPORT_TIME_BUDGET_S = 20 s contrôlé pendant le travail) → polygonParts (coords+holes+handles+color)
     4. _make_svg_file                # preview SVG (svg_generator.py — rendu simple, app)
 ```
 
@@ -213,6 +213,19 @@ publique. (3) 1e-4 mm = 0,1 µm — un kerf réel fait ~1,5 mm.
    n'y a pas de worker — Phase 4 spécifie une **erreur UI propre (i18n
    EN+FR) proposant le mode serveur** (qui, lui, a le retry), jamais un
    échec silencieux.
+7b. **Bornes d'import (lot 2a, 2026-09-11)** : la garde n'est plus un
+   plafond de 999 entités posé APRÈS le travail. Les deux importeurs
+   appliquent la même règle — plafond **10 000 entités** évalué sur le
+   compte que rend l'expansion des INSERT (le même que `entity_count` /
+   `validEntityCount`, jamais un second comptage) et **budget de 20 s par
+   fichier** contrôlé DANS les boucles chaudes, donc le travail s'arrête au
+   budget. Rust : `nest-import::budget` (`Limits`, `Deadline`,
+   `import_file_limited`, plafond dur d'expansion = 10 × le plafond, borne
+   de profondeur d'INSERT à 32 comme `assert_insert_depth`). Python :
+   `core/import_budget.py` + `build_geometry(..., deadline=…)`. Navigateur :
+   `geometryClient.IMPORT_MAX_ENTITIES` / `IMPORT_TIME_BUDGET_MS` et les
+   clés `localImport.tooManyEntities` / `tooHeavy` / `blockDepth`, qui
+   portent le nombre d'entités.
 
 ## 5. Corpus du harnais de parité (permanent, CI)
 

@@ -13,6 +13,9 @@ const state = vi.hoisted(() => ({
 vi.mock('../composables/geometryClient', () => ({
     geoImportFile: vi.fn(async () => state.imported),
     geoCanonicalDxf: vi.fn(async () => state.canonical),
+    // Lot 2a : bornes de l'import, miroirs des constantes Rust/Python.
+    IMPORT_MAX_ENTITIES: 10000,
+    IMPORT_TIME_BUDGET_MS: 20000,
 }))
 
 vi.mock('../composables/localFilesStore', async (importOriginal) => {
@@ -26,6 +29,7 @@ vi.mock('../composables/localFilesStore', async (importOriginal) => {
 })
 
 import { importLocalFile, localRecordToUiFile } from '../composables/localImport'
+import { translate } from '../utils/i18n'
 
 const squarePart = {
     coordinates: [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
@@ -79,11 +83,94 @@ describe('importLocalFile (J-090)', () => {
         await expect(importLocalFile(fakeFile('broken.dxf'), 'p')).rejects.toThrow('localImport.parseError')
     })
 
-    it('rejects entity floods and empty geometry like the server pipeline does', async () => {
-        state.imported = { parts: [squarePart], source_units: 4, entity_count: 1000, warnings: [] }
-        await expect(importLocalFile(fakeFile('flood.dxf'), 'p')).rejects.toThrow('localImport.tooManyEntities')
+    it('rejects empty geometry like the server pipeline does', async () => {
         state.imported = { parts: [], source_units: 4, entity_count: 3, warnings: [] }
         await expect(importLocalFile(fakeFile('empty.dxf'), 'p')).rejects.toThrow('localImport.noParts')
+    })
+
+    // ---------------------------------------------------------------- lot 2a
+    // La garde « trop lourd » vit dans le wasm : le flux navigateur ne compare
+    // plus un plafond après coup, il TRADUIT le refus. Ce que ces verrous
+    // tiennent, c'est le message — clé et nombres.
+    it('reads a file of 1200 entities (the old 999 cap refused 11 real files)', async () => {
+        state.imported = {
+            parts: [squarePart],
+            source_units: 4,
+            entity_count: 1200,
+            warnings: [],
+        }
+        const record = await importLocalFile(fakeFile('lightburn.dxf'), 'p')
+        expect(record.entityCount).toBe(1200)
+    })
+
+    it('turns an entity refusal into a message carrying the count and the cap', async () => {
+        state.imported = {
+            refusal: {
+                reason: 'entities',
+                entities: 12345,
+                entitiesAtLeast: false,
+                maxEntities: 10000,
+                elapsedMs: 8,
+                timeBudgetMs: 20000,
+            },
+        }
+        const err = await importLocalFile(fakeFile('huge.dxf'), 'p').catch((e) => e)
+        expect(err.message).toBe('localImport.tooManyEntities')
+        expect(err.params).toMatchObject({ n: 12345, max: 10000 })
+        expect(translate(err.message, 'fr', err.params)).toContain('12345 entités')
+        expect(translate(err.message, 'fr', err.params)).toContain('10000 au maximum')
+        expect(state.saved).toHaveLength(0)
+    })
+
+    it('says « plus de N » when the expansion was cut at the hard ceiling', async () => {
+        state.imported = {
+            refusal: {
+                reason: 'entities',
+                entities: 100000,
+                entitiesAtLeast: true,
+                maxEntities: 10000,
+                elapsedMs: 120,
+                timeBudgetMs: 20000,
+            },
+        }
+        const err = await importLocalFile(fakeFile('bomb.dxf'), 'p').catch((e) => e)
+        expect(err.message).toBe('localImport.tooManyEntitiesAtLeast')
+        expect(translate(err.message, 'fr', err.params)).toContain('plus de 100000 entités')
+    })
+
+    it('turns a time refusal into its own message, with the budget in seconds', async () => {
+        state.imported = {
+            refusal: {
+                reason: 'time',
+                entities: 787,
+                entitiesAtLeast: false,
+                maxEntities: 10000,
+                elapsedMs: 20298,
+                timeBudgetMs: 20000,
+            },
+        }
+        const err = await importLocalFile(fakeFile('splines.dxf'), 'p').catch((e) => e)
+        expect(err.message).toBe('localImport.tooHeavy')
+        expect(err.params).toMatchObject({ n: 787, seconds: 20 })
+        const fr = translate(err.message, 'fr', err.params)
+        expect(fr).toContain('787 entités')
+        expect(fr).toContain('plus de 20 s')
+    })
+
+    it('never sends a cyclic-block file to the servers (they refuse it too)', async () => {
+        state.imported = {
+            refusal: {
+                reason: 'blockDepth',
+                entities: 0,
+                entitiesAtLeast: true,
+                maxEntities: 10000,
+                elapsedMs: 3,
+                timeBudgetMs: 20000,
+            },
+        }
+        const err = await importLocalFile(fakeFile('cyclic.dxf'), 'p').catch((e) => e)
+        expect(err.message).toBe('localImport.blockDepth')
+        expect(translate(err.message, 'fr', err.params)).not.toMatch(/serveurs/)
     })
 })
 
