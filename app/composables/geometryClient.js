@@ -50,9 +50,14 @@ const parse = (r) => (r.ok ? JSON.parse(r.result) : r)
 
 /**
  * Bornes d'import du chemin navigateur (lot 2a,
- * `docs/PLAN-IMPORT-2026-09-09.md` §9.2). Miroirs EXACTS des constantes
- * Rust (`nest-import::budget`) et du worker Python (`MAX_ENTITY_LIMIT`,
- * `IMPORT_TIME_BUDGET_S`) — ne pas diverger.
+ * `docs/PLAN-IMPORT-2026-09-09.md` §9.2).
+ *
+ * Le PLAFOND D'ENTITÉS est une propriété du fichier : même valeur partout
+ * (Rust `nest-import::budget`, worker Python `MAX_ENTITY_LIMIT`) — ne pas
+ * diverger. Le BUDGET DE TEMPS est une propriété de l'implémentation qui
+ * lit : **20 s ici** (un onglet attend devant l'utilisateur) contre 60 s
+ * côté worker (`IMPORT_TIME_BUDGET_S`, asynchrone). Arbitrage du 12/09,
+ * §9.5 du plan d'import.
  */
 export const IMPORT_MAX_ENTITIES = 10000
 export const IMPORT_TIME_BUDGET_MS = 20000

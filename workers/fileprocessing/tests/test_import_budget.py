@@ -1,5 +1,7 @@
 """Verrous du lot 2a (`docs/PLAN-IMPORT-2026-09-09.md` §9.2) — les bornes
-d'import du worker : plafond d'entités à 10 000 et budget de temps de 20 s.
+d'import du worker : plafond d'entités à 10 000 et budget de temps de 60 s
+(20 s au navigateur : le budget est une propriété de l'implémentation qui
+lit, pas du fichier — arbitrage du 12/09, §9.5 du plan).
 
 Le verdict d'aucun verrou ne dépend de la vitesse de la machine : le budget
 est prouvé par un budget NUL (toute mesure le dépasse) sur un dessin que le
@@ -44,7 +46,9 @@ def _drawing(n=40):
 class TestLimits:
     def test_defaults_are_the_documented_ones(self):
         assert MAX_ENTITY_LIMIT_DEFAULT == 10000
-        assert TIME_BUDGET_S_DEFAULT == 20.0
+        # 60 s côté worker, 20 s côté navigateur (geometryClient) : le
+        # plafond d'entités est partagé, le budget de temps non.
+        assert TIME_BUDGET_S_DEFAULT == 60.0
         # Le plafond DUR d'expansion vaut 10 × le plafond fonctionnel, comme
         # `Limits::expansion_ceiling` en Rust : le refus peut annoncer le
         # nombre exact d'entités.

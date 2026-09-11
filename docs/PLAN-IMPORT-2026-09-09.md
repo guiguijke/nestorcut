@@ -345,6 +345,18 @@ sur les fichiers limites).
   `blockDepth` (FR+EN), nombres formatés dans la locale (piège #24).
 - Les deux bornes sont réglables sans livrer de code (`MAX_ENTITY_LIMIT`,
   `IMPORT_TIME_BUDGET_S`) : un seuil de produit doit pouvoir bouger.
+- **Valeurs du budget (arbitrage du vérificateur, 12/09) : 20 s au
+  navigateur, 60 s côté worker**, inscrites dans le code
+  (`TIME_BUDGET_S_DEFAULT = 60`) et dans `docker-compose.yml`, pas seulement
+  dans une variable d'environnement. Raison : le plafond d'entités est une
+  propriété du FICHIER, donc partagé ; le budget de temps est une propriété
+  de l'IMPLÉMENTATION qui lit — le même fichier basculait à 20,3 s sur un
+  poste et 20,6 s sur l'autre, un seuil qui suit la charge de la machine
+  n'est pas un seuil de produit. Un onglet fait attendre quelqu'un ; un
+  worker est asynchrone. Conséquence mesurée : **plus aucun refus de temps
+  côté serveur** sur les 238 fichiers (le plus lent hors les deux cas du
+  §9.5.4 est à 8,7 s), et le renvoi « essayez Nos serveurs » du message
+  navigateur redevient vrai pour les trois fichiers en désaccord.
 - **Garde de profondeur d'INSERT (32) ajoutée côté Rust — elle manquait.**
   Un graphe de blocs cyclique faisait récurser l'expansion sans fin : pile
   saturée, worker géométrie mort, et un plafond de comptage n'y change rien
@@ -450,6 +462,22 @@ options chiffrées, à votre arbitrage :
 Je n'ai pas tranché seul parce que (b) rend les deux importeurs
 volontairement asymétriques, ce que le §9.1 interdit en toutes lettres.
 
+**Après l'arbitrage du 12/09 (option (b), 60 s côté worker), mesuré.** Le
+coureur ezdxf rejoué sur les 153 réels rend **103 lus, 48 réparés, 2
+refusés** — les deux pour « 0 entité », défaut préexistant sans rapport avec
+les bornes — et **0 refus de temps**. Conséquences :
+
+- le fichier de **6 144 entités est désormais lu des deux côtés** (20,5 s au
+  serveur, 1,8 s au navigateur) alors qu'il était refusé des deux côtés
+  avant le lot (plafond dur de 4 000 au serveur, plafond 999 au
+  navigateur) ;
+- le fichier à 1 648 splines **retrouve sa lecture** au serveur (56,1 s) :
+  la seule régression du lot est annulée ;
+- le désaccord entre importeurs **tombe de 3 fichiers à 1** : celui de
+  787 entités, refusé au navigateur à 20 s et lu par le serveur en 8,7 s —
+  c'est-à-dire exactement ce que son message promet à l'utilisateur ;
+- **aucune dérive** de pièces ni de trous contre le passage à 20 s.
+
 #### 9.5.5 Non-faits, et ce que la mesure donne au lot 2d
 
 1. **La cause des 57 s côté serveur est trouvée, et ce n'est pas les
@@ -482,3 +510,59 @@ volontairement asymétriques, ce que le §9.1 interdit en toutes lettres.
 6. **Le corpus réel reste hors dépôt** ; les identifiants R0xx de ce
    rapport sont le rang du sha256 du fichier, la table de correspondance
    ne quitte pas la machine.
+
+### Lot 2a — vérification (vérificateur, 11/09, `ae4d8cba`) — GO, avec un arbitrage à appliquer avant le déploiement
+
+Rejoué sur le poste, image fileprocessing reconstruite à HEAD, app locale
+au commit du lot (`ASSERT IMAGES=HEAD: OK`), sorties brutes hors dépôt
+(`~/qa-out/verif-2a/`).
+
+| Verrou | Résultat |
+|---|---|
+| cargo geometry release | 106, 0 échec |
+| vitest | 526 |
+| parité golden | 63 bit-identiques + 2 error-parity + 2 metrics-ok = 100 % (seuil 99 %) |
+| déterminisme natif ≡ wasm | 68/68 et 17/17, tolérance 0 |
+| coureur wasm, 153 réels | 140 → **150 lus** (149 + 1 réparé), 12 → **2 refusés** ; les 11 refusés à tort passent `read` en 1,5 à 11,2 s ; **0 dérive** parts/trous sur les 140 lus des deux côtés ; le seul fichier basculé `read → refused` est celui de 787 entités (67,6 s avant, 20,1 s garé) |
+| coureur ezdxf, 153 réels, 20 s | 103 lus, 46 réparés, **4 refusés** : 2 à « 0 entité » (inchangés), **2 par le temps** : l'arbre de vie (6 144 entités, 20,4 s ; refusé avant par le plafond dur 4 000) et le fichier à 1 648 splines (20,6 s ; **lu avant en 56,9 s** — la régression du §9.5.4 se reproduit sur mon poste) ; 0 dérive sur 148 |
+| harnais navigateur, espacement 2 | 900/900 placées, `spacingOk` vrai, 0 pose dupliquée, `verifyStatus: measured`, calcul 24 s, mur 40,8 s (bande du poste) ; les deux DXF passent par la nouvelle garde |
+| lecture du code | plafond évalué sur le compte de l'expansion des INSERT, avant l'assemblage ; échéance `web_time` échantillonnée (pas 16) dans `node_segments`, `attach_handles` et les boucles Python (`build_geometry`, `_merge_near_polygons`, empreintes) ; `Limits::unlimited()` = chemin de parité inchangé ; garde de profondeur 32 côté Rust ; refus serveur en champ additif `importRefusal`, tag `1k_entity_count` conservé |
+
+**Le verrou « arbre de vie refusé dans les deux importeurs » était faux, et
+c'est le mien** : je l'avais écrit en tenant ce fichier pour lourd alors
+que le navigateur le lit en 1,5 s. L'objectif du §9.1 tranche, le verrou
+est retiré. Le plafond d'entités (propriété du fichier) est identique des
+deux côtés : c'est cela, le « même comportement ».
+
+**Arbitrage du §9.5.4 : option (b), inscrite dans le code.** Un budget de
+temps est une propriété de l'implémentation, donc il se règle par
+implémentation : **navigateur 20 s** (un onglet qui attend), **serveur
+60 s** (un worker asynchrone, personne ne regarde l'horloge). Raisons
+chiffrées : (1) un fichier réel du propriétaire régresse à 20 s, et le
+verdict est à la limite — sur mon poste le fichier à 1 648 splines passe à
+20,6 s, sur celui de l'implémenteur à 20,3 s : un seuil qui bascule avec
+la charge de la machine n'est pas un seuil de produit ; (2) à 60 s, plus
+aucun refus de temps côté serveur sur les 238 fichiers (le plus lent hors
+ces deux-là est à 8,7 s), et le message « essayez Nos serveurs » devient
+vrai pour les trois fichiers en désaccord ; (3) le lot 2d supprime la cause
+(`body.buffer` sorti de la boucle des empreintes) et ramènera les deux
+côtés sous 10 s — 60 s est une marge, pas un objectif. La valeur vit dans
+le **code** (`TIME_BUDGET_S_DEFAULT = 60` dans
+`workers/fileprocessing/core/import_budget.py`) et dans `docker-compose.yml`
+(`IMPORT_TIME_BUDGET_S: 60`), pas dans une seule ligne d'environnement
+qu'un compose oublié ferait retomber à 20.
+
+**Constat pour le lot 2c, hors GO** : un fichier garé par le serveur
+(`worker_tag: 1k_entity_count`) n'est lu par aucun code de `app/` ni de
+`server/` — l'utilisateur ne voit ni la cause ni le nombre, et un refus de
+temps s'affiche comme un refus d'entités. Le champ `importRefusal` est
+prêt ; le lot 2c le porte jusqu'à la fiche fichier avec le message qui
+correspond à `reason`.
+
+**GO déploiement** après le commit d'arbitrage (une valeur, un test, la
+ligne de compose) : app + wasm géométrie + worker fileprocessing dans la
+même fenêtre ; moteur inchangé → pas de benchmarks à régénérer ; le homelab
+n'héberge pas de worker fileprocessing et l'image nesting n'a pas changé de
+code → rien à y faire. Vérification après déploiement : un DXF de plus de
+999 entités s'importe en navigateur sur la prod, et le refus de temps
+affiche le nombre.

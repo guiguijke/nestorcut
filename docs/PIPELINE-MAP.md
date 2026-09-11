@@ -217,12 +217,15 @@ publique. (3) 1e-4 mm = 0,1 µm — un kerf réel fait ~1,5 mm.
    plafond de 999 entités posé APRÈS le travail. Les deux importeurs
    appliquent la même règle — plafond **10 000 entités** évalué sur le
    compte que rend l'expansion des INSERT (le même que `entity_count` /
-   `validEntityCount`, jamais un second comptage) et **budget de 20 s par
+   `validEntityCount`, jamais un second comptage) et un **budget de temps par
    fichier** contrôlé DANS les boucles chaudes, donc le travail s'arrête au
-   budget. Rust : `nest-import::budget` (`Limits`, `Deadline`,
+   budget : **20 s au navigateur, 60 s côté worker** — le plafond est une
+   propriété du fichier, le budget une propriété de l'implémentation qui lit
+   (arbitrage du 12/09, §9.5 du plan d'import). Rust : `nest-import::budget` (`Limits`, `Deadline`,
    `import_file_limited`, plafond dur d'expansion = 10 × le plafond, borne
    de profondeur d'INSERT à 32 comme `assert_insert_depth`). Python :
-   `core/import_budget.py` + `build_geometry(..., deadline=…)`. Navigateur :
+   `core/import_budget.py` (`TIME_BUDGET_S_DEFAULT = 60`, compose
+   `IMPORT_TIME_BUDGET_S: 60`) + `build_geometry(..., deadline=…)`. Navigateur :
    `geometryClient.IMPORT_MAX_ENTITIES` / `IMPORT_TIME_BUDGET_MS` et les
    clés `localImport.tooManyEntities` / `tooHeavy` / `blockDepth`, qui
    portent le nombre d'entités.

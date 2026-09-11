@@ -1,16 +1,23 @@
 """Bornes d'import du worker fileprocessing — miroir Python de
 `nest-import::budget` (lot 2a, `docs/PLAN-IMPORT-2026-09-09.md` §9.2).
 
-Deux gardes, la même règle des deux côtés :
+Deux gardes. Le plafond d'entités est la MÊME règle des deux côtés (c'est
+une propriété du fichier) ; le budget de temps, non :
 
 * **plafond d'entités** : 999 avant ce lot — il refusait côté navigateur
   11 fichiers réels que le serveur lisait (§8 du plan). Relevé à **10 000**,
   posé **avant** la polygonisation, sur `len(modelspace)` de la copie
   canonique — le même nombre que `validEntityCount`, jamais un second
   comptage ;
-* **budget de temps** : **20 s par fichier**, contrôlé PENDANT le travail
-  (boucle d'entités, attachement des handles, fusion) — au-delà, on arrête
-  au lieu de payer l'import en entier puis de le jeter.
+* **budget de temps** : contrôlé PENDANT le travail (boucle d'entités,
+  attachement des handles, fusion) — au-delà, on arrête au lieu de payer
+  l'import en entier puis de le jeter. **60 s ici, 20 s dans le
+  navigateur** : un budget de temps est une propriété de l'IMPLÉMENTATION
+  qui lit, pas du fichier (le même fichier bascule à 20,3 s sur un poste et
+  20,6 s sur un autre — un seuil qui suit la charge de la machine n'est pas
+  un seuil de produit). Un onglet attend devant l'utilisateur ; un worker
+  est asynchrone, personne ne regarde son horloge. Arbitrage du
+  vérificateur, 12/09, §9.5 du plan d'import.
 
 Les deux sont réglables par variables d'environnement
 (`MAX_ENTITY_LIMIT`, `IMPORT_TIME_BUDGET_S`) : une borne de temps est une
@@ -20,7 +27,7 @@ import os
 import time
 
 MAX_ENTITY_LIMIT_DEFAULT = 10000
-TIME_BUDGET_S_DEFAULT = 20.0
+TIME_BUDGET_S_DEFAULT = 60.0
 
 # Cause d'un refus « trop lourd » (mêmes noms que TooHeavyReason en Rust).
 REASON_ENTITIES = "entities"

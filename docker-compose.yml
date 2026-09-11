@@ -183,10 +183,12 @@ services:
       NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
       WORKER_TAG: normal
       # Lot 2a : plafond d'entités relevé à 10 000 (999 refusait 11 fichiers
-      # réels que ce worker lit) + budget de temps par fichier, mêmes valeurs
-      # que le chemin navigateur (geometryClient.IMPORT_*).
+      # réels que ce worker lit) — MÊME valeur que le navigateur, c'est une
+      # propriété du fichier. Le budget de temps, lui, est une propriété de
+      # l'implémentation : 60 s ici (worker asynchrone), 20 s au navigateur
+      # (geometryClient.IMPORT_TIME_BUDGET_MS).
       MAX_ENTITY_LIMIT: 10000
-      IMPORT_TIME_BUDGET_S: 20
+      IMPORT_TIME_BUDGET_S: 60
     security_opt:
       - no-new-privileges:true
     cap_drop:
