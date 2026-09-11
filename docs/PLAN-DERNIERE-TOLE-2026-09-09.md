@@ -1752,3 +1752,36 @@ garde, ce qui est juste.
 wasm dans la même fenêtre, homelab au même digest. Après ce déploiement,
 la **priorité 1 est close** : le hole-fill ne crée plus rien, l'embouchure
 est gardée, et le moteur mesure lui-même ce qu'il livre.
+
+## 23. Déploiement de la garde d'embouchure (implémenteur, 11/09)
+
+**Déployé** : `91844704` (worker, app, wasm, homelab) — procédure longue, le
+moteur a changé. Contenu moteur identique à `67eef237` qui a produit le
+corpus et les benchmarks (`git diff 67eef237..HEAD -- workers/nesting/engine
+public/engine` vide).
+
+| Contrôle | Mesure |
+|---|---|
+| Binaire de l'image publiée, **avant** de semer | porte `mouth_guard` et `raw_holes` — on ne mesure pas une image qui n'aurait pas la garde |
+| **Corpus** sur l'image publiée | **11/11 OK** |
+| **Benchmarks publics régénérés** | **les DIX densités identiques** au run précédent ; seules la version (`67eef23`) et la date changent. La garde ne corrige que les pièces nichées devant une embouchure : le corpus public (une direction, hôtes pré-remplis donc résolus trous fermés) ne produit pas ce cas. T-F à 89/90, dans sa bande d'oscillation (88, 89, 88, 89, 90, 89 sur six passages) |
+| digest worker **prod** | `sha256:b3e1f4a4…` |
+| digest worker **homelab** | `sha256:b3e1f4a4…` — **le même** ; `ASSERT OVERFLOW=HEAD: OK` |
+| moteur prod | `mouth_guard` ×3, `raw_holes` présents dans le binaire |
+| `core/main.py` · `core/nesting_input_builder.py` prod | `bb0c9780…` · `b8700e1e…` = HEAD (les deux constructeurs qui remplissent `raw_holes`) |
+| wasm moteur (conteneur app / dépôt / **servi**) | `1a14ca23…` partout — le nouveau wasm est bien celui que le navigateur reçoit (pas de copie CDN périmée, piège 14i) |
+| `/benchmarks` | affiche **67eef23 / 2026-09-11** |
+| `compute_pool` · pages · file d'attente | 28 · `/`, `/plans`, `/benchmarks` à 200 · 0 job en cours |
+| Journaux | app connectée, démo semée, purge OK ; worker en polling, aucune erreur |
+
+**Ce qui est donc en production** : le moteur rend la paroi de trou que le
+canal capillaire retire, et il mesure lui-même ce qu'il livre — la pièce
+nichée devant une embouchure est dégagée ou retirée, jamais livrée dans la
+paroi. Avec le correctif du hole-fill déployé le matin (`e680537f`), les
+deux défauts de la priorité 1 sont fermés : **plus de recouvrement créé par
+une passe, plus de remboursement pour cette cause, et plus de fenêtre
+d'embouchure**.
+
+**Non-faits** : aucun pour ce déploiement. La priorité 2 (import : garde
+« trop d'entités », unités, messages, temps des splines) attend la consigne
+du propriétaire.
