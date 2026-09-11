@@ -86,6 +86,27 @@ const place = (coords, rotDeg, tx, ty) => {
     const s = Math.sin(r)
     return coords.map(([x, y]) => [c * x - s * y + tx, s * x + c * y + ty])
 }
+/** Écart des AABB : minorant EXACT de la distance des anneaux qu'elles
+ * contiennent. Pré-filtrer avec ça ne peut pas changer un verdict — et sans
+ * lui, 276 poses × distances exactes dépassent le délai de vitest sur un
+ * runner lent (CI rouge le 11/09 : `Test timed out in 5000ms`, vert sur le
+ * poste : un verrou qui dépend de la vitesse de la machine ne verrouille
+ * rien). */
+const bbOf = (ring) => {
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
+    for (const [x, y] of ring) {
+        if (x < x0) x0 = x
+        if (y < y0) y0 = y
+        if (x > x1) x1 = x
+        if (y > y1) y1 = y
+    }
+    return [x0, y0, x1, y1]
+}
+const bbGap = (a, b) => {
+    const dx = Math.max(0, Math.max(b[0] - a[2], a[0] - b[2]))
+    const dy = Math.max(0, Math.max(b[1] - a[3], a[1] - b[3]))
+    return dx === 0 && dy === 0 ? 0 : Math.hypot(dx, dy)
+}
 const measure = (parts, layouts, space) => {
     const byId = new Map(parts.map((p) => [String(p.id), p]))
     const lim = Math.max(0, space - SLACK_MM)
@@ -94,17 +115,23 @@ const measure = (parts, layouts, space) => {
     for (const layout of layouts) {
         const mats = []
         const keys = []
+        const bbs = []
         for (const pi of layout.placed_items) {
             const part = byId.get(String(pi.item_id))
             const t = pi.transformation
+            const outer = place(part.coords, t.rotation, t.translation[0], t.translation[1])
             mats.push({
-                outer: place(part.coords, t.rotation, t.translation[0], t.translation[1]),
+                outer,
                 holes: (part.holes || []).map((h) => place(h, t.rotation, t.translation[0], t.translation[1])),
             })
+            bbs.push(bbOf(outer))
             keys.push([pi.item_id, t.rotation, t.translation[0], t.translation[1]].join('|'))
         }
         for (let i = 0; i < mats.length; i++) {
             for (let j = i + 1; j < mats.length; j++) {
+                // L'un DANS l'autre a un écart de bbox nul : le pré-filtre ne
+                // masque jamais un containment.
+                if (lim > 0 && bbGap(bbs[i], bbs[j]) >= lim) continue
                 if (matDist(mats[i], mats[j]) < lim) {
                     under++
                     if (keys[i] === keys[j]) duplicates++
@@ -139,14 +166,14 @@ describe('applyHoleFill — espacement tenu sur la tôle (§17.3)', () => {
         applyHoleFill(parts, layouts, space, diag)
         const after = measure(parts, layouts, space)
         expect(after, `post-pass=${JSON.stringify(diag)}`).toEqual({ under: 0, duplicates: 0 })
-    })
+    }, 30000)
 
     it('cas réel du 10/09 : même compte de relocalisations que le Python', () => {
         const { parts, layouts, space, expected } = loadFixture()
         // L'ancienne version en acceptait 13, toutes illégales (sa distance
         // sommet→segment rendait 4,2477 mm sur une paire mesurée à 0,0).
         expect(applyHoleFill(parts, layouts, space)).toBe(expected.relocalisations)
-    })
+    }, 30000)
 
     it('chemin multi-relocalisations : les poses de la même passe se voient', () => {
         const hole = [[-30, -30], [30, -30], [30, 30], [-30, 30], [-30, -30]]
