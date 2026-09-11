@@ -1610,3 +1610,31 @@ fixture hôte + trou circulaire + fillers rectangulaires à space 2,
 20 seeds, `min_pair_distance` ≥ 1,99 contre l'anneau brut ; déterminisme
 natif ≡ wasm ; parité Python/JS inchangée (le post-pass ne bouge pas).
 Verrou produit : démo 8 × 3 directions, 0 occurrence sous 1,99 sur 24.
+
+## 20. Déploiement du correctif du hole-fill (implémenteur, 11/09)
+
+**Déployé** : `e680537f` (app, worker, homelab). Le moteur n'a pas changé —
+`git diff e51e294c..HEAD -- workers/nesting/engine public/engine` est vide,
+donc **aucun benchmark public à régénérer** (AGENTS §6, vérifié et non
+supposé).
+
+| Contrôle (lecture seule) | Mesure |
+|---|---|
+| Corpus sur l'image **publiée** `e680537f` | **11/11 OK** (T-F partiel attendu, T-J refus attendu) |
+| `core/holefill.py` dans l'image publiée, avant de semer | `6a5e93f3…` = HEAD — le miroir corrigé est bien celui qui a tourné |
+| `core/holefill.py` du worker **prod** | `6a5e93f3…` = HEAD |
+| digest worker **prod** | `sha256:68552630…` |
+| digest worker **homelab** | `sha256:68552630…` — **le même** ; `ASSERT OVERFLOW=HEAD: OK` |
+| wasm moteur (conteneur app / dépôt / servi) | `cb87f45a…` partout — inchangé, le moteur n'était pas concerné |
+| `compute_pool` | total **28** |
+| Pages | `/`, `/plans`, `/benchmarks` → 200 |
+| `app-ci` | **vert** sur `main` (le verrou du cas réel ne dépend plus de la vitesse du runner) |
+
+Ce qui est donc corrigé en production : le hole-fill du navigateur ne peut
+plus livrer de recouvrement ni de pose dupliquée, et un job ne peut plus
+être remboursé pour cette cause (mesuré : 24 exécutions de la démo sans un
+seul rejet, contre une fois sur douze avant).
+
+**Reste ouvert** : l'écart d'embouchure du §19.2, confirmé par la mesure et
+non corrigé — il demande une garde dans le moteur (§19.3), donc un
+déploiement moteur avec régénération des benchmarks.
