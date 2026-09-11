@@ -1368,3 +1368,180 @@ Démo navigateur 8 × 3 directions : `smallestGapMm ≥ space − 0,01` sur
 rapportées avant / après ; L2 déterminisme ; cargo, vitest, pytest.
 Rapport en §18, GO, déploiement complet (moteur si 17.3 touche le
 moteur : benchmarks, homelab).
+
+## 18. Rapport « espacement tenu sur toutes les tôles » (implémenteur, 11/09)
+
+Commits : `27f9a217` (le correctif et ses verrous), `87af9187` (validation
+indexée + mesure du temps de la passe), `d0f9e4e` (docs du vérificateur).
+**Non déployé.** Images reconstruites, `ASSERT IMAGES=HEAD: OK`.
+
+**Deux défauts distincts sous un même symptôme.** L'un est trouvé, corrigé
+et verrouillé ; l'autre est un **verdict (c)** que je documente sans y
+toucher, parce que les trois causes candidates sont infirmées par la mesure.
+
+### 18.1 Étape 1 — le verdict, et ce qu'il a coûté de le mesurer
+
+L'événement est rare : **2 sur 12** exécutions au §16.3, puis **0 sur 47**
+le lendemain. Attendre une occurrence coûte une heure de banc, et ne dit
+toujours pas quelle passe a bougé quoi. J'ai donc élargi l'instrumentation
+de l'étape 1 (toujours de la mesure, aucun correctif) :
+
+- l'état MOTEUR des layouts est conservé sous `QA_DUMP_PRE_POSTPASS`, le
+  drapeau voyage **explicitement** (option `qa`) et non par le payload —
+  le seed canonique se calcule sur le contenu du payload, y glisser un
+  champ de QA changerait la mesure elle-même ;
+- le cliché est pris **avant la première mutation** : les passes mutent les
+  layouts en place, un cliché tardif comparerait l'état final à lui-même ;
+- les **deux états sont écrits à chaque exécution**, pas seulement quand le
+  badge tombe : la distribution avant/après sur douze exécutions vaut mieux
+  qu'une occurrence par heure ;
+- le cas « **toutes les alternatives écartées** » (job remboursé) ne
+  laissait ni record ni artefact — donc aucune trace du pire cas. Ses
+  états de poses sont maintenant conservés et relayés au harnais ;
+- `scripts/qa-replay-postpass.mjs` rejoue les passes **une par une** sur un
+  état figé, et chaque étape est mesurée par `measure_svg_gaps.py`
+  (shapely, anneaux bruts) — la mesure ne se fait pas dans le langage qui
+  a produit le défaut.
+
+Une correction de ma part dans l'outil : j'avais converti la rotation des
+poses en degrés alors qu'elle **est** déjà en degrés. Erreur de facteur 57
+qui aurait rendu toute la mesure absurde sans le dire ; le commentaire du
+code la fixe désormais.
+
+**Verdict, sur deux occurrences capturées :**
+
+| Occurrence | Avant post-pass | Après post-pass | Verdict |
+|---|---|---|---|
+| rejet total du 10/09 (`balanced`) | **2,0001 mm**, 0 paire sous le seuil | **0,0 mm**, **27 paires**, **9 doublons** | **(b) une passe** |
+| 1,8867 mm du 11/09 (`bottom`) | **1,8867 mm** | 1,8867 mm | **(a) puis (c)** — voir 18.4 |
+
+Le rejeu passe par passe nomme la passe du cas (b) : `applyHoleFill`
+(13 relocalisations) ; `fillResidualBands` déplace 0 pièce et le second
+hole-fill 0 — ils ne touchent à rien.
+
+### 18.2 La divergence JS ↔ Python, à la ligne
+
+Sur la paire fautive de ce rejet — un hôte de 420 × 300 et une pièce de
+60 × 70 **posée dedans** :
+
+| Mesure de la même paire | Résultat |
+|---|---|
+| `localBridge._polyPolyDist`, la fonction qui validait le hole-fill | **4,2477 mm** |
+| `shapely.distance`, ce que le Python et la vérification aval utilisent | **0,0 mm** |
+
+`_polyPolyDist` était une distance **sommet→segment** dans les deux sens :
+elle ne teste ni le croisement d'arêtes, ni le containment. Une pièce
+posée *dans* une autre lui rend la distance de ses sommets au bord de
+l'autre. C'est le **piège #55 du dépôt**, corrigé en septembre dans
+`residualClient` et **jamais dans `localBridge`** — là où le hole-fill
+valide. Rejoué sur la MÊME entrée : l'ancien Python relocalisait **0**
+pièce, l'ancien JS **13**, toutes illégales.
+
+### 18.3 Correctif, miroir exact des deux langues
+
+1. **Distance exacte** (JS) : arête↔arête, 0 au croisement, containment
+   tranché sur un **sommet** (frontières disjointes ⇒ la frontière de A est
+   entièrement dedans ou dehors), et distance de **MATIÈRE** — trous
+   soustraits. Ce dernier point n'est pas un détail : ma première version
+   validait sur les anneaux extérieurs et faisait tomber deux verrous du
+   dépôt à 0 relocalisation, parce qu'un filler niché dans un trou est
+   **légal** (piège #4).
+2. **Portée TÔLE** et non trou : chaque pose est validée contre tous les
+   occupants de la tôle, **y compris les pièces déplacées par la même
+   passe** — c'est ainsi que deux pièces envoyées au même endroit se
+   voient. Seuil `space − 0,01`, celui de `verify_layout` : la passe et la
+   vérification disent désormais la même chose du même layout, et le repli
+   à `space − 2 × SIMPLIFY` (1,90 pour 2,0 demandés) disparaît.
+3. **Ceinture par tôle** : cliché avant la première mutation (piège #58),
+   mesure exacte après la passe, toute paire sous le seuil ou pose
+   dupliquée **annule la passe sur cette tôle** (`postPass.holeFillRollback`).
+   Le layout moteur conforme est livré plutôt qu'un job remboursé.
+4. **Python aligné** sur la portée et la ceinture (sa distance était déjà
+   exacte) : les deux langues appliquent la même règle, sinon la prochaine
+   divergence est déjà écrite.
+
+Deux optimisations, honnêtement présentées : index spatial des occupants et
+plafond avec élagage par bbox d'arête sur la distance. Elles rendent la
+validation exacte insensible à la densité — mais elles ne visaient pas la
+bonne cible (voir 18.5), la passe pesant 42 ms.
+
+### 18.4 Le cas résiduel : verdict (c), trois hypothèses infirmées
+
+Une occurrence sur les 24 exécutions de la démo (8 × 3 directions) reste à
+**1,8867 mm** pour 2,0 promis. La paire : un hôte de 420 × 300 et une pièce
+de 90 × 160 **nichée dans son trou**, à 1,8867 mm de la paroi.
+
+| Hypothèse | Mesure | Verdict |
+|---|---|---|
+| Un post-pass le crée | 1,8867 **avant** et après | infirmée |
+| La simplification des anneaux (la cause prescrite du cas (a)) | coût mesuré sur cette paire : **0,0000 mm** — 5 sommets restent 5, les 40 du trou restent 40 | **infirmée** |
+| Le moteur sous-livre dans une cavité courbe | natif SPP sur la même géométrie : **2,0002** pour 2,0 demandés, **2,1012** pour 2,1 ; natif BPP : **2,0000 à 2,0004** à trois échelles (4+8, 10+20, 20+40) | **infirmée** |
+
+**Conséquence directe : la règle du cas (a) ne s'applique pas.** Demander
+`space + 2 × NEST_SIMPLIFY_MM` coûterait de la densité sur tout le corpus
+**sans corriger cette cause**, puisque la simplification n'y est pour rien
+— et le déficit mesuré (0,113 mm) dépasse de toute façon les 0,1 mm que la
+règle offre. Je ne pose donc ni cette règle, ni une marge de mon crû.
+
+**Ce qui reste pour le nommer, et qui est en place** : mon cliché « avant
+post-pass » est pris dans `buildAlternativeArtifacts`, donc **déjà après**
+la fusion du pool et l'ajout de l'alternative grille. La **sortie brute du
+moteur wasm** (`window.__lastSolveResult`) entre maintenant dans le dump :
+la prochaine occurrence tranchera entre le moteur wasm et ce qui vient
+après lui, sans nouvelle campagne.
+
+**Ce que ça coûte en attendant** : sur un job multi-tôles du navigateur,
+une paire de la tôle dense peut sortir ~0,11 mm sous la promesse, sans
+recouvrement. La vérification l'affiche avec son chiffre. Fréquence
+mesurée : **1 sur 24** (contre 2 sur 12 avant ce lot, mais les deux
+défauts étaient alors mélangés).
+
+### 18.5 Le temps : verrou tenu, et une conclusion que j'ai tirée trop vite
+
+J'ai d'abord rapporté une régression de **+6 à +11 s** sur le harnais et
+proposé de l'optimiser. Deux mesures la démentent :
+
+| Mesure | Résultat |
+|---|---|
+| `postPass.holeFillMs` (nouveau) | la passe corrigée coûte **40 à 46 ms** sur 900 pièces |
+| A/B **sur la même machine**, image publiée d'avant le correctif contre l'actuelle | **37,8 / 36,5 s** avant · **37,7 / 36,5 s** après |
+
+Les secondes viennent de l'état de la machine (des dizaines de builds
+depuis la mesure au repos de la veille), pas du code. **Le verrou « ≤
+référence + 1 s » est tenu**, référence mesurée dans le même état. La
+bonne séquence était l'attribution d'abord, l'optimisation ensuite — je
+l'ai prise dans l'autre sens.
+
+### 18.6 Verrous du §17.4
+
+| Verrou | Résultat |
+|---|---|
+| **Démo 8 × 3 directions** | **23 exécutions sur 24 à 2 mm** ; **0 rejet total**, **0 pose dupliquée**, **0 annulation de ceinture** (contre 1 rejet total sur 12 avant le lot). La 24ᵉ est le cas du 18.4 |
+| **Harnais** espacement 0,1 ×3 | 900/900 · **36,5 / 36,5 / 36,6 s** · `spacingOk: true`, gap 0,1 · doublons 0 · `holeFillMs` 42-46 |
+| **Harnais** espacement 2 ×3 | 900/900 · **39,5 / 40,8 / 36,6 s** · `spacingOk: true`, gap 2 · doublons 0 |
+| **Corpus** 11 cas | **11/11 OK** ; densités **identiques sur neuf cas sur dix** ; T-F à −1,0 point, le cas qui oscille d'une pièce selon le tirage (88, 89, 88, 89 sur quatre passages, dont deux avant ce lot) |
+| **Banc serveur L3** (chemin Python) | **tenu** — `kept=spp` ×3, badges verts, exemption du plancher matière imprimée |
+| Parité JS ≡ Python sur le cas réel | **tenue** : même compte de relocalisations que la référence Python (0), 0 paire sous le seuil, 0 doublon, fixture partagée par les deux suites |
+| Chemin multi-relocalisations | verrouillé dans les deux langues |
+| Distance elle-même | 4 micro-verrous (polygone contenu → 0, arêtes croisées en leur milieu → 0, pièce nichée mesurée contre l'anneau du trou, écart exact) — mesurés par une implémentation **indépendante** dans le test |
+| vitest / pytest nesting | **521** / **220** + 2 skipped |
+
+### 18.7 Non-faits et aveux
+
+1. **L'objectif du §17.1 n'est pas atteint** : il exige 0 occurrence sur 24
+   exécutions ; il en reste **une**, de cause non établie (18.4). Le défaut
+   qui livrait des recouvrements réels et des remboursements, lui, est
+   fermé.
+2. **Cause du résiduel** : non établie, trois hypothèses infirmées,
+   instrumentation posée pour la prochaine occurrence. Aucun seuil ni
+   marge décidé de mon côté — c'est votre arbitrage.
+3. **Deux erreurs de ma part dans ce lot**, attrapées par les verrous et
+   non par moi : le plafond passé à la distance sans être déclaré dans la
+   signature (`ReferenceError` sur le chemin des pièces nichées, 4 verrous
+   rouges) ; et un premier `git add` qui a ratissé neuf fichiers non
+   sollicités traînant en non-suivis (AGENTS §7), repéré avant tout push et
+   commit refait avec les onze fichiers du lot.
+4. **`L4` du §17.4 exige « temps ≤ référence + 1 s »** : tenu en A/B sur la
+   même machine, mais la référence absolue au repos (30,4 s la veille)
+   n'est pas reproductible dans l'état actuel du poste — à rejouer au repos
+   si vous voulez le chiffre absolu.

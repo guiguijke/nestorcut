@@ -1,0 +1,98 @@
+{
+ "lot": "espacement tenu sur toutes les tôles (§17/§18)",
+ "defaut1_holefill": {
+  "paire": "hôte 420 × 300 et pièce 60 × 70 posée dedans",
+  "distance_mesuree_par_le_holefill_js": 4.2477,
+  "distance_shapely": 0.0,
+  "rejeu_passe_par_passe": [
+   {
+    "etape": "sortie moteur",
+    "ecartMin": 2.0001,
+    "pairesSousSeuil": 0
+   },
+   {
+    "etape": "applyHoleFill (13 relocalisations)",
+    "ecartMin": 0.0,
+    "pairesSousSeuil": 27,
+    "doublons": 9
+   },
+   {
+    "etape": "fillResidualBands (0 déplacement)",
+    "ecartMin": 0.0,
+    "pairesSousSeuil": 27
+   },
+   {
+    "etape": "applyHoleFill #2 (0 relocalisation)",
+    "ecartMin": 0.0,
+    "pairesSousSeuil": 27
+   }
+  ],
+  "apres_correctif": {
+   "relocalisations": 0,
+   "ecartMin": 2.0001,
+   "pairesSousSeuil": 0
+  },
+  "ancien_python_meme_entree": {
+   "relocalisations": 0
+  }
+ },
+ "defaut2_residuel": {
+  "ecart": 1.8867,
+  "seuil": 1.99,
+  "frequence": "1 sur 24 exécutions de la démo",
+  "paire": "hôte 420 × 300 et pièce 90 × 160 nichée dans son trou",
+  "hypotheses_infirmees": {
+   "post_pass": "identique avant et après (1,8867)",
+   "simplification": "coût mesuré 0,0000 mm sur cette paire",
+   "moteur_natif": {
+    "spp_2.0": 2.0002,
+    "spp_2.1": 2.1012,
+    "bpp_4+8": 2.0004,
+    "bpp_10+20": 2.0002,
+    "bpp_20+40": 2.0
+   }
+  },
+  "verdict": "(c) cause non établie — instrumentation en place (sortie brute du moteur wasm)"
+ },
+ "temps": {
+  "holeFillMs": [
+   40,
+   42,
+   43,
+   46
+  ],
+  "ab_meme_machine": {
+   "avant_correctif": [
+    37.8,
+    36.5
+   ],
+   "apres_correctif": [
+    37.7,
+    36.5
+   ]
+  },
+  "harnais_0.1": [
+   36.5,
+   36.5,
+   36.6
+  ],
+  "harnais_2": [
+   39.5,
+   40.8,
+   36.6
+  ]
+ },
+ "corpus": {
+  "resultat": "11/11 OK",
+  "densites_identiques": 9,
+  "T-F": {
+   "avant": 89.0,
+   "apres": 88.0,
+   "note": "oscille d'une pièce selon le tirage (88, 89, 88, 89)"
+  }
+ },
+ "suites": {
+  "vitest": 521,
+  "pytest_nesting": "220 + 2 skipped"
+ }
+}
