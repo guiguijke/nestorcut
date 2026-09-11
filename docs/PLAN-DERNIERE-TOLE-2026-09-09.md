@@ -1724,3 +1724,31 @@ bretelles, c'est une ligne à ajouter, dites-le.
    garde). La garde est prouvée armée et prouvée correcte sur la géométrie
    réelle ; ce que la campagne montre, c'est l'absence de régression.
 4. **Déploiement** : procédure longue (moteur changé), en attente du GO.
+
+## 22. Vérification de la garde d'embouchure (vérificateur, 11/09, `67eef237`) — GO déploiement, procédure longue
+
+Rejoué sur le poste, images app et worker reconstruites à HEAD
+(`ASSERT IMAGES=HEAD: OK`) :
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 93 + 1 ignoré dans la bibliothèque (les 4 verrous de garde compris) |
+| L2 `determinism_lock.py` | natif ≡ wasm, `a1bd8810…` inchangé (fixture sans canal : la garde y est inerte, c'est attendu) |
+| L3 `seed_demo_dirs.py BENCH_ASSERT=1` ×1 | tenu ; `kept=spp` ×3, ancrage 2,0, badges verts |
+| L4 harnais 0,1 ×1 au repos | 900/900, 15 s, `spacingOk` vrai, `duplicatePoses` 0, long task après solve 0 ms |
+| Lecture de `mouth_guard.rs` | détection de la pièce nichée par sommet dans l'anneau brut, poussée à l'opposé du point le plus proche, acceptation seulement si la pièce reste dans le trou à ≥ `space − 0,01` de l'anneau brut ET à ≥ `space − 0,01` de tous les voisins (matière, trous soustraits), sinon retrait ; garde inerte sans `raw_holes` |
+
+**Arbitrages** : la validation CDE de la translation n'est pas exigée — la
+distance exacte à tous les voisins est l'oracle validé contre shapely, la
+carte de collision ne l'est pas ; la fixture « 20 graines du solveur »
+est remplacée par les deux verrous déterministes (cas réel + fenêtre
+[1,70 ; 1,99) sur 20 poses) plus la démo 8 × 3 avec le solveur dans la
+boucle, le témoin négatif ayant prouvé que la version « graines » ne
+mesurait rien ; les hôtes pré-remplis (résolus trous fermés) restent hors
+garde, ce qui est juste.
+
+**GO déploiement** (§12.4, procédure longue : moteur changé) : corpus
+11/11 sur l'image publiée, benchmarks publics régénérés, worker + app +
+wasm dans la même fenêtre, homelab au même digest. Après ce déploiement,
+la **priorité 1 est close** : le hole-fill ne crée plus rien, l'embouchure
+est gardée, et le moteur mesure lui-même ce qu'il livre.
