@@ -225,3 +225,78 @@ nom de fichier ni de client dans `docs/`), relancer les deux coureurs
 depuis `specs/import-corpus/`, et stratifier la synthèse « réels » sur
 ces 153 au lieu de 4. Les cinq constats ci-dessus deviennent les
 verrous chiffrés des priorités 2 et 3.
+
+## 9. Priorité 2 — import : garde, unités, messages, temps (consigne fermée, prête à envoyer)
+
+Décision propriétaire du 10/09 : les réparations d'import sont importantes ;
+chercher d'abord la solution existante. Cette priorité couvre ce qui se
+corrige **sans couture** ; la couture des contours est la priorité 3 (§10,
+à écrire après l'inventaire GitHub). Base de mesure : les **153 DXF réels**
+de `specs/import-corpus/` (§8) plus les 85 du corpus versionné.
+
+### 9.1 Objectif
+
+> Sur les 153 fichiers réels : plus aucun refus « trop d'entités » pour
+> un fichier que le serveur lit ; aucune unité supposée en silence ;
+> aucune perte de matière sans message ; aucun import de plus de 10 s pour
+> une pièce. Même comportement dans les deux importeurs.
+
+### 9.2 Périmètre fermé (quatre lots, un commit chacun)
+
+**Lot 2a — la garde « trop d'entités »** (`app/composables/geometryClient.js`
+et le worker géométrie wasm, miroir Python dans
+`workers/fileprocessing/core`). Aujourd'hui : plafond 999 entités, posé
+**après** le travail. Règle : la garde devient un **budget de temps**
+(plafond 20 s par fichier, mesuré) et un plafond d'entités relevé à
+**10 000**, posés **avant** la décomposition ; au-delà, message clair
+« fichier trop lourd pour l'import navigateur (N entités) : import serveur
+possible » avec le nombre. Verrou : les 11 fichiers réels aujourd'hui
+refusés à tort sont lus (`status: read`), l'arbre de vie (6 144 entités)
+est refusé avec son message dans les deux importeurs, et aucun fichier du
+corpus ne dépasse 20 s.
+
+**Lot 2b — unités** (`workers/fileprocessing/dxf_utils.py` `INSUNITS_TO_MM`
+et son miroir wasm `nest-import`). Règle : table complète des codes
+`$INSUNITS` (0 à 20) ; `$INSUNITS` **écrit en flottant** accepté ; code
+absent ou 0 → « unité non déclarée, millimètres supposés » de niveau
+**attention** ; codes 3, 7, 10-20 → conversion exacte au facteur du code,
+jamais un repli silencieux sur le millimètre ; en pouces (code 1) ×25,4.
+Verrou : les 8 fichiers réels sans unité portent l'avertissement ; c59
+(kilomètres) est converti avec le bon facteur ou refusé avec message,
+jamais lu à ×1 ; nos exports CAM c08-c11 (flottant) gardent leur unité ;
+parité wasm ≡ ezdxf sur `unitDetected` et `scaleApplied` pour les 238
+fichiers.
+
+**Lot 2c — messages de perte** (spécification `rapport-reparation.md`,
+FR/EN, clés i18n listées là). Règle : toute matière écartée (entité non
+supportée, contour pendant non recousu, pièce vide) produit un constat de
+niveau **attention** visible sur la fiche fichier (`FileDone.vue`), avec
+le compte ; l'avertissement wasm qui meurt aujourd'hui entre IndexedDB et
+la fiche est **porté** jusqu'à l'affichage. Un fichier sans constat
+n'affiche rien. Verrou : les 33 fichiers réels à segments pendants et les
+7 à écart de comptage affichent un constat chiffré ; capture de la fiche
+pour trois d'entre eux (identifiants neutres, jamais les noms).
+
+**Lot 2d — temps des splines** (échantillonnage dans `nest-import` et
+`dxf_utils`). Mesurer d'abord : profil des trois fichiers à 68, 33 et
+19 s (où passe le temps : échantillonnage, décomposition, polygonisation)
+; règle de correctif : échantillonnage adaptatif par tolérance de flèche
+(`flattening` existant), plafond de sommets par spline, sans changer la
+géométrie livrée au-delà de la tolérance actuelle. Verrou : ces trois
+fichiers sous 10 s dans les deux importeurs, `handles_canonical` et le
+sweep corpus 41/41 inchangés, déterminisme géométrie
+(`workers/geometry/parity`) vert.
+
+### 9.3 Invariants
+
+Handles canoniques (piège #33b), seed canonique du flux navigateur
+inchangé pour les fichiers déjà lus correctement, parité
+`workers/geometry/parity` verte, aucun nom de fichier réel dans `docs/`.
+
+### 9.4 Ordre et verrous globaux
+
+2a → 2b → 2c → 2d, un rapport par lot en §9.5 ; les deux coureurs
+relancés sur les 238 fichiers après chaque lot (comptes avant/après) ;
+vitest, pytest fileprocessing, cargo geometry ; harnais navigateur deux
+configurations (l'import du corpus T-A ne doit pas changer) ; GO par lot ;
+déploiement app + wasm géométrie + worker fileprocessing.
