@@ -607,6 +607,10 @@ def _nesting_process_impl(doc):
     )
 
     total_requested_count = 0
+    # §19.3 : anneaux de trou BRUTS des items dont les trous sont ouverts
+    # par un canal — rempli juste en dessous, au même endroit que
+    # l'ouverture.
+    raw_holes_by_id = {}
     # A4 : compte demandé PAR item_id (la garde anti-perte par total seul
     # laissait passer doublon + perte compensée).
     requested_by_id = {}
@@ -632,6 +636,14 @@ def _nesting_process_impl(doc):
             shape_coords = open_holes_with_channels(
                 shape_coords, item["holes"], channel_width
             )
+            # §19.3 : l'anneau d'ORIGINE reste de la matière à la découpe,
+            # alors que le polygone ouvert n'a plus de paroi sur la largeur
+            # du canal. On le transmet au moteur, qui garde l'embouchure à
+            # l'export (clé = id de l'instance résolue, re-mappée plus bas
+            # si la réduction J-085 s'applique).
+            raw_holes_by_id[item.get("id")] = [
+                [(float(x), float(y)) for x, y in ring] for ring in item["holes"]
+            ]
         jaguar_item = build_item(item.get("id"), count, shape_coords, allowed_orientations)
         total_requested_count += count
         requested_by_id[item.get("id")] = count
@@ -902,6 +914,26 @@ def _nesting_process_impl(doc):
             else:
                 meta = None
 
+    # §19.3 : la garde du moteur indexe par l'id de l'instance RÉSOLUE. Si
+    # la réduction J-085 a réindexé (meta.idMap : nouvel id -> id d'origine),
+    # les clés suivent — sinon un trou serait gardé sur la mauvaise pièce
+    # (piège #3b).
+    engine_raw_holes = raw_holes_by_id
+    if meta and isinstance(meta.get("idMap"), list):
+        # Un hôte PRÉ-REMPLI par la réduction est résolu TROUS FERMÉS
+        # (piège #3b : `reduce_for_solve` remplace sa forme par l'anneau
+        # externe simple). Il n'a donc pas de canal, et lui attacher des
+        # anneaux bruts ferait garder une paroi que le moteur voit déjà
+        # comme de la matière. On les exclut.
+        closed = {p["hostId"] for p in (packs or []) if p.get("fills")}
+        engine_raw_holes = {}
+        for new_id, old_id in enumerate(meta["idMap"]):
+            if old_id in closed:
+                continue
+            rings = raw_holes_by_id.get(old_id)
+            if rings:
+                engine_raw_holes[new_id] = rings
+
     seed = deterministic_seed({
         "instance": solve_instance,
         "space": space,
@@ -962,6 +994,7 @@ def _nesting_process_impl(doc):
         separator_workers=separator_workers,
         sa_stop_k=int(_sa_stop_k) if _sa_stop_k is not None else None,
         sa_stop_floor=int(_sa_stop_floor) if _sa_stop_floor is not None else None,
+        raw_holes=engine_raw_holes,
     )
 
     # Surface the effective compute profile on the job doc: the frontend

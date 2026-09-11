@@ -710,6 +710,10 @@ sink,
                 solution: jagua_rs::probs::spp::io::export(&instance, &r.solution, epoch),
             })
             .collect();
+        // §19.3 : garde d'embouchure avant la fusion — les poses exportées
+        // sont définitives ici. Même fonction que le chemin BPP.
+        let mut exported = exported;
+        let mouth = crate::mouth_guard::guard_sp_runs(&ext_instance, config, &mut exported);
         let merged = merge_sp_runs(
             &ext_instance,
             &exported,
@@ -723,12 +727,13 @@ sink,
         // écrit — champ additif, un tableau vide quand tout est conforme.
         let violations = spacing_violations(&ext_instance, &merged.output.alternatives, config);
         sink(&format!(
-            "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{},\"spacing_violations\":{}}}",
+            "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{},\"spacing_violations\":{},\"mouth_guard\":{}}}",
             merged.best_strip_width,
             merged.best_density,
             merged.output.alternatives.len(),
             started.elapsed().as_secs(),
-            serde_json::to_string(&violations).unwrap_or_else(|_| "[]".to_owned())
+            serde_json::to_string(&violations).unwrap_or_else(|_| "[]".to_owned()),
+            mouth.as_json()
         ));
         return Ok(merged.output);
     }
@@ -878,6 +883,9 @@ sink,
             solution: jagua_rs::probs::spp::io::export(&instance, &r.solution, epoch),
         })
         .collect();
+    // §19.3 : garde d'embouchure (mode plat).
+    let mut exported = exported;
+    let mouth = crate::mouth_guard::guard_sp_runs(&ext_instance, config, &mut exported);
     let merged = merge_sp_runs(
         &ext_instance,
         &exported,
@@ -888,11 +896,12 @@ sink,
     .expect("feasible solutions exist but none exported");
 
     sink(&format!(
-        "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{}}}",
+        "{{\"type\":\"done\",\"best_strip_width\":{:.3},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{},\"mouth_guard\":{}}}",
         merged.best_strip_width,
         merged.best_density,
         merged.output.alternatives.len(),
-        started.elapsed().as_secs()
+        started.elapsed().as_secs(),
+        mouth.as_json()
     ));
     Ok(merged.output)
 }

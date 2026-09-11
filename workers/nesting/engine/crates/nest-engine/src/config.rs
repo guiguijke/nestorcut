@@ -110,6 +110,25 @@ pub struct EngineConfig {
     /// leur alors que la fusion n'en garde qu'une par classe (+33 s mesurés).
     #[serde(default)]
     pub finish_partial_sheet: Option<bool>,
+    /// §19.3 — ANNEAUX DE TROU BRUTS, par id d'item de l'instance RÉSOLUE
+    /// (celle que le moteur voit, après la réduction J-085 : `meta.idMap`
+    /// re-mappe ensuite vers les ids d'origine — piège #3b).
+    ///
+    /// Pourquoi ce champ existe. Pour rendre un trou accessible à jagua,
+    /// l'hôte est ouvert par un canal de `space + 0,1` : sur le polygone
+    /// que le moteur reçoit, la paroi du trou **n'existe plus** sur cette
+    /// largeur. Une pièce nichée posée en face de l'embouchure n'est
+    /// retenue que par les deux coins du canal, et la géométrie laisse une
+    /// fenêtre légale pour le moteur, illégale à la découpe : mesuré le
+    /// 11/09, **1,8867 mm sur l'anneau brut contre 2,0013 mm sur le
+    /// polygone ouvert**, point le plus proche à 0,0 mm de l'embouchure.
+    ///
+    /// Les anneaux d'ORIGINE, eux, sont de la matière : la garde
+    /// d'embouchure (`mouth_guard`) les mesure à l'export. Un item sans
+    /// trou ouvert n'a pas d'entrée ; champ absent ⇒ garde inactive
+    /// (anciens payloads), jamais une erreur.
+    #[serde(default)]
+    pub raw_holes: Option<std::collections::HashMap<String, Vec<Vec<(f32, f32)>>>>,
     /// P4 — exposant du biais d'éjection par aire du séparateur GLS
     /// (0/absent = historique). La perte conteneur pondérée d'un item est
     /// multipliée par (aire/médiane)^β, clampée [0.25, 4] : à pénétration

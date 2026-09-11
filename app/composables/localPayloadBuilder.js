@@ -622,6 +622,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     let totalRequestedCount = 0
     let totalPartArea = 0
     let totalOuterArea = 0
+    // §19.3 : anneaux de trou BRUTS des items dont les trous sont ouverts
+    // par un canal. Sur le polygone ouvert la paroi n'existe plus sur la
+    // largeur du canal : le moteur garde l'embouchure à l'export, et il a
+    // besoin des anneaux d'origine pour ça. Miroir de main.py.
+    const rawHolesById = new Map()
     for (const item of inputItems) {
         // P-m.1 : liste vide → [0] (miroir main.py — une liste vide passée
         // au moteur a un comportement jagua indéfini).
@@ -633,6 +638,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             }
             const opened = await deps.openHoles(item.coords, item.holes, space)
             shapeCoords = opened.ring
+            rawHolesById.set(item.id, item.holes.map((ring) => ring.map(([x, y]) => [x, y])))
         }
         jaguarItems.push(buildItem(item.id, item.count, shapeCoords, allowedOrientations))
         totalRequestedCount += item.count
@@ -739,6 +745,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // + repli J-085. Ids RÉINDEXÉS 0..n-1 (piège #3b).
     let meta = null
     let solveInstance = instance
+    // §19.3 : hôtes dont la réduction ferme les trous (donc sans canal).
+    const closedHostIds = new Set()
     if (hasHoles) {
         const { planHoleFills, reduceForSolve } = await import('./localBridge')
         let packs = null
@@ -794,6 +802,12 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             }
         }
         if (packs) {
+            // §19.3 : les hôtes pré-remplis sont résolus TROUS FERMÉS
+            // (piège #3b) — on retient lesquels pour ne pas leur attacher
+            // d'anneaux bruts. Miroir de main.py.
+            for (const p of packs) {
+                if (p?.fills?.length) closedHostIds.add(p.hostId)
+            }
             const reduced = reduceForSolve(inputItems, jaguarItems, packs, space)
             meta = reduced.meta
             if (reduced.reduced.length) {
@@ -840,6 +854,26 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     }
     if (isSpp) engineConfig.max_strip_width = maxStripWidth
     if (directions) engineConfig.biases = directions
+    // §19.3 : indexé par l'id de l'instance RÉSOLUE. Si la réduction J-085
+    // a réindexé (meta.idMap : nouvel id → id d'origine), les clés suivent
+    // — sinon un trou serait gardé sur la mauvaise pièce (piège #3b).
+    if (rawHolesById.size) {
+        const idMap = Array.isArray(meta?.idMap) ? meta.idMap : null
+        const rawHoles = {}
+        if (idMap) {
+            idMap.forEach((oldId, newId) => {
+                if (closedHostIds.has(oldId)) return
+                const rings = rawHolesById.get(oldId)
+                if (rings?.length) rawHoles[String(newId)] = rings
+            })
+        } else {
+            for (const [id, rings] of rawHolesById) {
+                if (closedHostIds.has(id)) continue
+                if (rings?.length) rawHoles[String(id)] = rings
+            }
+        }
+        if (Object.keys(rawHoles).length) engineConfig.raw_holes = rawHoles
+    }
 
     // i) parts du payload : coords/holes SIMPLIFIÉS (jamais les anneaux à
     //    canal), couleur d'affichage, handles DXF (exports copient par

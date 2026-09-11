@@ -48,6 +48,7 @@ def build_engine_config(
     separator_workers=None,
     sa_stop_k=None,
     sa_stop_floor=None,
+    raw_holes=None,
 ):
     """Engine configuration (consumed by nest-engine's `-c config.json`).
 
@@ -70,6 +71,17 @@ def build_engine_config(
     separator_workers overrides sparrow's inner separator parallelism; the
     browser (wasm, mono-walk, AGENTS #14c) forces it to 1 since wasm has no
     OS threads and extra workers would only run sequentially.
+
+    raw_holes (§19.3) carries the ORIGINAL hole rings of every item whose
+    holes were opened by a capillary channel, keyed by the item id OF THE
+    RESOLVED INSTANCE (the one the engine sees, after the J-085 reduction —
+    `meta.idMap` re-maps afterwards, trap #3b). On the polygon the engine
+    receives, the hole wall is GONE over the channel width: a nested piece
+    facing the mouth is held by the two channel corners only, which leaves a
+    window (1.70-2.0 mm at space 2) that is legal for the engine and illegal
+    at the torch. Measured 2026-09-11: 1.8867 mm on the raw ring against
+    2.0013 mm on the opened polygon. The engine's mouth guard measures these
+    rings at export. None/empty ⇒ guard inactive, never an error.
     """
     config = {
         "time_budget_sec": int(time_budget_sec),
@@ -87,6 +99,14 @@ def build_engine_config(
         config["n_workers"] = int(n_workers)
     if biases:
         config["biases"] = list(biases)
+    if raw_holes:
+        # Clés en CHAÎNE : c'est la forme d'un objet JSON, et le moteur les
+        # relit ainsi (`HashMap<String, …>`).
+        config["raw_holes"] = {
+            str(item_id): [[[float(x), float(y)] for x, y in ring] for ring in rings]
+            for item_id, rings in raw_holes.items()
+            if rings
+        }
     if plateau_patience_sec is not None:
         config["plateau_patience_sec"] = float(plateau_patience_sec)
     # AB1 (L2-bis) : patience P3 pilotable — A/B sans rebuild. Env

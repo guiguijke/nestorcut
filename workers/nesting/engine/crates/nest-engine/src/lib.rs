@@ -10,6 +10,7 @@ pub mod config;
 pub mod geometry_check;
 pub mod gravity;
 pub mod merge;
+pub mod mouth_guard;
 pub mod progress;
 pub mod spp;
 

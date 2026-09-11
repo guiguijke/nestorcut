@@ -264,14 +264,21 @@ pub fn run_bpp_mem(
         &ext_instance, &mut exported, &biases, config, &started, sink,
     );
 
+    // §19.3 — GARDE D'EMBOUCHURE, juste avant la fusion : les poses des
+    // runs exportés sont définitives ici (la finition les a déjà réécrites),
+    // et la fusion ne fait plus que choisir et sérialiser. Un seul point
+    // pour le chemin natif ; le chemin navigateur a le sien dans
+    // `merge_alternatives_json`, même fonction.
+    let mouth = crate::mouth_guard::guard_bp_runs(&ext_instance, config, &mut exported);
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
         Ok(merged) => {
             sink(&format!(
-                "{{\"type\":\"done\",\"cost\":{},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{}}}",
+                "{{\"type\":\"done\",\"cost\":{},\"density\":{:.4},\"alternatives\":{},\"elapsed_sec\":{},\"mouth_guard\":{}}}",
                 merged.best_cost,
                 merged.best_density,
                 merged.output.alternatives.len(),
-                started.elapsed().as_secs()
+                started.elapsed().as_secs(),
+                mouth.as_json()
             ));
             Ok(merged.output)
         }
