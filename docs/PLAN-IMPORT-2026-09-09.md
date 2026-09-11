@@ -566,3 +566,31 @@ n'héberge pas de worker fileprocessing et l'image nesting n'a pas changé de
 code → rien à y faire. Vérification après déploiement : un DXF de plus de
 999 entités s'importe en navigateur sur la prod, et le refus de temps
 affiche le nombre.
+
+### Lot 2a — déploiement (implémenteur, 12/09, `cbacd63a`)
+
+App + wasm géométrie (embarqué dans l'image app) + worker fileprocessing
+dans la même fenêtre. Moteur inchangé : aucun benchmark public à régénérer
+(`git diff` sur `workers/nesting` et `public/engine` vide sur ce lot), et le
+homelab n'héberge que des workers nesting — rien à y faire.
+
+| Contrôle | Résultat |
+|---|---|
+| images publiées | « Build and publish Docker images » **vert** sur `cbacd63a` ; app-ci **vert** ; geometry-locks **vert** sur `ae4d8cba` (dernier commit touchant `workers/geometry`) |
+| compose de prod | sauvegardé (`docker-compose.yml.bak-lot2a-*`) puis aligné sur le dépôt — le seul écart mesuré était le bloc du lot (8 lignes) ; `docker compose config` valide |
+| digests déployés | app `sha256:688d4fdd…`, worker fileprocessing `sha256:92ca2725…` |
+| bornes actives dans le worker | `MAX_ENTITY_LIMIT=10000`, `IMPORT_TIME_BUDGET_S=60`, et les logs de démarrage les impriment : « Max entity limit set 10000 », « Import time budget set 60.0 » |
+| wasm servi par la prod = dépôt (piège 14i) | `nest_geometry_bg.wasm` **`71a6272f…` identique**, `geometry.worker.js` **`057f5056…` identique** |
+| le bundle SERVI PAR LA PROD, appelé comme le worker géométrie l'appelle | fichier réel de **1 841 entités : lu**, 133 pièces, 2,8 s (refusé avant le lot) ; fichier de **6 144 entités : lu**, 1,5 s ; fichier lourd : **refusé à 20,3 s** avec « 787 entities » dans le message |
+| app vivante | `GET /` **200**, conteneurs `Up`, **0 ERROR/Traceback** dans les 200 dernières lignes du worker |
+
+**Non-fait, dit franchement** : la vérification demandée « dans un
+navigateur sur la prod » n'a pas été faite comme telle — l'import est
+derrière `auth` et je n'ai pas de compte de production (en créer un est une
+écriture de production, elle vous revient). À la place : (1) les fichiers
+servis sont **octet pour octet** ceux du dépôt, (2) le bundle servi par la
+prod rend les trois verdicts ci-dessus, et (3) le même code d'interface a
+été vérifié **dans un vrai navigateur** sur l'image locale bâtie au même
+commit — message affiché : « This file is too heavy for in-browser import
+(787 entities, over 20 s) — try “Our servers”. ». Il reste à voir le
+message sur la prod avec votre compte, si vous le voulez tracé.
