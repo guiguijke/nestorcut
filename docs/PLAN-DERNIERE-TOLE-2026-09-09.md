@@ -1371,8 +1371,9 @@ moteur : benchmarks, homelab).
 
 ## 18. Rapport « espacement tenu sur toutes les tôles » (implémenteur, 11/09)
 
-Commits : `27f9a217` (le correctif et ses verrous), `87af9187` (validation
-indexée + mesure du temps de la passe), `d0f9e4e` (docs du vérificateur).
+Commits : `bda94d4b` (le correctif et ses verrous), `87af9187` (validation
+indexée + mesure du temps de la passe), `6e7e1ee0` (docs du vérificateur et
+consigne §17), `8f35729a` (ce rapport).
 **Non déployé.** Images reconstruites, `ASSERT IMAGES=HEAD: OK`.
 
 **Deux défauts distincts sous un même symptôme.** L'un est trouvé, corrigé
