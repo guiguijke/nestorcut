@@ -304,7 +304,7 @@ déploiement app + wasm géométrie + worker fileprocessing.
 
 ### Lot 2a — la garde « trop d'entités » (implémenteur, 11/09)
 
-Commit : `a17e38bd`. **Non déployé** : le wasm géométrie, l'app et le worker
+Commit : `7149fb56` (le lot), plus ce commit de correction du hash. **Non déployé** : le wasm géométrie, l'app et le worker
 fileprocessing ont changé — déploiement après votre GO.
 
 #### 9.5.1 Ce qui est livré
