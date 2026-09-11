@@ -1,8 +1,8 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit e51e294, run 2026-09-10 18:20 UTC — celui du GO
- * de la tranche 2, oracle de distance exact). Extraction :
+ * Docker PUBLIÉES (commit 67eef23, run 2026-09-11 16:12 UTC — celui du GO
+ * de la garde d'embouchure). Extraction :
  * workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
@@ -14,19 +14,20 @@
  */
 export const BENCHMARKS = {
     meta: {
-        runDate: '2026-09-10',
+        runDate: '2026-09-11',
         // Image Docker PUBLIÉE qui a produit les chiffres (workflow
         // « Build and publish Docker images »), régénérée à chaque
-        // livraison moteur (AGENTS.md §6). Run du 2026-09-10 sur
-        // ghcr.io/…/nest2d-nesting-worker:e51e294 (tranche 2 : la garde de
-        // la finition mesure la distance arête↔arête exacte et rejette sous
-        // l'espacement promis) : corpus 11/11 OK, T-A [587, 313].
-        // Les NEUF densités publiées sont IDENTIQUES au run 179b126 —
-        // y compris T-F, revenu à 89 pièces sur 90 : ce cas oscille d'UNE
-        // pièce selon le tirage du BPP (mesuré 88, 89, 88 sur 179b126 puis
-        // 89 sur e51e294), stock serré, sans rapport avec le moteur. Le
-        // chiffre publié reste celui du run de vérification daté ci-dessus.
-        version: 'e51e294',
+        // livraison moteur (AGENTS.md §6). Run du 2026-09-11 sur
+        // ghcr.io/…/nest2d-nesting-worker:67eef23 (garde d'embouchure : le
+        // moteur rend la paroi du trou que le canal capillaire retire, et
+        // mesure lui-même ce qu'il livre) : corpus 11/11 OK, T-A
+        // [587, 313]. **Les DIX densités publiées sont identiques** au run
+        // e51e294 — la garde ne corrige que les pièces nichées devant une
+        // embouchure, un cas que le corpus public (une direction, hôtes
+        // pré-remplis) ne produit pas. T-F revient à 89 pièces sur 90,
+        // dans sa bande d'oscillation connue (88, 89, 88, 89, 90, 89 sur
+        // six passages).
+        version: '67eef23',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
