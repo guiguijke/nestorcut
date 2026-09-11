@@ -123,13 +123,25 @@ const _segSegDist = (p1, p2, q1, q2) => {
 /** Distance ARÊTE↔ARÊTE entre deux anneaux (0 si les frontières se
  * croisent). Ne dit rien du containment — c'est `_polyPolyDist` qui
  * tranche. */
-const _ringEdgeDist = (a, b) => {
-    let best = Infinity
+const _ringEdgeDist = (a, b, limit = Infinity) => {
+    // `limit` : l'appelant ne veut souvent que le verdict « < seuil ». Le
+    // meilleur courant démarre donc au seuil, et l'élagage par bbox
+    // d'ARÊTE évite les 45 × 45 = 2 025 tests segment↔segment d'une paire
+    // éloignée. La valeur rendue est exacte SOUS le plafond, et vaut le
+    // plafond au-dessus (« au moins autant ») — jamais une valeur fausse.
+    let best = limit
     const na = a.length; const nb = b.length
     for (let i = 0; i < na; i++) {
         const p1 = a[i]; const p2 = a[(i + 1) % na]
+        const ax0 = Math.min(p1[0], p2[0]); const ax1 = Math.max(p1[0], p2[0])
+        const ay0 = Math.min(p1[1], p2[1]); const ay1 = Math.max(p1[1], p2[1])
         for (let j = 0; j < nb; j++) {
-            const d = _segSegDist(p1, p2, b[j], b[(j + 1) % nb])
+            const q1 = b[j]; const q2 = b[(j + 1) % nb]
+            const dx = Math.max(0, Math.max(Math.min(q1[0], q2[0]) - ax1, ax0 - Math.max(q1[0], q2[0])))
+            if (dx >= best) continue
+            const dy = Math.max(0, Math.max(Math.min(q1[1], q2[1]) - ay1, ay0 - Math.max(q1[1], q2[1])))
+            if (dy >= best) continue
+            const d = _segSegDist(p1, p2, q1, q2)
             if (d < best) { best = d; if (best === 0) return 0 }
         }
     }
@@ -528,7 +540,7 @@ export function applyHoleFill(parts, layouts, space, postPass = null) {
             rotation: pi.transformation?.rotation ?? 0,
             translation: [...(pi.transformation?.translation || [0, 0])],
         }))
-        const got = _fillOneSheetHoles(layout, byId, margin, deadline)
+        const { recovered: got, moved } = _fillOneSheetHoles(layout, byId, margin, deadline)
         if (!got) continue
         const entries = []
         for (const pi of layout.placed_items || []) {
@@ -541,7 +553,7 @@ export function applyHoleFill(parts, layouts, space, postPass = null) {
                 mat: _placedMaterial(item, t.rotation ?? 0, ...(t.translation || [0, 0])),
             })
         }
-        const { under, duplicates } = _sheetViolations(entries, margin)
+        const { under, duplicates } = _sheetViolations(entries, margin, moved)
         if (under || duplicates) {
             for (const snap of snapshot) {
                 snap.pi.transformation.rotation = snap.rotation
@@ -594,20 +606,20 @@ const _bbGap = (a, b) => {
  * deux verrous du dépôt tombés à 0 relocalisation).
  *
  * `a`/`b` : { outer, holes[] } d'anneaux POSÉS. */
-const _materialDist = (a, b) => {
-    const d = _ringEdgeDist(a.outer, b.outer)
+const _materialDist = (a, b, limit = Infinity) => {
+    const d = _ringEdgeDist(a.outer, b.outer, limit)
     if (d <= 0) return 0
     // Frontières disjointes : reste le containment, qu'une distance de
     // frontière ne voit pas. Un SOMMET suffit à trancher de quel côté.
     if (a.outer.length && _pin(a.outer[0], b.outer)) {
         for (const hole of b.holes || []) {
-            if (_pin(a.outer[0], hole)) return _ringEdgeDist(hole, a.outer)
+            if (_pin(a.outer[0], hole)) return _ringEdgeDist(hole, a.outer, limit)
         }
         return 0
     }
     if (b.outer.length && _pin(b.outer[0], a.outer)) {
         for (const hole of a.holes || []) {
-            if (_pin(b.outer[0], hole)) return _ringEdgeDist(hole, b.outer)
+            if (_pin(b.outer[0], hole)) return _ringEdgeDist(hole, b.outer, limit)
         }
         return 0
     }
@@ -627,6 +639,46 @@ const _placedMaterial = (item, rotDeg, tx, ty) => ({
     holes: (item.holes || []).map((h) => _placedPoly(h, rotDeg, tx, ty)),
 })
 
+/** Index spatial des occupants d'une tôle — la validation de portée tôle
+ * est appelée une fois par pose candidate : la parcourir entièrement coûte
+ * O(n) par pose, soit +6 à +11 s sur le harnais 900 pièces (mesuré). Les
+ * pièces sont indexées par cellule ; une requête ne touche que les cellules
+ * qui coupent la bbox élargie du candidat. Résultat identique, la grille ne
+ * fait que sauter des paires que le pré-filtre bbox aurait de toute façon
+ * écartées. */
+const _GRID_CELL_MM = 120
+function _sheetIndex(entries) {
+    const cells = new Map()
+    const key = (cx, cy) => `${cx}|${cy}`
+    const put = (e, i) => {
+        const [x0, y0, x1, y1] = e.bb
+        for (let cx = Math.floor(x0 / _GRID_CELL_MM); cx <= Math.floor(x1 / _GRID_CELL_MM); cx++) {
+            for (let cy = Math.floor(y0 / _GRID_CELL_MM); cy <= Math.floor(y1 / _GRID_CELL_MM); cy++) {
+                const k = key(cx, cy)
+                const arr = cells.get(k)
+                if (arr) arr.push(i)
+                else cells.set(k, [i])
+            }
+        }
+    }
+    entries.forEach((e, i) => { if (e.bb) put(e, i) })
+    return {
+        /** Indices des occupants dont la cellule croise `bb` élargie de `pad`. */
+        near(bb, pad) {
+            const out = new Set()
+            for (let cx = Math.floor((bb[0] - pad) / _GRID_CELL_MM); cx <= Math.floor((bb[2] + pad) / _GRID_CELL_MM); cx++) {
+                for (let cy = Math.floor((bb[1] - pad) / _GRID_CELL_MM); cy <= Math.floor((bb[3] + pad) / _GRID_CELL_MM); cy++) {
+                    const arr = cells.get(key(cx, cy))
+                    if (arr) for (const i of arr) out.add(i)
+                }
+            }
+            return out
+        },
+        /** Une pièce déplacée change de cellule : on la réindexe. */
+        update(e, i) { put(e, i) },
+    }
+}
+
 /** §17.3 point 2 — une pose est-elle en conflit avec la TÔLE ?
  *
  * Portée TÔLE et non trou : la pose est comparée à tous les occupants sauf
@@ -635,13 +687,17 @@ const _placedMaterial = (item, rotDeg, tx, ty) => ({
  * envoyées au même emplacement se voient). Seuil `space − 0,01`, celui du
  * rapport ; à espacement 0, le contact est permis mais le recouvrement non
  * (`_polyPolyDist` rend 0 dans les deux cas, d'où le test séparé). */
-function _conflictsWithSheet(candMat, entries, self, margin) {
+function _conflictsWithSheet(candMat, entries, self, margin, index = null, exclude = null) {
     const lim = Math.max(0, margin - PAIR_SLACK_MM)
     const bb = _bbOf(candMat.outer)
-    for (const e of entries) {
-        if (e === self || !e.mat) continue
+    const pool = index
+        ? [...index.near(bb, Math.max(lim, 1))].map((i) => entries[i])
+        : entries
+    for (const e of pool) {
+        if (!e || e === self || !e.mat) continue
+        if (exclude && exclude.has(e)) continue
         if (lim > 0 && _bbGap(bb, e.bb) >= lim) continue
-        const d = _materialDist(candMat, e.mat)
+        const d = _materialDist(candMat, e.mat, margin > 0 ? lim : 1e-9)
         if (margin > 0 ? d < lim : d <= 0) return true
     }
     return false
@@ -649,15 +705,32 @@ function _conflictsWithSheet(candMat, entries, self, margin) {
 
 /** Paires sous le seuil et poses dupliquées d'une tôle — la MESURE qui
  * arme la ceinture du §17.3 point 3. */
-function _sheetViolations(entries, margin) {
+/** §17.3 point 3 — paires sous le seuil et poses dupliquées INTRODUITES par
+ * la passe.
+ *
+ * Seules les paires dont au moins un membre a BOUGÉ sont mesurées : une
+ * paire de deux pièces immobiles est exactement celle que le moteur a
+ * livrée, la passe n'y est pour rien, et la re-juger coûte O(n²) sur une
+ * tôle de 900 pièces sans rien apprendre sur la passe. `movedIdx` vide ⇒
+ * rien à mesurer. */
+function _sheetViolations(entries, margin, movedIdx = null) {
     const lim = Math.max(0, margin - PAIR_SLACK_MM)
     let under = 0
     let duplicates = 0
     const bbs = entries.map((e) => _bbOf(e.mat.outer))
-    for (let i = 0; i < entries.length; i++) {
-        for (let j = i + 1; j < entries.length; j++) {
+    entries.forEach((e, i) => { e.bb = bbs[i] })
+    const index = _sheetIndex(entries)
+    const moved = movedIdx || new Set(entries.map((_, i) => i))
+    const seen = new Set()
+    for (const i of moved) {
+        if (!entries[i]) continue
+        for (const j of index.near(bbs[i], Math.max(lim, 1))) {
+            if (j === i) continue
+            const pairKey = i < j ? `${i}|${j}` : `${j}|${i}`
+            if (seen.has(pairKey)) continue
+            seen.add(pairKey)
             if (lim > 0 && _bbGap(bbs[i], bbs[j]) >= lim) continue
-            const d = _materialDist(entries[i].mat, entries[j].mat)
+            const d = _materialDist(entries[i].mat, entries[j].mat, margin > 0 ? lim : 1e-9)
             if (margin > 0 ? d < lim : d <= 0) {
                 under++
                 const a = entries[i].pi.transformation
@@ -682,7 +755,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         const t = pi.transformation || {}
         const poly = _placedPoly(item.coords, t.rotation ?? 0, ...(t.translation || [0, 0]))
         const mat = _placedMaterial(item, t.rotation ?? 0, ...(t.translation || [0, 0]))
-        entries.push({ item, pi, poly, mat, bb: _bbOf(poly) })
+        entries.push({ item, pi, poly, mat, bb: _bbOf(poly), idx: entries.length })
     }
     const holes = [] // {holeRing(world), members[], }
     for (const e of entries) {
@@ -704,6 +777,11 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         else holes[hi].members.push(e)
     }
     let recovered = 0
+    // §17.3 : index spatial des occupants, construit UNE fois et mis à jour
+    // à chaque relocalisation — la validation de portée tôle est appelée une
+    // fois par pose candidate.
+    const index = _sheetIndex(entries)
+    const moved = new Set()
     // Capacité pinwheel VALIDÉE du trou pour ce type de filler, à
     // l'espacement courant (jamais la capacité théorique) — miroir de
     // holefill.hole_capacity.
@@ -721,7 +799,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         const item = byId.get(String(pose.fillId))
         if (!item) return false
         const candMat = _placedMaterial(item, pose.rot, pose.lx, pose.ly)
-        return !_conflictsWithSheet(candMat, entries, null, margin)
+        return !_conflictsWithSheet(candMat, entries, null, margin, index)
     })
     for (const h of holes) {
         if (!free.length) break
@@ -762,7 +840,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
                 // compatibles avec le trou et incompatibles entre elles dès
                 // que la première est posée.
                 if (_conflictsWithSheet(
-                    _placedMaterial(e.item, pose.rot, pose.lx, pose.ly), entries, e, margin,
+                    _placedMaterial(e.item, pose.rot, pose.lx, pose.ly), entries, e, margin, index,
                 )) continue
                 pool.shift()
                 e.pi.transformation.rotation = pose.rot
@@ -770,6 +848,8 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
                 e.poly = cand
                 e.mat = _placedMaterial(e.item, pose.rot, pose.lx, pose.ly)
                 e.bb = _bbOf(cand)
+                index.update(e, e.idx)
+                moved.add(e.idx)
                 const fi = free.indexOf(e)
                 if (fi >= 0) {
                     free.splice(fi, 1)
@@ -794,7 +874,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             // ils sont justement ceux qu'on déplace.
             if (_conflictsWithSheet(
                 _placedMaterial(pool[i].item, PINWHEEL[i], c[0], c[1]),
-                entries.filter((e) => !pool.includes(e)), null, margin,
+                entries, null, margin, index, new Set(pool),
             )) {
                 ok = false
                 break
@@ -808,11 +888,13 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             e.poly = polys[i]
             e.mat = _placedMaterial(e.item, PINWHEEL[i], c[0], c[1])
             e.bb = _bbOf(polys[i])
+            index.update(e, e.idx)
+            moved.add(e.idx)
             const fi = free.indexOf(e)
             if (fi >= 0) { free.splice(fi, 1); recovered++ }
         })
     }
-    return recovered
+    return { recovered, moved }
 }
 
 /** J-085 expansion meta-pièces (miroir de core/holefill.py expand_meta) :
@@ -1195,8 +1277,11 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             // ceinture par tôle — l'objet `postPass` n'existe qu'après, on
             // fusionne plus bas plutôt que de déplacer sa construction.
             const holeFillDiag = {}
+            let holeFillMs = 0
             if (!selfContained && holesGateOpen(payload, parts)) {
+                const t0 = Date.now()
                 holeFillRecovered = applyHoleFill(parts, layouts, space, holeFillDiag)
+                holeFillMs = Date.now() - t0
             }
             const partsById0 = new Map(parts.map((p2) => [String(p2.id), p2]))
             // P4 : import explicite — Nuxt auto-importe layoutAabb sur le
@@ -1224,6 +1309,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 ...(holeFillDiag.holeFillRollback
                     ? { holeFillRollback: holeFillDiag.holeFillRollback }
                     : {}),
+                // §17.4 : le temps de la passe est un verrou (≤ référence
+                // + 1 s sur le harnais) — il se mesure, il ne s'estime pas.
+                holeFillMs,
                 // X4/Y4 : état après expansion + hole-fill, AVANT le
                 // post-pass résiduel (miroir main.py — le gain mesuré est
                 // celui du post-pass, pas de l'expansion).

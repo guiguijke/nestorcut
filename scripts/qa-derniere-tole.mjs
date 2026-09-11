@@ -248,7 +248,39 @@ try {
                 // par tôle sait lire les deux) — mais pas les DXF, qui ne
                 // servent à aucune mesure et pèsent le plus lourd.
                 const { svgs, dxfs, ...rest } = a
-                return { alternative: { ...rest, svgs: svgs || [] } }
+                // §17.2 : la SORTIE BRUTE du moteur wasm, avant TOUT pas JS
+                // (`window.__lastSolveResult`, posée par localJobPrivate).
+                // Sans elle, « avant post-pass » désigne l'état au moment du
+                // clone dans `buildAlternativeArtifacts` — déjà après la
+                // fusion du pool et l'ajout de l'alternative grille : on ne
+                // peut pas distinguer le moteur de ce qui vient après lui.
+                const engine = window.__lastSolveResult || null
+                return {
+                    alternative: { ...rest, svgs: svgs || [] },
+                    engineRaw: engine
+                        ? {
+                            alternatives: (engine.alternatives || []).map((alt) => ({
+                                bias: alt.bias ?? alt.strategy ?? null,
+                                structural: Boolean(alt.structural),
+                                layouts: (alt.solution?.layouts
+                                    || (alt.solution?.layout ? [alt.solution.layout] : [])
+                                ).map((l) => ({
+                                    container_id: l.container_id ?? 0,
+                                    placed_items: (l.placed_items || []).map((pi) => ({
+                                        item_id: pi.item_id,
+                                        transformation: {
+                                            rotation: pi.transformation?.rotation ?? 0,
+                                            translation: [
+                                                pi.transformation?.translation?.[0] ?? 0,
+                                                pi.transformation?.translation?.[1] ?? 0,
+                                            ],
+                                        },
+                                    })),
+                                })),
+                            })),
+                        }
+                        : null,
+                }
             }, DIRS[d])
             const file = path.join(OUT, `spacing-fail-${DIRS[d]}-${RUN_TAG}.json`)
             // L'espacement vient du HARNAIS (kerf 0 + sécurité 1 = 2 mm),
