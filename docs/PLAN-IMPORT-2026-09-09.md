@@ -596,7 +596,7 @@ commit — message affiché : « This file is too heavy for in-browser import
 message sur la prod avec votre compte, si vous le voulez tracé.
 ### Lot 2b — les unités (implémenteur, 12/09)
 
-Commit : `HASH`. **Non déployé** — wasm géométrie et worker fileprocessing
+Commit : `52871f48`. **Non déployé** — wasm géométrie et worker fileprocessing
 touchés ; GO attendu.
 
 #### 9.5.6 Ce qui était faux, mesuré avant d'écrire une ligne de correctif
