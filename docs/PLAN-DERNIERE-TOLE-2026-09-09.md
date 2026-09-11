@@ -1546,3 +1546,67 @@ l'ai prise dans l'autre sens.
    même machine, mais la référence absolue au repos (30,4 s la veille)
    n'est pas reproductible dans l'état actuel du poste — à rejouer au repos
    si vous voulez le chiffre absolu.
+
+## 19. Vérification « espacement tenu » (vérificateur, 11/09, `56c47580`) — GO déploiement du correctif ; le résiduel a une cause candidate précise
+
+### 19.1 Rejeu sur le poste (images app et worker reconstruites à HEAD)
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 521 |
+| L4 harnais 0,1 ×1 au repos | 900/900, **15 s**, `spacingOk` vrai, `duplicatePoses` 0, `holeFillMs` 32, aucune annulation, long task après solve 0 ms |
+| L3 `seed_demo_dirs.py BENCH_ASSERT=1` ×1 | tenu ; `kept=spp` ×3, ancrage 2,0, badges verts, exemption plancher matière imprimée |
+
+Le correctif du hole-fill navigateur (distance sommet→segment → exacte,
+portée tôle, ceinture) est validé. **GO déploiement** : app + wasm
+(chemin navigateur) ET worker (le miroir Python a changé) ; le moteur n'a
+pas changé → pas de benchmarks à régénérer, homelab au même digest quand
+même (règle worker). C'est un défaut de production actif (un job sur
+douze remboursé sur la démo) : déployer sans attendre le résiduel.
+
+### 19.2 Le résiduel 1,8867 mm : verdict (c) refusé, cause candidate à vérifier sur le dump existant
+
+Les trois hypothèses testées ne couvraient pas la quatrième, qui explique
+exactement la fenêtre observée : **l'embouchure du canal capillaire**
+(piège #2). Pour rendre un trou accessible à jagua, l'hôte est ouvert par
+un canal de largeur `space + 0,1` (2,1 mm à space 2,
+`holed_polygons.channel_width_for_space`). Sur le polygone que voit le
+moteur, la paroi du trou **n'existe plus sur 2,1 mm** à l'embouchure : le
+moteur n'impose l'espacement qu'aux deux parois du canal, pas à l'arc de
+trou d'origine qui, lui, est bien de la matière à la découpe. Une pièce
+nichée placée **en face de l'embouchure** est donc contrainte par les deux
+coins du canal seulement : à `d` de la ligne d'embouchure et 1,05 mm des
+parois, sa distance aux coins vaut √(d² + 1,05²) ≥ 2 ⇒ **d ≥ 1,70 mm**.
+Tout écart entre **1,70 et 2,0 mm** devant une embouchure est légal pour
+le moteur et illégal à la découpe. 1,8867 est dans la fenêtre ; c'est
+rare (il faut une pièce en face de l'embouchure) ; le natif sur petits
+cas ne le montre que par hasard ; la simplification n'y est pour rien.
+L'hôte du cas (item 20) a bien un trou ouvert par canal.
+
+**À vérifier d'abord, sur le dump existant, sans campagne (≈ 1 h)** :
+reconstruire le polygone d'item 20 tel que le moteur l'a reçu
+(`openHoles(coords, holes, space)` côté JS, `open_holes_with_channels`
+côté Python), mesurer la distance d'item 2 à **ce** polygone (attendu
+≥ 2,0) et à l'anneau **brut** (attendu 1,8867), et vérifier que le point
+le plus proche est sur la ligne d'embouchure. Si oui, cause établie.
+
+### 19.3 Correctif, par règle, si la cause est confirmée (une seule fois, dans le moteur)
+
+Dans `nest-engine`, à l'export final de chaque layout (SPP et BPP, donc
+finition comprise), **garde d'embouchure** : pour chaque hôte à canal,
+mesurer avec `geometry_check::material_distance` la distance de chaque
+pièce nichée à l'anneau de trou **brut** (les anneaux d'origine sont dans
+l'instance externe avant ouverture : les transmettre au moteur dans un
+champ additif `raw_holes` de l'`ExtItem`, ou recalculer la fermeture du
+canal à partir de la largeur connue). Si `d < space − 0,01` : translater
+la pièce nichée **dans la direction opposée à la ligne d'embouchure** de
+`space − d + 0,02`, accepter si la CDE (formes gonflées) reste sans
+collision et si la distance exacte à tous les voisins reste
+≥ `space − 0,01` ; sinon **retirer la pièce du trou** et la marquer
+`unplaced` de la finition/relocalisation ordinaire (le post-pass
+hole-fill exact la replacera ou la posera ailleurs). Trace
+`mouth_guard: {moved, removed}` dans l'événement `done`. Verrous cargo :
+fixture hôte + trou circulaire + fillers rectangulaires à space 2,
+20 seeds, `min_pair_distance` ≥ 1,99 contre l'anneau brut ; déterminisme
+natif ≡ wasm ; parité Python/JS inchangée (le post-pass ne bouge pas).
+Verrou produit : démo 8 × 3 directions, 0 occurrence sous 1,99 sur 24.
