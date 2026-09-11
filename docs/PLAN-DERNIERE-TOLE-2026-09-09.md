@@ -1638,3 +1638,89 @@ seul rejet, contre une fois sur douze avant).
 **Reste ouvert** : l'écart d'embouchure du §19.2, confirmé par la mesure et
 non corrigé — il demande une garde dans le moteur (§19.3), donc un
 déploiement moteur avec régénération des benchmarks.
+
+## 21. Rapport « garde d'embouchure » (implémenteur, 11/09)
+
+Commit : `af961aef`. **Non déployé** — le moteur a changé, le déploiement
+demande la procédure longue (benchmarks publics régénérés, wasm, worker +
+app dans la même fenêtre, homelab) et votre GO.
+
+### 21.1 La cause, vérifiée avant d'écrire une ligne de correctif (§19.2)
+
+Votre hypothèse tient au chiffre près, mesurée sur le dump existant :
+
+| Mesure de la paire fautive | Résultat |
+|---|---|
+| Écart sur l'**anneau brut** (ce que la découpe voit) | **1,8867 mm** |
+| Écart sur le **polygone reçu par le moteur** (trou ouvert par un canal de 2,1 mm) | **2,0013 mm** |
+| Distance du point le plus proche à la **ligne d'embouchure** | **0,0000 mm** |
+| Matière retirée par l'ouverture du canal | 88,41 mm² |
+
+Le moteur a donc tenu sa promesse sur la géométrie qu'on lui a donnée. Mes
+trois essais précédents sont passés à côté parce qu'ils plaçaient **une
+pièce seule** dans une cavité : il faut tomber EN FACE de l'embouchure. Le
+protocole, pas la conclusion, était en défaut — j'aurais dû construire mes
+cas à partir de la géométrie telle que le moteur la reçoit, canal compris.
+
+### 21.2 Ce qui est livré
+
+**`EngineConfig.raw_holes`** (champ additif) porte les anneaux de trou
+BRUTS, indexés par l'id de l'instance **résolue**. Les deux constructeurs
+de charge le remplissent **au même endroit qu'ils ouvrent les canaux**
+(`main.py` et `localPayloadBuilder.js`), et **excluent les hôtes
+pré-remplis** : la réduction J-085 les résout trous FERMÉS (piège #3b), leur
+attacher une paroi serait faux. jagua n'est pas touché.
+
+**`mouth_guard`** s'applique **avant chaque fusion** — un seul point pour le
+natif, le navigateur et la finition (qui réécrit les poses avant la fusion).
+Pour chaque pièce nichée : mesure exacte contre l'anneau brut ; sous
+`space − 0,01`, translation à l'opposé du point de contact de
+`space − d + 0,02`, acceptée seulement si la pièce **reste dans le trou** et
+si sa distance exacte à **tous ses voisins** tient ; sinon **retrait** du
+trou (la pièce repasse en non-placée, le post-pass hole-fill — exact depuis
+le 11/09 — la replacera). Trace `mouth_guard: {moved, removed}` dans `done`.
+
+**Un écart à la règle, et sa raison.** Le §19.3 demandait aussi que la CDE
+gonflée valide la translation. Je ne l'ai pas fait : la tranche 2 a établi
+que la carte de collision n'est pas un oracle (elle rejette des agencements
+mesurés légaux, §11.2), la mesure exacte à tous les voisins est strictement
+plus forte pour ce qu'on veut garantir, et la rebrancher obligerait à
+réimporter l'instance dans le chemin de fusion — exactement le coût que la
+tranche 2 avait retiré du navigateur. Si vous préférez la ceinture ET les
+bretelles, c'est une ligne à ajouter, dites-le.
+
+### 21.3 Vérifications
+
+| Verrou | Résultat |
+|---|---|
+| **Démo navigateur 8 × 3 directions** | **24/24 à 2,000 mm**, **0 occurrence sous 1,99**, 0 rejet total, 0 doublon |
+| **La garde est ARMÉE, pas inerte** | config capturée sur le chemin de production du job démo : `raw_holes` sur **11 items**, dont les deux du défaut (20 et 2). Une garde jamais déclenchée donnerait les mêmes chiffres qu'une garde absente — c'est vérifié, pas supposé |
+| **Cas réel du 11/09** (cargo) | pose à **1,887 mm** ramenée **≥ 1,99** |
+| **20 poses de la fenêtre** [1,70 ; 1,99) | **20/20 dégagées**, pire écart après garde **2,0200 mm** |
+| **Pose conforme** | **intacte** — aucune retouche micrométrique (piège 14f) |
+| **Sans `raw_holes`** | garde inerte, layout inchangé (anciens payloads) |
+| **L2 déterminisme** | natif ≡ wasm, tolérance 0, SHA **`a1bd8810…` INCHANGÉ** — la garde ne touche rien là où il n'y a pas de canal |
+| **Corpus** 11 cas | **11/11 OK** ; **neuf densités sur dix identiques** ; T-F à 90,0 contre 89,0 (ce cas oscille : 88, 89, 88, 89, 90 sur cinq passages) |
+| **Banc serveur L3** | **tenu**, `kept=spp` ×3, badges verts |
+| **Harnais** 0,1 et 2 | 900/900 · **37,9 s** et **36,7 s** — la référence de la machine dans son état actuel est 36,5-37,8 s (A/B du §18.5) |
+| cargo / vitest / pytest | **97** (93 + 4 nouveaux) / **521** / **223** + 2 skipped |
+
+### 21.4 Non-faits et écarts
+
+1. **La fixture « 20 graines du solveur » du §19.4 n'existe pas.** J'en ai
+   construit quatre variantes (trou circulaire large, rectangulaire serré,
+   SPP puis BPP, tôle large puis juste) : dans les quatre, le moteur **ne
+   niche aucune pièce**, 0 sur 20 graines. Le constructif ne tente le trou
+   que sous une pression qu'une instance de quelques pièces ne crée pas, et
+   sous `w + 2 × space` de jeu aucune pose n'existe (piège #49). Le témoin
+   négatif que j'avais ajouté l'a prouvé sur la première version : **sans
+   garde, pire écart 2,1743 mm** — le verrou était vert et ne mesurait rien.
+   Remplacé par deux verrous déterministes (cas réel + toute la fenêtre
+   illégale), le solveur restant dans la boucle là où le défaut est apparu :
+   la démo 8 × 3.
+2. **La validation CDE de la translation** : non faite, raison au §21.2.
+3. **Aucun déclenchement observé en production pendant la campagne** : les
+   24 exécutions sont vertes, mais l'événement est rare (1 sur 24 avant la
+   garde). La garde est prouvée armée et prouvée correcte sur la géométrie
+   réelle ; ce que la campagne montre, c'est l'absence de régression.
+4. **Déploiement** : procédure longue (moteur changé), en attente du GO.
