@@ -168,3 +168,60 @@ Champ non mesuré par un importeur = `null`, jamais omis.
 - `.testparts/` est désormais ignoré par git (il ne l'était pas ; AGENTS
   le disait). Aucun fichier du corpus n'est entré dans le dépôt (vérifié :
   0 DXF/DWG ajouté au commit).
+
+## 8. Corpus RÉEL du propriétaire — 153 DXF passés dans les deux importeurs (vérificateur, 10/09 soir)
+
+Le propriétaire a déposé **153 DXF d'atelier** (18 Mio) dans
+`specs/import-corpus/` (privé, ignoré par git — vérifié : `.gitignore:65`).
+Les noms de fichiers portent des noms de clients : **ils ne sortent jamais
+du dossier privé** ; ici, comptes et identifiants neutres seulement. Les
+deux coureurs ont tourné tels quels (`qa-import-wasm.mjs` sur le poste,
+`qa-import-ezdxf.py` dans l'image fileprocessing à `229222a1`) ; sorties
+brutes hors dépôt (`~/qa-out/import-reel/`).
+
+| | wasm (navigateur) | ezdxf (serveur) |
+|---|---|---|
+| lus | 140 | 103 |
+| « réparés » | 1 | 47 (= segments pendants détectés, **rien n'est recousu**) |
+| refusés | **12** | 3 |
+| temps total | 281 s | 171 s |
+
+**Ce que le corpus réel dit, par gravité :**
+
+1. **La garde « trop d'entités » (999) refuse 11 fichiers réels que le
+   serveur lit** : dessins LightBurn et gravures à splines de 1 100 à
+   6 100 entités (poules, poussins, arbre de vie). Côté navigateur, le
+   client voit un refus ; côté serveur, le même fichier passe. Un seul
+   fichier (arbre de vie, 6 144 entités) est refusé des deux côtés.
+   → à traiter avec la priorité 2 : la garde doit porter sur le **temps**
+   ou sur un plafond réaliste (≥ 5 000), et être posée **avant** le
+   travail (constat C9 de la synthèse).
+2. **Segments pendants sur 33 fichiers réels sur 153** (ezdxf les voit,
+   le wasm n'en mesure aucun) et **7 fichiers où les deux importeurs ne
+   rendent pas le même nombre de pièces ou de trous**, sans aucun message
+   des deux côtés : 141 contre 151 pièces, 10 contre 7, 2 contre 1, 30
+   contre 34 ; jusqu'à 551 segments pendants sur un même fichier.
+   → c'est la matière de la priorité 3 (couture) ; la fixture témoin
+   existe maintenant, en privé.
+3. **8 fichiers réels sans unité déclarée** (`$INSUNITS = 0`) → « mm
+   supposés » en silence des deux côtés. → priorité 2 (unités).
+4. **Deux fichiers lus par le wasm et refusés par ezdxf « 0 entité »**
+   (dont un à 169 pièces) : le serveur échoue là où le navigateur réussit.
+   → à classer avec la priorité 2 (écart entre importeurs).
+5. **Temps d'import** : 68 s, 33 s et 19 s côté wasm pour des fichiers à
+   **une** pièce riches en splines (101 fichiers sur 153 contiennent des
+   splines) ; 57 s côté ezdxf sur un autre. Un import de plus d'une minute
+   pour une pièce est un abandon. → à mesurer et corriger avec la
+   priorité 2 (échantillonnage des splines).
+
+**Taux « lu sans réparation manuelle » sur le réel** (ce que la synthèse
+ne pouvait pas dire avec 4 fichiers) : wasm **140 / 153 = 91,5 %**, ezdxf
+103 / 153 = 67 % (les 47 « réparés » sont des fichiers à segments perdus,
+pas des réparations). La cible du masterplan est 95 %.
+
+**Pour l'agent, quand la priorité 2 s'ouvre** : intégrer ces 153 fichiers
+au corpus par **hash + provenance « propriétaire, privé »** (jamais de
+nom de fichier ni de client dans `docs/`), relancer les deux coureurs
+depuis `specs/import-corpus/`, et stratifier la synthèse « réels » sur
+ces 153 au lieu de 4. Les cinq constats ci-dessus deviennent les
+verrous chiffrés des priorités 2 et 3.

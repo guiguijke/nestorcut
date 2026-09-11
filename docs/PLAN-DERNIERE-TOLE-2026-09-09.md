@@ -1309,3 +1309,62 @@ le correctif qui répare la CI ne la déclenchait donc pas. Ajouté, avec
 3. **Diagrammes du site marketing** (plan d'import §6, second point) : les
    64 occurrences de `#007bff` sont toujours là — non demandé dans cette
    consigne, non fait.
+
+## 17. Chantier suivant — l'écart sous l'espacement de la tôle DENSE (consigne fermée, prête à envoyer)
+
+Décision propriétaire du 10/09 : « si je veux 2 mm et que j'ai 1,883, ça
+ne me sera pas pardonné ». C'est donc la **priorité 1** du reste à livrer.
+Constat (§16.3) : 1,883 mm sur la tôle pleine (271 pièces), paire hôte
+420 × 300 / pièce nichée 90 × 160, 2 occurrences sur 12 exécutions de la
+démo navigateur, 0 sur 45 côté serveur ; la tôle finie mesure 2,0001.
+
+### 17.1 Objectif
+
+> Aucune paire sous `space − 0,01 mm` sur **aucune** tôle d'un job livré,
+> navigateur et serveur, mesurée par l'oracle du moteur ET par la
+> vérification aval ; 0 occurrence sur 24 exécutions de la démo (8 par
+> direction) et sur les deux configurations du harnais ×3.
+
+### 17.2 Étape 1 — la mesure qui discrimine (½ journée, aucune décision)
+
+1. `app/composables/localBridge.js` : sous `QA_DUMP_PRE_POSTPASS` (variable
+   du harnais, jamais en production), conserver dans le record IndexedDB
+   les layouts **tels que sortis du moteur** (avant `expandMeta`,
+   `applyHoleFill`, `fillResidualBands`) à côté des layouts livrés.
+2. `scripts/qa-derniere-tole.mjs` : `QA_DIRS=bottom,balanced`, 12 exécutions ;
+   à chaque `spacingOk: false`, dumper la paire fautive **avant** et
+   **après** post-pass (`spacing-fail-<dir>-<n>.json` : les deux poses de
+   chaque pièce, l'écart mesuré avant et après par `measure_svg_gaps.py`).
+3. Verdict par cas : (a) l'écart existe déjà **avant** post-pass → cause =
+   solve sur anneaux simplifiés (`NEST_SIMPLIFY_MM` 0,05 côté pipeline) ;
+   (b) l'écart apparaît **après** → cause = une passe (`applyHoleFill` /
+   `expandMeta` / fusion), nommer laquelle ; (c) ni l'un ni l'autre →
+   rapporter avec le dump, sans correctif.
+
+### 17.3 Étape 2 — le correctif, par règle
+
+- Cas (a) : la séparation demandée au moteur devient
+  `space + 2 × NEST_SIMPLIFY_MM` **dans les deux constructeurs de charge**
+  (`nesting_input_builder.build_engine_config` et
+  `localPayloadBuilder.js`, une seule constante partagée dans `shared/`),
+  pour que l'écart sur anneaux BRUTS soit ≥ `space`. Coût mesuré :
+  densité du corpus 11 cas avant / après (perte tolérée ≤ 0,3 point) et
+  T-A 900/900 conservé.
+- Cas (b) : la validation de la passe fautive passe à l'oracle exact au
+  seuil `space − 0,01` sur anneaux bruts (les fonctions `pairViolates`
+  JS / Python existent ; le repli de tolérance à 1,90 disparaît), miroir
+  exact des deux langues, verrou qui compte les paires < seuil sur le
+  chemin multi-itérations (piège #56).
+- Dans tous les cas : **l'export BPP du moteur mesure toutes ses tôles**
+  avec `geometry_check::min_pair_distance_upto` et écrit
+  `spacing_violations` (tôle, paire, écart) dans l'événement `done`, comme
+  le mode directions SPP le fait déjà — la source dit le chiffre.
+
+### 17.4 Verrous
+
+Démo navigateur 8 × 3 directions : `smallestGapMm ≥ space − 0,01` sur
+100 % des jobs, `spacing_violations` vide ; harnais deux configurations
+×3 : 900/900, temps ≤ référence + 1 s ; corpus 11/11 et densités
+rapportées avant / après ; L2 déterminisme ; cargo, vitest, pytest.
+Rapport en §18, GO, déploiement complet (moteur si 17.3 touche le
+moteur : benchmarks, homelab).
