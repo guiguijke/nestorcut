@@ -594,3 +594,87 @@ prod rend les trois verdicts ci-dessus, et (3) le même code d'interface a
 commit — message affiché : « This file is too heavy for in-browser import
 (787 entities, over 20 s) — try “Our servers”. ». Il reste à voir le
 message sur la prod avec votre compte, si vous le voulez tracé.
+### Lot 2b — les unités (implémenteur, 12/09)
+
+Commit : `HASH`. **Non déployé** — wasm géométrie et worker fileprocessing
+touchés ; GO attendu.
+
+#### 9.5.6 Ce qui était faux, mesuré avant d'écrire une ligne de correctif
+
+| Défaut | Mesure |
+|---|---|
+| **table d'unités à sept codes** sur vingt-et-un | codes 3, 7, 10 à 20 absents des DEUX tables : un dessin déclaré en kilomètres, en yards ou en microns était lu **×1**, en silence — c'est-à-dire au millimètre |
+| **`$INSUNITS` écrit en flottant** | notre propre exporteur DXF écrit `70` puis `4.0` ; le parse strict du Rust rendait `0` = « sans unité ». Conséquence : **notre export CAM en POUCES se relisait ×1 au lieu de ×25,4 dans notre propre navigateur** (c11 : code 0 côté wasm, code 1 côté ezdxf, qui tolère) |
+| **le même flottant sur les autres codes entiers** | l'exporteur écrit aussi `70` (drapeau « fermée ») et `90` (nombre de sommets) en flottant : le drapeau tombait à faux et **nos exports CAM se relisaient à 0 pièce** (c08 : 0 contre 2 côté ezdxf ; c11 : 0 contre 3) |
+| **deux vocabulaires pour la même mesure** | le coureur wasm disait `in` / `assumed-mm`, le coureur ezdxf `inch` / `unitless` : **38 lignes de « divergence » sur 238** dont 33 n'étaient que du vocabulaire — le bruit cachait les 5 vraies |
+
+#### 9.5.7 Ce qui est livré
+
+1. **Table complète 0-20, facteurs EXACTS**, identique des deux côtés
+   (`nest-import::units`, `worker_common.geometry.units`). Exacts par
+   définition (le pouce VAUT 25,4 mm), **pas** ceux de
+   `ezdxf.units.METER_FACTOR` qui sont arrondis (1000/39,37007874 =
+   25,400000000101603) — et ezdxf n'a de facteur ni pour le code 8
+   (microinch) ni pour le 9 (mil).
+2. **Entiers écrits en flottant acceptés** par les deux lecteurs :
+   `$INSUNITS` et, côté Rust, les codes d'entité 62/70/71/72/73.
+3. **Aucune unité supposée en silence** — trois constats, **mêmes textes des
+   deux côtés** : `$INSUNITS missing or 0 — assuming millimeters`,
+   `unknown $INSUNITS=N — assuming millimeters`, et
+   `$INSUNITS=N (nom) — geometry scaled xF to mm` quand le facteur dépasse
+   10 m par unité (km, hm, Mm, année-lumière…). La conversion reste exacte :
+   une pièce de 80 mètres sort, mais plus sans explication.
+4. **Noms d'unité canoniques partagés** (`inch`, `foot`, `km`, `yard`…) ; le
+   coureur ezdxf tire désormais le nom de la PRODUCTION (`unit_name`) au lieu
+   d'une table locale — un coureur qui redéfinit le vocabulaire ne mesure
+   plus le produit.
+5. **Notre exporteur DXF écrit les codes entiers en entiers**
+   (`nest-export/dxf_writer.rs`) : la cause disparaît pour les fichiers que
+   nous produisons désormais.
+6. Le golden de parité `units_unknown.dxf` (code 7) est **régénéré** avec le
+   Python corrigé : l'ancien figeait le ×1 silencieux.
+
+#### 9.5.8 Verrous du §9.2
+
+| Verrou | Résultat |
+|---|---|
+| **parité wasm ≡ ezdxf sur `unitDetected` et `scaleApplied`, 238 fichiers** | **0 divergence** (38 avant le lot) |
+| **les 8 fichiers réels sans unité portent l'avertissement** | **8/8** — et 28/28 sur les 238, des deux côtés, **au mot près le même texte** |
+| **c59 (kilomètres) converti au bon facteur, jamais ×1** | **×1 000 000** des deux côtés (×1 avant), avec le constat « geometry scaled x1000000 to mm » |
+| **nos exports CAM c08-c11 gardent leur unité** | c08/c09/c10 **mm**, c11 **inch ×25,4** (les quatre étaient « sans unité » côté navigateur). En prime, ils sont enfin **LUS** : **2, 2, 4, 3 pièces** — exactement les comptes d'ezdxf (0, 2, 1, 0 avant) |
+| accord des deux importeurs (pièces ET trous) sur le corpus versionné | **62/70 → 66/72** ; sur les 153 réels, inchangé à 139/149 (aucun de ces fichiers ne vient de notre exporteur) |
+| **seed canonique du flux navigateur inchangé** (§9.3) | `6825704941837900974` **identique** avant et après le lot sur les deux DXF du harnais |
+| handles canoniques (§9.3) | `handles_canonical` **14/14**, sweep corpus inchangé |
+| parité golden | **100 %** (63 bit-identiques + 2 error-parity + 2 metrics-ok ; seuil 99 %) |
+| déterminisme natif ≡ wasm | **68/68** et **17/17**, tolérance 0 |
+| suites | cargo geometry **109** (106 + 3), vitest **526**, pytest fileprocessing **42**, pytest common **64** (48 + 16) |
+| harnais navigateur, deux configurations | **900/900** placées aux deux espacements, `spacingOk`, 0 doublon, calcul 24 s, mur 39,5 s |
+
+**Comptes des deux coureurs, 153 réels** : wasm 150 lus → **142 lus + 9
+« réparés »** (les constats d'unité font passer un fichier de « lu sans rien
+supposer » à « lu avec un constat » — c'est le but), refusés **inchangés à
+2** ; ezdxf 103/48/2 → **101/50/2**. Sur les 85 versionnés : wasm refusés
+**13 → 11** (c08 et c11 deviennent lisibles).
+
+#### 9.5.9 Non-faits et écarts
+
+1. **`exports_check.py` et `client-server-diff` n'ont pas tourné sur mon
+   poste** : ils veulent ezdxf/shapely côté hôte et des CLI natifs Linux. Ils
+   tournent en CI (`geometry-locks`) sur ce commit — c'est le verdict à
+   retenir pour le changement d'exporteur (le DXF y est comparé
+   sémantiquement, entité par entité, pas octet à octet).
+2. **Le fichier en kilomètres produit maintenant une pièce de 80 m × 40 m**,
+   que le nesting refusera (aucune tôle). C'est voulu : le fichier le déclare.
+   Ce qui manque, c'est que l'utilisateur LISE le constat — le porter jusqu'à
+   la fiche fichier est le lot 2c, et le champ est déjà là.
+3. **Le seuil « unité invraisemblable » (10 m par unité) est une décision de
+   ma part.** Il ne change aucune conversion : il décide seulement quand un
+   constat est émis. En dessous (pouce, pied, cm, m, dm, yard, micron), rien
+   n'est dit — l'unité est déclarée et la conversion exacte.
+4. **Les codes 21 à 24** (unités « US survey ») restent hors table, comme
+   chez ezdxf : facteur 1 + constat « code inconnu ». Le §9.2 demandait 0 à 20.
+5. Mon erreur du lot : j'ai mesuré les 238 fichiers avec un **bundle wasm
+   d'avant le correctif des codes entiers** (rebuild oublié après la dernière
+   modification Rust). Les chiffres de c08/c10/c11 étaient inchangés, ce qui
+   ne collait pas avec le CLI natif — c'est cet écart qui a révélé l'oubli.
+   Bundle reconstruit, corpus rejoué, chiffres ci-dessus.

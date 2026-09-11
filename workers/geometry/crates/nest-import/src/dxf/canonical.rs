@@ -110,10 +110,21 @@ pub fn canonical_entities_bounded(
 
     // Unités : decompose D'ABORD, scale uniforme ensuite (AGENTS #26).
     let (factor, unknown) = units::factor_to_mm(doc.source_insunits);
+    // Lot 2b : aucune unité supposée EN SILENCE. Trois constats possibles,
+    // dans l'ordre de gravité (le miroir Python porte les mêmes textes).
     if unknown {
         warnings.push(format!(
             "unknown $INSUNITS={} — assuming millimeters",
             doc.source_insunits
+        ));
+    } else if doc.source_insunits == 0 {
+        warnings.push("$INSUNITS missing or 0 — assuming millimeters".to_string());
+    } else if factor >= units::IMPLAUSIBLE_FACTOR_MM {
+        warnings.push(format!(
+            "$INSUNITS={} ({}) — geometry scaled x{} to mm",
+            doc.source_insunits,
+            units::unit_name(doc.source_insunits),
+            factor
         ));
     }
     if factor != 1.0 {

@@ -44,8 +44,19 @@ upload → Mongo user_dxf_files (status pending)
 3. `recursive_decompose(msp)` : INSERT (blocs, y compris imbriqués) → primitives
    modelspace ; HATCH conservé puis converti en lignes via `hatch_entity`
    (boundary → segments droits).
-4. **Decompose PUIS scale** : `$INSUNITS` → facteur mm (1:25.4, 2:304.8, 4:1,
-   5:10, 6:1000, 8:2.54e-5, 9:0.0254 ; 0/inconnu → 1.0 + warning).
+4. **Decompose PUIS scale** : `$INSUNITS` → facteur mm, **table complète des
+   codes 0 à 20 depuis le lot 2b** (1:25.4, 2:304.8, 3:1 609 344, 4:1, 5:10,
+   6:1000, 7:1e6, 8:2.54e-5, 9:0.0254, 10:914.4, 11:1e-7, 12:1e-6, 13:1e-3,
+   14:100, 15:1e4, 16:1e5, 17:1e12, 18:1.495978707e14, 19:9.4607304725808e18,
+   20:3.0856775814913673e19 ; 0/absent → 1.0 + constat « mm supposés » ;
+   au-delà de 20 → 1.0 + constat « code inconnu » ; facteur ≥ 1e4 → constat
+   « converti ×N » car l'unité n'est pas celle d'une tôle). Facteurs EXACTS
+   par définition, pas ceux (arrondis) de `ezdxf.units.METER_FACTOR`. Le code
+   70 **écrit en flottant** (« 4.0 ») est accepté des deux côtés — c'est ce
+   que notre propre exporteur écrivait, et le parse strict du Rust le lisait
+   « sans unité » (nos exports en pouces relus ×1). `insunits_detail`
+   (Python) / `units::factor_to_mm` + `canonical_entities` (Rust) portent les
+   MÊMES noms canoniques et les mêmes textes de constat.
    `Matrix44.scale` uniforme sur chaque entité. Copie validDxf = mm canonique
    (relue avec normalize_units=False — jamais re-normaliser, AGENTS #27).
 5. Traceability : `sourceUnits` (code $INSUNITS source) sur le doc.

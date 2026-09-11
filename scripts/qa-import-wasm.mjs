@@ -95,18 +95,40 @@ function slugify(name) {
     )
 }
 
+// Miroir EXACT de nest-import/src/units.rs (lot 2b) — table complète 0-20,
+// facteurs exacts par définition (pas ceux, arrondis, de ezdxf), et noms
+// canoniques IDENTIQUES à worker_common.geometry.units.unit_name : le verrou
+// de parité du lot 2b compare `unitDetected` entre les deux coureurs.
+const INSUNITS_TO_MM = {
+    1: 25.4, 2: 304.8, 3: 1609344, 4: 1, 5: 10, 6: 1000, 7: 1e6,
+    8: 2.54e-5, 9: 0.0254, 10: 914.4, 11: 1e-7, 12: 1e-6, 13: 1e-3,
+    14: 100, 15: 10000, 16: 100000, 17: 1e12, 18: 1.495978707e14,
+    19: 9.4607304725808e18, 20: 3.0856775814913673e19,
+}
+const INSUNITS_NAME = {
+    0: 'unitless', 1: 'inch', 2: 'foot', 3: 'mile', 4: 'mm', 5: 'cm', 6: 'm',
+    7: 'km', 8: 'microinch', 9: 'mil', 10: 'yard', 11: 'angstrom',
+    12: 'nanometer', 13: 'micron', 14: 'decimeter', 15: 'decameter',
+    16: 'hectometer', 17: 'gigameter', 18: 'au', 19: 'lightyear', 20: 'parsec',
+}
+
 /** $INSUNITS -> facteur mm : miroir de units.rs::factor_to_mm (nest-import). */
 function factorToMm(code) {
     if (code === 0 || code === 4) return { factor: 1, unknown: false }
-    const table = { 1: 25.4, 2: 304.8, 5: 10, 6: 1000, 8: 2.54e-5, 9: 0.0254 }
-    if (Object.prototype.hasOwnProperty.call(table, code)) return { factor: table[code], unknown: false }
+    if (Object.prototype.hasOwnProperty.call(INSUNITS_TO_MM, code)) {
+        return { factor: INSUNITS_TO_MM[code], unknown: false }
+    }
     return { factor: 1, unknown: true }
 }
 
-/** Nom d'unité du code $INSUNITS. 0/inconnu = mm SUPPOSÉ (units.rs). */
+/** Nom canonique de l'unité du code $INSUNITS (units.rs::unit_name). */
 function unitName(code) {
-    const names = { 1: 'in', 2: 'ft', 4: 'mm', 5: 'cm', 6: 'm', 8: 'uin', 9: 'mil' }
-    return names[code] || 'assumed-mm'
+    return INSUNITS_NAME[code] || 'unknown'
+}
+
+/** Constats d'unité émis par l'importeur (texte identique côté Python). */
+function unitWarnings(warnings) {
+    return (warnings || []).filter((w) => /\$INSUNITS/.test(w))
 }
 
 const BINARY_DXF_SENTINEL = 'AutoCAD Binary DXF'
@@ -205,6 +227,8 @@ function emptyRow(id) {
         splines: null,
         splinesHandled: null,
         ms: null,
+        // ADDITIF lot 2b : constats d'unité (même texte que le coureur ezdxf).
+        unitWarnings: null,
         extra: null,
     }
 }
@@ -301,6 +325,7 @@ async function runOne(file, id, tol) {
     row.unitDeclared = insunits
     row.unitDetected = insunits === null ? null : unitName(insunits)
     row.scaleApplied = factor
+    row.unitWarnings = unitWarnings(warnings)
     row.parts = parts.length
     row.holes = parts.reduce((n, p) => n + ((p.holes && p.holes.length) || 0), 0)
     row.extra.entityCount = Number.isInteger(imported.entity_count) ? imported.entity_count : null

@@ -151,13 +151,33 @@ fn common_apply(common: &mut Common, code: i32, value: &str) {
         5 => common.handle = value.trim().to_string(),
         8 => common.layer = value.trim().to_string(),
         // Preservation-only (export DXF): ACI color. Absent = BYLAYER (256).
-        62 => common.color = value.trim().parse::<i32>().unwrap_or(256),
+        62 => common.color = i(value, 256),
         _ => {}
     }
 }
 
 fn f(v: &str) -> f64 {
     parse_f64(v).unwrap_or(0.0)
+}
+
+/// Entier d'un groupe DXF, TOLÉRANT au flottant (lot 2b).
+///
+/// Les codes 62/70/71/72/73/90 sont des entiers par la spec, mais des
+/// producteurs les écrivent « 1.0 » — dont NOTRE propre exporteur DXF
+/// jusqu'au lot 2b (`nest-export/dxf_writer.rs` écrivait tous les entiers en
+/// flottant). Un `parse::<i32>()` nu rendait alors le défaut : le drapeau
+/// « fermée » d'une LWPOLYLINE tombait à faux, et nos propres exports CAM se
+/// relisaient à 0 pièce dans notre propre navigateur (c08 : 0 contre 2 côté
+/// ezdxf, qui tolère). Mesuré au lot 2b.
+fn i(v: &str, default: i32) -> i32 {
+    let t = v.trim();
+    if let Ok(x) = t.parse::<i32>() {
+        return x;
+    }
+    match parse_f64(t) {
+        Some(x) if x.is_finite() => x.round() as i32,
+        _ => default,
+    }
 }
 
 /// Reads one entity. Returns the entity plus the lookahead group (the
@@ -212,7 +232,7 @@ pub fn read_entity<'a>(
                             *b = f(v);
                         }
                     }
-                    70 => e.closed = (v.trim().parse::<i32>().unwrap_or(0) & 1) != 0,
+                    70 => e.closed = (i(&v, 0) & 1) != 0,
                     _ => common_apply(&mut common, c, v),
                 }
             }
@@ -257,7 +277,7 @@ pub fn read_entity<'a>(
                         }
                     }
                     70 => {
-                        let flags = v.trim().parse::<i32>().unwrap_or(0);
+                        let flags = i(&v, 0);
                         if let Some(mut cv) = cur.take() {
                             cv.1 = flags;
                             cur = Some(cv);
@@ -332,9 +352,9 @@ pub fn read_entity<'a>(
             while let Some((c, v)) = r.next() {
                 if c == 0 { look = Some((0, v.trim().to_string())); break; }
                 match c {
-                    71 => e.degree = v.trim().parse().unwrap_or(3),
-                    72 => n_knots = v.trim().parse().unwrap_or(0),
-                    73 => n_ctrl = v.trim().parse().unwrap_or(0),
+                    71 => e.degree = i(&v, 3),
+                    72 => n_knots = i(&v, 0) as usize,
+                    73 => n_ctrl = i(&v, 0) as usize,
                     40 if e.knots.len() < n_knots => e.knots.push(f(v)),
                     41 if e.weights.len() < n_ctrl => e.weights.push(f(v)),
                     10 => pending_x = Some(f(v)),

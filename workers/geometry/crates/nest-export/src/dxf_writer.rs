@@ -25,6 +25,10 @@ fn num(s: &mut String, code: i32, v: f64) {
     // Pleine précision, jamais arrondi (repr shortest, lisible par ezdxf/Python).
     let _ = writeln!(s, "{}\n{}", code, fmt_dxf(v));
 }
+/// Entier d'un groupe DXF (codes 70, 90… — jamais de point décimal).
+fn int_grp(s: &mut String, code: i32, v: i32) {
+    let _ = writeln!(s, "{}\n{}", code, v);
+}
 fn grp(s: &mut String, code: i32, v: &str) {
     let _ = writeln!(s, "{}\n{}", code, v);
 }
@@ -304,9 +308,13 @@ pub fn build_part_dxf(
     grp(&mut s, 9, "$ACADVER");
     grp(&mut s, 1, "AC1027");
     grp(&mut s, 9, "$INSUNITS");
-    num(&mut s, 70, insunits as f64);
+    // Lot 2b : le code 70 est un ENTIER. Écrit en flottant (« 4.0 »), il
+    // était relu « sans unité » par notre propre importeur navigateur — un
+    // export en pouces se relisait ×1 au lieu de ×25,4. ezdxf écrit un
+    // entier ; on fait pareil.
+    int_grp(&mut s, 70, insunits);
     grp(&mut s, 9, "$MEASUREMENT");
-    num(&mut s, 70, measurement as f64);
+    int_grp(&mut s, 70, measurement);
     grp(&mut s, 0, "ENDSEC");
 
     grp(&mut s, 0, "SECTION");

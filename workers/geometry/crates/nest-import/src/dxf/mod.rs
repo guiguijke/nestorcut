@@ -33,6 +33,24 @@ impl<'a> GroupReader<'a> {
     }
 }
 
+/// Entier d'un groupe DXF, TOLÉRANT au flottant (lot 2b) : le code 70 est
+/// un entier par la spec, mais des producteurs l'écrivent « 4.0 » — dont
+/// NOTRE propre exporteur DXF jusqu'au lot 2b (`nest-export/dxf_writer.rs`
+/// écrivait `$INSUNITS` en flottant). Un `parse::<i32>()` nu rendait alors 0,
+/// c'est-à-dire « sans unité » : notre export en POUCES se relisait ×1 au
+/// lieu de ×25,4, dans notre propre navigateur. ezdxf, lui, tolère.
+fn parse_int_tolerant(s: &str) -> i32 {
+    let t = s.trim();
+    if let Ok(v) = t.parse::<i32>() {
+        return v;
+    }
+    match parse_f64(t) {
+        // round-half-away-from-zero comme int(round(x)) côté Python
+        Some(f) if f.is_finite() => f.round() as i32,
+        _ => 0,
+    }
+}
+
 fn parse_f64(s: &str) -> Option<f64> {
     // f64::from_str is correctly rounded (Eisel-Lemire) — identical bits to
     // Python float() (David Gay) for the same decimal string.
@@ -129,7 +147,7 @@ impl Document {
                         // The value is the NEXT group (code 70).
                         if let Some((c, v)) = next_group!() {
                             if c == 70 {
-                                insunits = v.trim().parse().unwrap_or(0);
+                                insunits = parse_int_tolerant(&v);
                             }
                         }
                     }

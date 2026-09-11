@@ -94,7 +94,12 @@ from core.import_budget import (
 )
 from core.format_detect import detect_format
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
-from worker_common.geometry.units import insunits_code, insunits_to_mm
+from worker_common.geometry.units import (
+    insunits_code,
+    insunits_detail,
+    insunits_to_mm,
+    unit_name,
+)
 
 from shapely import set_precision, unary_union
 from shapely.geometry import LineString
@@ -104,35 +109,18 @@ from shapely.ops import polygonize_full
 # `flattening: 0.01` sur chaque fichier uploadé.
 DEFAULT_TOLERANCE = 0.01
 
-UNIT_NAMES = {
-    0: "unitless",
-    1: "inch",
-    2: "foot",
-    3: "mile",
-    4: "mm",
-    5: "cm",
-    6: "m",
-    7: "km",
-    8: "microinch",
-    9: "mil",
-    10: "yard",
-    11: "angstrom",
-    12: "nanometer",
-    13: "micron",
-    14: "decimeter",
-    15: "decameter",
-    16: "hectometer",
-    17: "gigameter",
-    18: "astronomical unit",
-    19: "light year",
-    20: "parsec",
-}
+# Les noms d'unité viennent de la PRODUCTION (worker_common.geometry.units,
+# `unit_name`) — pas d'une table locale : le verrou de parité du lot 2b
+# compare `unitDetected` entre les deux importeurs, il doit comparer ce que
+# le produit dit, pas ce que le coureur redéfinit.
 
 GRID_FIELDS = [
     "id", "importer", "version", "status", "error", "failingEntity",
     "unitDeclared", "unitDetected", "scaleApplied", "entities", "parts",
     "holes", "openContours", "openContoursClosed", "blocksFlattened",
     "splines", "splinesHandled", "ms",
+    # ADDITIF lot 2b : constats d'unité (texte identique côté wasm).
+    "unitWarnings",
 ]
 
 
@@ -157,6 +145,7 @@ def blank_record(file_id: str, version: str) -> dict:
         "splines": None,
         "splinesHandled": None,
         "ms": None,
+        "unitWarnings": None,
     }
 
 
@@ -179,11 +168,12 @@ def probe_source(path: str) -> dict:
     doc, auditor = recover.readfile(path)
     msp = doc.modelspace()
     counts = count_entities(msp)
-    declared = insunits_code(doc)
+    declared, name, factor, unit_warnings = insunits_detail(doc)
     return {
         "unitDeclared": declared,
-        "unitDetected": UNIT_NAMES.get(declared, f"code-{declared}"),
-        "scaleApplied": float(insunits_to_mm(doc)),
+        "unitDetected": name,
+        "scaleApplied": float(factor),
+        "unitWarnings": unit_warnings,
         "entities": counts,
         "blocksFlattened": counts.get("INSERT", 0),
         "splines": counts.get("SPLINE", 0),
@@ -279,8 +269,8 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
             if tmp_path and os.path.exists(tmp_path):
                 os.unlink(tmp_path)
             return record
-        for key in ("unitDeclared", "unitDetected", "scaleApplied", "entities",
-                    "blocksFlattened", "splines"):
+        for key in ("unitDeclared", "unitDetected", "scaleApplied", "unitWarnings",
+                    "entities", "blocksFlattened", "splines"):
             record[key] = probe[key]
         record["splinesHandled"] = "sampled" if probe["splines"] else None
 
@@ -322,6 +312,7 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
             record["splinesHandled"] = "sampled" if record["splines"] else None
             record["unitDetected"] = "mm"
             record["scaleApplied"] = 1.0
+            record["unitWarnings"] = []
 
         entity_count = len(drawing.modelspace())
         if entity_count == 0:
@@ -386,6 +377,9 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
             (probe and (probe["auditorErrors"] or probe["auditorFixes"]))
             or (record["openContours"] or 0) > 0
             or linework["conversionFailures"] > 0
+            # Lot 2b : une unité supposée ou invraisemblable est un CONSTAT,
+            # comme côté wasm (où elle entre dans `warnings`).
+            or bool(record.get("unitWarnings"))
         )
         record["status"] = "repaired" if repaired else "read"
         return record
