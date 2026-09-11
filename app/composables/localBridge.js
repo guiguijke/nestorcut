@@ -98,20 +98,65 @@ const _ptSeg = (p, a, b) => {
     const qx = a[0] + t * abx; const qy = a[1] + t * aby
     return Math.hypot(p[0] - qx, p[1] - qy)
 }
-// distance min poly→anneau (sommet↔segment croisés)
-const _polyRingDist = (poly, ring) => {
+const _orient = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+/** Distance segment↔segment — 0 si les segments se CROISENT.
+ *
+ * PIÈGE #55, et il a coûté un défaut de production : une distance
+ * sommet→segment ne voit pas deux arêtes qui se croisent en leur milieu, et
+ * surtout elle rend une valeur GRANDE quand un polygone est DANS l'autre
+ * (les sommets du petit sont loin du bord du grand). Le hole-fill
+ * navigateur validait avec cette distance : mesuré le 10/09 sur la paire
+ * fautive d'un rejet total, elle rendait **4,2477 mm** là où shapely — donc
+ * le Python et la vérification aval — mesure **0,0 mm** de recouvrement
+ * réel. 27 paires sous l'espacement et 9 poses dupliquées livrées, job
+ * remboursé une fois sur douze sur la démo. */
+const _segSegDist = (p1, p2, q1, q2) => {
+    const o1 = _orient(p1, p2, q1); const o2 = _orient(p1, p2, q2)
+    const o3 = _orient(q1, q2, p1); const o4 = _orient(q1, q2, p2)
+    if (o1 !== 0 && o2 !== 0 && o3 !== 0 && o4 !== 0
+        && (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0)) return 0
+    return Math.min(
+        _ptSeg(p1, q1, q2), _ptSeg(p2, q1, q2),
+        _ptSeg(q1, p1, p2), _ptSeg(q2, p1, p2),
+    )
+}
+/** Distance ARÊTE↔ARÊTE entre deux anneaux (0 si les frontières se
+ * croisent). Ne dit rien du containment — c'est `_polyPolyDist` qui
+ * tranche. */
+const _ringEdgeDist = (a, b) => {
     let best = Infinity
-    for (const p of poly) {
-        for (let i = 0; i < ring.length - 1; i++) best = Math.min(best, _ptSeg(p, ring[i], ring[i + 1]))
+    const na = a.length; const nb = b.length
+    for (let i = 0; i < na; i++) {
+        const p1 = a[i]; const p2 = a[(i + 1) % na]
+        for (let j = 0; j < nb; j++) {
+            const d = _segSegDist(p1, p2, b[j], b[(j + 1) % nb])
+            if (d < best) { best = d; if (best === 0) return 0 }
+        }
     }
     return best
 }
+// distance min poly→anneau, ARÊTE↔ARÊTE (le croisement rend 0).
+const _polyRingDist = (poly, ring) => _ringEdgeDist(poly, ring)
+/** Distance entre deux polygones posés, MÊME SÉMANTIQUE que
+ * `shapely.Polygon.distance` (celle du Python et de la vérification aval) :
+ * 0 s'ils se touchent, se croisent, ou si l'un est DANS l'autre.
+ *
+ * Le containment se tranche sur un SOMMET : frontières disjointes ⇒ la
+ * frontière de A est entièrement dedans ou entièrement dehors de B. Pas de
+ * centroïde (il sort d'une pièce concave), pas d'échantillonnage. */
 const _polyPolyDist = (a, b) => {
-    let best = Infinity
-    for (const p of a) for (let i = 0; i < b.length - 1; i++) best = Math.min(best, _ptSeg(p, b[i], b[i + 1]))
-    for (const p of b) for (let i = 0; i < a.length - 1; i++) best = Math.min(best, _ptSeg(p, a[i], a[i + 1]))
-    return best
+    const d = _ringEdgeDist(a, b)
+    if (d <= 0) return 0
+    if (a.length && _pin(a[0], b)) return 0
+    if (b.length && _pin(b[0], a)) return 0
+    return d
 }
+/** §17.3 : tolérance de la validation du post-pass, ALIGNÉE sur celle de
+ * la vérification aval (`nest-report::verify_layout` : `spacingOk = écart ≥
+ * space − 0,01`). L'ancien repli valait `space − 2 × SIMPLIFY` = 1,90 pour
+ * 2,0 demandés : il acceptait ce que le rapport rejette ensuite — le
+ * post-pass et la vérification doivent dire la même chose du même layout. */
+const PAIR_SLACK_MM = 0.01
 const PINWHEEL = [0, 90, 180, 270]
 const CAPACITY = 4
 const PACK_GRID = 8
@@ -439,7 +484,7 @@ export function expandPacks(parts, packs, layouts) {
  * Mutate les transforms des layouts ; déterministe. Miroir de holefill.py.
  * Validation = promesse exacte du moteur (piège #3) : marge `space` à la
  * paroi du trou et entre fillers (l'inflation ±space/2 des deux côtés). */
-export function applyHoleFill(parts, layouts, space) {
+export function applyHoleFill(parts, layouts, space, postPass = null) {
     // D3 (audit 2026-09-03) : garde non-quart-de-tour — rotateRing traite
     // tout angle non multiple de 90 comme 270 : la validation comparerait
     // des anneaux FAUX et accepterait des poses chevauchantes.
@@ -459,6 +504,7 @@ export function applyHoleFill(parts, layouts, space) {
     }
     const margin = Math.max(0, Number(space) || 0)
     const byId = new Map(parts.map((p) => [String(p.id), p]))
+    const rollbacks = []
     // BPP : scopé PAR TÔLE (2026-09-01) — les layouts BPP partagent le
     // repère de coordonnées ; pooler trous/libres à travers les tôles
     // laissait nestedHole classer un fan d'une tôle comme occupant du trou
@@ -469,9 +515,163 @@ export function applyHoleFill(parts, layouts, space) {
     const deadline = Date.now() + PACK_BUDGET_MS
     let recovered = 0
     for (const layout of layouts) {
-        recovered += _fillOneSheetHoles(layout, byId, margin, deadline)
+        // §17.3 point 3 — CEINTURE PAR TÔLE. Cliché AVANT la première
+        // mutation (piège #58 : un cliché pris après une phase restaure un
+        // état déjà abîmé), puis mesure exacte de la tôle après la passe.
+        // Une paire sous le seuil ou une pose dupliquée annule la passe SUR
+        // CETTE TÔLE : le layout moteur, mesuré conforme, vaut mieux qu'un
+        // job remboursé (constat du 10/09 : une fois sur douze, TOUTES les
+        // alternatives étaient écartées et l'utilisateur repartait sans
+        // résultat).
+        const snapshot = (layout.placed_items || []).map((pi) => ({
+            pi,
+            rotation: pi.transformation?.rotation ?? 0,
+            translation: [...(pi.transformation?.translation || [0, 0])],
+        }))
+        const got = _fillOneSheetHoles(layout, byId, margin, deadline)
+        if (!got) continue
+        const entries = []
+        for (const pi of layout.placed_items || []) {
+            const item = byId.get(String(pi.item_id))
+            if (!item) continue
+            const t = pi.transformation || {}
+            entries.push({
+                item,
+                pi,
+                mat: _placedMaterial(item, t.rotation ?? 0, ...(t.translation || [0, 0])),
+            })
+        }
+        const { under, duplicates } = _sheetViolations(entries, margin)
+        if (under || duplicates) {
+            for (const snap of snapshot) {
+                snap.pi.transformation.rotation = snap.rotation
+                snap.pi.transformation.translation = [...snap.translation]
+            }
+            rollbacks.push({
+                sheet: layouts.indexOf(layout),
+                moved: got,
+                pairsUnderThreshold: under,
+                duplicatePoses: duplicates,
+            })
+            continue
+        }
+        recovered += got
+    }
+    if (rollbacks.length && postPass) {
+        postPass.holeFillRollback = rollbacks
     }
     return recovered
+}
+
+const _bbOf = (poly) => {
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
+    for (const [x, y] of poly) {
+        if (x < x0) x0 = x
+        if (y < y0) y0 = y
+        if (x > x1) x1 = x
+        if (y > y1) y1 = y
+    }
+    return [x0, y0, x1, y1]
+}
+/** Écart des AABB (0 si elles se recouvrent) : minorant EXACT de la
+ * distance des anneaux, donc pré-filtre sûr — la distance exacte ne se paie
+ * que sur les paires réellement proches. */
+const _bbGap = (a, b) => {
+    const dx = Math.max(0, Math.max(b[0] - a[2], a[0] - b[2]))
+    const dy = Math.max(0, Math.max(b[1] - a[3], a[1] - b[3]))
+    return dx === 0 && dy === 0 ? 0 : Math.hypot(dx, dy)
+}
+
+/** Distance entre les MATIÈRES de deux pièces posées, TROUS SOUSTRAITS —
+ * la sémantique de `shapely.Polygon(outer, holes).distance` et du
+ * `geometry_check::material_distance` du moteur.
+ *
+ * PIÈGE #4, et il est central ici : la matière d'un hôte s'arrête au bord
+ * de ses trous. Un filler NICHÉ dans le trou de son hôte est légal et sa
+ * distance est celle qui le sépare de l'anneau DU TROU — pas 0 parce qu'il
+ * est dans l'anneau extérieur de l'hôte. Sans cette règle, élargir la
+ * validation à la tôle rejetterait tout remplissage de trou (constaté :
+ * deux verrous du dépôt tombés à 0 relocalisation).
+ *
+ * `a`/`b` : { outer, holes[] } d'anneaux POSÉS. */
+const _materialDist = (a, b) => {
+    const d = _ringEdgeDist(a.outer, b.outer)
+    if (d <= 0) return 0
+    // Frontières disjointes : reste le containment, qu'une distance de
+    // frontière ne voit pas. Un SOMMET suffit à trancher de quel côté.
+    if (a.outer.length && _pin(a.outer[0], b.outer)) {
+        for (const hole of b.holes || []) {
+            if (_pin(a.outer[0], hole)) return _ringEdgeDist(hole, a.outer)
+        }
+        return 0
+    }
+    if (b.outer.length && _pin(b.outer[0], a.outer)) {
+        for (const hole of a.holes || []) {
+            if (_pin(b.outer[0], hole)) return _ringEdgeDist(hole, b.outer)
+        }
+        return 0
+    }
+    return d
+}
+/** Exporté pour les verrous : une distance qui MENT est la cause du défaut
+ * du 10/09 (hole-fill navigateur), et elle a menti trois mois. Le test
+ * `holefillParity.test.js` la contraint directement. */
+export const materialDistance = (a, b) => _materialDist(a, b)
+
+/** Anneaux POSÉS d'une pièce : extérieur + trous. */
+export const placedMaterial = (item, rotDeg, tx, ty) => _placedMaterial(item, rotDeg, tx, ty)
+
+/** Anneaux POSÉS d'une pièce : extérieur + trous. */
+const _placedMaterial = (item, rotDeg, tx, ty) => ({
+    outer: _placedPoly(_itemCoords(item), rotDeg, tx, ty),
+    holes: (item.holes || []).map((h) => _placedPoly(h, rotDeg, tx, ty)),
+})
+
+/** §17.3 point 2 — une pose est-elle en conflit avec la TÔLE ?
+ *
+ * Portée TÔLE et non trou : la pose est comparée à tous les occupants sauf
+ * l'entrée qu'on déplace, dans leur état COURANT (les pièces déjà
+ * relocalisées par la même passe comptent — c'est ainsi que deux pièces
+ * envoyées au même emplacement se voient). Seuil `space − 0,01`, celui du
+ * rapport ; à espacement 0, le contact est permis mais le recouvrement non
+ * (`_polyPolyDist` rend 0 dans les deux cas, d'où le test séparé). */
+function _conflictsWithSheet(candMat, entries, self, margin) {
+    const lim = Math.max(0, margin - PAIR_SLACK_MM)
+    const bb = _bbOf(candMat.outer)
+    for (const e of entries) {
+        if (e === self || !e.mat) continue
+        if (lim > 0 && _bbGap(bb, e.bb) >= lim) continue
+        const d = _materialDist(candMat, e.mat)
+        if (margin > 0 ? d < lim : d <= 0) return true
+    }
+    return false
+}
+
+/** Paires sous le seuil et poses dupliquées d'une tôle — la MESURE qui
+ * arme la ceinture du §17.3 point 3. */
+function _sheetViolations(entries, margin) {
+    const lim = Math.max(0, margin - PAIR_SLACK_MM)
+    let under = 0
+    let duplicates = 0
+    const bbs = entries.map((e) => _bbOf(e.mat.outer))
+    for (let i = 0; i < entries.length; i++) {
+        for (let j = i + 1; j < entries.length; j++) {
+            if (lim > 0 && _bbGap(bbs[i], bbs[j]) >= lim) continue
+            const d = _materialDist(entries[i].mat, entries[j].mat)
+            if (margin > 0 ? d < lim : d <= 0) {
+                under++
+                const a = entries[i].pi.transformation
+                const b = entries[j].pi.transformation
+                if (entries[i].item.id === entries[j].item.id
+                    && Math.abs((a.rotation || 0) - (b.rotation || 0)) < 1e-6
+                    && Math.abs(a.translation[0] - b.translation[0]) < 1e-6
+                    && Math.abs(a.translation[1] - b.translation[1]) < 1e-6) {
+                    duplicates++
+                }
+            }
+        }
+    }
+    return { under, duplicates }
 }
 
 function _fillOneSheetHoles(layout, byId, margin, deadline) {
@@ -480,7 +680,9 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         const item = byId.get(String(pi.item_id))
         if (!item) continue
         const t = pi.transformation || {}
-        entries.push({ item, pi, poly: _placedPoly(item.coords, t.rotation ?? 0, ...(t.translation || [0, 0])) })
+        const poly = _placedPoly(item.coords, t.rotation ?? 0, ...(t.translation || [0, 0]))
+        const mat = _placedMaterial(item, t.rotation ?? 0, ...(t.translation || [0, 0]))
+        entries.push({ item, pi, poly, mat, bb: _bbOf(poly) })
     }
     const holes = [] // {holeRing(world), members[], }
     for (const e of entries) {
@@ -509,21 +711,18 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         const allowed = fillItem.rotations?.length ? fillItem.rotations : PINWHEEL
         return _jsPinwheelCapacity(ring, _itemCoords(fillItem), margin, allowed).length
     }
-    // Écarte les poses en conflit avec les fillers DÉJÀ dans le trou
-    // (pré-nichés par l'expansion méta-pièces) : packHole valide contre un
-    // trou VIDE — sans ça il retéléporte sur les poses canoniques occupées,
-    // double-remplissage (cas trou600 : jumeaux au µm près). Miroir de
-    // holefill.drop_occupied.
-    const dropOccupied = (h, poses) => {
-        if (!h.members.length) return poses
-        const lim = margin > 0 ? margin + _SPACE_EPS : _SPACE_EPS
-        return poses.filter((pose) => {
-            const item = byId.get(String(pose.fillId))
-            if (!item) return false
-            const cand = _placedPoly(_itemCoords(item), pose.rot, pose.lx, pose.ly)
-            return !h.members.some((m) => _polyPolyDist(cand, m.poly) < lim)
-        })
-    }
+    // §17.3 : écarte les poses en conflit avec la TÔLE — pas seulement
+    // avec les fillers déjà dans le trou visé. `packHole` valide contre un
+    // trou VIDE : sans ce filtre il retéléporte sur des poses occupées
+    // (double-remplissage, cas trou600), et la version « trou seulement »
+    // laissait passer une pose posée sur une pièce de la tôle (constat du
+    // 10/09 : 27 paires sous l'espacement, 9 doublons, job remboursé).
+    const dropOccupied = (poses) => poses.filter((pose) => {
+        const item = byId.get(String(pose.fillId))
+        if (!item) return false
+        const candMat = _placedMaterial(item, pose.rot, pose.lx, pose.ly)
+        return !_conflictsWithSheet(candMat, entries, null, margin)
+    })
     for (const h of holes) {
         if (!free.length) break
         // Trou déjà à capacité validée (fillers pré-nichés) : no-op —
@@ -543,7 +742,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             uniq.push(c)
         }
         let poses = uniq.length ? packHole(h.ring, uniq, margin, deadline) : []
-        if (poses.length) poses = dropOccupied(h, poses)
+        if (poses.length) poses = dropOccupied(poses)
         if (poses.length) {
             const freeByItem = new Map()
             for (const e of free) {
@@ -551,21 +750,35 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
                 list.push(e)
                 freeByItem.set(e.item.id, list)
             }
+            let applied = 0
             for (const pose of poses) {
                 const pool = freeByItem.get(pose.fillId) || []
                 if (!pool.length) continue
-                const e = pool.shift()
+                const e = pool[0]
+                const cand = _placedPoly(_itemCoords(e.item), pose.rot, pose.lx, pose.ly)
+                // §17.3 : re-validée MAINTENANT, contre l'état courant de la
+                // tôle. Les poses d'un même trou sont calculées ensemble
+                // contre un trou vide : deux d'entre elles peuvent être
+                // compatibles avec le trou et incompatibles entre elles dès
+                // que la première est posée.
+                if (_conflictsWithSheet(
+                    _placedMaterial(e.item, pose.rot, pose.lx, pose.ly), entries, e, margin,
+                )) continue
+                pool.shift()
                 e.pi.transformation.rotation = pose.rot
                 e.pi.transformation.translation = [pose.lx, pose.ly]
-                e.poly = _placedPoly(_itemCoords(e.item), pose.rot, pose.lx, pose.ly)
+                e.poly = cand
+                e.mat = _placedMaterial(e.item, pose.rot, pose.lx, pose.ly)
+                e.bb = _bbOf(cand)
                 const fi = free.indexOf(e)
                 if (fi >= 0) {
                     free.splice(fi, 1)
                     h.members.push(e) // occupe le trou (parité _apply_poses)
                     recovered++
+                    applied++
                 }
             }
-            continue
+            if (applied) continue
         }
         const cur = h.members
         if (cur.length >= CAPACITY || free.length < CAPACITY - cur.length) continue
@@ -577,6 +790,15 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             const cand = _placedPoly(pool[i].item.coords, PINWHEEL[i], c[0], c[1])
             if (!cand.every((v) => _pin(v, h.ring)) || _polyRingDist(cand, h.ring) < margin) { ok = false; break }
             if (polys.some((q) => _polyPolyDist(cand, q) < margin)) { ok = false; break }
+            // §17.3 : et contre la TÔLE — les membres du pool sont exclus,
+            // ils sont justement ceux qu'on déplace.
+            if (_conflictsWithSheet(
+                _placedMaterial(pool[i].item, PINWHEEL[i], c[0], c[1]),
+                entries.filter((e) => !pool.includes(e)), null, margin,
+            )) {
+                ok = false
+                break
+            }
             polys.push(cand)
         }
         if (!ok) continue
@@ -584,6 +806,8 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             e.pi.transformation.rotation = PINWHEEL[i]
             e.pi.transformation.translation = [c[0], c[1]]
             e.poly = polys[i]
+            e.mat = _placedMaterial(e.item, PINWHEEL[i], c[0], c[1])
+            e.bb = _bbOf(polys[i])
             const fi = free.indexOf(e)
             if (fi >= 0) { free.splice(fi, 1); recovered++ }
         })
@@ -869,7 +1093,7 @@ export function decorateLiveLayout(evt, payload) {
     }
 }
 
-export async function buildAlternativeArtifacts(result, payload) {
+export async function buildAlternativeArtifacts(result, payload, qa = null) {
     try {
         const alternatives = result?.alternatives || []
         const parts = payload?.parts || []
@@ -889,12 +1113,36 @@ export async function buildAlternativeArtifacts(result, payload) {
         const space = Number(payload?.engineConfig?.min_item_separation) || 0
 
         const out = []
+        // §17.2 : la géométrie des pièces, une fois — les deux états
+        // (moteur et livré) se mesurent contre les MÊMES anneaux bruts.
+        const qaParts = qa?.dumpPrePostPass
+            ? parts.map((p) => ({ id: String(p.id), coords: p.coords, holes: p.holes || [] }))
+            : null
         for (const alt of alternatives) {
             const layouts = normalizeLayouts(alt.solution)
             if (!layouts.length) {
                 out.push(null)
                 continue
             }
+            // §17.2 : COPIE de l'état moteur AVANT toute mutation. Les
+            // passes ci-dessous mutent `layouts` en place (remap idMap,
+            // expansion, hole-fill, bandes) : un clone pris plus tard ne
+            // mesurerait que l'état final contre lui-même.
+            const qaLayoutsPre = qa?.dumpPrePostPass
+                ? layouts.map((l) => ({
+                    container_id: l.container_id ?? 0,
+                    placed_items: (l.placed_items || []).map((pi) => ({
+                        item_id: pi.item_id,
+                        transformation: {
+                            rotation: pi.transformation?.rotation ?? 0,
+                            translation: [
+                                pi.transformation?.translation?.[0] ?? 0,
+                                pi.transformation?.translation?.[1] ?? 0,
+                            ],
+                        },
+                    })),
+                }))
+                : null
             // Alternative structurelle AUTO-SUFFISANTE (constat 2026-08-29) :
             // ids d'origine + trous déjà remplis par le pass grille. Le remap
             // idMap CORROMPRait ses ids (un id d'origine indexé comme id
@@ -943,8 +1191,12 @@ export async function buildAlternativeArtifacts(result, payload) {
             // muet : expandMeta compté, holeFillRecovered = relocations,
             // residual stats (moved/rounds/rollback/errors).
             let holeFillRecovered = 0
+            // §17.3 : `holeFillDiag` recueille les annulations de la
+            // ceinture par tôle — l'objet `postPass` n'existe qu'après, on
+            // fusionne plus bas plutôt que de déplacer sa construction.
+            const holeFillDiag = {}
             if (!selfContained && holesGateOpen(payload, parts)) {
-                holeFillRecovered = applyHoleFill(parts, layouts, space)
+                holeFillRecovered = applyHoleFill(parts, layouts, space, holeFillDiag)
             }
             const partsById0 = new Map(parts.map((p2) => [String(p2.id), p2]))
             // P4 : import explicite — Nuxt auto-importe layoutAabb sur le
@@ -967,6 +1219,11 @@ export async function buildAlternativeArtifacts(result, payload) {
                 holeFillRecovered,
                 residualMoved: 0, residualRounds: 0,
                 compactRollback: false, errors: [],
+                // §17.3 : tôles dont le hole-fill a été ANNULÉ faute de
+                // tenir l'espacement (absent = aucune annulation).
+                ...(holeFillDiag.holeFillRollback
+                    ? { holeFillRollback: holeFillDiag.holeFillRollback }
+                    : {}),
                 // X4/Y4 : état après expansion + hole-fill, AVANT le
                 // post-pass résiduel (miroir main.py — le gain mesuré est
                 // celui du post-pass, pas de l'expansion).
@@ -989,7 +1246,14 @@ export async function buildAlternativeArtifacts(result, payload) {
                 // libre peut devenir remplissable. Deuxième hole-fill,
                 // scopé tôle (piège #52). Miroir main.py.
                 if (holesGateOpen(payload, parts)) {
-                    postPass.holeFillRecovered += applyHoleFill(parts, layouts, space) || 0
+                    const diag2 = {}
+                    postPass.holeFillRecovered += applyHoleFill(parts, layouts, space, diag2) || 0
+                    if (diag2.holeFillRollback) {
+                        postPass.holeFillRollback = [
+                            ...(postPass.holeFillRollback || []),
+                            ...diag2.holeFillRollback,
+                        ]
+                    }
                 }
             }
             const containers = []
@@ -1026,6 +1290,30 @@ export async function buildAlternativeArtifacts(result, payload) {
                 report: report && !report.error ? report : null,
                 postPass,
                 engineCounts,
+                // §17.2 : sous drapeau QA seulement — l'état MOTEUR et
+                // l'état LIVRÉ des mêmes layouts, plus la géométrie brute
+                // des pièces, pour que la mesure soit faite hors du
+                // navigateur (shapely) sur les deux états.
+                qaPrePostPass: qa?.dumpPrePostPass
+                    ? {
+                        parts: qaParts,
+                        layoutsPre: qaLayoutsPre,
+                        layoutsPost: layouts.map((l) => ({
+                            container_id: l.container_id ?? 0,
+                            placed_items: (l.placed_items || []).map((pi) => ({
+                                item_id: pi.item_id,
+                                transformation: {
+                                    rotation: pi.transformation?.rotation ?? 0,
+                                    translation: [
+                                        pi.transformation?.translation?.[0] ?? 0,
+                                        pi.transformation?.translation?.[1] ?? 0,
+                                    ],
+                                },
+                            })),
+                        })),
+                        space,
+                    }
+                    : null,
             })
         }
         return out
@@ -1120,6 +1408,8 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
             // Plan « dernière tôle » : trace de la finition de la tôle
             // partielle (champ ADDITIF, miroir main.py).
             finish: alt.finish ?? null,
+            // §17.2 : présent UNIQUEMENT sous le drapeau QA du harnais.
+            qaPrePostPass: art.qaPrePostPass ?? null,
             svgs: art.sheets || [],
             report: {
                 ...verify,

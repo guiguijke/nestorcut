@@ -23,11 +23,22 @@ fs.mkdirSync(OUT, { recursive: true })
 
 // Espacement demandé par le harnais : kerf 0 + 2 × sécurité 1.
 const SPACE_MM = 2
+// Étiquette d'exécution : QA_RUN_TAG=<n> distingue les dumps de la même
+// direction sur plusieurs passages (§17.2 : douze exécutions).
+const RUN_TAG = process.env.QA_RUN_TAG || '1'
 const log = (...a) => console.log(`[${new Date().toISOString().slice(11, 19)}]`, ...a)
 const browser = await chromium.launch({ headless: true })
-const page = await (await browser.newContext({
+const context = await browser.newContext({
     locale: 'en-US', viewport: { width: 1680, height: 1000 },
-})).newPage()
+})
+// §17.2 : demander à l'app de conserver l'état MOTEUR des layouts (avant
+// expansion meta / hole-fill / bandes résiduelles) à côté de l'état livré.
+// Drapeau de harnais, posé avant tout script de page ; l'app ne le lit
+// nulle part ailleurs et la production ne le pose jamais.
+if (process.env.QA_DUMP_PRE_POSTPASS === '1') {
+    await context.addInitScript(() => { window.__QA_DUMP_PRE_POSTPASS = true })
+}
+const page = await context.newPage()
 page.on('pageerror', (e) => log('[pageerror]', String(e).slice(0, 300)))
 
 try {
@@ -88,7 +99,19 @@ try {
         while (Date.now() - t0 < 15 * 60 * 1000) {
             await page.waitForTimeout(3000)
             const err = (await page.locator('.content__error').allInnerTexts().catch(() => [])).join(' ')
-            if (err) throw new Error('page-error: ' + err)
+            if (err) {
+                // §17.2 : « toutes les alternatives rejetées » ne laisse
+                // aucun record. Le relais QA porte les deux états de poses
+                // des alternatives écartées : on les écrit AVANT de lever,
+                // sinon le cas le plus grave est le seul non mesurable.
+                const discarded = await page.evaluate(() => window.__QA_LAST_DISCARDED || null)
+                if (discarded) {
+                    const file = path.join(OUT, `discarded-${DIRS[d]}-${RUN_TAG}.json`)
+                    fs.writeFileSync(file, JSON.stringify({ space: SPACE_MM, discarded }, null, 1))
+                    log(`REJET TOTAL : états écrits dans ${path.basename(file)}`)
+                }
+                throw new Error('page-error: ' + err)
+            }
             const running = await page.locator('.stage__status').count()
             const btn = await page.locator('[data-testid="result-report-btn"]').count()
             if (btn > before && !running) { done = true; break }
@@ -161,9 +184,49 @@ try {
         }
         await page.locator('[data-testid="viewer-stage"]').first()
             .screenshot({ path: path.join(OUT, `demo-${DIRS[d]}.png`) })
-        // Badge d'espacement rouge : on sort les POSES, sinon le constat
-        // s'arrête à « c'est rouge » et la cause reste invisible (quelle
-        // tôle, quelle paire, ou un simple bord de tôle).
+        // §17.2 : sous drapeau QA, on écrit les DEUX états de poses à
+        // CHAQUE exécution, pas seulement quand le badge tombe. L'écart
+        // sous l'espacement est rare (mesuré 2 sur 12 puis 0 sur 47) :
+        // attendre l'événement, c'est mesurer une fois par heure. La
+        // distribution « avant post-pass / après post-pass » sur toutes les
+        // exécutions dit si une passe RÉDUIT l'écart, même quand elle
+        // reste au-dessus du seuil.
+        if (process.env.QA_DUMP_PRE_POSTPASS === '1') {
+            const poses = await page.evaluate(async (strategy) => {
+                const db = await new Promise((res, rej) => {
+                    const req = indexedDB.open('nestorcut-local')
+                    req.onsuccess = () => res(req.result)
+                    req.onerror = () => rej(req.error)
+                })
+                const recs = await new Promise((res, rej) => {
+                    const r = db.transaction('results', 'readonly').objectStore('results').getAll()
+                    r.onsuccess = () => res(r.result || [])
+                    r.onerror = () => rej(r.error)
+                })
+                recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+                const a = (recs[0]?.alternatives || []).find((x) => x.strategy === strategy)
+                if (!a?.qaPrePostPass) return null
+                return {
+                    strategy: a.strategy,
+                    report: {
+                        spacingOk: a.report?.spacingOk ?? null,
+                        smallestGapMm: a.report?.smallestGapMm ?? null,
+                        overlapFree: a.report?.overlapFree ?? null,
+                        duplicatePoses: a.report?.duplicatePoses ?? null,
+                    },
+                    postPass: a.report?.postPass ?? null,
+                    finish: a.finish ?? null,
+                    qaPrePostPass: a.qaPrePostPass,
+                }
+            }, DIRS[d])
+            if (poses) {
+                const file = path.join(OUT, `poses-${DIRS[d]}-${RUN_TAG}.json`)
+                fs.writeFileSync(file, JSON.stringify({ space: SPACE_MM, alternative: poses }, null, 1))
+            }
+        }
+        // Badge d'espacement rouge : on sort les POSES ET les SVG livrés,
+        // sinon le constat s'arrête à « c'est rouge » et la cause reste
+        // invisible (quelle tôle, quelle paire, ou un simple bord de tôle).
         if (alt.spacingOk === false) {
             const dump = await page.evaluate(async (strategy) => {
                 const db = await new Promise((res, rej) => {
@@ -179,9 +242,15 @@ try {
                 recs.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
                 const rr = recs[0] || {}
                 const a = (rr.alternatives || []).find((x) => x.strategy === strategy)
-                return { alternative: a || null }
+                if (!a) return { alternative: null }
+                // On garde les deux états de poses (`qaPrePostPass`), la
+                // géométrie brute, le rapport et les SVG livrés (la mesure
+                // par tôle sait lire les deux) — mais pas les DXF, qui ne
+                // servent à aucune mesure et pèsent le plus lourd.
+                const { svgs, dxfs, ...rest } = a
+                return { alternative: { ...rest, svgs: svgs || [] } }
             }, DIRS[d])
-            const file = path.join(OUT, `spacing-fail-${DIRS[d]}.json`)
+            const file = path.join(OUT, `spacing-fail-${DIRS[d]}-${RUN_TAG}.json`)
             // L'espacement vient du HARNAIS (kerf 0 + sécurité 1 = 2 mm),
             // pas du record : celui-ci ne porte pas les paramètres, et un
             // dump sans espacement fait comparer l'outil de mesure à un

@@ -113,8 +113,10 @@ async function appendBppGrid(result, payload) {
     }
 }
 
-export async function assembleBrowserArtifacts({ result, payload, sources, jobSlug }) {
+export async function assembleBrowserArtifacts({ result, payload, sources, jobSlug, qa = null }) {
     const localDiscarded = []
+    // §17.2 : états de poses des alternatives écartées (QA seulement).
+    const qaDiscarded = []
     let structMultiDiag = null
     try {
         structMultiDiag = await appendBppGrid(result, payload)
@@ -129,7 +131,7 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
     try {
         const { perClassCountsMatch, enginePlacedById } = await import('./localBridge')
         const preEngineCounts = rawAlts.map((alt) => enginePlacedById(alt))
-        let arts = await buildAlternativeArtifacts(result, payload)
+        let arts = await buildAlternativeArtifacts(result, payload, qa)
         const requestedById = new Map(
             (payload?.parts || []).map((p) => [String(p.id), Number(p.count) || 0]),
         )
@@ -162,6 +164,23 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
                         smallestGapMm: verify.smallestGapMm ?? null,
                     },
                 })
+                // §17.2 : une alternative ÉCARTÉE ne laisse aucun record —
+                // c'est justement le cas le plus intéressant à mesurer
+                // (« toutes les alternatives rejetées », remboursement). Sous
+                // drapeau QA, on garde ses deux états de poses pour dire si
+                // le recouvrement existait AVANT le post-pass.
+                if (qa?.dumpPrePostPass && art?.qaPrePostPass) {
+                    qaDiscarded.push({
+                        strategy,
+                        reason: 'overlap',
+                        verification: {
+                            overlapFree: verify.overlapFree,
+                            duplicatePoses: verify.duplicatePoses,
+                            smallestGapMm: verify.smallestGapMm ?? null,
+                        },
+                        qaPrePostPass: art.qaPrePostPass,
+                    })
+                }
                 return
             }
             keptIdx.push(i)
@@ -221,5 +240,7 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
         localDiscarded,
         result,
         structMultiDiag,
+        // Vide hors drapeau QA.
+        qaDiscarded,
     }
 }

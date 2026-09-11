@@ -557,6 +557,17 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     {
         const assembled = await assembleBrowserArtifactsOffThread({
             result, payload, sources, jobSlug,
+            // §17.2 : le harnais peut demander l'état MOTEUR des layouts,
+            // avant expansion meta / hole-fill / bandes résiduelles, pour
+            // savoir si un écart sous l'espacement existe DÉJÀ à la sortie
+            // du solveur ou s'il apparaît dans une passe. Drapeau posé par
+            // le harnais sur `window`, jamais en production, et transmis
+            // EXPLICITEMENT : le payload sert au seed canonique, on n'y
+            // glisse rien.
+            qa: {
+                dumpPrePostPass: typeof window !== 'undefined'
+                    && window.__QA_DUMP_PRE_POSTPASS === true,
+            },
         })
         alternatives = assembled.alternatives || []
         liveLayout = assembled.liveLayout || null
@@ -570,6 +581,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
         }
         if (typeof window !== 'undefined' && assembled.structMultiDiag) {
             window.__structMultiDiag = assembled.structMultiDiag
+        }
+        // §17.2 : quand TOUTES les alternatives sont écartées, il n'y a ni
+        // record ni artefact — sans ce relais, le cas le plus grave est
+        // aussi le seul qu'on ne peut pas mesurer. QA seulement.
+        if (typeof window !== 'undefined' && assembled.qaDiscarded?.length) {
+            window.__QA_LAST_DISCARDED = assembled.qaDiscarded
         }
         if (liveHandler && liveLayout) {
             try { liveHandler(liveLayout) } catch { /* reveal reste la source */ }

@@ -8,8 +8,16 @@ quelle tôle. Ce script le dit, tôle par tôle, sur les anneaux BRUTS écrits
 dans le SVG (les mêmes que le DXF livré, trous compris, `fill-rule
 evenodd`).
 
-Entrée : le dump du harnais L5 (`spacing-fail-<dir>.json`, clés `space` et
-`alternative.svgs`), ou n'importe quel JSON de la même forme.
+Entrée : le dump du harnais L5 (`spacing-fail-<dir>-<n>.json`).
+
+DEUX modes, selon ce que le dump contient :
+
+* `alternative.svgs` → mesure des tôles LIVRÉES (anneaux bruts du SVG) ;
+* `alternative.qaPrePostPass` (drapeau `QA_DUMP_PRE_POSTPASS`, §17.2) →
+  mesure de l'état MOTEUR (avant expansion meta, hole-fill et bandes
+  résiduelles) ET de l'état livré, sur les MÊMES anneaux bruts, avec les
+  deux poses de la paire fautive. C'est cette comparaison qui dit si
+  l'écart sort du solveur ou d'une passe.
 
 À lancer DANS l'image worker (shapely) :
 
@@ -74,8 +82,132 @@ def sheet_size(svg):
     return (float(m.group(1)), float(m.group(2))) if m else (None, None)
 
 
+def rings_of_part(part):
+    """(anneau externe, trous) d'une pièce du payload navigateur."""
+    outer = [tuple(p) for p in part.get("coords") or []]
+    while len(outer) > 1 and outer[-1] == outer[0]:
+        outer.pop()
+    holes = []
+    for h in part.get("holes") or []:
+        ring = [tuple(p) for p in h]
+        while len(ring) > 1 and ring[-1] == ring[0]:
+            ring.pop()
+        holes.append(ring)
+    return outer, holes
+
+
+def polys_of_layout(layout, base):
+    """Polygones posés d'une tôle, à partir des poses.
+
+    `placed_items[].transformation.rotation` est en DEGRÉS — c'est la
+    convention externe du moteur, et `layoutTransforms` (localBridge) lui
+    applique `degToRad` pour le SVG. Convertir ici serait une erreur de
+    facteur 57 qui rendrait toute la mesure absurde sans le dire.
+    """
+    out, ids = [], []
+    for pi in layout.get("placed_items") or []:
+        rings = base.get(str(pi["item_id"]))
+        if rings is None:
+            continue
+        outer, holes = rings
+        g = Polygon(outer, holes)
+        t = pi.get("transformation") or {}
+        deg = float(t.get("rotation") or 0.0)
+        tx, ty = (t.get("translation") or [0.0, 0.0])[:2]
+        g = affinity.rotate(g, deg, origin=(0, 0))
+        g = affinity.translate(g, float(tx), float(ty))
+        out.append(g)
+        ids.append(int(pi["item_id"]))
+    return out, ids
+
+
+def min_pair(polys, space):
+    """(écart minimal, paire, nombre de paires sous le seuil) d'une tôle."""
+    if len(polys) < 2:
+        return math.inf, None, 0
+    tree = STRtree(polys)
+    best, pair, under = math.inf, None, 0
+    limit = space - 0.01
+    for i, p in enumerate(polys):
+        for j in tree.query(p.buffer(space + 1.0)):
+            j = int(j)
+            if j <= i:
+                continue
+            d = p.distance(polys[j])
+            if d < best:
+                best, pair = d, (i, j)
+            if d < limit:
+                under += 1
+    return best, pair, under
+
+
+def measure_poses(data):
+    """Mode POSES : l'état moteur contre l'état livré (§17.2)."""
+    alt = data.get("alternative") or {}
+    qa = alt.get("qaPrePostPass") or {}
+    space = float(qa.get("space") or data.get("space") or 0.0)
+    base = {str(p["id"]): rings_of_part(p) for p in qa.get("parts") or []}
+    verdicts = []
+    for label, key in (("moteur (avant post-pass)", "layoutsPre"),
+                       ("livré (après post-pass)", "layoutsPost")):
+        rows = []
+        for k, layout in enumerate(qa.get(key) or []):
+            polys, ids = polys_of_layout(layout, base)
+            d, pair, under = min_pair(polys, space)
+            rows.append({
+                "tole": k, "pieces": len(polys),
+                "ecartMin": None if d is math.inf else round(d, 4),
+                "pairesSousSeuil": under,
+                "paire": None if not pair else {
+                    "itemIds": [ids[pair[0]], ids[pair[1]]],
+                    "poses": [
+                        [round(v, 3) for v in polys[pair[0]].bounds],
+                        [round(v, 3) for v in polys[pair[1]].bounds],
+                    ],
+                },
+            })
+        worst = min((r for r in rows if r["ecartMin"] is not None),
+                    key=lambda r: r["ecartMin"], default=None)
+        verdicts.append({"etat": label, "toles": rows,
+                         "ecartMinGlobal": worst["ecartMin"] if worst else None,
+                         "toleFautive": worst["tole"] if worst else None,
+                         "pairesSousSeuil": sum(r["pairesSousSeuil"] for r in rows)})
+    print(json.dumps({
+        "space": space,
+        "seuil": round(space - 0.01, 4),
+        "spacingOkRapporte": (alt.get("report") or {}).get("spacingOk"),
+        "ecartMinRapporte": (alt.get("report") or {}).get("smallestGapMm"),
+        "etats": verdicts,
+    }, ensure_ascii=False, indent=1))
+    pre, post = verdicts[0], verdicts[1]
+    limit = space - 0.01
+    if pre["pairesSousSeuil"] > 0:
+        verdict = "(a) L'ÉCART EXISTE DÉJÀ AVANT POST-PASS — cause côté solve"
+    elif post["pairesSousSeuil"] > 0:
+        verdict = "(b) L'ÉCART APPARAÎT APRÈS POST-PASS — cause côté passe"
+    else:
+        verdict = "(c) AUCUN des deux états ne montre de paire sous le seuil"
+    print("VERDICT " + verdict)
+    print("   avant : %s mm (tôle %s) · après : %s mm (tôle %s) · seuil %.4f"
+          % (pre["ecartMinGlobal"], pre["toleFautive"],
+             post["ecartMinGlobal"], post["toleFautive"], limit))
+    return 0
+
+
 def main(path):
     data = json.load(open(path, encoding="utf-8"))
+    # Dump d'un REJET TOTAL : une entrée par alternative écartée.
+    if data.get("discarded"):
+        rc = 0
+        for entry in data["discarded"]:
+            print("=== alternative écartée : %s (%s) ===" % (
+                entry.get("strategy"), entry.get("reason")))
+            print("    vérification livrée : " + json.dumps(
+                entry.get("verification") or {}, ensure_ascii=False))
+            rc |= measure_poses({"space": data.get("space"), "alternative": entry})
+        return rc
+    if ((data.get("alternative") or {}).get("qaPrePostPass") or {}).get("layoutsPre"):
+        return measure_poses(data)
     space = float(data.get("space") or 0.0)
     alt = data.get("alternative") or {}
     svgs = alt.get("svgs") or []

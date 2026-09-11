@@ -40,8 +40,28 @@ PACK_GRID = 8
 _SPACE_EPS = 1e-6
 
 
+# §17.3 : tolérance de la validation du post-pass, ALIGNÉE sur celle de la
+# vérification aval (`verify_layout` : `spacingOk = écart >= space - 0,01`).
+# Le post-pass et la vérification doivent dire la même chose du même layout.
+PAIR_SLACK_MM = 0.01
+
+
 def _placed(item, rot_deg, tx, ty):
     return translate(rotate(Polygon(item["coords"]), rot_deg, origin=(0, 0)), tx, ty)
+
+
+def _placed_material(item, rot_deg, tx, ty):
+    """Polygone POSÉ avec ses TROUS SOUSTRAITS — la matière réelle.
+
+    Piège #4 : la matière d'un hôte s'arrête au bord de ses trous. Un filler
+    niché dans un trou est légal ; le comparer à l'anneau EXTERNE de son
+    hôte le déclarerait en conflit et interdirait tout remplissage (miroir
+    exact de `_placedMaterial` côté JS)."""
+    holes = item.get("holes") or []
+    return translate(
+        rotate(Polygon(item["coords"], holes), rot_deg, origin=(0, 0)),
+        tx, ty,
+    )
 
 
 def _centroid(ring):
@@ -60,6 +80,50 @@ def _violates_spacing(cand, placed, space):
         elif cand.intersection(q).area > OVERLAP_EPS:
             return True
     return False
+
+
+def _conflicts_with_sheet(cand_mat, row, self_entry, space):
+    """§17.3 — la pose est-elle en conflit avec la TÔLE ?
+
+    Portée TÔLE et non trou : comparée à tous les occupants sauf l'entrée
+    qu'on déplace, dans leur état COURANT (les pièces déjà relocalisées par
+    la même passe comptent — c'est ainsi que deux pièces envoyées au même
+    emplacement se voient). Seuil `space - 0,01`, celui du rapport."""
+    lim = max(0.0, float(space) - PAIR_SLACK_MM)
+    for e in row:
+        if e is self_entry:
+            continue
+        other = e[5]
+        if other is None:
+            continue
+        d = cand_mat.distance(other)
+        if (d < lim) if space > 0 else (cand_mat.intersection(other).area > OVERLAP_EPS):
+            return True
+    return False
+
+
+def _sheet_violations(row, space):
+    """(paires sous le seuil, poses dupliquées) d'une tôle — la mesure qui
+    arme la ceinture du §17.3."""
+    lim = max(0.0, float(space) - PAIR_SLACK_MM)
+    under = 0
+    duplicates = 0
+    for i in range(len(row)):
+        for j in range(i + 1, len(row)):
+            a, b = row[i], row[j]
+            if a[5] is None or b[5] is None:
+                continue
+            d = a[5].distance(b[5])
+            bad = (d < lim) if space > 0 else (a[5].intersection(b[5]).area > OVERLAP_EPS)
+            if not bad:
+                continue
+            under += 1
+            if (a[0]["id"] == b[0]["id"]
+                    and abs(a[1] - b[1]) < 1e-6
+                    and abs(a[2] - b[2]) < 1e-6
+                    and abs(a[3] - b[3]) < 1e-6):
+                duplicates += 1
+    return under, duplicates
 
 
 def _ring_key(coords):
@@ -405,7 +469,7 @@ def expand_packs(items, packs, layouts):
     return out_layouts
 
 
-def apply_hole_fill(input_items, layouts, space):
+def apply_hole_fill(input_items, layouts, space, post_pass=None):
     """Rewrite in-place les transforms des fillers libres replacés en
     pinwheel dans un trou ayant de la place. Renvoie le nb de fillers
     relocalisés. Déterministe : ordre de parcours des layouts/placements.
@@ -426,16 +490,47 @@ def apply_hole_fill(input_items, layouts, space):
         for pi in layout.get("placed_items", []):
             it = by_id[pi["item_id"]]
             tr = pi["transformation"]
-            row.append([it, tr["rotation"], tr["translation"][0], tr["translation"][1],
-                        _placed(it, tr["rotation"], tr["translation"][0], tr["translation"][1])])
+            row.append([
+                it, tr["rotation"], tr["translation"][0], tr["translation"][1],
+                _placed(it, tr["rotation"], tr["translation"][0], tr["translation"][1]),
+                # §17.3 : matière (trous soustraits) pour la validation de
+                # portée tôle — l'anneau externe (index 4) reste utilisé par
+                # `nested_hole` et la capacité, inchangé.
+                _placed_material(it, tr["rotation"], tr["translation"][0], tr["translation"][1]),
+            ])
         placed.append(row)
 
     deadline = time.monotonic() + PACK_BUDGET_SEC
     recovered = 0
-    for row in placed:
-        recovered += _fill_one_sheet_holes(row, by_id, space, deadline)
+    rollbacks = []
+    for idx, row in enumerate(placed):
+        # §17.3 point 3 — CEINTURE PAR TÔLE. Cliché AVANT la première
+        # mutation (piège #58), mesure exacte après la passe : une paire sous
+        # le seuil ou une pose dupliquée annule la passe SUR CETTE TÔLE. Le
+        # layout moteur, mesuré conforme, vaut mieux qu'une alternative
+        # écartée en aval (côté navigateur : un job remboursé).
+        snapshot = [(e[1], e[2], e[3]) for e in row]
+        got = _fill_one_sheet_holes(row, by_id, space, deadline)
+        if not got:
+            continue
+        under, duplicates = _sheet_violations(row, space)
+        if under or duplicates:
+            for e, (rot, tx, ty) in zip(row, snapshot):
+                e[1], e[2], e[3] = rot, tx, ty
+                e[4] = _placed(e[0], rot, tx, ty)
+                e[5] = _placed_material(e[0], rot, tx, ty)
+            rollbacks.append({
+                "sheet": idx,
+                "moved": got,
+                "pairsUnderThreshold": under,
+                "duplicatePoses": duplicates,
+            })
+            continue
+        recovered += got
     if recovered:
         _write_back(layouts, placed)
+    if rollbacks and post_pass is not None:
+        post_pass["holeFillRollback"] = rollbacks
     return recovered
 
 
@@ -444,7 +539,7 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
     jamais les layouts (voir apply_hole_fill). Retourne le nb relocalisés."""
 
     def holes_world(entry):
-        it, rot, tx, ty, _ = entry
+        it, rot, tx, ty = entry[0], entry[1], entry[2], entry[3]
         out = []
         for h in (it["holes"] or []):
             out.append(translate(rotate(Polygon(h), rot, origin=(0, 0)), tx, ty))
@@ -481,17 +576,16 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
         return len(pinwheel_capacity(ring, coords, space, allowed=allowed))
 
     def drop_occupied(hi, poses):
-        """Écarte les poses en conflit avec les fillers DÉJÀ dans le trou
-        (pré-nichés par l'expansion) : pack_hole valide contre un trou vide,
-        sans ça il retéléporte sur les poses canoniques occupées — double-
-        remplissage (cas trou600 : 200 jumeaux au µm près)."""
-        members = [e[4] for e in hole_members[hi]]
-        if not members:
-            return poses
+        """§17.3 — écarte les poses en conflit avec la TÔLE, pas seulement
+        avec les fillers déjà dans le trou visé. `pack_hole` valide contre un
+        trou VIDE : sans ce filtre il retéléporte sur des poses occupées
+        (double-remplissage, cas trou600 : 200 jumeaux au µm près), et la
+        version « trou seulement » laissait passer une pose posée sur une
+        pièce de la tôle (constat navigateur du 10/09)."""
         kept = []
         for pose in poses:
-            cand = _placed(by_id[pose["fillId"]], pose["rot"], pose["lx"], pose["ly"])
-            if not _violates_spacing(cand, members, space):
+            cand = _placed_material(by_id[pose["fillId"]], pose["rot"], pose["lx"], pose["ly"])
+            if not _conflicts_with_sheet(cand, row, None, space):
                 kept.append(pose)
         return kept
 
@@ -504,9 +598,19 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
             pool = by_free.get(pose["fillId"]) or []
             if not pool:
                 continue
-            e = pool.pop(0)
+            e = pool[0]
+            cand_mat = _placed_material(e[0], pose["rot"], pose["lx"], pose["ly"])
+            # §17.3 : re-validée MAINTENANT, contre l'état courant de la
+            # tôle. Les poses d'un même trou sont calculées ensemble contre
+            # un trou vide : deux d'entre elles peuvent être compatibles avec
+            # le trou et incompatibles entre elles dès que la première est
+            # posée.
+            if _conflicts_with_sheet(cand_mat, row, e, space):
+                continue
+            pool.pop(0)
             e[1], e[2], e[3] = pose["rot"], pose["lx"], pose["ly"]
             e[4] = _placed(e[0], pose["rot"], pose["lx"], pose["ly"])
+            e[5] = cand_mat
             # A11 (audit 2026-09-03) : retrait par IDENTITÉ — list.remove
             # compare par VALEUR et les jumeaux (fans identiques à poses
             # égales) retiraient la MAUVAISE entrée, recovered faux (même
@@ -555,6 +659,7 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
         pool = cur + free[: CAPACITY - len(cur)]
         new_polys = []
         ok = True
+        others = [e for e in row if e not in pool]
         for rot, e in zip(PINWHEEL, pool):
             cand = _placed(e[0], rot, cx, cy)
             if not inner.contains(cand):
@@ -563,12 +668,19 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
             if _violates_spacing(cand, new_polys, space):
                 ok = False
                 break
+            # §17.3 : et contre la TÔLE — les membres du pool sont exclus,
+            # ce sont ceux qu'on déplace.
+            if _conflicts_with_sheet(
+                    _placed_material(e[0], rot, cx, cy), others, None, space):
+                ok = False
+                break
             new_polys.append(cand)
         if not ok:
             continue
         for rot, e, cand in zip(PINWHEEL, pool, new_polys):
             e[1], e[2], e[3] = rot, cx, cy
             e[4] = cand
+            e[5] = _placed_material(e[0], rot, cx, cy)
             for k in range(len(free)):
                 if free[k] is e:
                     del free[k]
