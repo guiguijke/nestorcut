@@ -741,3 +741,28 @@ fileprocessing (et worker nesting si `worker_common` embarqué y change —
 `units.py` est dans `worker_common`, donc oui : les deux images worker,
 homelab compris pour l'image nesting) ; moteur inchangé → pas de
 benchmarks à régénérer.
+
+### Lot 2b — déploiement (implémenteur, 12/09, `c84b0842`)
+
+App + wasm géométrie + **les deux images worker** — `worker_common/geometry/
+units.py` est embarqué par le worker fileprocessing ET par le worker nesting
+(vérifié dans l'image : l'ancienne table à 7 codes y était bien présente) —
+donc **homelab compris**. Moteur inchangé : aucun benchmark public à
+régénérer.
+
+| Contrôle | Résultat |
+|---|---|
+| CI sur le commit | `geometry-locks` **vert** : **exports-parity ✓** (le DXF exporté est comparé entité par entité au Python — les codes entiers ne changent pas la géométrie), client-server-diff ✓, parity ✓, determinism ✓, cargo-tests ✓. Images publiées ✓ |
+| Hetzner | `app`, `user-file-processing-worker` et `nesting-worker` tirés et recréés **dans la même fenêtre** ; digests `47f4dfca…`, `77a43274…`, `1836199b…` |
+| **table d'unités active en production** | les DEUX workers répondent **20 codes, km = 1 000 000** (7 codes, km absent avant) |
+| bornes d'import toujours actives (lot 2a) | logs du worker : `max_entity_limit 10000`, `import_time_budget_s 60.0` |
+| wasm servi par la prod = dépôt (piège 14i) | `1aca2874…` **identique** ; `GET /` **200** |
+| **le bundle SERVI PAR LA PROD, sur les témoins d'unité** | notre export CAM en pouces : **code 1, 3 pièces** (« sans unité », 0 pièce avant le lot) ; export mm : **2 pièces** (0 avant) ; kilomètres : converti avec le constat `$INSUNITS=7 (km) — geometry scaled x1000000 to mm` ; sans unité : constat `$INSUNITS missing or 0 — assuming millimeters` |
+| homelab | 3 workers overflow tirés et recréés ; **`ASSERT OVERFLOW=HEAD: OK`** (md5 des fichiers clés = HEAD, binaire moteur du 12/09) |
+
+**Non-fait, le même qu'au lot 2a** : pas de capture dans un navigateur sur
+la prod (l'import est derrière `auth`, et je n'ai pas de compte de
+production — en créer un est une écriture de production, elle vous revient).
+Ce qui est vérifié à la place : les fichiers servis sont octet pour octet
+ceux du dépôt, et le bundle servi rend les verdicts ci-dessus sur les
+témoins d'unité.
