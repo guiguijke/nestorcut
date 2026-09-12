@@ -234,7 +234,7 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
     # One random display color per part, sampled without replacement first so
     # parts of the same file look distinct in the viewer and result SVG.
     for part, color in zip(closed_parts, pick_colors(len(closed_parts))):
-        mongo_dict = part.to_mongo_dict(color=color)
+        mongo_dict = part.to_mongo_dict(color=color, stats=stats)
         if mongo_dict is not None:
             polygon_parts.append(mongo_dict)
         else:

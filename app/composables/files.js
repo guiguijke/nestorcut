@@ -372,9 +372,13 @@ async function addFiles(files, slug) {
         state.localImportError = ''
         state.localImportErrorParams = {}
         try {
-            const { importLocalFile } = await import('./localImport')
+            const { importLocalFiles } = await import('./localImport')
+            const { advancedImportOptions } = await import('./advancedImport')
+            // Lot E1 : le réglage de l'« import avancé » vaut pour TOUTE la
+            // dépose (éteint par défaut : options neutres, chaîne inchangée).
+            const options = advancedImportOptions()
             for (const file of files) {
-                await importLocalFile(file, slug)
+                await importLocalFiles(file, slug, options)
             }
         } catch (err) {
             state.localImportError = err?.message || 'localImport.parseError'

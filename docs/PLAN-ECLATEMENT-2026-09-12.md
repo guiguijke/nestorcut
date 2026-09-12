@@ -122,6 +122,32 @@ DXF ne change ni de geste ni de vitesse.
    dépose ; il est mémorisé dans la session, pas dans le compte.
    Aucun changement quand l'option est éteinte : le harnais deux
    configurations et les captures U3 sont inchangés.
+   **Précision propriétaire du 12/09** : c'est une option que l'utilisateur
+   **valide** explicitement (« Import avancé »), jamais l'import par
+   défaut. Et l'échelle se règle **à vue, contre une tôle de découpe** :
+   le panneau montre le dessin importé (contours des pièces, couleurs de
+   l'aperçu existant) posé sur une tôle choisie parmi les formats par
+   défaut (`SHEET_PRESETS`, `app/utils/units.js`, 1000 × 2000 en tête) ou
+   saisie en dimensions personnalisées ; l'utilisateur ajuste la taille du
+   dessin soit par les champs (facteur, largeur ou hauteur cible), soit
+   **en tirant une poignée d'angle** sur l'aperçu (rapport conservé, cotes
+   affichées en direct, facteur recalculé) ; la tôle choisie ici
+   pré-remplit les réglages de tôle du projet si l'utilisateur le demande
+   (case), sans les écraser sinon. Verrous : le dessin de 1612 mm posé sur
+   1000 × 2000 apparaît hors tôle, tiré à 900 mm de large → facteur 0,558
+   affiché, pièces importées à cette échelle ; changer de format de tôle
+   ne change pas le facteur ; l'aperçu n'est qu'un aperçu — aucune
+   géométrie n'est produite tant que l'import n'est pas validé.
+   **Langues** (rappel propriétaire du 12/09) : « Import avancé » est un nom
+   de travail, pas un libellé. Tout texte du panneau — interrupteur,
+   réglages, infobulles, boutons, cotes et leurs unités, constats, phrase de
+   nommage des fiches éclatées — passe par `app/utils/i18n.js` en anglais
+   ET en français dès le lot, nombres et unités formatés dans la locale
+   (`fmtNumber`, `useUnit`), aucun texte en dur dans les composants (piège
+   #20 : doubles quotes pour les apostrophes françaises). Le suffixe des
+   fiches éclatées est neutre (« nom · 3/17 »), pas une phrase. Verrou : le
+   panneau capturé dans les deux langues ; une troisième langue ne doit
+   demander qu'un dictionnaire de plus.
 2. **Une seule chaîne de code** : import du DXF (existant) → si échelle ≠ 1,
    DXF canonique **mis à l'échelle** (affine sur les entités, `nest-export`,
    codes entiers en entiers) → si éclatement, **un DXF canonique par
@@ -412,3 +438,116 @@ interface vérifiée dans un vrai navigateur au même commit en local). Le
 geste qui reste, chez vous, est de 30 secondes : projet « cet appareil » sur
 `app.nestorcut.com`, dépose du logo, `Imbriquer` — attendu : **17 pièces
 posées**, sans recouvrement, écart ≥ 2 mm.
+
+### Lot E1 — « Import avancé » : éclatement, échelle, micro-vides (implémenteur, 12/09)
+
+Commit : `HASH`. **Non déployé** — wasm géométrie, app, serveur et worker
+fileprocessing touchés ; GO attendu.
+
+#### 5.6 Ce qui est livré
+
+1. **Panneau « Import avancé », replié et éteint** (`DxfUpload.vue`, présent
+   seulement sur un projet « cet appareil »). Ouvert : « Éclater en pièces
+   unitaires » (case) et « Échelle » avec trois modes — facteur, largeur
+   cible, hauteur cible. Le réglage vaut pour la dépose, vit dans la SESSION
+   (`sessionStorage`, jamais le compte) et n'a **aucun effet tant que le
+   panneau est fermé** — c'est le verrou « panneau fermé = réglage inerte »,
+   posé exprès pour qu'une case oubliée ne suive pas l'utilisateur.
+2. **Une seule chaîne** (`localImport.js`) : DXF canonique **mis à l'échelle**
+   (affine sur les entités, handles réassignés) → import ordinaire →
+   **un DXF canonique par pièce** écrit depuis ses `handles` → import
+   ordinaire de chacun. Chaque fiche produite est une fiche NORMALE
+   (quantité, rotations, couleur, aperçu, suppression, export par handle),
+   nommée « nom (k/N).dxf ». Provenance en champs **additifs** :
+   `importScale`, `explodedFrom`, `explodedIndex`.
+   Deux liaisons wasm nouvelles (`canonical_dxf_scaled`,
+   `canonical_dxf_part`), le worker géométrie et son client mis à jour dans
+   la même livraison (piège #33b).
+3. **Le micro-vide n'est plus un trou, l'aller-retour n'est plus de la
+   matière** — même règle dans les deux importeurs
+   (`nest-import::assemble`, `worker_common/geometry/cleanup.py`, seuils lus
+   dans le fichier Rust par un test Python) : un trou d'aire < 1 mm² ou dont
+   le petit côté fait moins de 0,5 mm est **rebouché** ; un aller-retour de
+   largeur nulle (le tracé part, revient à moins de 0,01 mm) est **retiré**.
+   Deux constats d'information (`import.microVoidsFilled`,
+   `import.spursRemoved`), FR et EN, dans la fiche fichier (pas sur la
+   carte — même arbitrage que les autres constats d'information au lot 2c).
+4. **Le compte affiché compte les PIÈCES, pas les fichiers** (ajout de votre
+   vérification) : sur un projet « cet appareil », le serveur ne connaissait
+   que des quantités de fichiers (« 1 pièce demandée » pour un fichier de
+   17). Le navigateur envoie désormais le compte d'items avec la
+   comptabilité de fin (`local-quota`, scalaire borné — la surface
+   d'enqueue, verrouillée par un test de confidentialité, n'a pas bougé
+   d'un champ), et `local-result` **mesure** `placed` au lieu de recopier le
+   demandé.
+
+#### 5.7 Verrous et mesures
+
+| Verrou | Résultat |
+|---|---|
+| **la volute perd ses faux trous** | **21 trous → 0** sur l'item fautif, 21 micro-vides annoncés ; le fichier passe de 29 à 8 trous, tous réels |
+| **le moteur accepte tout le corpus** | coureur « moteur × 238 fichiers » : **205 atteignent le moteur, 205 vont au bout — 0 échec d'import, 0 panique** (le lot E0 en laissait 4 : les deux ergots de largeur nulle et les deux anneaux à sommets dupliqués sont nettoyés à l'import) |
+| **rien ne change ailleurs** (A/B géométrie) | empreinte des anneaux importés, avant/après, sur les 238 fichiers (231 contenus distincts) : **222 identiques au bit près**, **9 changés — tous porteurs d'un constat de nettoyage**, et **aucun constat sans changement** |
+| **les deux importeurs nettoient les mêmes fichiers** | 11 fichiers des deux côtés ; **4 navigateur seul**, **1 serveur seul** (détail au 5.8) |
+| **l'écart entre importeurs ne se creuse pas** | fichiers où les comptes diffèrent : pièces **9 → 9**, trous **14 → 12** (il se réduit) |
+| **aucun fichier ne devient illisible** | lus avant/après : navigateur **225 → 225**, serveur **223 → 223** |
+| **le temps d'import ne bouge pas** (machine au repos) | 151 fichiers réels : total **67,4 s → 70,0 s (+3,9 %)**, médiane **19,5 → 19,7 ms (+1,1 %)**, pire fichier 9,18 → 10,02 s (+9 %). Le premier passage donnait +14,8 % : il tournait pendant deux autres coureurs — attribution par A/B au repos, comme l'exige la discipline de mesure |
+| **option éteinte = chaîne d'avant** | vitest : la chaîne fait exactement `import` + `canonical`, **aucun appel wasm de plus** ; dans le navigateur, une fiche, nom intact, aucun champ de provenance |
+| **dépose en masse, option éteinte** | **10 fichiers → 10 fiches en 8,6 s**, panneau resté replié |
+| **éclatement** | navigateur : **17 fiches**, une pièce chacune, « volute (k/17).dxf », quantités indépendantes (une fiche passée à 3, les autres inchangées) ; en natif, **17/17 pièces rendent exactement un contour** (aucun repli) |
+| **éclatement → imbrication** | 17 pièces sur 1000 × 2000 à espacement 2 : **done en 12 s, 17/17 posées**, sans recouvrement, dans la tôle, **écart ≥ 2 mm** ; badges **tous verts**, état « All parts are placed » (capture 02) |
+| **échelle ×0,5** | étendue du dessin **2834,34 → 1417,17 mm**, plus grande pièce **1612,61 → 806,31 mm** — mesuré sur les pièces IMPORTÉES (lues dans IndexedDB) |
+| **largeur cible 1000 mm** | facteur déduit **0,353**, largeur obtenue **1000,00 mm** |
+| suites | vitest **568** (+17), cargo geometry **134** (+10, dont le verrou de handles canoniques), pytest fileprocessing **42**, common **83** (+11), nesting **234 + 1 skip**, `nuxt build` vert |
+| parités | goldens **100 %** (seuil 99 %), déterminisme natif ≡ wasm **68/68** et **17/17** (tolérance 0), **diff client/serveur OK**, **parité exports OK** |
+
+#### 5.8 Non-faits, écarts et arbitrages
+
+1. **Les nombres de la consigne étaient ceux de la plus grande PIÈCE, pas du
+   dessin.** L'étendue du dessin complet est 2834,34 mm (la pièce la plus
+   large fait 1612,61 mm) : ×0,5 donne donc 1417,17 mm d'étendue — et
+   806,31 mm sur la plus grande pièce, le chiffre du plan. De même, une
+   largeur cible de 1000 mm donne un facteur **0,353** (1000/2834), pas
+   0,620. L'échelle s'applique au DESSIN, c'est le sens de la consigne ;
+   seules les valeurs attendues étaient calculées sur une pièce.
+2. **Le nettoyage n'agit pas exactement sur les mêmes fichiers des deux
+   côtés** : 11 en commun, 4 côté navigateur seul (deux fichiers à ergots de
+   largeur nulle — le chemin serveur les avait déjà absorbés par sa grille de
+   précision shapely, ce qui explique que la panne E0 ne se voyait QUE dans
+   le navigateur — et deux autres), 1 côté serveur seul (un trou déjà écarté
+   avant le lot, désormais NOMMÉ : le compte ne change pas, le constat
+   apparaît). La règle et les seuils sont identiques et verrouillés (le test
+   Python lit les constantes dans le fichier Rust) ; ce qui diffère, ce sont
+   les jeux de trous que les deux polygoniseurs produisent — écart
+   préexistant, documenté au lot 2c, et qui se réduit de 14 à 12 fichiers.
+   Le refermer est le périmètre du **lot E2**.
+3. **Le coureur ezdxf ne comptait pas le nettoyage** : il appelait
+   `to_mongo_dict()` sans passer `stats`, alors que la production le passe.
+   Corrigé dans le coureur (une ligne) — sans quoi je mesurais des comptes
+   qui bougent et des constats vides.
+4. **L'importeur serveur n'est pas reproductible sur un fichier
+   pathologique.** Mesuré en le rejouant trois fois à code identique (un
+   exemple LibreDWG à 1 300 tracés ouverts) : **1365 / 1334 / 1334** tracés
+   ouverts et **13 / 13 / 14** trous. Un `PYTHONHASHSEED` fixé n'y change
+   rien (13 puis 14). Ce n'est pas un effet du lot E1 — c'est un défaut
+   préexistant du chemin Python, qui rend bruyante toute comparaison de ce
+   fichier. À arbitrer comme chantier distinct (le navigateur, lui, est
+   déterministe : c'est le verrou 68/68).
+5. **Le nom du DXF résultat devient absurde quand on éclate** : il concatène
+   les slugs des 17 fiches (capture 02, ligne sous le titre). C'est un
+   effet de bord visible de l'éclatement, pas une régression de l'existant ;
+   il faut borner ce nom (trois fichiers puis « … »). Non touché ici pour ne
+   pas élargir le lot — à faire au **lot E2**, où les constats reviennent.
+6. **Le repli « une pièce qui ne se referme pas seule »** existe et est
+   verrouillé (la pièce n'est jamais perdue : sa géométrie vient de l'import
+   du dessin complet), mais **il n'a jamais servi** sur le fichier du
+   collègue (17/17 exact) ni sur le corpus. Il reste un filet, pas un chemin
+   mesuré.
+7. **L'ordre des fiches éclatées** suit désormais l'ordre des pièces (une
+   milliseconde d'écart par fiche à l'écriture) : sans cela, dix-sept fiches
+   écrites dans la même milliseconde s'affichaient dans un ordre arbitraire.
+8. **Le panneau ne montre pas le facteur déduit** en mode cible (il
+   s'affiche après coup dans la provenance de la fiche, pas dans le
+   panneau) : le calcul exige la taille du dessin, qu'on ne connaît qu'après
+   lecture. Le faire vivre dans le panneau demanderait de lire le fichier au
+   survol de la dépose — à trancher si vous le voulez.

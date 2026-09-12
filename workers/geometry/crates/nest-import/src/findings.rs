@@ -100,6 +100,10 @@ pub struct ImportStats {
     pub dangling_paths: usize,
     /// Corps écartés à l'émission (plus petits que 0,1 mm sur un côté).
     pub dropped_parts: usize,
+    /// Trous rebouchés parce que trop petits pour être découpés (lot E1).
+    pub micro_voids: usize,
+    /// Sommets retirés des aller-retours de largeur nulle (lot E1).
+    pub spurs_removed: usize,
 }
 
 impl ImportStats {
@@ -190,6 +194,24 @@ impl ImportStats {
         }
         if self.splines > 0 {
             out.push(Finding::new("import.splinesSampled", LEVEL_INFO, self.splines));
+        }
+        // Lot E1 : ce que le nettoyage géométrique a retiré. Information, pas
+        // attention — ni l'un ni l'autre n'enlève de la matière à découper
+        // (un micro-vide rebouché REND de la matière), mais on ne modifie pas
+        // un dessin en silence.
+        if self.micro_voids > 0 {
+            out.push(Finding::new(
+                "import.microVoidsFilled",
+                LEVEL_INFO,
+                self.micro_voids,
+            ));
+        }
+        if self.spurs_removed > 0 {
+            out.push(Finding::new(
+                "import.spursRemoved",
+                LEVEL_INFO,
+                self.spurs_removed,
+            ));
         }
         out
     }

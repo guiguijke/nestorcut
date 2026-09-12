@@ -89,7 +89,12 @@ export default defineEventHandler(async (event) => {
         {
             $set: {
                 alternatives,
-                placed: job.requested ?? best.layouts.reduce((n, l) => n + (l.placed_items?.length || 0), 0),
+                // Lot E1 : `placed` est MESURÉ sur la solution livrée. Il
+                // recopiait `job.requested` quand celui-ci existait — un
+                // partiel se serait affiché complet, et un demandé faux
+                // (quantité au lieu de quantité × pièces) contaminait le
+                // compte posé.
+                placed: best.layouts.reduce((n, l) => n + (l.placed_items?.length || 0), 0),
                 layoutCount: best.layoutCount,
                 density: best.density,
                 status: 'done',

@@ -482,6 +482,47 @@ pub fn canonical_dxf_bytes(doc: &Document) -> Vec<u8> {
     emit_dxf(&entities, "AC1027")
 }
 
+/// Bytes DXF canoniques mm MIS À L'ÉCHELLE (lot E1 de
+/// `docs/PLAN-ECLATEMENT-2026-09-12.md`) : le DXF canonique du document, ses
+/// longueurs multipliées par `factor`, handles canoniques RÉASSIGNÉS.
+///
+/// Pourquoi passer par le DXF et non par les anneaux importés : le DXF
+/// canonique est la seule chose que l'aval sait lire (aperçu, export par
+/// handle, ré-import). Mettre à l'échelle les anneaux laisserait un DXF
+/// d'origine qui ne correspond plus aux pièces.
+pub fn canonical_dxf_bytes_scaled(doc: &Document, factor: f64) -> Vec<u8> {
+    let (mut entities, _) = canonical_entities(doc);
+    if factor != 1.0 {
+        // `scale_entity` est CELUI des unités (AGENTS #26) : un seul scale
+        // uniforme dans le crate, pas un second qui pourrait en diverger.
+        for e in entities.iter_mut() {
+            scale_entity(e, factor);
+        }
+    }
+    assign_canonical_handles(&mut entities);
+    emit_dxf(&entities, "AC1027")
+}
+
+/// Bytes DXF canoniques mm d'UNE PIÈCE (lot E1) : les entités du document
+/// canonique dont le handle est dans `handles` (le contour de la pièce et
+/// ses trous, à l'identité — aucune transformation), handles canoniques
+/// RÉASSIGNÉS pour que le DXF produit soit un document canonique à son tour.
+///
+/// Les handles attendus sont ceux de `Part::handles` (séquence ezdxf fraîche,
+/// piège AGENTS #33b) : ce sont exactement ceux que porte
+/// `canonical_dxf_bytes`.
+pub fn canonical_dxf_bytes_subset(doc: &Document, handles: &[String]) -> Vec<u8> {
+    let (entities, _) = canonical_entities(doc);
+    let wanted: std::collections::HashSet<&str> =
+        handles.iter().map(|h| h.as_str()).collect();
+    let mut kept: Vec<Entity> = entities
+        .into_iter()
+        .filter(|e| wanted.contains(e.handle()))
+        .collect();
+    assign_canonical_handles(&mut kept);
+    emit_dxf(&kept, "AC1027")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

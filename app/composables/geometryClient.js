@@ -111,6 +111,29 @@ export async function geoCanonicalDxf(bytes, tol = 0.01) {
     const r = await call('canonical_dxf', { bytes: Array.from(bytes), tol })
     return r.ok ? new Uint8Array(r.result) : r
 }
+/**
+ * Lot E1 (« import avancé ») : le DXF canonique du dessin COMPLET mis à
+ * l'échelle. Le facteur est celui de la dépose ; 1 rend le canonique tel quel
+ * (l'option éteinte ne touche rien).
+ */
+export async function geoCanonicalDxfScaled(bytes, factor) {
+    const r = await call('canonical_dxf_scaled', { bytes: Array.from(bytes), factor })
+    return r.ok ? new Uint8Array(r.result) : r
+}
+
+/**
+ * Lot E1 : le DXF canonique d'UNE pièce — les entités dont le handle est dans
+ * `handles` (contour et trous), à l'identité. L'entrée doit être le document
+ * CANONIQUE (celui dont viennent les handles).
+ */
+export async function geoCanonicalDxfPart(canonicalBytes, handles) {
+    const r = await call('canonical_dxf_part', {
+        bytes: Array.from(canonicalBytes),
+        handles: Array.from(handles || []),
+    })
+    return r.ok ? new Uint8Array(r.result) : r
+}
+
 /** J-090 : rotations pinwheel validées pour un filler dans un trou
  * (pré-passe meta J-085 côté navigateur). */
 export async function geoPinwheelCapacity(holeRing, fillerCoords, spaceMm, allowed = null) {

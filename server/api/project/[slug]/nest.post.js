@@ -489,8 +489,13 @@ export default defineEventHandler(async (event) => {
             params: dbParams,
             extraFields: {
                 priority: isDemo ? DEMO_PRIORITY : compute.priority,
-                // J-090 : pas de worker pour renseigner `requested` plus tard —
-                // le compte demandé est connu dès l'enqueue (métadonnée).
+                // J-090 : pas de worker pour renseigner `requested` plus tard.
+                // À l'enqueue, le serveur d'un projet « cet appareil » ne
+                // connaît QUE des quantités de fichiers (verrou de
+                // confidentialité : slug + compte + rotations, rien d'autre) —
+                // le compte d'ITEMS demandés (quantité × pièces) est envoyé
+                // avec la comptabilité de fin par le navigateur, qui est le
+                // seul à connaître la géométrie (lot E1).
                 ...(project.local
                     ? { requested: fileMetadata.reduce((sum, f) => sum + (f.count || 0), 0) }
                     : {}),

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
+from worker_common.geometry.cleanup import is_micro_void, strip_spurs
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
 
 from ezdxf.document import Drawing
@@ -174,7 +175,7 @@ class ClosedPolygon:
     geometry: Polygon
     handles: List[str]
 
-    def to_mongo_dict(self, color: str | None = None) -> Dict[str, List[List[float]]] :
+    def to_mongo_dict(self, color: str | None = None, stats=None) -> Dict[str, List[List[float]]] :
         if not isinstance(self.geometry, Polygon):
             raise TypeError("The 'geometry' attribute must be a shapely Polygon.")
 
@@ -197,11 +198,28 @@ class ClosedPolygon:
                     reduced.append(point)
             return [[p[0], p[1]] for p in reduced]
 
-        exterior_coords = reduce_ring(self.geometry.exterior)
-        hole_rings = [
-            ring for ring in (reduce_ring(interior) for interior in self.geometry.interiors)
-            if len(ring) >= 3
-        ]
+        exterior_coords, spurs = strip_spurs(reduce_ring(self.geometry.exterior))
+        # Lot E1 : l'anneau nettoye doit encore fermer quelque chose.
+        if len(exterior_coords) < 3:
+            if stats is not None:
+                stats["spursRemoved"] = stats.get("spursRemoved", 0) + spurs
+            return None
+        hole_rings = []
+        micro_voids = 0
+        for interior in self.geometry.interiors:
+            ring, removed = strip_spurs(reduce_ring(interior))
+            spurs += removed
+            # Lot E1 : un micro-vide n'est plus un trou — il est rebouche
+            # (retire de la liste, la matiere reprend sa place) et compte.
+            if len(ring) < 3 or is_micro_void(ring):
+                micro_voids += 1
+                continue
+            hole_rings.append(ring)
+        if stats is not None:
+            if micro_voids:
+                stats["microVoids"] = stats.get("microVoids", 0) + micro_voids
+            if spurs:
+                stats["spursRemoved"] = stats.get("spursRemoved", 0) + spurs
 
         doc = {
             'coordinates': exterior_coords,

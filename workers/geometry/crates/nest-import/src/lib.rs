@@ -189,6 +189,8 @@ pub fn import_dxf_limited(
         .map_err(|e| out_of_time(count, limits, e))?;
     stats.dangling_paths = asm.dangling_paths;
     stats.dropped_parts = asm.dropped_parts;
+    stats.micro_voids = asm.micro_voids;
+    stats.spurs_removed = asm.spurs_removed;
     Ok(ImportResult {
         parts,
         source_units: doc.source_insunits,
@@ -276,6 +278,29 @@ pub fn canonical_dxf(bytes: &[u8], _flatten_tol: f64) -> Result<Vec<u8>, ImportE
 pub fn canonical_dxf(bytes: &[u8], _flatten_tol: f64) -> Result<Vec<u8>, ImportError> {
     let doc = dxf::Document::parse(bytes)?;
     Ok(dxf::canonical::canonical_dxf_bytes(&doc))
+}
+
+/// Bytes DXF canoniques mm MIS À L'ÉCHELLE (lot E1 de
+/// `docs/PLAN-ECLATEMENT-2026-09-12.md`) : même document canonique, longueurs
+/// multipliées par `factor`. Les SVG passent par leur propre chemin canonique
+/// puis sont relus — un SVG n'a pas d'entités DXF à transformer.
+pub fn canonical_dxf_scaled(bytes: &[u8], factor: f64) -> Result<Vec<u8>, ImportError> {
+    if !(factor.is_finite() && factor > 0.0) {
+        return Err(ImportError::Corrupt(format!("invalid scale factor {factor}")));
+    }
+    let canonical = canonical_dxf(bytes, 0.0)?;
+    let doc = dxf::Document::parse(&canonical)?;
+    Ok(dxf::canonical::canonical_dxf_bytes_scaled(&doc, factor))
+}
+
+/// Bytes DXF canoniques mm d'UNE PIÈCE (lot E1) : les entités dont le handle
+/// est dans `handles` (contour + trous), à l'identité, handles réassignés.
+/// L'entrée doit être un document canonique (ou le devient : on le rebuilde
+/// avant de filtrer, pour que les handles demandés soient bien les siens).
+pub fn canonical_dxf_subset(bytes: &[u8], handles: &[String]) -> Result<Vec<u8>, ImportError> {
+    let canonical = canonical_dxf(bytes, 0.0)?;
+    let doc = dxf::Document::parse(&canonical)?;
+    Ok(dxf::canonical::canonical_dxf_bytes_subset(&doc, handles))
 }
 
 /// Sortie JSON de l'import BORNÉ, commune aux deux liaisons wasm et au

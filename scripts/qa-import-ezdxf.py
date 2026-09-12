@@ -369,7 +369,12 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
             record["status"] = "refused"
             record["error"] = f"gate: IMPORT_TIME_BUDGET_S ({heavy})"
             return record
-        mongo_parts = [part.to_mongo_dict() for part in closed_parts]
+        # Lot E1 : `stats` DOIT être passé à to_mongo_dict — c'est là que le
+        # nettoyage géométrique (micro-vides rebouchés, aller-retours de
+        # largeur nulle) est compté, exactement comme dans core/main.py.
+        # Sans ça, le coureur mesurait des comptes qui bougent et des
+        # constats vides.
+        mongo_parts = [part.to_mongo_dict(stats=stats) for part in closed_parts]
         mongo_parts = [part for part in mongo_parts if part is not None]
         elapsed += time.perf_counter() - started
 

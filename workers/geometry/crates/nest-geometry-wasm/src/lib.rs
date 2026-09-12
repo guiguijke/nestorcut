@@ -60,6 +60,27 @@ pub fn canonical_dxf(bytes: &[u8], tol: f64) -> Result<Vec<u8>, JsError> {
     nest_import::canonical_dxf(bytes, tol).map_err(|e| JsError::new(&format!("{e}")))
 }
 
+/// canonical_dxf_scaled(bytes, factor) -> Uint8Array (lot E1) : le DXF
+/// canonique du fichier, MIS À L'ÉCHELLE (longueurs × factor). C'est la
+/// première étape de l'« import avancé » : tout l'aval (import ordinaire,
+/// aperçu, export par handle) lit ce document comme n'importe quel autre.
+#[wasm_bindgen]
+pub fn canonical_dxf_scaled(bytes: &[u8], factor: f64) -> Result<Vec<u8>, JsError> {
+    nest_import::canonical_dxf_scaled(bytes, factor).map_err(|e| JsError::new(&format!("{e}")))
+}
+
+/// canonical_dxf_part(bytes, handles_json) -> Uint8Array (lot E1) : le DXF
+/// canonique d'UNE pièce — les entités dont le handle est dans la liste
+/// (contour et trous), à l'identité. `handles_json` = `["2F","30",…]`, les
+/// `handles` d'une pièce rendue par l'import.
+#[wasm_bindgen]
+pub fn canonical_dxf_part(bytes: &[u8], handles_json: &str) -> Result<Vec<u8>, JsError> {
+    let handles: Vec<String> = serde_json::from_str(handles_json)
+        .map_err(|e| JsError::new(&format!("parsing handles: {e}")))?;
+    nest_import::canonical_dxf_subset(bytes, &handles)
+        .map_err(|e| JsError::new(&format!("{e}")))
+}
+
 /// pinwheel_capacity(json {hole_ring, filler_coords, space_mm, allowed?})
 ///   -> JSON {rotations: [...]} — miroir exact de holefill.py (J-085/J-089,
 /// trou érodé de space en entier, espacement > space strict).

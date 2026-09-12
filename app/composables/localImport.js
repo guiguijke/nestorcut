@@ -7,7 +7,11 @@
  * les entités par handle depuis ces bytes) et un aperçu SVG (data URI).
  * AUCUN byte ne quitte la machine — DWG refusé (conversion serveur, D-PRV-2).
  */
-import { geoImportFile, geoCanonicalDxf, IMPORT_MAX_ENTITIES } from './geometryClient'
+import {
+    geoImportFile, geoCanonicalDxf, geoCanonicalDxfScaled, geoCanonicalDxfPart,
+    IMPORT_MAX_ENTITIES,
+} from './geometryClient'
+import { resolveScale } from './advancedImport'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 
@@ -114,12 +118,40 @@ function buildPreviewSvg(parts) {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
+/** Étendue du DESSIN COMPLET (bbox de toutes les pièces), en mm. */
+function drawingExtent(parts) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const p of parts || []) {
+        for (const [x, y] of p.coordinates || []) {
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+        }
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return { width: 0, height: 0 }
+    return { width: maxX - minX, height: maxY - minY }
+}
+
 /**
- * Importe UN File (DXF/SVG) d'un projet local : parse wasm → couleurs →
- * bytes canoniques → preview → IndexedDB. Renvoie le record stocké.
+ * Importe UN File (DXF/SVG) d'un projet local et rend la LISTE des fiches
+ * stockées — une seule d'ordinaire, une par pièce quand l'« import
+ * avancé » demande l'éclatement (lot E1).
+ *
+ * La chaîne est unique : échelle du dessin complet (DXF canonique mis à
+ * l'échelle) → import ordinaire → éclatement (un DXF canonique par pièce,
+ * écrit depuis ses handles) → import ordinaire de chaque pièce. Chaque fiche
+ * produite est une fiche NORMALE : quantité, rotations, couleur, aperçu,
+ * suppression, export par handle.
+ *
+ * `options` : `{ scale = 1, explode = false }`. Options par défaut = aucun
+ * appel supplémentaire, aucun octet de plus, comportement d'avant le lot E1.
  * Lève des Error à clé i18n (localImport.*) pour l'UI.
  */
-export async function importLocalFile(file, projectSlug) {
+export async function importLocalFiles(file, projectSlug, options = {}) {
     const name = file.name || 'part.dxf'
     const dot = name.lastIndexOf('.')
     const ext = dot >= 0 ? name.slice(dot).toLowerCase() : ''
@@ -133,13 +165,47 @@ export async function importLocalFile(file, projectSlug) {
         throw new Error('upload.tooLarge')
     }
 
-    const bytes = new Uint8Array(await file.arrayBuffer())
+    const source = new Uint8Array(await file.arrayBuffer())
     if (ext === '.svg') {
-        const head = new TextDecoder('utf-8', { fatal: false }).decode(bytes.subarray(0, 65536))
+        const head = new TextDecoder('utf-8', { fatal: false }).decode(source.subarray(0, 65536))
         if (/<!ENTITY\b/i.test(head)) {
             throw new Error('localImport.parseError')
         }
     }
+    // Lot E1 — 1) ÉCHELLE, sur le dessin complet et une seule fois. Un
+    // facteur de 1 ne touche rien (aucun appel wasm de plus).
+    //
+    // Mode « largeur/hauteur cible » : le facteur ne peut pas être connu
+    // d'avance — il faut la taille du dessin, donc une lecture. On lit une
+    // fois, on mesure l'étendue de TOUTES les pièces (le dessin complet,
+    // pas la plus grande pièce), on en déduit le facteur.
+    const explode = options.explode === true
+    let scale = resolveScale(options, null)
+    if (options.scaleTarget) {
+        let probe
+        try {
+            probe = await geoImportFile(source)
+        } catch {
+            throw new Error('localImport.parseError')
+        }
+        if (probe?.refusal) throw tooHeavyError(probe.refusal)
+        if (!probe || !Array.isArray(probe.parts) || probe.parts.length === 0) {
+            throw new Error('localImport.noParts')
+        }
+        scale = resolveScale(options, drawingExtent(probe.parts))
+    }
+    let bytes = source
+    if (scale !== 1) {
+        try {
+            bytes = await geoCanonicalDxfScaled(source, scale)
+        } catch {
+            throw new Error('localImport.parseError')
+        }
+        if (!(bytes instanceof Uint8Array)) {
+            throw new Error('localImport.parseError')
+        }
+    }
+
     let imported
     try {
         imported = await geoImportFile(bytes)
@@ -164,37 +230,106 @@ export async function importLocalFile(file, projectSlug) {
         throw new Error('localImport.parseError')
     }
 
-    const colors = pickColors(imported.parts.length)
-    const parts = imported.parts.map((p, i) => ({
-        coordinates: p.coordinates,
-        holes: p.holes || [],
-        width: p.width,
-        height: p.height,
-        handles: p.handles || [],
-        color: colors[i],
-    }))
-
-    const slug = makeLocalFileSlug(name)
-
-    const record = {
-        slug,
-        projectSlug,
-        name,
-        addedAt: new Date().toISOString(),
-        dxfBytes: canonical.slice().buffer,
-        parts,
-        sourceUnits: imported.source_units ?? 0,
-        entityCount: imported.entity_count ?? 0,
-        warnings: imported.warnings || [],
-        // Lot 2c : les constats d'import (perte de matière, unité supposée,
-        // tracés ouverts) — c'est le maillon qui manquait entre le wasm et
-        // la fiche fichier.
-        findings: imported.findings || [],
-        previewSvg: buildPreviewSvg(parts),
-    }
     const { saveLocalFile } = await import('./localFilesStore')
-    await saveLocalFile(record)
-    return record
+
+    // Provenance (champs ADDITIFS) : ce que le lot E1 a fait au dessin.
+    const provenance = scale !== 1 ? { importScale: scale } : {}
+
+    // Lot E1 : les fiches sont triées par `addedAt` (localFilesStore) — sans
+    // horodatage distinct, dix-sept fiches écrites dans la même milliseconde
+    // s'affichent dans un ordre arbitraire. On avance d'une milliseconde par
+    // fiche : la liste suit l'ordre des pièces.
+    const t0 = Date.now()
+    let written = 0
+
+    /** Fabrique + stocke une fiche depuis un import et ses octets DXF. */
+    const store = async (imp, dxf, label, extra) => {
+        const colors = pickColors(imp.parts.length)
+        const parts = imp.parts.map((p, i) => ({
+            coordinates: p.coordinates,
+            holes: p.holes || [],
+            width: p.width,
+            height: p.height,
+            handles: p.handles || [],
+            color: colors[i],
+        }))
+        const record = {
+            slug: makeLocalFileSlug(label),
+            projectSlug,
+            name: label,
+            addedAt: new Date(t0 + written++).toISOString(),
+            dxfBytes: dxf.slice().buffer,
+            parts,
+            sourceUnits: imp.source_units ?? 0,
+            entityCount: imp.entity_count ?? 0,
+            warnings: imp.warnings || [],
+            // Lot 2c : les constats d'import (perte de matière, unité
+            // supposée, tracés ouverts) — c'est le maillon qui manquait
+            // entre le wasm et la fiche fichier.
+            findings: imp.findings || [],
+            previewSvg: buildPreviewSvg(parts),
+            ...provenance,
+            ...(extra || {}),
+        }
+        await saveLocalFile(record)
+        return record
+    }
+
+    // Lot E1 — 2) ÉCLATEMENT : un DXF canonique par pièce, écrit depuis ses
+    // handles, repassé par l'import ORDINAIRE. Un seul contour ⇒ rien à
+    // éclater, on garde la fiche unique et son nom intact.
+    if (!explode || imported.parts.length < 2) {
+        return [await store(imported, canonical, name, {})]
+    }
+
+    const total = imported.parts.length
+    const base = dot >= 0 ? name.slice(0, dot) : name
+    const suffix = dot >= 0 ? name.slice(dot) : ''
+    const out = []
+    for (let k = 0; k < total; k++) {
+        const part = imported.parts[k]
+        const label = `${base} (${k + 1}/${total})${suffix}`
+        const extra = { explodedFrom: name, explodedIndex: k + 1 }
+        let partBytes = null
+        try {
+            partBytes = await geoCanonicalDxfPart(canonical, part.handles || [])
+        } catch {
+            partBytes = null
+        }
+        let sub = null
+        if (partBytes instanceof Uint8Array) {
+            try {
+                sub = await geoImportFile(partBytes)
+            } catch {
+                sub = null
+            }
+        }
+        if (sub && Array.isArray(sub.parts) && sub.parts.length >= 1) {
+            out.push(await store(sub, partBytes, label, extra))
+            continue
+        }
+        // Repli : le sous-ensemble ne referme rien tout seul (deux pièces qui
+        // partagent une arête, par exemple). On NE PERD PAS la pièce : sa
+        // géométrie vient de l'import du dessin complet et ses octets du
+        // document canonique complet — l'export par handle reste exact.
+        out.push(await store(
+            { ...imported, parts: [part] },
+            canonical,
+            label,
+            { ...extra, explodeFallback: true },
+        ))
+    }
+    return out
+}
+
+/**
+ * Compatibilité : un seul File, une seule fiche (le chemin d'avant le lot
+ * E1). Les appelants qui peuvent recevoir plusieurs fiches passent par
+ * `importLocalFiles`.
+ */
+export async function importLocalFile(file, projectSlug, options = {}) {
+    const records = await importLocalFiles(file, projectSlug, options)
+    return records[0]
 }
 
 /** Forme UI attendue par ProjectFiles/FileDone (miroir du mapper serveur) —

@@ -42,6 +42,10 @@ export default defineEventHandler(async (event) => {
         return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : null
     }
     const placed = num(body?.placed, 0, 10_000_000)
+    // Lot E1 : nombre d'ITEMS demandés (quantité × pièces), connu du seul
+    // navigateur pour un projet « cet appareil ». Scalaire borné, jamais de
+    // géométrie — même catégorie que `placed`.
+    const requested = num(body?.requested, 0, 10_000_000)
     const layoutCount = num(body?.layoutCount, 0, 10_000)
     const density = num(body?.density, 0, 1)
     // Z3 (vérif 2026-09-05) : leviers d'une solution partielle locale —
@@ -69,6 +73,7 @@ export default defineEventHandler(async (event) => {
                 status: 'done',
                 // Comptabilité seule — la géométrie reste dans le navigateur.
                 placed: placed ?? job.requested ?? 0,
+                ...(requested != null ? { requested } : {}),
                 layoutCount: layoutCount ?? 0,
                 density: density ?? null,
                 localOnly: true,

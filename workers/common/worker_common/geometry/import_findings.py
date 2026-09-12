@@ -62,6 +62,8 @@ def empty_stats() -> dict:
         "splines": 0,           # SPLINE échantillonnées
         "danglingPaths": 0,     # tracés ouverts ne refermant aucune pièce
         "droppedParts": 0,      # corps écartés à l'émission
+        "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
+        "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
     }
 
 
@@ -121,4 +123,11 @@ def build_findings(stats: dict) -> list:
         out.append(_finding("import.blocksFlattened", LEVEL_INFO, stats["blocksFlattened"]))
     if stats["splines"] > 0:
         out.append(_finding("import.splinesSampled", LEVEL_INFO, stats["splines"]))
+    # Lot E1 : ce que le nettoyage géométrique a retiré. Information, pas
+    # attention — un micro-vide rebouché REND de la matière — mais on ne
+    # modifie pas un dessin en silence.
+    if stats["microVoids"] > 0:
+        out.append(_finding("import.microVoidsFilled", LEVEL_INFO, stats["microVoids"]))
+    if stats["spursRemoved"] > 0:
+        out.append(_finding("import.spursRemoved", LEVEL_INFO, stats["spursRemoved"]))
     return out

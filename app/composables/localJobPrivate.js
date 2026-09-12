@@ -683,6 +683,13 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         method: 'POST',
         body: {
             placed,
+            // Lot E1 : le compte d'ITEMS demandés (quantité × pièces de
+            // chaque fichier). Le serveur d'un projet « cet appareil » ne
+            // connaît que des quantités de fichiers : sans ce scalaire, il
+            // annonçait « 1 pièce demandée » pour un fichier de 17 pièces et
+            // le badge « toutes les pièces posées » sortait en rouge sur un
+            // résultat complet.
+            requested,
             layoutCount: best.layoutCount ?? 0,
             density: best.density ?? null,
             ...(partialUnfit ? { unfit: partialUnfit } : {}),

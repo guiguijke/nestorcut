@@ -439,6 +439,87 @@ pub fn reduce_ring(ring: &[Pt]) -> Vec<Pt> {
     out
 }
 
+/// Seuils du NETTOYAGE GÉOMÉTRIQUE (lot E1 de
+/// `docs/PLAN-ECLATEMENT-2026-09-12.md` §3) — miroir exact du Python
+/// (`core/geometry/build_geometry.py`).
+///
+/// Un trou plus petit que ça n'est pas une découpe : c'est un artefact de
+/// dessin (deux traits qui ne se rejoignent pas tout à fait, un congé
+/// dégénéré). Le garder coûte cher et ne sert à rien — jagua ouvre chaque
+/// trou par un canal capillaire (piège AGENTS #2) et un canal dans un vide
+/// de 0,3 mm² écrase l'anneau.
+pub const MICRO_VOID_AREA_MM2: f64 = 1.0;
+pub const MICRO_VOID_MIN_DIM_MM: f64 = 0.5;
+/// Tolérance des aller-retours de largeur nulle (même 0,01 mm que
+/// `reduce_ring`, qui fusionne déjà deux sommets CONSÉCUTIFS sous ce seuil).
+pub const SPUR_EPS_MM: f64 = 0.01;
+
+/// Un trou trop petit pour être découpé (aire ou plus petit côté).
+pub fn is_micro_void(ring: &[Pt]) -> bool {
+    if ring.len() < 3 {
+        return true;
+    }
+    let (min_x, max_x, min_y, max_y) = ring.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+        |(a, b, c, d), p| (a.min(p[0]), b.max(p[0]), c.min(p[1]), d.max(p[1])),
+    );
+    let (w, h) = (max_x - min_x, max_y - min_y);
+    ring_signed_area(ring).abs() < MICRO_VOID_AREA_MM2 || w.min(h) < MICRO_VOID_MIN_DIM_MM
+}
+
+/// Supprime les ALLER-RETOURS DE LARGEUR NULLE d'un anneau (ouvert, cyclique)
+/// et rend le nombre de sommets retirés.
+///
+/// Le motif : le tracé part de A, va en B et revient en A' à moins de
+/// 0,01 mm de A. `reduce_ring` ne le voit pas (A et B sont à 7 mm l'un de
+/// l'autre, A et A' ne sont pas consécutifs), et ce qui reste est un ergot
+/// d'aire nulle. Mesuré au lot E0 : c'est ce motif qui fait échouer le
+/// *surrogate* de jagua (« no pole found with 10 levels of recursion ») et
+/// tue le job à l'import — deux fichiers du corpus, un DXF de marquage dont
+/// la polyligne revient sur elle-même à 0,0001 mm près.
+///
+/// On garde A, on jette B et A'. Itératif : un ergot niché dans un ergot
+/// disparaît au passage suivant.
+pub fn strip_spurs(ring: &mut Vec<Pt>) -> usize {
+    let eps2 = SPUR_EPS_MM * SPUR_EPS_MM;
+    let mut total = 0usize;
+    loop {
+        let n = ring.len();
+        if n < 4 {
+            return total;
+        }
+        let mut keep = vec![true; n];
+        let mut removed = 0usize;
+        let mut i = 0usize;
+        while i < n {
+            let prev = (i + n - 1) % n;
+            let next = (i + 1) % n;
+            if keep[i] && keep[prev] && keep[next] && prev != next {
+                let (a, c) = (ring[prev], ring[next]);
+                let (dx, dy) = (a[0] - c[0], a[1] - c[1]);
+                if dx * dx + dy * dy <= eps2 {
+                    keep[i] = false;
+                    keep[next] = false;
+                    removed += 2;
+                    i += 2;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        if removed == 0 {
+            return total;
+        }
+        *ring = ring
+            .iter()
+            .zip(keep.iter())
+            .filter(|(_, k)| **k)
+            .map(|(p, _)| *p)
+            .collect();
+        total += removed;
+    }
+}
+
 /// Boundary of the union of material BODIES: edges (undirected, snapped)
 /// appearing in exactly one body — a body = a material face PLUS its hole
 /// rings (a hole edge borders exactly one body → kept; a shared outer edge
@@ -504,6 +585,10 @@ pub struct AssemblyStats {
     pub dangling_paths: usize,
     /// Corps écartés à l'émission (côté sous 0,1 mm, anneau dégénéré).
     pub dropped_parts: usize,
+    /// Trous rebouchés parce que trop petits pour être découpés (lot E1).
+    pub micro_voids: usize,
+    /// Sommets retirés par `strip_spurs` (aller-retours de largeur nulle).
+    pub spurs_removed: usize,
 }
 
 /// Tracés ouverts d'un jeu d'arêtes : pelage itératif des sommets de degré 1
@@ -764,6 +849,10 @@ pub fn build_parts_stats_until(
     let mut out: Vec<Part> = Vec::new();
     for ((outer, holes), handles) in parts.into_iter().zip(assigned) {
         let mut ext = reduce_ring(&outer);
+        // Lot E1 : les aller-retours de largeur nulle partent AVANT la
+        // mesure de la bbox et avant la fermeture — ils ne portent pas de
+        // matière et le moteur ne sait pas les préparer.
+        asm.spurs_removed += strip_spurs(&mut ext);
         if ext.len() < 3 {
             asm.dropped_parts += 1;
             continue;
@@ -782,20 +871,28 @@ pub fn build_parts_stats_until(
             asm.dropped_parts += 1;
             continue;
         }
-        let holes_out: Vec<Vec<Pt>> = holes
-            .iter()
-            .map(|h| {
-                let mut hh = reduce_ring(h);
-                if ring_signed_area(&hh) < 0.0 {
-                    hh.reverse(); // holes CCW (mirror of the CW exterior)
-                }
-                if hh.len() >= 3 && hh.first() != hh.last() {
-                    hh.push(hh[0]);
-                }
-                hh
-            })
-            .filter(|h| h.len() >= 4)
-            .collect();
+        let mut holes_out: Vec<Vec<Pt>> = Vec::new();
+        for h in &holes {
+            let mut hh = reduce_ring(h);
+            asm.spurs_removed += strip_spurs(&mut hh);
+            // Lot E1 : un micro-vide n'est plus un trou — il est rebouché
+            // (retiré de la liste : la matière reprend sa place) et compté.
+            if hh.len() < 3 || is_micro_void(&hh) {
+                asm.micro_voids += 1;
+                continue;
+            }
+            if ring_signed_area(&hh) < 0.0 {
+                hh.reverse(); // holes CCW (mirror of the CW exterior)
+            }
+            if hh.first() != hh.last() {
+                hh.push(hh[0]);
+            }
+            if hh.len() >= 4 {
+                holes_out.push(hh);
+            } else {
+                asm.micro_voids += 1;
+            }
+        }
         let mut ext_final = ext;
         if ring_signed_area(&ext_final) > 0.0 {
             ext_final.reverse(); // exterior CW (GEOS parity)
@@ -898,4 +995,66 @@ mod tests {
             assert_eq!(format!("{:?}", pa.holes), format!("{:?}", pb.holes));
         }
     }
+    // ---- Lot E1 : nettoyage géométrique (miroir des tests Python de
+    // workers/common/tests/test_geometry_cleanup.py) ----
+
+    #[test]
+    fn micro_vide_un_vrai_trou_reste_un_trou() {
+        // Ø35 mm de la pièce annulaire du corpus : 962 mm².
+        let ring: Vec<Pt> = (0..36)
+            .map(|t| {
+                let a = t as f64 * std::f64::consts::PI / 18.0;
+                [17.5 * a.cos(), 17.5 * a.sin()]
+            })
+            .collect();
+        assert!(!is_micro_void(&ring));
+    }
+
+    #[test]
+    fn micro_vide_par_l_aire_et_par_le_petit_cote() {
+        // 0,8 × 0,8 = 0,64 mm² < 1 mm².
+        assert!(is_micro_void(&[[0.0, 0.0], [0.8, 0.0], [0.8, 0.8], [0.0, 0.8]]));
+        // 20 × 0,3 mm : 6 mm² mais 0,3 mm de large — rien ne passe là.
+        assert!(is_micro_void(&[[0.0, 0.0], [20.0, 0.0], [20.0, 0.3], [0.0, 0.3]]));
+        assert!(is_micro_void(&[[0.0, 0.0], [1.0, 0.0]]));
+    }
+
+    #[test]
+    fn ergot_de_largeur_nulle_du_fichier_c04() {
+        // Motif MESURÉ au lot E0 (« no pole found with 10 levels of
+        // recursion ») : la polyligne part à gauche sur 6,9 mm et revient
+        // 0,0001 mm plus haut.
+        let mut ring: Vec<Pt> = vec![
+            [72.871, 84.6031],
+            [65.9436, 84.6031],
+            [72.871, 84.6032],
+            [74.8711, 82.6031],
+            [74.871, 73.5209],
+            [74.871, 82.6031],
+        ];
+        let removed = strip_spurs(&mut ring);
+        assert_eq!(removed, 4, "{ring:?}");
+        assert_eq!(ring, vec![[72.871, 84.6031], [74.8711, 82.6031]]);
+    }
+
+    #[test]
+    fn un_anneau_propre_n_est_pas_touche() {
+        // NO-OP obligatoire : sinon le seed canonique de tous les fichiers
+        // changerait.
+        let mut ring: Vec<Pt> = vec![[0.0, 0.0], [100.0, 0.0], [100.0, 50.0], [0.0, 50.0]];
+        let before = ring.clone();
+        assert_eq!(strip_spurs(&mut ring), 0);
+        assert_eq!(ring, before);
+
+        let mut circle: Vec<Pt> = (0..64)
+            .map(|t| {
+                let a = t as f64 * std::f64::consts::PI / 32.0;
+                [10.0 * a.cos(), 10.0 * a.sin()]
+            })
+            .collect();
+        let n = circle.len();
+        assert_eq!(strip_spurs(&mut circle), 0);
+        assert_eq!(circle.len(), n);
+    }
+
 }

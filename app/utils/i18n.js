@@ -280,6 +280,9 @@ const dict = {
         'import.unitUnknown': 'Unknown drawing unit ($INSUNITS code {value}) — millimeters assumed. Check the dimensions before cutting.',
         'import.unitImplausible': 'File declares {value} — geometry converted as declared. Check the dimensions before cutting.',
         'import.splinesSampled': '{n} splines sampled.',
+        // Lot E1 : ce que le nettoyage géométrique a retiré (information).
+        'import.microVoidsFilled': '{n} micro-cutouts ignored (too small to cut) — the material stays in place.',
+        'import.spursRemoved': '{n} zero-width back-and-forths cleaned up.',
         'import.blocksFlattened': '{n} blocks flattened.',
         'import.andMore': 'and {n} more',
         'import.findingsTitle': 'Import report',
@@ -329,6 +332,16 @@ const dict = {
         // Lot E0 : the engine refused ONE part's geometry at import. Naming
         // the file and the part is the whole point — 'crashLocal' told the
         // user nothing they could act on.
+        // Lot E1 : « Import avancé » de la dépose (projets « cet appareil »).
+        'advancedImport.title': 'Advanced import',
+        'advancedImport.badgeExplode': 'split',
+        'advancedImport.explode': 'Split into single parts',
+        'advancedImport.explodeHint': 'One file card per closed contour, each with its own quantity. Cutouts stay with their part.',
+        'advancedImport.scale': 'Scale',
+        'advancedImport.mode.factor': 'Factor',
+        'advancedImport.mode.width': 'Target width',
+        'advancedImport.mode.height': 'Target height',
+        'advancedImport.scaleHint': 'Applies to the whole drawing, before splitting. A factor of 1 changes nothing.',
         'localMode.itemGeometry': 'The engine could not use part {part} of “{file}”: its outline is not a usable closed contour. The nesting was refunded — fix that part in your CAD, or set its quantity to 0.',
         'localMode.itemGeometryUnknown': 'The engine could not use one part of this job: its outline is not a usable closed contour. The nesting was refunded — check the parts of the files in this project.',
         'localCompute.memoryError': 'This job needs more memory than your browser can provide. The nesting was refunded — try a smaller job or a desktop browser.',
@@ -1013,6 +1026,8 @@ const dict = {
         'import.unitUnknown': "Unité de dessin inconnue (code $INSUNITS {value}) — millimètres supposés. Vérifiez les dimensions avant de découper.",
         'import.unitImplausible': "Le fichier déclare des {value} — géométrie convertie telle quelle. Vérifiez les dimensions avant de découper.",
         'import.splinesSampled': "{n} splines échantillonnées.",
+        'import.microVoidsFilled': "{n} micro-découpes ignorées (trop petites pour être découpées) — la matière reste en place.",
+        'import.spursRemoved': "{n} aller-retours de largeur nulle nettoyés.",
         'import.blocksFlattened': "{n} blocs aplatis.",
         'import.andMore': "et {n} autres",
         'import.findingsTitle': "Rapport d'import",
@@ -1059,6 +1074,15 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez avec une tâche plus petite.",
         'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
+        'advancedImport.title': 'Import avancé',
+        'advancedImport.badgeExplode': 'éclaté',
+        'advancedImport.explode': 'Éclater en pièces unitaires',
+        'advancedImport.explodeHint': "Une fiche par contour fermé, chacune avec sa quantité. Les découpes restent avec leur pièce.",
+        'advancedImport.scale': 'Échelle',
+        'advancedImport.mode.factor': 'Facteur',
+        'advancedImport.mode.width': 'Largeur cible',
+        'advancedImport.mode.height': 'Hauteur cible',
+        'advancedImport.scaleHint': "S'applique au dessin complet, avant l'éclatement. Un facteur de 1 ne change rien.",
         'localMode.itemGeometry': "Le moteur n'a pas pu utiliser la pièce {part} de « {file} » : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — corrigez cette pièce dans votre CAO, ou mettez sa quantité à 0.",
         'localMode.itemGeometryUnknown': "Le moteur n'a pas pu utiliser une pièce de cette tâche : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — vérifiez les pièces des fichiers de ce projet.",
         'localCompute.memoryError': "Cette tâche demande plus de mémoire que votre navigateur ne peut en fournir. L'imbrication a été remboursée — essayez une tâche plus petite ou un navigateur de bureau.",

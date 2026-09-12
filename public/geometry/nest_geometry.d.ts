@@ -10,6 +10,22 @@
 export function canonical_dxf(bytes: Uint8Array, tol: number): Uint8Array;
 
 /**
+ * canonical_dxf_part(bytes, handles_json) -> Uint8Array (lot E1) : le DXF
+ * canonique d'UNE pièce — les entités dont le handle est dans la liste
+ * (contour et trous), à l'identité. `handles_json` = `["2F","30",…]`, les
+ * `handles` d'une pièce rendue par l'import.
+ */
+export function canonical_dxf_part(bytes: Uint8Array, handles_json: string): Uint8Array;
+
+/**
+ * canonical_dxf_scaled(bytes, factor) -> Uint8Array (lot E1) : le DXF
+ * canonique du fichier, MIS À L'ÉCHELLE (longueurs × factor). C'est la
+ * première étape de l'« import avancé » : tout l'aval (import ordinaire,
+ * aperçu, export par handle) lit ce document comme n'importe quel autre.
+ */
+export function canonical_dxf_scaled(bytes: Uint8Array, factor: number): Uint8Array;
+
+/**
  * compute_report(json {items, containers, space}) -> rapport JSON.
  */
 export function compute_report(json: string): string;
@@ -75,6 +91,8 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly canonical_dxf: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly canonical_dxf_part: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly canonical_dxf_scaled: (a: number, b: number, c: number) => [number, number, number, number];
     readonly compute_report: (a: number, b: number) => [number, number, number, number];
     readonly export_dxf: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
