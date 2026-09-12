@@ -1,0 +1,13 @@
+{
+ "file": "volute.dxf",
+ "cardName": "volute.dxf",
+ "wasm": "C:\\Users\\GUIGUI~1\\AppData\\Local\\Temp/nest_wasm_bg_nofallback.wasm",
+ "banner": "The engine could not use part 13 of “volute.dxf”: its outline is not a usable closed contour. The nesting was refunded — fix that part in your CAD, or set its quantity to 0.",
+ "checks": {
+  "nommeLeFichier": true,
+  "nommeLaPiece": true,
+  "annonceLeRemboursement": true,
+  "plusDeMessageGenerique": true,
+  "pasDeGabaritNonSubstitue": true
+ }
+}

@@ -47,6 +47,16 @@ export default defineEventHandler(async (event) => {
         }
         : undefined
 
+    // Lot E0 : pièce dont le moteur a refusé la géométrie (slug du fichier +
+    // index de la pièce dans ce fichier). Champ ADDITIF : les jobs d'avant
+    // n'en ont pas et s'affichent comme avant.
+    const geom = body?.geom && typeof body.geom === 'object' && body.geom.slug
+        ? {
+            slug: String(body.geom.slug).slice(0, 128),
+            part: Number.isFinite(Number(body.geom.part)) ? Math.max(0, Math.trunc(Number(body.geom.part))) : 0,
+        }
+        : undefined
+
     // Inline refund — mirror of worker_common/refund.py (kept as reference).
     const chargeType = job.charge?.type
     const alreadyRefunded = Boolean(job.charge?.refunded)
@@ -72,6 +82,7 @@ export default defineEventHandler(async (event) => {
                 finishedAt: new Date(),
                 update_ts: new Date(),
                 ...(unfit ? { unfit } : {}),
+                ...(geom ? { itemGeometry: geom } : {}),
                 ...(alreadyRefunded ? {} : { 'charge.refunded': true }),
             },
             $unset: { progress: '', compute: '', localPayload: '', liveLayout: '' },

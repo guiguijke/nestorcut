@@ -58,6 +58,13 @@ version = "0.10"
 [dependencies.geo-buffer]
 version = "0.2"
 
+# AJOUT VENDORISÉ (lot E0) : union robuste en arithmétique ENTIÈRE pour le
+# repli du gonflement (voir VENDORED.patch.md §3). Entier ⇒ déterministe
+# cross-plateforme, ce que le float de geo_buffer ne garantit pas.
+[dependencies.i_overlay]
+version = "4"
+default-features = false
+
 [dependencies.geo-types]
 version = "0.7"
 

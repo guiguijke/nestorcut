@@ -1,6 +1,8 @@
-// Runs the browser-target wasm artifact on the demo fixture and prints the
-// canonical SHA-256 of the alternatives (cross-target determinism lock).
-//   node workers/nesting/bench/wasm_canon_hash.mjs
+// Runs the browser-target wasm artifact on a fixture and prints the canonical
+// SHA-256 of the alternatives (cross-target determinism lock).
+//   node workers/nesting/bench/wasm_canon_hash.mjs [fixture]
+// Fixture par défaut : b_demo. L'autre est e0_volute (SPP, repli du
+// gonflement robuste du lot E0).
 import { readFileSync } from 'node:fs';
 import init, { run_nesting } from '../../../public/engine/nest_wasm.js';
 
@@ -10,8 +12,9 @@ const read = (p) => readFileSync(new URL(p, root), 'utf8');
 const wasmBytes = readFileSync(new URL('../../../public/engine/nest_wasm_bg.wasm', root));
 await init(wasmBytes);
 
-const instance = read('fixtures/b_demo/instance.json');
-const config = read('fixtures/b_demo/config_det.json');
+const fixture = process.argv[2] || 'b_demo';
+const instance = read(`fixtures/${fixture}/instance.json`);
+const config = read(`fixtures/${fixture}/config_det.json`);
 const seed = BigInt(config.match(/"prng_seed":\s*(\d+)/)[1]);
 
 const out = JSON.parse(run_nesting(instance, config, seed));

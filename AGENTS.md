@@ -103,6 +103,29 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    et le moteur panique dans un thread rayon (« Offset resulted in an empty
    polygon », opaque). Garde côté Python avant `run_engine` (exception
    explicite : réduire l'espacement ou ajouter pièces/stock).
+2c. **`geo_buffer` s'effondre sur un canal plus étroit que le gonflement.**
+   L'inflation d'import (`space/2`) décale les deux bords d'un canal étroit
+   l'un à travers l'autre : le contour rendu se recoupe, `SPolygon::new` le
+   refuse, et le moteur MEURT à l'import — « importing SPP instance into
+   jagua-rs: Simple polygon contains intersecting edges » ⇒ job en « stopped
+   unexpectedly » + remboursement (panne de production sur une volute
+   d'atelier, 17 pièces, 2 975 sommets). Et la sortie de `geo_buffer` n'est
+   pas réparable : mesuré sur une volute synthétique à canal de 0,3 mm, elle
+   rend un contour d'aire 47 mm² pour une pièce de 353 mm² — l'information
+   est déjà perdue, aucune union ne la rend. Le **repli** de
+   `offset_shape` (patch vendorisé §3, lot E0) RECALCULE donc le gonflement
+   depuis l'anneau d'origine : union en arithmétique entière (`i_overlay`,
+   règle positive) de la pièce, d'un rectangle par arête et d'un polygone
+   32-gone CIRCONSCRIT par sommet — un sur-ensemble de la somme de Minkowski
+   exacte (jamais moins d'espacement que promis). Il ne tourne QUE sur
+   l'erreur : le chemin normal reste bit-identique (verrou
+   `determinism_lock.py`, SHA `b_demo` inchangé). Corollaire : un échec
+   d'import moteur doit DÉSIGNER son item
+   (`nest-engine/src/import_error.rs` : évènement
+   `{"type":"error","kind":"item_geometry","item":k}` + message préfixé
+   `item_geometry:<id>:`) — sinon ni le worker ni le navigateur ne peuvent
+   nommer le fichier et la pièce, et l'utilisateur lit « arrêté de façon
+   inattendue » pour un contour précis.
 3. **`min_item_separation` = inflation jagua** (exacte, ±space/2 de chaque
    côté → séparation totale `space`). Toute validation d'ajustement (filler
    dans trou) doit garantir **distance ≥ `space` à la paroi** : candidat NON

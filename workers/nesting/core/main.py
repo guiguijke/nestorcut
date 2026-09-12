@@ -13,7 +13,9 @@ from core.nesting_input_builder import (
     build_spp_instance,
     deterministic_seed,
 )
-from core.engine import EngineCancelled, EngineError, run_engine
+from core.engine import (EngineCancelled, EngineError,
+                         item_geometry_message, parse_item_geometry,
+                         run_engine)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
 from core.metrics import (
@@ -1256,7 +1258,21 @@ def _nesting_process_impl(doc):
         # user nothing actionable.
         detail = str(e)
         unfit = None
-        if "no feasible solution" in detail:
+        item_geometry = None
+        # Lot E0 : le moteur a refuse la geometrie d'UN item. On nomme le
+        # fichier et le rang de la piece — « Nesting failed: item_geometry:7:
+        # Simple polygon contains intersecting edges » n'aide personne.
+        _item_id = parse_item_geometry(detail)
+        if _item_id is not None:
+            _target = part_index_by_id.get(_item_id) or {}
+            _fname = None
+            if _target.get("slug"):
+                _fdoc = db["user_dxf_files"].find_one(
+                    {"slug": _target["slug"]}, {"name": 1}) or {}
+                _fname = _fdoc.get("name")
+            information, item_geometry = item_geometry_message(
+                _item_id, _target, _fname)
+        elif "no feasible solution" in detail:
             # Plan 2026-09-05 §1.2b : infaisabilité moteur → information
             # ACTIONNABLE + champ structuré `unfit` (les trois leviers).
             # best_strip_width quand le moteur bande le fournit.
@@ -1292,6 +1308,9 @@ def _nesting_process_impl(doc):
         }
         if unfit:
             update["unfit"] = unfit
+        if item_geometry:
+            # Champ ADDITIF (piege #19b) : les anciens jobs n'en ont pas.
+            update["itemGeometry"] = item_geometry
         db["nesting_jobs"].update_one(
             { "slug": slug },
             {

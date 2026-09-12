@@ -10,7 +10,7 @@ use crate::merge::{BpMergeError, BpRun, merge_bp_runs};
 use crate::progress::EventSink;
 use crate::spp::derive_seed;
 use crate::{EngineOutput, map_workers};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use constructive::DirBias;
 use jagua_rs::entities::Instance as _;
 use jagua_rs::io::import::Importer;
@@ -120,8 +120,20 @@ pub fn run_bpp_mem(
         sparrow_config.min_item_separation,
         sparrow_config.narrow_concavity_cutoff_ratio,
     );
-    let instance = jagua_rs::probs::bpp::io::import_instance(&importer, &ext_instance)
-        .context("importing BPP instance into jagua-rs")?;
+    // Lot E0 : idem SPP — l'échec d'import désigne l'item fautif.
+    let instance = match jagua_rs::probs::bpp::io::import_instance(&importer, &ext_instance) {
+        Ok(i) => i,
+        Err(e) => {
+            let items: Vec<&jagua_rs::io::ext_repr::ExtItem> =
+                ext_instance.items.iter().map(|it| &it.base).collect();
+            return Err(crate::import_error::item_import_error(
+                sink,
+                &importer,
+                &items,
+                e.context("importing BPP instance into jagua-rs"),
+            ));
+        }
+    };
 
     let n_workers = config.n_workers();
     sink(&format!(

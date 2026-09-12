@@ -9,6 +9,7 @@ pub mod column_fill;
 pub mod config;
 pub mod geometry_check;
 pub mod gravity;
+pub mod import_error;
 pub mod merge;
 pub mod mouth_guard;
 pub mod progress;

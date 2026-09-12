@@ -11,6 +11,7 @@ which are forwarded to the caller for live UI progress.
 """
 import json
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -26,7 +27,18 @@ TIMEOUT_GRACE_SECONDS = int(os.environ.get("NEST_ENGINE_TIMEOUT_GRACE", "120"))
 
 
 class EngineError(Exception):
-    pass
+    """Echec moteur.
+
+    Lot E0 : `kind` et `item` sont renseignes quand le moteur a DESIGNE un
+    item (evenement `{"type":"error","kind":"item_geometry","item":k}`) — le
+    worker peut alors nommer le fichier et la piece au lieu d'un message
+    generique.
+    """
+
+    def __init__(self, message, kind=None, item=None):
+        super().__init__(message)
+        self.kind = kind
+        self.item = item
 
 
 class EngineCancelled(Exception):
@@ -181,6 +193,13 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
                 extra={"returncode": returncode, "stderr": stderr_tail},
             )
             reason = error_event.get("reason", "unknown")
+            kind = error_event.get("kind")
+            if kind == "item_geometry":
+                # La geometrie d'UN item a ete refusee a l'import : on garde
+                # l'identifiant, l'appelant le traduit en fichier + piece.
+                item = error_event.get("item")
+                raise EngineError(
+                    f"item_geometry:{item}: {reason}", kind=kind, item=item)
             raise EngineError(f"engine failed (rc={returncode}, reason={reason}): {stderr_tail}")
 
         alternatives_path = os.path.join(out_dir, "alternatives.json")
@@ -232,3 +251,39 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
         },
     )
     return alternatives
+
+
+# --- Lot E0 : echec d'import moteur DESIGNE PAR ITEM -----------------------
+# Le moteur rend `item_geometry:<id>: <raison>` (nest-engine/import_error.rs).
+# Ces deux fonctions sont PURES : c'est elles que le verrou pytest mesure,
+# pas le chemin Mongo.
+
+def parse_item_geometry(detail):
+    """Id de l'item refuse dans un message d'echec moteur, sinon None."""
+    m = re.search(r"item_geometry:(\d+)", str(detail or ""))
+    return int(m.group(1)) if m else None
+
+
+def item_geometry_message(item_id, target, file_name=None):
+    """Message utilisateur + champ structure pour un item refuse.
+
+    `target` = {"slug": ..., "part": <index 0-based dans son fichier>} de
+    l'itemMap du job ; `file_name` le nom d'origine du fichier quand le
+    serveur l'a (un projet 100 % client n'en a pas cote serveur).
+
+    Le rang affiche est 1-BASED : l'utilisateur compte ses pieces a partir
+    de 1.
+    """
+    target = target or {}
+    part = target.get("part") or 0
+    label = f'"{file_name}"' if file_name else "one of the files"
+    information = (
+        f"Nesting failed: part {part + 1} of {label} has an outline the "
+        "engine cannot use (not a usable closed contour) — fix that part in "
+        "your CAD, or set its quantity to 0."
+    )
+    return information, {
+        "item": item_id,
+        "slug": target.get("slug"),
+        "part": part,
+    }

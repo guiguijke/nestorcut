@@ -25,3 +25,11 @@ rayon = { workspace = true }
 clap = { workspace = true }
 libm = { workspace = true }
 num_cpus = "1.17"
+
+# Controle NEGATIF du verrou de gonflement (lot E0) : le test rejoue le
+# chemin primaire de jagua (geo_buffer seul) pour prouver qu'il MEURT sur la
+# fixture. Sans ce controle, le verrou passerait meme si le repli ne servait
+# a rien. Uniquement en test, jamais dans le binaire livre.
+[dev-dependencies]
+geo-buffer = "0.2"
+geo-types = "0.7"

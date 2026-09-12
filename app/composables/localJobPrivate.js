@@ -365,7 +365,7 @@ async function buildClientPayload(meta) {
 
 
 
-export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) {
+export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap: seedItemMap } = {}) {
     // §M.3 (audit 2026-08-29, durci 2026-08-31) : fetch SANS timeout — un
     // serveur qui ne répond jamais laissait le slot du registre occupé à vie
     // (running=1, bouton « Imbriquer » muet jusqu'au rechargement). Borné :
@@ -377,7 +377,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
     let sources
     // J-090 : correspondance id moteur → {slug, part} — construite par le
     // builder client (le job d'un projet local n'a pas d'itemMap serveur).
-    let itemMap = null
+    // Lot E0 : pour un job PRÉPARÉ PAR LE SERVEUR (compte Free sur un projet
+    // serveur), elle vient du document job via le registre — sans elle, un
+    // refus de géométrie retomberait sur le message générique.
+    let itemMap = seedItemMap || null
     if (fetched?.mode === 'client-built') {
         try {
             const built = await buildClientPayload(fetched)
@@ -459,14 +462,27 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive } = {}) 
             || (String(outcome.error || '').includes('no feasible solution')
                 ? { reason: 'strip' }
                 : null)
+        // Lot E0 : le moteur refuse la géométrie d'UN item — on nomme le
+        // fichier et la pièce au lieu de « arrêté de façon inattendue ».
+        const { itemGeometryTarget } = await import('./localGeomError')
+        const geom = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap)
         await $fetch(`/api/results/${jobSlug}/local-fail`, {
             method: 'POST',
             body: {
-                error: outcome.error === 'memory_cap' ? 'memory_cap' : String(outcome.error),
+                error: outcome.error === 'memory_cap' ? 'memory_cap'
+                    : geom ? 'item_geometry'
+                    : String(outcome.error),
                 ...(unfit ? { unfit } : {}),
+                ...(geom ? { geom } : {}),
             },
         })
-        return { ok: false, error: outcome.error, memory: outcome.memory, unfit }
+        return {
+            ok: false,
+            error: geom ? 'item_geometry' : outcome.error,
+            memory: outcome.memory,
+            unfit,
+            geom,
+        }
     }
 
     const result = outcome.result

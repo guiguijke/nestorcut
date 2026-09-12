@@ -168,6 +168,7 @@ import { isLocalComputeEnabled } from "~/composables/localCompute";
 import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
+import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
 import {
     DEMO_NESTING_LIMIT,
@@ -321,7 +322,16 @@ const localLive = computed(() => {
 });
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
 // les messages d'erreur locaux prennent leurs variantes dédiées.
-const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, { localOnly: unref(isLocalProject) }));
+// Lot E0 : géométrie d'une pièce refusée par le moteur — { slug, part } du
+// registre, traduit en { file, part } (nom du fichier, rang 1-based).
+const localGeom = ref(null);
+const localGeomParams = computed(() =>
+    itemGeometryParams(localGeom.value, projectFiles.value)
+);
+const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
+    localOnly: unref(isLocalProject),
+    params: localComputeError.value === 'item_geometry' ? localGeomParams.value : null,
+}));
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
 // leviers du pré-contrôle) — le registre le porte sur la phase error.
 const localUnfit = ref(null);
@@ -376,10 +386,12 @@ watch(
               : p.error === 'geometry_missing' ? 'geometry_missing'
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
+              : p.error === 'item_geometry' ? 'item_geometry'
               : p.error === 'cancelled' ? null
               : 'crash')
             : null;
         localUnfit.value = p.phase === 'error' ? (p.unfit || null) : null;
+        localGeom.value = p.phase === 'error' ? (p.geom || null) : null;
         if (p.phase === 'queued' || p.phase === 'running' || p.phase === 'finalizing') {
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
@@ -670,6 +682,7 @@ watch(pageSlug, async (s, prev) => {
         localComputeRunning.value = false
         localComputeError.value = null
         localUnfit.value = null
+        localGeom.value = null
         localWalks.value = 1
         localEvals.value = null
         localZonePhase.value = null

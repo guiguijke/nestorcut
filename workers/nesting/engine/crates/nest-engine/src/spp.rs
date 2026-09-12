@@ -3,7 +3,7 @@ use crate::config::EngineConfig;
 use crate::merge::{SpMergeMode, SpRun, merge_sp_runs};
 use crate::progress::{EventSink, MapBack, PlateauTerminator, ProgressListener};
 use crate::{EngineOutput, map_workers};
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use jagua_rs::io::import::Importer;
 use jagua_rs::probs::spp::entities::{SPInstance, SPSolution};
 use jagua_rs::probs::spp::io::ext_repr::ExtSPInstance;
@@ -331,8 +331,21 @@ pub fn run_spp_mem(
         sparrow_config.min_item_separation,
         sparrow_config.narrow_concavity_cutoff_ratio,
     );
-    let instance = jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance)
-        .context("importing SPP instance into jagua-rs")?;
+    // Lot E0 : sur échec, l'erreur NOMME l'item (le worker et le navigateur
+    // en tirent le fichier et la pièce). Aucun coût sur le chemin normal.
+    let instance = match jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance) {
+        Ok(i) => i,
+        Err(e) => {
+            let items: Vec<&jagua_rs::io::ext_repr::ExtItem> =
+                ext_instance.items.iter().map(|it| &it.base).collect();
+            return Err(crate::import_error::item_import_error(
+                sink,
+                &importer,
+                &items,
+                e.context("importing SPP instance into jagua-rs"),
+            ));
+        }
+    };
 
     let n_workers = config.n_workers();
     // In deterministic work-bounded mode the wall budget must NOT leak

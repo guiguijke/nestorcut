@@ -11,4 +11,35 @@
    (msvcrt / glibc / Rust libm sur wasm32) divergent par ulps et cassent la
    reproductibilité cross-device (AGENTS.md moteur — libm). Dép libm ajoutée.
 
+3. `src/geometry/shape_modification.rs` : `offset_shape` gagne un **repli**
+   quand le chemin primaire (`geo_buffer` puis `import_simple_polygon`) ne
+   rend pas un anneau simple. Le repli **recalcule le gonflement depuis
+   l'anneau d'origine**, comme une somme de Minkowski explicite : réunion de
+   la pièce, d'un rectangle par arête et d'un polygone à 32 côtés
+   CIRCONSCRIT au disque par sommet, union faite en arithmétique ENTIÈRE
+   (`i_overlay`, règle positive). Il ne s'exécute QUE sur l'erreur et
+   seulement en mode `Inflate`, donc le chemin normal est bit-identique
+   (verrou `bench/determinism_lock.py` inchangé).
+
+   Pourquoi ne pas réparer la sortie de `geo_buffer` : elle n'est pas
+   réparable. Mesuré sur la fixture synthétique du verrou (volute de 2,5
+   tours, brin de 2,4 mm, canal de 0,3 mm) à un offset de 1 mm, `geo_buffer`
+   rend un contour de 278 points d'aire 47 mm² là où la pièce brute en fait
+   353 : l'information est déjà perdue, aucune union ne la rend. Une première
+   version du repli (union « non nulle » de ce contour) livrait donc un
+   gonflement PLUS PETIT que la pièce — c'est ce que le verrou d'aire
+   attrape.
+
+   Raison du chantier : jagua gonfle chaque pièce de `space/2` à l'import
+   (`min_item_separation`). Sur une pièce dont deux brins de matière laissent
+   un canal plus étroit que le gonflement — volute, spirale, lettrage plein —
+   les deux bords décalés se croisent, `SPolygon::new` refuse le contour, et
+   le moteur MEURT à l'import : le job finissait en « The on-device compute
+   stopped unexpectedly » avec remboursement. Dépendance ajoutée :
+   `i_overlay` 4 (booléen entier ⇒ déterministe natif ≡ wasm) ; les seules
+   transcendantales du repli sont celles du crate `libm` (règle AGENTS #14b).
+   Verrous : `crates/nest-engine/tests/inflate_fallback.rs` (contrôle négatif
+   compris) et la fixture de déterminisme `bench/fixtures/e0_volute`.
+   Lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`.
+
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).

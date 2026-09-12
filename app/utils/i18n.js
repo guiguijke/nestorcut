@@ -326,6 +326,11 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please retry with a smaller job.',
         'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
+        // Lot E0 : the engine refused ONE part's geometry at import. Naming
+        // the file and the part is the whole point — 'crashLocal' told the
+        // user nothing they could act on.
+        'localMode.itemGeometry': 'The engine could not use part {part} of “{file}”: its outline is not a usable closed contour. The nesting was refunded — fix that part in your CAD, or set its quantity to 0.',
+        'localMode.itemGeometryUnknown': 'The engine could not use one part of this job: its outline is not a usable closed contour. The nesting was refunded — check the parts of the files in this project.',
         'localCompute.memoryError': 'This job needs more memory than your browser can provide. The nesting was refunded — try a smaller job or a desktop browser.',
         'localMode.title': 'Compute location',
         'localMode.toggle.local': 'On my machine',
@@ -1054,6 +1059,8 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez avec une tâche plus petite.",
         'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
+        'localMode.itemGeometry': "Le moteur n'a pas pu utiliser la pièce {part} de « {file} » : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — corrigez cette pièce dans votre CAO, ou mettez sa quantité à 0.",
+        'localMode.itemGeometryUnknown': "Le moteur n'a pas pu utiliser une pièce de cette tâche : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — vérifiez les pièces des fichiers de ce projet.",
         'localCompute.memoryError': "Cette tâche demande plus de mémoire que votre navigateur ne peut en fournir. L'imbrication a été remboursée — essayez une tâche plus petite ou un navigateur de bureau.",
         'localMode.title': 'Lieu de calcul',
         'localMode.toggle.local': 'Sur ma machine',

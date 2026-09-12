@@ -40,7 +40,16 @@ export function useLocalMode(projectSlug) {
     // `localOnly` (AF6, L3-bis) : un projet « cet appareil » n'a AUCUNE
     // géométrie côté serveur — les conseils « réessayez en mode serveur »
     // sont impossibles à suivre : variantes dédiées.
-    function mapError(err, { localOnly = false } = {}) {
+    function mapError(err, { localOnly = false, params = null } = {}) {
+        // Lot E0 : le moteur a refusé la géométrie d'une pièce — le message
+        // NOMME le fichier et le rang de la pièce. Jamais `crashLocal` :
+        // « arrêté de façon inattendue » n'aide personne à corriger un
+        // contour.
+        if (err === 'item_geometry') {
+            return params
+                ? t('localMode.itemGeometry', params)
+                : t('localMode.itemGeometryUnknown')
+        }
         if (err === 'memory_cap') {
             return localOnly ? t('localMode.memoryLocal') : t('localMode.memorySuggest')
         }

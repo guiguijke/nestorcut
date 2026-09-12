@@ -370,7 +370,150 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
             .collect_vec(),
     );
 
-    import::import_simple_polygon(&ext_s_polygon)
+    match import::import_simple_polygon(&ext_s_polygon) {
+        // CHEMIN NORMAL, INCHANGÉ : quand `geo_buffer` rend un anneau simple,
+        // rien ne bouge — pas un flottant de plus (verrou de déterminisme).
+        Ok(shape) => Ok(shape),
+        // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
+        Err(first) => match mode {
+            ShapeModifyMode::Inflate => {
+                let ring = robust_inflate_ring(&sp.vertices, distance).map_err(|e| {
+                    anyhow::anyhow!("offset fallback failed: {e} (geo_buffer: {first})")
+                })?;
+                import::import_simple_polygon(&ExtSPolygon(ring)).map_err(|e| {
+                    anyhow::anyhow!(
+                        "offset fallback produced no simple ring: {e} (geo_buffer: {first})"
+                    )
+                })
+            }
+            // L'érosion n'a pas de repli : elle ne s'applique qu'au conteneur
+            // (rectangle de tôle), qui n'a jamais mis `geo_buffer` en défaut.
+            ShapeModifyMode::Deflate => Err(first),
+        },
+    }
+}
+
+/// Nombre de côtés du polygone qui remplace le disque du gonflement.
+/// Le polygone est CIRCONSCRIT (rayon `d / cos(π/K)`) : le résultat contient
+/// donc la somme de Minkowski exacte — jamais moins d'espacement que promis,
+/// au prix de +0,2 % d'aire à K = 32.
+const INFLATE_DISK_SIDES: usize = 32;
+
+/// Gonflement ROBUSTE d'un anneau, utilisé quand `geo_buffer` rend un contour
+/// que `SPolygon::new` refuse.
+///
+/// Pourquoi ne pas réparer la sortie de `geo_buffer` : elle n'est pas
+/// réparable. Mesuré sur une volute synthétique (deux brins séparés de
+/// 0,3 mm) à un offset de 1 mm — `geo_buffer` rend un contour de 278 points
+/// d'aire 47 mm² là où la pièce brute en fait 353 : l'information est déjà
+/// perdue, aucune union ne la rend.
+///
+/// On recalcule donc le gonflement depuis l'anneau D'ORIGINE, comme une somme
+/// de Minkowski explicite : réunion de la pièce, d'un rectangle par arête
+/// (l'arête décalée de ±d) et d'un polygone à `INFLATE_DISK_SIDES` côtés par
+/// sommet. L'union se fait en arithmétique ENTIÈRE (i_overlay, règle positive
+/// sur des morceaux tous orientés en sens direct).
+///
+/// Trois propriétés, qui sont les raisons de cette forme :
+/// - le résultat CONTIENT la pièce (elle est un des morceaux) : une aire
+///   gonflée ne peut pas être plus petite que l'aire brute ;
+/// - il contient le disque de rayon `d` autour de chaque point du bord
+///   (polygones circonscrits) : la séparation `space` reste tenue ;
+/// - il est reproductible natif ≡ wasm : les seules transcendantales sont
+///   celles du crate `libm` (règle AGENTS #14b), et le booléen d'i_overlay
+///   travaille en entier.
+fn robust_inflate_ring(vertices: &[Point], distance: f32) -> Result<Vec<(f32, f32)>> {
+    use i_overlay::core::fill_rule::FillRule;
+    use i_overlay::float::simplify::SimplifyShape;
+
+    let n = vertices.len();
+    if n < 3 {
+        bail!("inflate fallback: ring with {n} vertices");
+    }
+    let d = distance as f64;
+    if !(d > 0.0) {
+        bail!("inflate fallback: distance {distance}");
+    }
+
+    fn signed_area(ring: &[[f64; 2]]) -> f64 {
+        let mut a = 0.0;
+        for i in 0..ring.len() {
+            let p = ring[i];
+            let q = ring[(i + 1) % ring.len()];
+            a += p[0] * q[1] - q[0] * p[1];
+        }
+        a / 2.0
+    }
+
+    // Tous les morceaux sont poussés en sens DIRECT : la règle « positive »
+    // d'i_overlay en fait alors exactement l'union.
+    let mut pieces: Vec<Vec<Vec<[f64; 2]>>> = Vec::with_capacity(2 * n + 1);
+    let mut push_ccw = |ring: Vec<[f64; 2]>| {
+        let mut ring = ring;
+        if signed_area(&ring) < 0.0 {
+            ring.reverse();
+        }
+        pieces.push(vec![ring]);
+    };
+
+    let pts: Vec<[f64; 2]> = vertices.iter().map(|p| [p.0 as f64, p.1 as f64]).collect();
+    push_ccw(pts.clone());
+
+    // Le disque, une fois pour toutes : polygone circonscrit de rayon
+    // d / cos(π/K), sommets alignés sur les mêmes angles pour tous les points
+    // (une seule table ⇒ pas de dérive d'un sommet à l'autre).
+    let k = INFLATE_DISK_SIDES;
+    let step = 2.0 * core::f64::consts::PI / k as f64;
+    let r = d / libm::cos(core::f64::consts::PI / k as f64);
+    let disk: Vec<[f64; 2]> = (0..k)
+        .map(|i| {
+            let a = step * i as f64;
+            [r * libm::cos(a), r * libm::sin(a)]
+        })
+        .collect();
+
+    for i in 0..n {
+        let a = pts[i];
+        let b = pts[(i + 1) % n];
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let len = (dx * dx + dy * dy).sqrt();
+        if len > 0.0 {
+            // Normale unitaire × d : `sqrt`, division et multiplication sont
+            // exactes au bit près sur les deux cibles.
+            let (nx, ny) = (-dy / len * d, dx / len * d);
+            push_ccw(vec![
+                [a[0] - nx, a[1] - ny],
+                [b[0] - nx, b[1] - ny],
+                [b[0] + nx, b[1] + ny],
+                [a[0] + nx, a[1] + ny],
+            ]);
+        }
+        push_ccw(disk.iter().map(|p| [a[0] + p[0], a[1] + p[1]]).collect());
+    }
+
+    let shapes = pieces.simplify_shape(FillRule::Positive);
+    let best = shapes
+        .iter()
+        .filter_map(|shape| shape.first())
+        .filter(|ring| ring.len() >= 3)
+        .map(|ring| (signed_area(ring).abs(), ring))
+        .filter(|(area, _)| *area > 0.0)
+        // Ordre TOTAL (aire puis longueur) : le choix ne dépend jamais de
+        // l'ordre dans lequel le booléen a sorti ses formes.
+        .max_by(|a, b| {
+            OrderedFloat(a.0)
+                .cmp(&OrderedFloat(b.0))
+                .then_with(|| a.1.len().cmp(&b.1.len()))
+        });
+
+    match best {
+        // Les trous éventuels du résultat (une volute dont les brins se
+        // rejoignent en enferme) sont laissés pleins : `SPolygon` n'a pas de
+        // trous, et un anneau plein est un SUR-ensemble — jamais moins
+        // d'espacement.
+        Some((_, ring)) => Ok(ring.iter().map(|p| (p[0] as f32, p[1] as f32)).collect()),
+        None => bail!("inflate fallback: union produced no ring"),
+    }
 }
 
 /// Closes narrow concavities in a [`SPolygon`] by replacing them with a straight edge, eliminating the vertices in between.

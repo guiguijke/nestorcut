@@ -1,7 +1,13 @@
-"""Cross-target determinism lock (Phase 2 foundation): the SAME demo job run
+"""Cross-target determinism lock (Phase 2 foundation): the SAME job run
 through the native nest-engine binary and through the browser-target wasm
 artifact (in Node/V8) must produce BIT-IDENTICAL alternatives — SHA-256 of
 the canonical form, tolerance 0.
+
+Deux fixtures, toutes deux verrouillées :
+  - `b_demo`    (BPP) : le job de démo, pièces convexes.
+  - `e0_volute` (SPP) : trois volutes synthétiques dont le gonflement passe
+    par le REPLI robuste de `offset_shape` (lot E0) — le repli tourne aussi
+    en navigateur, il doit rendre les mêmes octets que le natif.
 
 The fixture config is work-bounded (sa_max_iterations), so both targets do
 exactly the same work regardless of machine speed (AGENTS.md moteur — libm).
@@ -21,7 +27,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINE = os.path.abspath(os.path.join(HERE, "..", "engine"))
-FIXTURE = os.path.join(HERE, "fixtures", "b_demo")
+FIXTURES = [("b_demo", "bpp"), ("e0_volute", "spp")]
 
 
 def jsnum(x):
@@ -61,21 +67,22 @@ def canon(alternatives):
     return "\n".join(lines)
 
 
-def native_hash(bin_path):
+def native_hash(bin_path, fixture, problem):
+    d = os.path.join(HERE, "fixtures", fixture)
     with tempfile.TemporaryDirectory(prefix="nest_det_lock_") as tmp:
         subprocess.run(
-            [bin_path, "-i", os.path.join(FIXTURE, "instance.json"),
-             "-c", os.path.join(FIXTURE, "config_det.json"),
-             "-s", tmp, "-p", "bpp"],
+            [bin_path, "-i", os.path.join(d, "instance.json"),
+             "-c", os.path.join(d, "config_det.json"),
+             "-s", tmp, "-p", problem],
             check=True, capture_output=True,
         )
         alternatives = json.load(open(os.path.join(tmp, "alternatives.json")))
     return hashlib.sha256(canon(alternatives).encode()).hexdigest(), alternatives
 
 
-def wasm_hash():
+def wasm_hash(fixture):
     r = subprocess.run(
-        ["node", os.path.join(HERE, "wasm_canon_hash.mjs")],
+        ["node", os.path.join(HERE, "wasm_canon_hash.mjs"), fixture],
         check=True, capture_output=True, text=True,
     )
     return r.stdout.strip().splitlines()[-1]
@@ -87,17 +94,24 @@ def main():
         "nest-engine.exe" if os.name == "nt" else "nest-engine",
     )
     print(f"[lock] native binary: {bin_path}")
-    nh, alts = native_hash(bin_path)
-    print(f"[lock] native SHA-256: {nh}")
-    wh = wasm_hash()
-    print(f"[lock] wasm   SHA-256: {wh}")
-    a = alts[0]
-    print(f"[lock] native best: cost={a.get('cost')} density={a.get('density')} "
-          f"iterations={a.get('iterations')}")
-    if nh != wh:
-        print("[lock] FAIL — alternatives diverge between native and wasm")
+    failed = []
+    for fixture, problem in FIXTURES:
+        nh, alts = native_hash(bin_path, fixture, problem)
+        wh = wasm_hash(fixture)
+        a = alts[0]
+        print(f"[lock] {fixture} ({problem})")
+        print(f"[lock]   native SHA-256: {nh}")
+        print(f"[lock]   wasm   SHA-256: {wh}")
+        print(f"[lock]   native best: cost={a.get('cost')} "
+              f"strip_width={a.get('strip_width')} density={a.get('density')} "
+              f"iterations={a.get('iterations') or a.get('evaluations')}")
+        if nh != wh:
+            print(f"[lock]   FAIL — alternatives diverge between native and wasm")
+            failed.append(fixture)
+    if failed:
+        print("[lock] FAIL — " + ", ".join(failed))
         sys.exit(1)
-    print("[lock] OK — bit-identical alternatives (tolerance 0)")
+    print(f"[lock] OK — {len(FIXTURES)} fixtures bit-identical (tolerance 0)")
 
 
 if __name__ == "__main__":

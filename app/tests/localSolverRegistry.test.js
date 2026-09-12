@@ -28,6 +28,26 @@ describe('localSolverRegistry — navigation isolée, file tier, idempotence', (
         expect(runs).toBe(1)
     })
 
+    // Lot E0 : sans cette transmission, un refus de géométrie sur un job
+    // PRÉPARÉ PAR LE SERVEUR (compte Free, projet serveur) retomberait sur
+    // « le calcul s'est arrêté de façon inattendue » : le runner n'aurait
+    // aucun moyen de nommer la pièce.
+    it('transmet l’itemMap du document job au runner, et le { slug, part } du refus à la page', async () => {
+        const seen = []
+        const mod = await freshRegistry(async (slug, opts) => {
+            seen.push(opts?.itemMap)
+            return { ok: false, error: 'item_geometry', geom: { slug: 'f1', part: 11 } }
+        })
+        const map = [{ id: 7, slug: 'f1', part: 11 }]
+        mod.ensureJob(job('jg', map), { projectSlug: 'pg', maxConcurrent: 1 })
+        await new Promise(r => setTimeout(r, 40))
+        expect(seen).toEqual([map])
+        const p = mod.progressFor('pg')
+        expect(p.phase).toBe('error')
+        expect(p.error).toBe('item_geometry')
+        expect(p.geom).toEqual({ slug: 'f1', part: 11 })
+    })
+
     it('cap 1 : le 2e projet attend en file, démarre à la fin du 1er', async () => {
         const started = []
         let release

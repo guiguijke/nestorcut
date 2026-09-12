@@ -97,6 +97,10 @@ async function launch(jobSlug, projectSlug, itemMap) {
         const run = runner || realRunner
         const res = await run(jobSlug, {
             projectSlug,
+            // Lot E0 : la correspondance item → (fichier, pièce) du document
+            // job, pour nommer la pièce refusée même sur un job préparé par
+            // le serveur (compte Free sur un projet serveur).
+            itemMap: job.itemMap || itemMap || null,
             onLive: (evt) => {
                 const j = state.jobs[jobSlug]
                 if (!j) return
@@ -126,6 +130,9 @@ async function launch(jobSlug, projectSlug, itemMap) {
         // capacité / partiel) remonte à la page — scalaires légers, gardés
         // après l'éviction des champs lourds.
         job.unfit = res?.ok ? null : (res?.unfit || null)
+        // Lot E0 : { slug, part } de la pièce dont le moteur a refusé la
+        // géométrie — scalaires, gardés comme `unfit` après éviction.
+        job.geom = res?.ok ? null : (res?.geom || null)
         job.phase = res?.ok ? 'done' : (res?.error === 'cancelled' ? 'cancelled' : 'error')
     } catch (e) {
         job.ok = false
