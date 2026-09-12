@@ -179,7 +179,7 @@ Le harnais navigateur à un fichier utilisé pour la reproduction est
 
 ### Lot E0 — le moteur ne meurt plus sur un canal fin, et il dit ce qu'il refuse (implémenteur, 12/09)
 
-Commit : `HASH`. **Non déployé** — moteur natif, wasm moteur, app, serveur et
+Commit : `b1da2690`. **Non déployé** — moteur natif, wasm moteur, app, serveur et
 worker nesting touchés ; GO attendu. E0 se déploie seul (défaut de
 production actif).
 
