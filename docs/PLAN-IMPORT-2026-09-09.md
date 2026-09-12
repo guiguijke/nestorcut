@@ -768,7 +768,7 @@ ceux du dépôt, et le bundle servi rend les verdicts ci-dessus sur les
 témoins d'unité.
 ### Lot 2c — les messages de perte (implémenteur, 12/09)
 
-Commit : `HASH`. **Non déployé** — wasm géométrie, app, serveur et worker
+Commit : `84f48799`. **Non déployé** — wasm géométrie, app, serveur et worker
 fileprocessing touchés ; GO attendu.
 
 #### 9.5.10 Ce qui était silencieux, et où ça se taisait exactement
