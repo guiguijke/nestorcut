@@ -244,6 +244,10 @@ const mapProcessingStatus = (processingStatus) => {
 
 const mapBinFileToUi = async (userId, file) => {
   const completed = file.processingStatus === "completed";
+  // Lot 2c : un fichier garé par la garde d'import (lot 2a) reste
+  // « pending » en base — le worker ne le reprendra pas. Le montrer « en
+  // cours » indéfiniment est un mensonge : c'est un échec, avec une cause.
+  const refused = Boolean(file.importRefusal) && !completed;
 
   // Decrypts the enc blob when the vault is enabled (403 vault_locked if no
   // active session), passes legacy plaintext through untouched.
@@ -254,7 +258,7 @@ const mapBinFileToUi = async (userId, file) => {
     name: file.name,
     svgUrl: completed ? `/api/files/project/svg/${file.svgFileSlug}` : null,
     dxfUrl: completed ? `/api/files/project/dxf/${file.slug}` : null,
-    processingStatus: mapProcessingStatus(file.processingStatus),
+    processingStatus: refused ? "error" : mapProcessingStatus(file.processingStatus),
     // Demo project only: suggested initial quantity (undefined elsewhere).
     demoQuantity: file.demoQuantity,
     parts: parts.map((part, index) => ({
@@ -268,6 +272,11 @@ const mapBinFileToUi = async (userId, file) => {
     // « expiré » et masque compteur/preview. Champs additifs.
     expired: Boolean(file.purgedAt),
     uploadAt: file.uploadAt ?? null,
+    // Lot 2c : constats d'import (perte de matière, unité supposée, tracés
+    // ouverts) et refus de la garde du lot 2a. Champs ADDITIFS — les
+    // fichiers importés avant n'en ont pas et s'affichent sans.
+    findings: file.importReport?.findings ?? [],
+    importRefusal: file.importRefusal ?? null,
   };
 };
 

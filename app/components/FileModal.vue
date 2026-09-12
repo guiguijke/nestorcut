@@ -24,6 +24,18 @@
             <div class="modal__name">
                 {{ fileModalData.name }}
             </div>
+            <!-- Lot 2c : la fiche montre TOUT, une ligne par constat avec son
+                 niveau — jamais un résumé (le résumé est sur la carte). -->
+            <ul v-if="findingList.length" class="modal__findings">
+                <li
+                    v-for="finding in findingList"
+                    :key="finding.code"
+                    :class="`modal__finding--${finding.level}`"
+                    class="modal__finding"
+                >
+                    {{ finding.text }}
+                </li>
+            </ul>
         </div>
     </DialogWrapper>
 </template>
@@ -32,9 +44,15 @@
 import { iconType } from '~~/constants/icon.constants';
 import { sizeType } from '~~/constants/size.constants';
 import { themeType } from '~~/constants/theme.constants';
+import { composeFindingList } from '~/composables/importFindings';
 
 const { getters } = globalStore;
 const fileModalData = computed(() => getters.fileModalData);
+
+const { t, fmtNumber } = useLocale();
+const findingList = computed(() =>
+    composeFindingList(fileModalData.value?.findings, t, (v) => fmtNumber(v, 0)),
+);
 
 const isFullScreen = useFullScreen();
 const updateFullScreen = () => {

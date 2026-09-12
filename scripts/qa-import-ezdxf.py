@@ -100,6 +100,9 @@ from worker_common.geometry.units import (
     insunits_to_mm,
     unit_name,
 )
+# Lot 2c : les constats d'import, produits par le MÊME code que la
+# production (build_findings sur les stats remplies par build_geometry).
+from worker_common.geometry.import_findings import build_findings, empty_stats
 
 from shapely import set_precision, unary_union
 from shapely.geometry import LineString
@@ -121,6 +124,8 @@ GRID_FIELDS = [
     "splines", "splinesHandled", "ms",
     # ADDITIF lot 2b : constats d'unité (texte identique côté wasm).
     "unitWarnings",
+    # ADDITIF lot 2c : constats d'import (code, niveau, compte, types).
+    "findings",
 ]
 
 
@@ -146,6 +151,7 @@ def blank_record(file_id: str, version: str) -> dict:
         "splinesHandled": None,
         "ms": None,
         "unitWarnings": None,
+        "findings": None,
     }
 
 
@@ -348,11 +354,14 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
         #    SOUS le budget de temps de production (lot 2a) — un dépassement
         #    est un refus, comme en prod, pas une mesure de 57 secondes.
         started = time.perf_counter()
+        stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
+        stats.setdefault("skipped", {})
         try:
             closed_parts = build_geometry(
                 drawing,
                 tolerance,
                 deadline=Deadline(time_budget_s_from_env(), entity_count),
+                stats=stats,
             )
         except ImportTooHeavy as heavy:
             elapsed += time.perf_counter() - started
@@ -367,6 +376,8 @@ def run_one(path: str, file_id: str, version: str, tolerance: float) -> dict:
         record["ms"] = round(elapsed * 1000)
         record["parts"] = len(mongo_parts)
         record["holes"] = sum(len(part.get("holes", [])) for part in mongo_parts)
+        stats["droppedParts"] = len(closed_parts) - len(mongo_parts)
+        record["findings"] = build_findings(stats)
 
         if record["parts"] == 0:
             record["status"] = "refused"

@@ -96,14 +96,33 @@ pub fn canonical_entities_bounded(
     ceiling: usize,
     max_depth: usize,
 ) -> Result<(Vec<Entity>, Vec<String>), decompose::Overflow> {
+    canonical_entities_stats_bounded(doc, ceiling, max_depth).map(|(e, w, _)| (e, w))
+}
+
+/// `canonical_entities_bounded` + les CONSTATS de lecture (lot 2c) : types
+/// d'entités écartées et leurs comptes, unité lue, blocs aplatis, splines
+/// échantillonnées. Un seul passage, aucune mesure séparée — un second
+/// comptage finirait par diverger de ce que l'importeur fait vraiment.
+pub fn canonical_entities_stats_bounded(
+    doc: &Document,
+    ceiling: usize,
+    max_depth: usize,
+) -> Result<(Vec<Entity>, Vec<String>, crate::findings::ImportStats), decompose::Overflow> {
+    let mut stats = crate::findings::ImportStats::default();
     let mut kept: Vec<Entity> = Vec::new();
     let mut warnings = Vec::new();
     for e in &doc.entities {
         match e {
             Entity::Unsupported(kind) => {
                 warnings.push(format!("skipped entity {kind}"));
+                *stats.skipped.entry(kind.to_ascii_uppercase()).or_insert(0) += 1;
             }
-            _ => kept.push(e.clone()),
+            _ => {
+                if matches!(e, Entity::Insert(_)) {
+                    stats.blocks_flattened += 1;
+                }
+                kept.push(e.clone());
+            }
         }
     }
     let mut flat = decompose::decompose_to_entities_bounded(&kept, &doc.blocks, ceiling, max_depth)?;
@@ -133,7 +152,14 @@ pub fn canonical_entities_bounded(
         }
     }
     assign_canonical_handles(&mut flat);
-    Ok((flat, warnings))
+    // Splines COMPTÉES APRÈS résolution des INSERT : c'est le nombre que
+    // l'importeur échantillonne réellement (une spline dans un bloc inséré
+    // trois fois est échantillonnée trois fois).
+    stats.splines = flat.iter().filter(|e| matches!(e, Entity::Spline(_))).count();
+    stats.insunits = doc.source_insunits;
+    stats.unit_factor = factor;
+    stats.unit_unknown = unknown;
+    Ok((flat, warnings, stats))
 }
 
 /// Scale uniforme au niveau entité (jumeau de `entity.transform(scale_matrix)`

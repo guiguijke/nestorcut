@@ -766,3 +766,111 @@ production — en créer un est une écriture de production, elle vous revient).
 Ce qui est vérifié à la place : les fichiers servis sont octet pour octet
 ceux du dépôt, et le bundle servi rend les verdicts ci-dessus sur les
 témoins d'unité.
+### Lot 2c — les messages de perte (implémenteur, 12/09)
+
+Commit : `HASH`. **Non déployé** — wasm géométrie, app, serveur et worker
+fileprocessing touchés ; GO attendu.
+
+#### 9.5.10 Ce qui était silencieux, et où ça se taisait exactement
+
+| Défaut | Où |
+|---|---|
+| **les constats du navigateur mouraient entre IndexedDB et la fiche** | `localImport.js` écrivait bien `warnings` dans l'enregistrement ; `localRecordToUiFile` ne les recopiait pas, et aucun composant ne les lisait |
+| **le serveur n'avait aucun champ** | seulement des `logger.warning` dans `core/main.py` : rien ne sortait du worker |
+| **les tracés ouverts n'étaient pas MESURÉS côté navigateur** | `openContours` nul sur les 85 JSON du lot B : on ne peut pas afficher un compte qu'on ne produit pas — 33 fichiers réels perdaient du linework que seul le serveur voyait |
+| **le refus serveur n'était lu par personne** | un fichier garé par la garde du lot 2a restait `pending` : indicateur d'attente éternel, sans cause ni nombre (constat du vérificateur) |
+
+#### 9.5.11 Ce qui est livré
+
+1. **Une table matière/bruit, une seule, des deux côtés**
+   (`nest-import::findings`, `worker_common/geometry/import_findings.py`),
+   avec un verrou Python qui **lit le fichier Rust** — pas une copie. Deux
+   listes qui divergent, et le même fichier serait « attention » d'un côté et
+   « info » de l'autre. **Une entité inconnue compte comme de la matière** :
+   on ne sait pas ce qu'on a jeté, donc on le dit.
+2. **Dix constats**, chacun avec un code (la clé i18n), un niveau, un compte,
+   et ses types ou sa valeur : `entitiesSkipped`, `contoursDropped`,
+   `partsDropped`, `unitUnknown`, `unitImplausible` (**attention**) ;
+   `annotationsSkipped`, `unitConverted`, `unitAssumed`, `blocksFlattened`,
+   `splinesSampled` (**info**).
+3. **La mesure qui manquait** : les tracés ouverts sont désormais comptés par
+   les DEUX importeurs, dans la même unité — des CHAÎNES, pas des segments
+   (un contour ouvert est un tracé à refermer, pas quarante arêtes). Rust :
+   pelage des sommets de degré 1 puis composantes connexes. Python :
+   `polygonize_full` + `linemerge`, pour le même prix que le `polygonize`
+   qu'il faisait déjà.
+4. **Le chemin jusqu'à l'écran** : `ImportResult.findings` → IndexedDB →
+   `localRecordToUiFile` (navigateur) ; champ **additif**
+   `importReport.findings` sur le document fichier → mapper serveur
+   (serveur). **Carte** : une ligne, trois fragments au plus, puis « et N
+   autres », ambre dès qu'un constat est « attention ». **Fiche** : tout, une
+   ligne par constat. **Rien à dire ⇒ rien affiché** — pas de « 0
+   avertissement », pas de pastille verte.
+5. **Le refus serveur devient visible** : un fichier garé passe en **erreur**
+   avec sa cause et ses nombres au lieu d'un indicateur d'attente sans fin.
+   Le message du refus de TEMPS côté serveur ne renvoie pas vers le serveur
+   (on y est) : il propose l'appareil.
+6. **Arbitrage de la carte, consigné** : `unitAssumed`,
+   `annotationsSkipped`, `splinesSampled` et `blocksFlattened` ne vont **que
+   dans la fiche**. Raison du catalogue (§3.1) : l'unité non déclarée touche
+   un fichier sur cinq — un ambre sur 22 % des imports banalise l'ambre et
+   tue le signal des cas dangereux. Réversible d'une ligne
+   (`CARD_CODES` dans `app/composables/importFindings.js`).
+
+#### 9.5.12 Verrous, mesurés sur les 238 fichiers
+
+| Verrou | Résultat |
+|---|---|
+| **le champ existe sur tout fichier lu** | **0 fichier lu sans champ** des deux côtés (225 lus côté navigateur, 223 côté serveur) |
+| **un fichier sans constat n'affiche rien** | **75** fichiers muets côté navigateur, **77** côté serveur : la règle a de vrais cas, ce n'est pas une clause de style |
+| **les 33 fichiers réels à tracés pendants portent un constat chiffré** | **34 fichiers réels** côté navigateur, 35 côté serveur, **34 des deux côtés** — et **0 fichier vu par le serveur mais muet côté navigateur** (c'était 33 avant le lot) |
+| **les 7 fichiers réels à écart de comptage portent un constat chiffré** | **10 mesurés aujourd'hui**, **10/10 avec un constat des deux côtés**, **0 muet** |
+| **perte de matière** | 14 fichiers du corpus versionné côté navigateur (11 côté serveur), avec leurs types : ex. 26 entités dont `ACAD_PROXY_ENTITY` et `HATCH`. **Aucun fichier réel** n'en a : les DXF d'atelier ne portent pas d'entités « matière » non supportées — c'est une bonne nouvelle, pas un verrou vide |
+| **les niveaux ne divergent jamais entre les deux importeurs** | **0 divergence** sur tous les fichiers lus des deux côtés (c'est la table unique qui le garantit) |
+| **aucun constat sans compte, aucun code inconnu** | **0 anomalie** sur les 238 × 2 |
+| **la carte et la fiche, dans un vrai navigateur** | trois fichiers, captures dans `docs/qa/import-2026-09-09/lot2c/` (identifiants neutres) : « 225 tracés ouverts ne seront pas découpés — refermez-les dans votre CAO. », « 31 tracés ouverts… », et un fichier à deux fragments « 26 entités non prises en charge ignorées (ACAD_PROXY_ENTITY, HATCH) — la matière qu'elles décrivaient ne sera pas découpée., 6 tracés ouverts… ». La fiche montre la liste complète |
+| suites | vitest **543** (526 + 17), cargo geometry **124** (113 + 11), pytest fileprocessing **42**, pytest common **72** (64 + 8) |
+| parité et déterminisme | golden **100 %**, natif ≡ wasm **68/68** et **17/17**, tolérance 0 |
+| harnais navigateur, deux configurations | **verdict vert aux deux espacements** : sans recouvrement, dans la tôle, **écart ≥ 0,1 mm** et **écart ≥ 2 mm** tenus, **900/900 placées** ; calcul 21 s, mur 36,6 s. **Le harnais ne va pas jusqu'au bout sur mon poste** : il se bloque APRÈS le verdict, dans le rendu three.js de la visionneuse du résultat (« GPU stall due to ReadPixels »), sans erreur de page — voir 9.5.13 |
+
+**Comptes des deux coureurs** (153 réels) : navigateur 142 lus / 9 réparés /
+2 refusés, **114 fichiers portent au moins un constat** ; serveur 101 / 50 /
+2, **113 fichiers**. Sur les 85 versionnés : 43 et 35 fichiers avec constat.
+
+#### 9.5.13 Non-faits, écarts et arbitrages
+
+1. **Les comptes de tracés ouverts ne sont pas égaux entre les deux
+   importeurs** (ex. 225 contre 334 sur le plus gros fichier réel ; 17
+   contre 17 sur six autres). Les deux mesurent la même chose — des chaînes
+   ouvertes — mais sur des linework différents : le serveur convertit les
+   HATCH en lignes de motif (documenté, PIPELINE-MAP §1.3), le navigateur les
+   saute. Aucun des deux nombres n'est faux ; le catalogue interdit d'exposer
+   l'écart entre chemins à l'utilisateur (§3.6), et il ne l'est pas.
+2. **`import.contoursClosed` (« N contours refermés ») n'est PAS livré** :
+   il n'existe aucune étape de fermeture, d'aucun côté. Le catalogue
+   l'interdit explicitement avant la couture (priorité 3) — une phrase qui
+   annonce une réparation qui n'a pas lieu.
+3. **`localImport.unsupportedType` n'est pas dédoublé** pour le DXF binaire.
+   Le catalogue demande deux clés ; c'est un message de refus de FORMAT, pas
+   de perte, et il demande de vérifier que le chemin serveur échoue aussi
+   (il échoue : c82/c83). Je l'ai laissé au lot des refus, en le notant ici.
+4. **Le seuil de la carte (trois fragments) et le choix des constats de
+   carte** sont ceux du catalogue ; le reste est dans la fiche. Rien n'est
+   décidé par moi hors de ces règles.
+5. **Le harnais se bloque après son verdict, et ce n'est pas le lot.** Deux
+   exécutions de suite s'arrêtent juste après l'étape de zoom du résultat, sur
+   un « GPU stall due to ReadPixels » de la visionneuse three.js. **A/B
+   d'attribution joué** : interface remise à l'état d'avant le lot 2c (stash
+   des cinq fichiers d'interface), app reconstruite, même harnais — **le
+   blocage se reproduit au même endroit**, après un verdict identique
+   (900/900, calcul 24 s, mur 40,8 s), et la dernière ligne du journal est la
+   même : « waiting for fonts to load » d'une capture d'écran (le rendu du
+   résultat ne rend plus la main). Tué à 420 s dans les deux cas. Ce n'est donc pas un effet du lot ; c'est l'état de la
+   machine (des heures de builds et de rendus) sur un chemin que le lot ne
+   touche pas. Les chiffres du verrou sont pris dans `modal-report.json`,
+   écrit AVANT le blocage. À rejouer au repos.
+6. **La fiche fichier n'affiche pas encore les constats du chemin SERVEUR
+   pour les fichiers déjà en base** : le champ est écrit à l'import, donc
+   seuls les fichiers importés après le déploiement l'auront. Les anciens
+   s'affichent sans constat (liste vide) — c'est la discipline additive, pas
+   un défaut.

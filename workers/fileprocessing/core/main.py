@@ -19,6 +19,7 @@ from core.import_budget import (
     max_entity_limit_from_env,
     time_budget_s_from_env,
 )
+from worker_common.geometry.import_findings import build_findings, empty_stats
 from core.format_detect import detect_format
 from core.svg_to_drawing import svg_bytes_to_drawing
 from core.dwg_convert import dwg_bytes_to_dxf_bytes
@@ -210,10 +211,16 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
  
     start_time = time.time()
     drawing = _getting_drawing(doc)
+    # Constats d'import (lot 2c) : ceux de la lecture (unités, entités
+    # supprimées, blocs, splines — portés par le document reconstruit) plus
+    # ceux de l'assemblage, remplis ci-dessous.
+    stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
+    stats.setdefault("skipped", {})
     closed_parts = build_geometry(
         drawing,
         tolerance,
         deadline=Deadline(import_time_budget_s, len(drawing.modelspace())),
+        stats=stats,
     )
     
     logger.info("result", extra={
@@ -230,8 +237,23 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
         mongo_dict = part.to_mongo_dict(color=color)
         if mongo_dict is not None:
             polygon_parts.append(mongo_dict)
+        else:
+            # Corps écarté à l'émission (côté sous 0,1 mm) : une pièce qui
+            # n'arrivera jamais sur la tôle — constat lot 2c.
+            stats["droppedParts"] = stats.get("droppedParts", 0) + 1
 
     _check_handle_coverage(drawing, polygon_parts, logger, doc["slug"])
+
+    # Champ ADDITIF `importReport` (lot 2c) : les constats de cet import, avec
+    # leur niveau et leur compte. Les fichiers déjà en base n'en ont pas et
+    # continuent de s'afficher sans (même discipline que le rapport de
+    # nesting, piège #19b). Une liste VIDE veut dire « rien à signaler ».
+    findings = build_findings(stats)
+    logger.info("import findings", extra={"findings": findings})
+    db["user_dxf_files"].update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"importReport": {"findings": findings}}},
+    )
     
     dek = get_dek(db, doc)
     if dek is not None:

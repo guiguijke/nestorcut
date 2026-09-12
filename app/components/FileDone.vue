@@ -15,6 +15,18 @@
             <p class="file__name" :title="file.name">
                 {{ file.name }}
             </p>
+            <!-- Lot 2c : UNE ligne de constats sous le nom (perte de matière,
+                 unité supposée, tracés ouverts). Rien à dire ⇒ rien affiché :
+                 pas de « 0 avertissement », pas de pastille verte. -->
+            <p
+                v-if="findingLine"
+                :class="`file__findings--${findingLine.level}`"
+                :title="t('import.findingsTitle')"
+                class="file__findings"
+                @click="openModal()"
+            >
+                {{ findingLine.line }}
+            </p>
             <div class="file__counter counter">
                 <MainButton :size="sizeType.s" :icon="iconType.minus" :isDisable="file.count < 1" :isLabelShow="false"
                     trackingTag="file_decrement" @click="decrement(fileIndex, $event)" label="decrement" class="counter__btn" />
@@ -37,8 +49,9 @@
 <script setup>
 import { sizeType } from '~~/constants/size.constants'
 import { iconType } from '~~/constants/icon.constants'
+import { composeCardLine } from '~/composables/importFindings'
 
-const { t } = useLocale()
+const { t, fmtNumber } = useLocale()
 
 const props = defineProps({
     file: {
@@ -55,6 +68,12 @@ const count = computed({
     get: () => props.file.count,
     set: value => updateCount(value, props.fileIndex),
 });
+
+// Lot 2c : la ligne de constats, composée par les règles du §4 du
+// catalogue (gravité d'abord, trois fragments au plus, « et N autres »).
+const findingLine = computed(() =>
+    composeCardLine(props.file.findings, t, (v) => fmtNumber(v, 0)),
+)
 
 const emit = defineEmits(['openModal'])
 
@@ -93,6 +112,17 @@ const openModal = () => {
         height: 64px;
     }
 
+    &__findings {
+        flex-basis: 100%;
+        margin-top: 4px;
+        font-size: var(--fs-12);
+        cursor: pointer;
+        color: var(--label-secondary);
+
+        &--attention {
+            color: var(--warning-text, #B45309);
+        }
+    }
     &__name {
         width: 100%;
         margin-top: 10px;

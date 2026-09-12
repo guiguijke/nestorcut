@@ -9,6 +9,7 @@ pub mod assemble;
 pub mod attach;
 pub mod budget;
 pub mod dxf;
+pub mod findings;
 #[cfg(feature = "svg")]
 pub mod svg;
 pub mod units;
@@ -47,6 +48,11 @@ pub struct ImportResult {
     /// Modelspace entity count after cleanup (MAX_ENTITY_LIMIT gate input).
     pub entity_count: usize,
     pub warnings: Vec<String>,
+    /// Constats d'import (lot 2c) : ce qui a été perdu, supposé ou aplati,
+    /// avec son compte et son niveau. Champ ADDITIF — les consommateurs
+    /// d'avant le lot 2c l'ignorent. Les textes vivent côté interface.
+    #[serde(default)]
+    pub findings: Vec<findings::Finding>,
 }
 
 /// Refus « trop lourd » (lot 2a, `docs/PLAN-IMPORT-2026-09-09.md` §9.2) :
@@ -153,7 +159,7 @@ pub fn import_dxf_limited(
 ) -> Result<ImportResult, ImportError> {
     let dl = budget::Deadline::new(limits.time_budget_ms);
     let doc = dxf::Document::parse(bytes)?;
-    let (entities, mut warnings) = dxf::flattened_modelspace_bounded(
+    let (entities, mut warnings, mut stats) = dxf::flattened_modelspace_bounded(
         &doc,
         limits.expansion_ceiling(),
         budget::MAX_INSERT_DEPTH,
@@ -179,13 +185,16 @@ pub fn import_dxf_limited(
     let (linework, w2, entity_count) = assemble::collect_linework_until(&entities, flatten_tol, &dl)
         .map_err(|e| out_of_time(count, limits, e))?;
     warnings.extend(w2);
-    let parts = assemble::build_parts_until(linework, flatten_tol, &dl)
+    let (parts, asm) = assemble::build_parts_stats_until(linework, flatten_tol, &dl)
         .map_err(|e| out_of_time(count, limits, e))?;
+    stats.dangling_paths = asm.dangling_paths;
+    stats.dropped_parts = asm.dropped_parts;
     Ok(ImportResult {
         parts,
         source_units: doc.source_insunits,
         entity_count,
         warnings,
+        findings: stats.findings(),
     })
 }
 

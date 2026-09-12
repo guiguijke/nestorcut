@@ -496,6 +496,91 @@ fn dissolve_boundary(
     Ok(Some(boundary))
 }
 
+/// Constats de l'assemblage (lot 2c) : ce que l'assemblage a laissé de côté.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AssemblyStats {
+    /// Tracés ouverts qui ne referment aucune pièce (« dangles » de GEOS),
+    /// comptés en CHAÎNES, comme `len(dangles.geoms)` côté shapely.
+    pub dangling_paths: usize,
+    /// Corps écartés à l'émission (côté sous 0,1 mm, anneau dégénéré).
+    pub dropped_parts: usize,
+}
+
+/// Tracés ouverts d'un jeu d'arêtes : pelage itératif des sommets de degré 1
+/// (définition des « dangles » du polygonize GEOS), puis comptage des
+/// CHAÎNES connexes parmi les arêtes pelées.
+///
+/// Pourquoi cette mesure existe (lot 2c) : côté navigateur, le nombre de
+/// tracés pendants n'était **pas produit du tout** (`openContours` nul sur
+/// les 85 JSON du lot B) alors que le serveur le voyait — 33 fichiers réels
+/// sur 153 perdent du linework en silence. On ne peut pas afficher un compte
+/// qu'on ne mesure pas.
+pub fn dangling_paths(edges: &[(Pt, Pt)]) -> usize {
+    type Key = (u64, u64);
+    let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
+    let mut inc: HashMap<Key, Vec<usize>> = HashMap::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        if key(a) == key(b) {
+            continue;
+        }
+        inc.entry(key(a)).or_default().push(i);
+        inc.entry(key(b)).or_default().push(i);
+    }
+    let mut degree: HashMap<Key, usize> = inc.iter().map(|(k, v)| (*k, v.len())).collect();
+    let mut peeled = vec![false; edges.len()];
+    // File des sommets de degré 1 — ordre déterministe (tri des clés).
+    let mut queue: Vec<Key> = degree.iter().filter(|(_, d)| **d == 1).map(|(k, _)| *k).collect();
+    queue.sort();
+    while let Some(v) = queue.pop() {
+        if degree.get(&v).copied().unwrap_or(0) != 1 {
+            continue;
+        }
+        let Some(edges_of_v) = inc.get(&v) else { continue };
+        let Some(&ei) = edges_of_v.iter().find(|&&i| !peeled[i]) else { continue };
+        peeled[ei] = true;
+        let (a, b) = edges[ei];
+        for k in [key(a), key(b)] {
+            if let Some(d) = degree.get_mut(&k) {
+                *d = d.saturating_sub(1);
+                if *d == 1 {
+                    queue.push(k);
+                }
+            }
+        }
+    }
+    // Chaînes : composantes connexes des arêtes pelées (union-find).
+    let mut parent: HashMap<Key, Key> = HashMap::new();
+    fn find(parent: &mut HashMap<(u64, u64), (u64, u64)>, x: (u64, u64)) -> (u64, u64) {
+        let mut r = x;
+        while let Some(&p) = parent.get(&r) {
+            if p == r {
+                break;
+            }
+            r = p;
+        }
+        r
+    }
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        if !peeled[i] {
+            continue;
+        }
+        let (ka, kb) = (key(a), key(b));
+        parent.entry(ka).or_insert(ka);
+        parent.entry(kb).or_insert(kb);
+        let (ra, rb) = (find(&mut parent, ka), find(&mut parent, kb));
+        if ra != rb {
+            parent.insert(ra, rb);
+        }
+    }
+    let mut roots: std::collections::HashSet<Key> = std::collections::HashSet::new();
+    let keys: Vec<Key> = parent.keys().copied().collect();
+    for k in keys {
+        let r = find(&mut parent, k);
+        roots.insert(r);
+    }
+    roots.len()
+}
+
 /// Full assembly: linework → parts. Mirrors build_geometry + to_mongo_dict.
 pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
     build_parts_until(lw, tol, &Deadline::unlimited())
@@ -506,6 +591,16 @@ pub fn build_parts(lw: Linework, tol: f64) -> Vec<Part> {
 /// lourd se passe ici (mesuré sur le corpus réel : 16 s des 16,1 s natifs du
 /// pire fichier, dont 7,4 s de `node_segments`).
 pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Part>, Expired> {
+    build_parts_stats_until(lw, tol, dl).map(|(p, _)| p)
+}
+
+/// `build_parts_until` + les constats de l'assemblage (lot 2c).
+pub fn build_parts_stats_until(
+    lw: Linework,
+    tol: f64,
+    dl: &Deadline,
+) -> Result<(Vec<Part>, AssemblyStats), Expired> {
+    let mut asm = AssemblyStats::default();
     // 1) Noding at FULL precision over EVERYTHING (ring edges + open
     //    segments) — GEOS's first unary_union nodes the whole linework set
     //    together; snapping comes after (set_precision).
@@ -524,6 +619,9 @@ pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Pa
         .map(|&(a, b)| (snap_pt(a), snap_pt(b)))
         .filter(|(a, b)| a != b)
         .collect();
+    // Constat lot 2c : le linework qui ne referme rien (mesuré sur le jeu
+    // d'arêtes SNAPPÉ, celui que la polygonisation voit).
+    asm.dangling_paths = dangling_paths(&edges);
     // A second union pass in GEOS re-nodes snap-induced crossings — the
     // polygonizer below sees a clean edge set either way.
     let _ = &mut edges;
@@ -667,6 +765,7 @@ pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Pa
     for ((outer, holes), handles) in parts.into_iter().zip(assigned) {
         let mut ext = reduce_ring(&outer);
         if ext.len() < 3 {
+            asm.dropped_parts += 1;
             continue;
         }
         // shapely emits the closing vertex (first == last) — match it.
@@ -680,6 +779,7 @@ pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Pa
         let width = max_x - min_x;
         let height = max_y - min_y;
         if width.abs() < 0.1 || height.abs() < 0.1 {
+            asm.dropped_parts += 1;
             continue;
         }
         let holes_out: Vec<Vec<Pt>> = holes
@@ -709,7 +809,7 @@ pub fn build_parts_until(lw: Linework, tol: f64, dl: &Deadline) -> Result<Vec<Pa
         });
     }
     let _ = tol;
-    Ok(out)
+    Ok((out, asm))
 }
 
 #[cfg(test)]

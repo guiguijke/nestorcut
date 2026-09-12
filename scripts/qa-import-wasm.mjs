@@ -229,6 +229,8 @@ function emptyRow(id) {
         ms: null,
         // ADDITIF lot 2b : constats d'unité (même texte que le coureur ezdxf).
         unitWarnings: null,
+        // ADDITIF lot 2c : constats d'import (code, niveau, compte, types).
+        findings: null,
         extra: null,
     }
 }
@@ -326,6 +328,7 @@ async function runOne(file, id, tol) {
     row.unitDetected = insunits === null ? null : unitName(insunits)
     row.scaleApplied = factor
     row.unitWarnings = unitWarnings(warnings)
+    row.findings = Array.isArray(imported.findings) ? imported.findings : []
     row.parts = parts.length
     row.holes = parts.reduce((n, p) => n + ((p.holes && p.holes.length) || 0), 0)
     row.extra.entityCount = Number.isInteger(imported.entity_count) ? imported.entity_count : null

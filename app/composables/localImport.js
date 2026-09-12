@@ -186,6 +186,10 @@ export async function importLocalFile(file, projectSlug) {
         sourceUnits: imported.source_units ?? 0,
         entityCount: imported.entity_count ?? 0,
         warnings: imported.warnings || [],
+        // Lot 2c : les constats d'import (perte de matière, unité supposée,
+        // tracés ouverts) — c'est le maillon qui manquait entre le wasm et
+        // la fiche fichier.
+        findings: imported.findings || [],
         previewSvg: buildPreviewSvg(parts),
     }
     const { saveLocalFile } = await import('./localFilesStore')
@@ -214,6 +218,8 @@ export function localRecordToUiFile(record) {
         processingStatus: 'done',
         expired: false,
         local: true,
+        // Lot 2c : les constats voyagent jusqu'à l'UI (ils mouraient ici).
+        findings: record.findings || [],
         parts: (record.parts || []).map((p) => ({
             width: Math.round(p.width * 10) / 10,
             height: Math.round(p.height * 10) / 10,

@@ -8,7 +8,8 @@ from ezdxf.audit import Auditor
 from ezdxf.explode import explode_entity
 from ezdxf import recover
 from worker_common.logger import setup_logger
-from worker_common.geometry.units import insunits_to_mm, insunits_code
+from worker_common.geometry.units import insunits_code, insunits_detail, insunits_to_mm
+from worker_common.geometry.import_findings import empty_stats
 from ezdxf.math import Matrix44
 from ezdxf.render.hatching import hatch_entity
 from ezdxf.entities import DXFGraphic
@@ -71,9 +72,23 @@ def read_dxf_file(dxf_path: str, normalize_units: bool = True) -> Drawing | None
     unit_factor = insunits_to_mm(doc) if normalize_units else 1.0
     source_insunits = insunits_code(doc)
 
+    # Constats d'import (lot 2c) : ce qu'on suppose et ce qu'on jette, compté
+    # AU MOMENT où on le fait — pas reconstitué après coup.
+    stats = empty_stats()
+    if normalize_units:
+        code, _name, factor, _warnings = insunits_detail(doc)
+        stats["insunits"] = code
+        stats["unitFactor"] = factor
+        stats["unitUnknown"] = bool(_warnings) and factor == 1.0 and code not in (0, 4)
+    stats["blocksFlattened"] = len(msp.query("INSERT"))
+
     text_entities = msp.query("TEXT MTEXT IMAGE SOLID")
     if text_entities:
         for text_entity in text_entities:
+            # SOLID est de la MATIÈRE (table import_findings) : le supprimer
+            # est une perte, et l'utilisateur doit l'apprendre.
+            kind = text_entity.dxftype()
+            stats["skipped"][kind] = stats["skipped"].get(kind, 0) + 1
             msp.delete_entity(text_entity)
         logger.info(f"Removed {len(text_entities)} TEXT/MTEXT/IMAGE entities.")
 
@@ -101,6 +116,10 @@ def read_dxf_file(dxf_path: str, normalize_units: bool = True) -> Drawing | None
     # Traceability: the source document's declared units (0 = unitless),
     # read by _make_dxf_copy to persist `sourceUnits` on the file record.
     new_doc.source_insunits = source_insunits
+    # Constats de lecture (lot 2c) — même canal que source_insunits : un
+    # attribut porté par le document reconstruit, lu par _make_dxf_copy.
+    stats["splines"] = len(new_msp.query("SPLINE"))
+    new_doc.import_stats = stats
                 
     logger.info(f"Successfully processed.")
     

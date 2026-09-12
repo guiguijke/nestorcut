@@ -9,7 +9,7 @@ from ezdxf.document import Drawing
 from shapely import STRtree, set_precision, unary_union
 from shapely.geometry import LineString, Point, Polygon
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import polygonize
+from shapely.ops import linemerge, polygonize, polygonize_full
 
 from worker_common.logger import setup_logger
 
@@ -223,7 +223,7 @@ class ClosedPolygon:
         return doc
 
 
-def build_geometry(drawing: Drawing, tolerance: float, deadline=None) -> List[ClosedPolygon]:
+def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None) -> List[ClosedPolygon]:
     """
     Build accurate part contours from a DXF drawing.
 
@@ -249,6 +249,10 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None) -> List[Cl
     s'arrête au budget au lieu d'être payé en entier. Les appels shapely
     (unary_union, buffer) ne sont pas interruptibles : le contrôle encadre
     chaque étage, le dépassement possible est celui d'UN appel.
+
+    `stats` (lot 2c, dict de `worker_common.geometry.import_findings`) est
+    REMPLI au passage : entités non converties (matière perdue) et tracés
+    ouverts qui ne referment aucune pièce. Sans lui, rien ne change.
     """
     msp = drawing.modelspace()
 
@@ -269,6 +273,11 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None) -> List[Cl
             raise e
 
         if dxf_geometry is None:
+            # Entité non convertible : c'est une PERTE, et son type décide
+            # du niveau du constat (matière vs annotation, lot 2c).
+            if stats is not None:
+                kind = entity.dxftype()
+                stats["skipped"][kind] = stats["skipped"].get(kind, 0) + 1
             continue
 
         geometry = dxf_geometry.geometry
@@ -297,7 +306,18 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None) -> List[Cl
         deadline.check()
     merged_lines = set_precision(unary_union(linework), GRID_SIZE)
     noded = unary_union(merged_lines)
-    faces = list(polygonize(noded))
+    if stats is None:
+        faces = list(polygonize(noded))
+    else:
+        # polygonize_full rend les faces ET les tracés pendants pour le même
+        # prix : c'est la mesure du constat « contours ouverts » (lot 2c).
+        # Comptés en CHAÎNES (linemerge) et non en segments : un contour
+        # ouvert est UN tracé à refermer, pas quarante arêtes.
+        faces_geom, _cuts, dangles, _invalid = polygonize_full(noded)
+        faces = list(getattr(faces_geom, "geoms", []))
+        if not dangles.is_empty:
+            merged = linemerge(dangles)
+            stats["danglingPaths"] = len(getattr(merged, "geoms", [merged]))
     logger.info("Recovered faces from linework", extra={"len": len(faces)})
 
     if not faces:

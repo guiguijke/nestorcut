@@ -332,9 +332,24 @@ pub fn import_svg_limited(
     let (linework, w2, _) = crate::assemble::collect_linework_until(&prims, flatten_tol, &dl)
         .map_err(|e| crate::out_of_time(entity_count, limits, e))?;
     warnings.extend(w2);
-    let parts = crate::assemble::build_parts_until(linework, flatten_tol, &dl)
+    let (parts, asm) = crate::assemble::build_parts_stats_until(linework, flatten_tol, &dl)
         .map_err(|e| crate::out_of_time(entity_count, limits, e))?;
-    Ok(ImportResult { parts, source_units: 4, entity_count, warnings })
+    // Un SVG n'a ni $INSUNITS ni blocs : seuls les constats d'assemblage et
+    // les éléments non supportés (déjà dans `warnings`) ont un sens ici.
+    let mut stats = crate::findings::ImportStats {
+        insunits: 4,
+        unit_factor: 1.0,
+        ..Default::default()
+    };
+    stats.dangling_paths = asm.dangling_paths;
+    stats.dropped_parts = asm.dropped_parts;
+    Ok(ImportResult {
+        parts,
+        source_units: 4,
+        entity_count,
+        warnings,
+        findings: stats.findings(),
+    })
 }
 
 /// Parse + flatten SVG → primitives mm (y-up), handles canoniques assignés.

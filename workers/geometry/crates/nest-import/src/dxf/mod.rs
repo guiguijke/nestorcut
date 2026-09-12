@@ -211,8 +211,12 @@ pub fn flattened_modelspace_bounded(
     doc: &Document,
     ceiling: usize,
     max_depth: usize,
-) -> Result<(Vec<flatten::Primitive>, Vec<String>), decompose::Overflow> {
-    let (entities, warnings) = canonical::canonical_entities_bounded(doc, ceiling, max_depth)?;
+) -> Result<
+    (Vec<flatten::Primitive>, Vec<String>, crate::findings::ImportStats),
+    decompose::Overflow,
+> {
+    let (entities, warnings, stats) =
+        canonical::canonical_entities_stats_bounded(doc, ceiling, max_depth)?;
     let prims = entities.iter().map(decompose::primitive_of).collect();
-    Ok((prims, warnings))
+    Ok((prims, warnings, stats))
 }

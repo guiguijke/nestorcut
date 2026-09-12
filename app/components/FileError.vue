@@ -6,6 +6,12 @@
         <p class="file__name">
             {{ file.name }}
         </p>
+        <!-- Lot 2c : la CAUSE du refus, avec ses nombres, quand le serveur
+             l'a écrite (`importRefusal`, lot 2a). Sans elle, l'utilisateur
+             ne lisait que « Échec de l'import ». -->
+        <p v-if="refusal" class="file__reason">
+            {{ refusal }}
+        </p>
         <MainButton
             :size="sizeType.s"
             :theme="themeType.secondary"
@@ -21,15 +27,20 @@
 <script setup>
 import { sizeType } from "~~/constants/size.constants";
 import { themeType } from '~~/constants/theme.constants';
+import { refusalMessage } from '~/composables/importFindings';
 
-const { t } = useLocale()
+const { t, fmtNumber } = useLocale()
 
-defineProps({
+const props = defineProps({
     file: {
         type: Object,
         required: true
     },
 })
+
+const refusal = computed(() =>
+    refusalMessage(props.file.importRefusal, t, (v) => fmtNumber(v, 0)),
+)
 
 </script>
 
@@ -55,6 +66,11 @@ defineProps({
         color: var(--label-primary);
         font-size: var(--fs-12);
         padding: 4px;
+    }
+    &__reason {
+        margin-bottom: 16px;
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
     }
     &__name {
         margin-top: 16px;

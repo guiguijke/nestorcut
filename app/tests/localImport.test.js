@@ -92,6 +92,32 @@ describe('importLocalFile (J-090)', () => {
     // La garde « trop lourd » vit dans le wasm : le flux navigateur ne compare
     // plus un plafond après coup, il TRADUIT le refus. Ce que ces verrous
     // tiennent, c'est le message — clé et nombres.
+    // ---------------------------------------------------------------- lot 2c
+    it('carries the import findings from the wasm to the UI shape', async () => {
+        state.imported = {
+            parts: [squarePart],
+            source_units: 0,
+            entity_count: 12,
+            warnings: ['skipped entity HATCH'],
+            findings: [
+                { code: 'import.entitiesSkipped', level: 'attention', count: 2, types: ['HATCH'] },
+                { code: 'import.unitAssumed', level: 'info', count: 1 },
+            ],
+        }
+        const record = await importLocalFile(fakeFile('hatched.dxf'), 'p')
+        expect(record.findings).toHaveLength(2)
+        // C'est ICI que les constats mouraient avant le lot 2c : la forme UI
+        // ne les recopiait pas.
+        const ui = localRecordToUiFile(record)
+        expect(ui.findings).toEqual(record.findings)
+    })
+
+    it('leaves findings empty when the importer has nothing to say', async () => {
+        const record = await importLocalFile(fakeFile('clean.dxf'), 'p')
+        expect(record.findings).toEqual([])
+        expect(localRecordToUiFile(record).findings).toEqual([])
+    })
+
     it('reads a file of 1200 entities (the old 999 cap refused 11 real files)', async () => {
         state.imported = {
             parts: [squarePart],
