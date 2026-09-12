@@ -441,7 +441,7 @@ posées**, sans recouvrement, écart ≥ 2 mm.
 
 ### Lot E1 — « Import avancé » : éclatement, échelle, micro-vides (implémenteur, 12/09)
 
-Commit : `HASH`. **Non déployé** — wasm géométrie, app, serveur et worker
+Commit : `0ec498d0`. **Non déployé** — wasm géométrie, app, serveur et worker
 fileprocessing touchés ; GO attendu.
 
 #### 5.6 Ce qui est livré
