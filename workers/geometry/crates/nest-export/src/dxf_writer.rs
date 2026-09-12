@@ -25,7 +25,14 @@ fn num(s: &mut String, code: i32, v: f64) {
     // Pleine précision, jamais arrondi (repr shortest, lisible par ezdxf/Python).
     let _ = writeln!(s, "{}\n{}", code, fmt_dxf(v));
 }
-/// Entier d'un groupe DXF (codes 70, 90… — jamais de point décimal).
+/// Entier d'un groupe DXF — **jamais de point décimal**.
+///
+/// La spec DXF fait des codes 60-79 et 90-99 des entiers (drapeau « fermée »,
+/// nombre de sommets, couleur, degré de spline…). Nous les écrivions tous en
+/// flottant (« 1.0 ») : notre propre lecteur n'y voyait rien après le lot 2b
+/// (il tolère), mais un DXF exporté par NestorCut part vers des CAM tiers —
+/// SheetCAM notamment — qui n'ont aucune raison de tolérer. Verrou :
+/// `tests/integer_group_codes.rs` refuse tout point décimal après ces codes.
 fn int_grp(s: &mut String, code: i32, v: i32) {
     let _ = writeln!(s, "{}\n{}", code, v);
 }
@@ -64,8 +71,8 @@ fn write_entity(s: &mut String, e: &Entity, aff: &Affine, handle: &str) -> bool 
             grp(s, 0, "LWPOLYLINE");
             common(s, &p.common, handle);
             grp(s, 100, "AcDbPolyline");
-            num(s, 90, p.points.len() as f64);
-            num(s, 70, if p.closed { 1.0 } else { 0.0 });
+            int_grp(s, 90, p.points.len() as i32);
+            int_grp(s, 70, if p.closed { 1 } else { 0 });
             for (i, q) in pts.iter().enumerate() {
                 num(s, 10, q[0]);
                 num(s, 20, q[1]);
@@ -79,14 +86,14 @@ fn write_entity(s: &mut String, e: &Entity, aff: &Affine, handle: &str) -> bool 
         Entity::Polyline(p) => {
             grp(s, 0, "POLYLINE");
             common(s, &p.common, handle);
-            num(s, 70, if p.closed { 1.0 } else { 0.0 });
-            num(s, 66, 1.0);
+            int_grp(s, 70, if p.closed { 1 } else { 0 });
+            int_grp(s, 66, 1);
             for pt in &p.points {
                 let q = aff.apply(*pt);
                 grp(s, 0, "VERTEX");
                 num(s, 10, q[0]);
                 num(s, 20, q[1]);
-                num(s, 70, 0.0);
+                int_grp(s, 70, 0);
             }
             grp(s, 0, "SEQEND");
             true
@@ -143,10 +150,10 @@ fn write_entity(s: &mut String, e: &Entity, aff: &Affine, handle: &str) -> bool 
             grp(s, 0, "SPLINE");
             common(s, &sp.common, handle);
             grp(s, 100, "AcDbSpline");
-            num(s, 70, 0.0);
-            num(s, 71, sp.degree as f64);
-            num(s, 72, sp.knots.len() as f64);
-            num(s, 73, sp.control.len() as f64);
+            int_grp(s, 70, 0);
+            int_grp(s, 71, sp.degree);
+            int_grp(s, 72, sp.knots.len() as i32);
+            int_grp(s, 73, sp.control.len() as i32);
             for k in &sp.knots {
                 num(s, 40, *k);
             }
@@ -184,7 +191,7 @@ fn common(s: &mut String, c: &entities::Common, handle: &str) {
     grp(s, 100, "AcDbEntity");
     grp(s, 8, if c.layer.is_empty() { "0" } else { &c.layer });
     if c.color != 256 {
-        num(s, 62, c.color as f64);
+        int_grp(s, 62, c.color);
     }
 }
 
@@ -267,8 +274,8 @@ pub fn build_part_dxf(
         grp(&mut body, 100, "AcDbEntity");
         grp(&mut body, 8, "BIN_BOUNDARY");
         grp(&mut body, 100, "AcDbPolyline");
-        num(&mut body, 90, 4.0);
-        num(&mut body, 70, 1.0);
+        int_grp(&mut body, 90, 4);
+        int_grp(&mut body, 70, 1);
         for (x, y) in [(0.0, 0.0), (bw, 0.0), (bw, bh), (0.0, bh)] {
             num(&mut body, 10, x * unit_scale);
             num(&mut body, 20, y * unit_scale);
@@ -292,8 +299,8 @@ pub fn build_part_dxf(
             grp(&mut body, 100, "AcDbEntity");
             grp(&mut body, 8, "OUT_SHAPE");
             grp(&mut body, 100, "AcDbPolyline");
-            num(&mut body, 90, 4.0);
-            num(&mut body, 70, 1.0);
+            int_grp(&mut body, 90, 4);
+            int_grp(&mut body, 70, 1);
             for (x, y) in [(x0, y0), (x1, y0), (x1, y1), (x0, y1)] {
                 num(&mut body, 10, x);
                 num(&mut body, 20, y);
@@ -324,8 +331,8 @@ pub fn build_part_dxf(
     for (name, color) in &layers {
         grp(&mut s, 0, "LAYER");
         grp(&mut s, 2, name);
-        num(&mut s, 70, 0.0);
-        num(&mut s, 62, *color as f64);
+        int_grp(&mut s, 70, 0);
+        int_grp(&mut s, 62, *color);
     }
     grp(&mut s, 0, "ENDTAB");
     grp(&mut s, 0, "ENDSEC");

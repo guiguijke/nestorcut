@@ -630,7 +630,18 @@ touchés ; GO attendu.
    plus le produit.
 5. **Notre exporteur DXF écrit les codes entiers en entiers**
    (`nest-export/dxf_writer.rs`) : la cause disparaît pour les fichiers que
-   nous produisons désormais.
+   nous produisons désormais. **Rectification du 12/09** (écart relevé à la
+   vérification) : la première version ne corrigeait que l'**en-tête**
+   (`$INSUNITS`, `$MEASUREMENT`) ; toutes les entités et la table des calques
+   passaient encore par le formateur flottant. Corrigé partout — LWPOLYLINE
+   (90, 70), POLYLINE et VERTEX (70, 66), SPLINE (70, 71, 72, 73), les
+   LWPOLYLINE synthétisés (BIN_BOUNDARY, OUT_SHAPE) et la table LAYER
+   (70, 62) — avec un verrou qui lit la SORTIE et refuse tout point décimal
+   après un code entier (`nest-export/tests/integer_group_codes.rs`, témoin
+   négatif vérifié : remettre un seul `num(70, …)` le fait échouer en nommant
+   la paire fautive). Ce que ça change : notre lecteur tolère le flottant
+   depuis ce lot, mais un DXF exporté par NestorCut est lu par des CAM
+   tiers — la spec fait de 62/70/90 des entiers.
 6. Le golden de parité `units_unknown.dxf` (code 7) est **régénéré** avec le
    Python corrigé : l'ancien figeait le ×1 silencieux.
 
@@ -678,3 +689,55 @@ supposer » à « lu avec un constat » — c'est le but), refusés **inchangés
    modification Rust). Les chiffres de c08/c10/c11 étaient inchangés, ce qui
    ne collait pas avec le CLI natif — c'est cet écart qui a révélé l'oubli.
    Bundle reconstruit, corpus rejoué, chiffres ci-dessus.
+
+### Lot 2b — vérification (vérificateur, 12/09, `53a17eb8`) — GO, un écart à corriger avant le déploiement
+
+Rejoué sur le poste : image fileprocessing reconstruite à HEAD, bundle wasm
+servi par l'app locale bit-identique à celui du commit (`1aca2874…`),
+sorties brutes hors dépôt (`~/qa-out/verif-2b/`, deux coureurs × deux
+corpus, harnais).
+
+| Verrou | Résultat |
+|---|---|
+| cargo geometry release | 109, 0 échec |
+| vitest | 526 |
+| parité golden | 100 % (63 + 2 + 2, seuil 99 %) |
+| déterminisme natif ≡ wasm | 68/68 et 17/17, tolérance 0 |
+| **parité des unités wasm ≡ ezdxf** (`unitDetected`, `scaleApplied`) | **0 divergence** sur tous les fichiers lus des deux côtés (151 réels + 85 versionnés) ; les trois seules lignes différentes sont des fichiers refusés d'un côté (champs nuls), pas des unités |
+| **8 fichiers réels sans unité** | **8/8** portent `$INSUNITS missing or 0 — assuming millimeters`, **au mot près le même texte** des deux côtés ; corpus versionné : 19/19 lus des deux côtés, même texte |
+| **c59 (kilomètres)** | **×1 000 000** des deux côtés, constat `$INSUNITS=7 (km) — geometry scaled x1000000 to mm` |
+| **exports CAM c08-c11** | mm, mm, mm, pouce ×25,4 ; **2, 2, 4, 3 pièces**, identiques à ezdxf |
+| autres codes | c53 cm ×10, c54 pied ×304,8, c57 mil ×0,0254 — identiques des deux côtés |
+| statuts, 153 réels | wasm 141 lus + 9 réparés + 2 refusés (8 fichiers passés « lu → réparé » = le constat d'unité, voulu) ; ezdxf 101 / 50 / 2, **0 refus de temps** à 60 s ; **0 dérive** pièces/trous sur les 150 lus des deux campagnes |
+| statuts, 85 versionnés | wasm refusés 13 → **11** (c08 et c11 lisibles) ; ezdxf 46 / 26 / 13 |
+| **seed canonique du navigateur** | `6825704941837900974` identique au lot 2a (harnais espacement 2) |
+| harnais navigateur, espacement 2 | 900/900, `spacingOk` vrai, 0 doublon, `verifyStatus: measured`, calcul 15 s |
+| lecture du code | tables 0-20 identiques aux facteurs exacts (`nest-import::units`, `worker_common.geometry.units`), `dxf_utils.read_dxf_file` passe bien par la table partagée ; lecteur Rust tolérant au flottant sur 62/70/71/72/73 |
+
+**Un écart entre le rapport et le code, à corriger avant le déploiement.**
+Le §9.5.7 (point 5) et le commentaire de `entities.rs` disent que
+« l'exporteur écrit ses entiers en entiers ». Ce n'est vrai que pour
+l'en-tête (`$INSUNITS`, `$MEASUREMENT`, deux appels `int_grp`). Toutes les
+entités passent encore par `num(…)`, donc par `py_str`, qui écrit `1.0` :
+`dxf_writer.rs` lignes 67-68 (LWPOLYLINE 90 et 70), 82, 89, 146, 270-271,
+295-296 et 327 (table LAYER 70 et 62). Le lecteur wasm ne le voit plus
+parce qu'il tolère désormais le flottant — mais un DXF exporté par
+NestorCut est lu par des CAM tiers (SheetCam chez le propriétaire), et la
+spécification DXF fait de 62/70/90 des entiers : un `70\n1.0` est un
+fichier hors norme que nous produisons encore. Correctif : `int_grp` sur
+tous les codes entiers de l'exporteur, un verrou cargo qui refuse tout
+point décimal après un code 62/70/71/72/73/90 dans la sortie, `exports-parity`
+en CI (la géométrie ne change pas) ; corriger la phrase du rapport et le
+commentaire.
+
+**Accepté tel quel** : les codes 21-24 hors table (le §9.2 demandait 0-20)
+; le seuil « unité invraisemblable » à 10 m par unité (il ne change aucune
+conversion, seulement l'émission d'un constat) ; le fichier en kilomètres
+qui devient une pièce de 80 m (c'est ce que le fichier déclare ; le lot 2c
+porte le constat jusqu'à la fiche).
+
+**GO déploiement** après ce commit : app + wasm géométrie + worker
+fileprocessing (et worker nesting si `worker_common` embarqué y change —
+`units.py` est dans `worker_common`, donc oui : les deux images worker,
+homelab compris pour l'image nesting) ; moteur inchangé → pas de
+benchmarks à régénérer.

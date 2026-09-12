@@ -165,7 +165,10 @@ fn f(v: &str) -> f64 {
 /// Les codes 62/70/71/72/73/90 sont des entiers par la spec, mais des
 /// producteurs les écrivent « 1.0 » — dont NOTRE propre exporteur DXF
 /// jusqu'au lot 2b (`nest-export/dxf_writer.rs` écrivait tous les entiers en
-/// flottant). Un `parse::<i32>()` nu rendait alors le défaut : le drapeau
+/// flottant ; corrigé le 12/09, verrou `integer_group_codes.rs` — la
+/// tolérance ici reste nécessaire pour les fichiers DÉJÀ exportés et pour
+/// les autres producteurs). Un `parse::<i32>()` nu rendait alors le défaut :
+/// le drapeau
 /// « fermée » d'une LWPOLYLINE tombait à faux, et nos propres exports CAM se
 /// relisaient à 0 pièce dans notre propre navigateur (c08 : 0 contre 2 côté
 /// ezdxf, qui tolère). Mesuré au lot 2b.
