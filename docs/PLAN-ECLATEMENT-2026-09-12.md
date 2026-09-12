@@ -551,3 +551,70 @@ fileprocessing touchés ; GO attendu.
    panneau) : le calcul exige la taille du dessin, qu'on ne connaît qu'après
    lecture. Le faire vivre dans le panneau demanderait de lire le fichier au
    survol de la dépose — à trancher si vous le voulez.
+
+### Lot E1 — vérification (vérificateur, 12/09, `0ec498d0`) — GO déploiement, un lot E1-bis à livrer avant E2
+
+Rejoué sur le poste : images app et fileprocessing reconstruites à HEAD
+(wasm géométrie servi = dépôt, `5fe7fec3…`), sorties hors dépôt
+(`~/qa-out/verif-e1/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest / cargo geometry | 568 / 134, 0 échec |
+| parité golden, déterminisme géométrie | 100 % ; 68/68 et 17/17 |
+| **coureur wasm, 153 réels + 85 versionnés, comparé à la campagne 2b** | statuts identiques (141 + 9 + 2 ; 50 + 24 + 11) ; **11 réels et 2 versionnés changent de comptes de trous, tous porteurs du constat « micro-découpes ignorées »** (3 à 45 par fichier ; six copies d'un même dessin parmi les 11) ; 2 fichiers portent un constat sans changement de compte (aller-retours retirés) ; aucun autre mouvement |
+| coureur ezdxf, mêmes corpus | statuts identiques (101 + 48 + 2 ; 46 + 26 + 13) ; **10 réels et 1 versionné changent de comptes, tous porteurs du constat** ; 1 constat sans changement de compte |
+| **coureur moteur × 238** (binaire E0, bundle d'import E1) | **205 fichiers atteignent le moteur, 205 vont au bout : 0 refus d'item, 0 panique, 0 dépassement** (E0 en laissait 4) |
+| **harnais navigateur « import avancé »**, quatre cas sur la copie du logo | **A** option éteinte : 1 fiche, nom intact, 0,9 s ; **B** éclatement : 17 fiches « (k/17) » d'une pièce, quantités indépendantes, imbrication faite en 12 s, **17/17 posées, quatre badges verts** dont « All 17 parts placed » (le défaut du point 9 est corrigé) ; **C** ×0,5 : étendue 2834,34 → 1417,17 mm mesurée sur les pièces importées ; **D** largeur cible 1000 : facteur 0,353, largeur obtenue 1000,00 |
+| langues | les 12 clés nouvelles existent en anglais ET en français, aucun texte en dur trouvé dans `DxfUpload.vue` |
+
+**Arbitrages (§5.8)** :
+
+1. Les nombres de la consigne (806 mm, 0,620) étaient calculés sur la plus
+   grande pièce : erreur du vérificateur, l'échelle s'applique bien au
+   dessin complet. Les valeurs mesurées (1417,17 mm ; 0,353) sont les
+   bonnes.
+2. Nettoyage sur des jeux de fichiers légèrement différents des deux côtés
+   (11 communs, 4 navigateur, 1 serveur) : la règle est la même, ce sont les
+   polygoniseurs qui diffèrent — périmètre du lot E2, comme proposé.
+3. **Importeur serveur non reproductible** sur un fichier pathologique
+   (1365 / 1334 / 1334 tracés ouverts à code identique) : défaut
+   préexistant, chantier distinct, **inscrit au registre** (à traiter avec
+   la couture des contours, priorité 5, qui touche ce même chemin).
+4. Nom du DXF résultat qui concatène 17 slugs : à borner au lot E2.
+5. Le facteur déduit absent du panneau (point 8) : réglé par E1-bis
+   ci-dessous, qui lit le fichier à la dépose.
+
+**Ce qui manque par rapport à la demande du propriétaire (12/09, après le
+début du lot) : l'aperçu contre une tôle.** Le panneau livré règle l'échelle
+par des champs ; le propriétaire a demandé de voir le dessin posé sur une
+tôle (formats par défaut ou dimensions personnalisées) et de l'ajuster à la
+main. C'est écrit au §3 (point 1, « Précision propriétaire du 12/09 »).
+**Lot E1-bis, à livrer avant E2** :
+
+- à la dépose (option ouverte), le fichier est lu une fois par l'import
+  ordinaire pour connaître ses pièces et son étendue ; l'aperçu montre les
+  contours des pièces (couleurs de l'aperçu existant) posés sur une tôle
+  choisie parmi `SHEET_PRESETS` (`app/utils/units.js`, 1000 × 2000 en tête)
+  ou saisie (largeur × hauteur, unité courante) ;
+- l'échelle se règle par les champs existants OU en tirant une poignée
+  d'angle sur l'aperçu, rapport conservé, cotes du dessin affichées en
+  direct, **facteur déduit visible** dans le panneau (ferme le point 8) ;
+- une case « utiliser cette tôle pour le projet » pré-remplit les réglages
+  de tôle, sans rien écraser sinon ; l'aperçu ne produit aucune fiche tant
+  que l'import n'est pas validé ; tout libellé passe par `i18n.js` en
+  anglais et en français ;
+- verrous : harnais « import avancé » cas E : logo sur 1000 × 2000 → hors
+  tôle signalé, poignée tirée à 900 mm d'étendue → facteur 0,318 affiché et
+  pièces importées à cette échelle (étendue mesurée 900 ± 0,5) ; changer de
+  format de tôle ne change pas le facteur ; option éteinte : aucune lecture
+  supplémentaire du fichier (cas A inchangé, même nombre d'appels wasm) ;
+  captures FR et EN.
+
+**GO déploiement E1 tel quel** : le nettoyage ferme les quatre derniers
+refus du moteur et l'éclatement fonctionne ; le panneau est replié et
+inerte par défaut, l'aperçu s'y ajoute sans rien casser. Déploiement : app
++ wasm géométrie + worker fileprocessing (le worker nesting n'a pas changé,
+homelab non concerné) ; moteur inchangé → pas de benchmarks. Si le
+propriétaire préfère ne montrer le panneau qu'avec son aperçu, E1-bis se
+livre d'abord et les deux se déploient ensemble : c'est un choix produit.
