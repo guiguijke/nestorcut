@@ -329,3 +329,60 @@ passent d'un échec d'import à un job complet.
 10. **Une observation de discipline** : `AGENTS.md` gagne un piège 2c (canal
     plus étroit que le gonflement, non réparabilité de la sortie de
     `geo_buffer`, obligation de désigner l'item fautif).
+
+### Lot E0 — vérification (vérificateur, 12/09, `b1da2690`) — GO déploiement
+
+Rejoué sur le poste : binaire natif et image worker reconstruits à HEAD,
+app locale à HEAD servant le wasm moteur du commit (`37f1bee5…`), sorties
+brutes hors dépôt (`~/qa-out/verif-e0/`, `~/qa-out/eclat/`).
+
+| Verrou | Résultat |
+|---|---|
+| cargo `nest-engine` release | 106 passés, 0 échec, 2 ignorés |
+| vitest | 551 |
+| `determinism_lock.py` | `b_demo` **`a1bd8810…` inchangé** natif et wasm ; `e0_volute` **`4ff43700…`** identique natif ≡ wasm |
+| **instance réelle du logo** (celle que le navigateur avait envoyée le 12/09 au matin, rejouée en natif) | avec canaux : **résolue**, 17 pièces, bande 599,9 mm, 12 s, `spacing_violations: []` ; trous fermés : résolue, 9 s. Avant le lot : panne à l'import dans les deux cas |
+| coureur moteur × 238 (`qa-engine-corpus.mjs`, binaire HEAD) | 205 fichiers au moteur, **201 menés au bout, 4 refus d'item, 0 panique, 0 dépassement** ; les 4 : deux « no pole found » (c04 et son jumeau réel, item 58) et deux « non-consecutive duplicate vertices » (anneau brut, deux fichiers réels) — exactement ceux du §5.5 |
+| navigateur, le logo du collègue | job **abouti**, **17 pièces posées**, badges « sans recouvrement », « dans la tôle », « écart ≥ 2 mm » verts ; le badge « All 17 parts placed » est **rouge à tort** et l'état dit « 1 parts needed » (point 9 du rapport, confirmé) ; le harnais se bloque ensuite dans le rendu three.js (GPU stall, connu sur ce poste) |
+| harnais 900 pièces, espacement 2 | sans recouvrement, dans la tôle, écart ≥ 2 mm, **900/900 placées**, calcul 24 s (même blocage three.js après le verdict) |
+| lecture du repli (`shape_modification.rs`) | ne s'exécute que sur l'échec de `geo_buffer` et qu'en gonflement ; somme de Minkowski depuis l'anneau brut, disque circonscrit à 32 côtés, union entière `i_overlay` règle positive, `libm` pour cos/sin ; choix du polygone par ordre total (aire puis longueur) ; trous du résultat laissés pleins (sur-ensemble) |
+| taille du wasm moteur | 504 212 → **587 836 octets gzip** (+83 Ko) |
+
+**Le diagnostic du §1 était incomplet, la correction de l'implémenteur est
+juste** : ce n'est pas la finesse d'un brin mais l'étroitesse du canal entre
+deux brins qui fait tomber `geo_buffer`, et sa sortie n'est pas réparable.
+La consigne demandait une union de cette sortie ; le verrou d'aire (le
+gonflé contient la pièce) a montré que cette lettre était fausse. Le repli
+livré est le bon : il recalcule depuis l'anneau brut.
+
+**Arbitrages (§5.5)** :
+
+1. « no pole found » sur un ergot de largeur nulle (2 fichiers, même
+   contenu) : chantier distinct, **à traiter dans le lot E1 point 3**
+   (fusion des sommets à moins de 0,01 mm et suppression des aller-retours
+   de largeur nulle à l'import — c'est la même règle de nettoyage), verrou :
+   c04 mené au bout par le coureur.
+2. « non-consecutive duplicate vertices » sur l'anneau brut (2 fichiers
+   réels) : c'est l'importeur qui produit un contour qui se touche — rejoint
+   la **couture des contours (priorité 5)**, non ouvert ici ; le message
+   nomme désormais la pièce, c'est ce qui compte en attendant.
+3. **Message sans mention d'espacement : accepté.** Après E0 un refus n'est
+   plus une affaire de finesse ; renvoyer vers l'espacement ferait travailler
+   pour rien. La phrase livrée nomme le fichier et la pièce et donne deux
+   leviers vrais.
+4. **Taille du wasm : accepté, pas de compilation conditionnelle.** Le cas
+   du propriétaire est un cas navigateur ; un repli qui n'existe pas dans le
+   navigateur ne répare rien. 83 Ko gzip sur un premier chargement d'un
+   moteur qui en fait déjà 500, contre un job qui meurt : le choix est fait.
+5. Point 9 du rapport (badge « All 17 parts placed » en rouge, « 1 parts
+   needed » = quantité du fichier et non nombre de pièces) : **défaut réel,
+   à corriger dans le lot E1** avec le comptage par pièce que l'éclatement
+   introduit de toute façon ; verrou : capture verte sur le logo, 17 pièces
+   annoncées.
+
+**GO déploiement E0 seul** : app + wasm moteur + worker nesting, homelab
+compris (`assert_overflow_head.py`). Benchmarks publics : le verrou de
+déterminisme n'a pas bougé, mais le moteur a changé ; rejouer
+`densities_corpus.py` sur l'image publiée et ne toucher `data/benchmarks.js`
+que si un chiffre bouge (attendu : aucun). Vérification prod : le logo du
+collègue nesté depuis un vrai compte, 17 pièces posées.
