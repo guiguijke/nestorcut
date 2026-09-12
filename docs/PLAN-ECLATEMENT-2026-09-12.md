@@ -386,3 +386,29 @@ déterminisme n'a pas bougé, mais le moteur a changé ; rejouer
 `densities_corpus.py` sur l'image publiée et ne toucher `data/benchmarks.js`
 que si un chiffre bouge (attendu : aucun). Vérification prod : le logo du
 collègue nesté depuis un vrai compte, 17 pièces posées.
+
+#### Déploiement du lot E0 (implémenteur, 12/09)
+
+Déployé à `28880d01` — app `sha256:d20035bb…`, worker nesting
+`sha256:a02836c0…` (même digest sur Hetzner et sur le homelab).
+
+| Contrôle | Résultat |
+|---|---|
+| images publiées puis tirées | `docker compose pull app nesting-worker` + `up -d` ; tous les conteneurs `Up`, `GET /` **200** |
+| commit injecté dans l'app | `NUXT_PUBLIC_GIT_COMMIT_SHA=28880d01…` |
+| artefacts SERVIS par la prod = dépôt (piège #14i) | **octet pour octet** : `engine/nest_wasm_bg.wasm` `37f1bee5…`, `engine/nest_wasm.js` `506a6025…`, `geometry/nest_geometry_bg.wasm` `86143daa…`, `workers/engine.worker.js` `f020ac90…` |
+| **le moteur SERVI par la prod sur la géométrie du logo** | wasm téléchargé depuis `app.nestorcut.com`, instance des 17 contours à espacement 2 : **17 pièces posées**, bande 599,3 mm. C'est l'import qui tuait le job ce matin |
+| homelab (débordement) | 3 workers recréés sur le même digest ; `assert_overflow_head.py` → **`ASSERT OVERFLOW=HEAD: OK`**, binaire moteur du **12/09 17:33 UTC** |
+| corpus de torture sur l'**image publiée** | **11/11 OK** (T-F partiel et T-J refus attendus) : 0 recouvrement, tout dans la tôle, 0 doublon, aucun rollback |
+| benchmarks publics | `densities_corpus.py` rejoué sur l'image publiée : **0 écart** sur les dix cas publiés (densités, pièces posées, tôles) — `data/benchmarks.js` **non modifié**, comme prévu |
+| journaux prod | **0 ERROR / Traceback** sur les 200 dernières lignes de l'app et du worker nesting |
+
+**Non-fait, dit franchement** : « le logo nesté depuis un vrai compte » n'a
+pas été joué **par moi** — l'import est derrière `auth`, je n'ai pas de
+compte de production, et en créer un est une écriture de production qui
+vous revient. Les trois substituts ci-dessus couvrent la chaîne technique
+(bits servis identiques, moteur servi résolvant la géométrie fautive,
+interface vérifiée dans un vrai navigateur au même commit en local). Le
+geste qui reste, chez vous, est de 30 secondes : projet « cet appareil » sur
+`app.nestorcut.com`, dépose du logo, `Imbriquer` — attendu : **17 pièces
+posées**, sans recouvrement, écart ≥ 2 mm.
