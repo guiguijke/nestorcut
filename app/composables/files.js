@@ -365,12 +365,52 @@ function setProjectFiles(files, path) {
     }
     scheduleFilesRefresh(path)
 }
+async function importStagedFiles(files, slug) {
+    // `state.projectSlug` porte le CHEMIN d'API, pas le slug : l'aperçu
+    // transmet celui qu'il a reçu à la dépose.
+    state.localImportError = ''
+    state.localImportErrorParams = {}
+    try {
+        const { importLocalFiles } = await import('./localImport')
+        const { advancedImportOptions } = await import('./advancedImport')
+        const options = advancedImportOptions()
+        for (const file of files || []) {
+            await importLocalFiles(file, slug, options)
+        }
+    } catch (err) {
+        state.localImportError = err?.message || 'localImport.parseError'
+        state.localImportErrorParams = err?.params || {}
+    }
+    await getProject(API_ROUTES.PROJECT(slug))
+}
+
 async function addFiles(files, slug) {
     if (state.projectLocal) {
         // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
         // byte ne transite par le serveur.
         state.localImportError = ''
         state.localImportErrorParams = {}
+        // Lot E1-bis : panneau « Import avancé » OUVERT ⇒ la dépose passe
+        // par l'aperçu (le fichier est lu une fois, aucune fiche n'est
+        // créée) et l'import attend « Importer ». Panneau fermé ⇒ chemin
+        // d'avant, sans lecture de plus.
+        const { needsPreview, useAdvancedImport } = await import('./advancedImport')
+        if (needsPreview()) {
+            const adv = useAdvancedImport()
+            if (!adv.preview.sheet) {
+                // Tôle de référence : celle du projet si elle est valide.
+                // Les params portent des valeurs d'AFFICHAGE : conversion
+                // ici, à la frontière (AGENTS #25).
+                const first = normalizedSheets(state.params)[0]
+                const u = getUnitState()
+                adv.setSheet(
+                    displayToMm(Number(first?.width), u),
+                    displayToMm(Number(first?.height), u),
+                )
+            }
+            await adv.stage(files, { projectSlug: slug })
+            return
+        }
         try {
             const { importLocalFiles } = await import('./localImport')
             const { advancedImportOptions } = await import('./advancedImport')
@@ -705,6 +745,11 @@ export const filesStore = readonly({
         updateParams,
         updateKerfSafety,
         updateSheet,
+        // Lot E1-bis : import des fichiers gardés par l'aperçu, avec les
+        // réglages du panneau (l'aperçu a déjà lu la géométrie ; l'import
+        // ordinaire la relit — c'est le prix d'une seule chaîne de code, et
+        // il ne se paie QUE sur une dépose à panneau ouvert).
+        importStagedFiles,
         addSheet,
         removeSheet,
         syncParamsToUnit,

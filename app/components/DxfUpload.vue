@@ -99,6 +99,11 @@
                     <p class="advanced__hint">{{ t('advancedImport.scaleHint') }}</p>
                 </div>
             </div>
+
+            <!-- Lot E1-bis : l'aperçu contre une tôle. Il n'existe que
+                 lorsqu'une dépose attend (aucune fiche créée avant
+                 validation). -->
+            <AdvancedImportPreview v-if="adv.preview.pending.length || adv.preview.loading" />
         </div>
     </div>
 </template>

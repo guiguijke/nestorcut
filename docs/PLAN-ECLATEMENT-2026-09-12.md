@@ -638,3 +638,79 @@ produit « strip », pipeline séparé) **n'embarque pas** `worker_common.geomet
 — son digest n'a pas bougé à ce build. Le nettoyage n'y est donc pas ; ce
 n'est pas un oubli de déploiement, c'est un autre chemin de code, à traiter
 s'il doit suivre la même règle.
+
+### Lot E1-bis — l'aperçu du dessin posé sur une tôle (implémenteur, 12/09)
+
+Commit : `HASH`. **Non déployé** — app seule (aucun changement wasm, serveur
+ou worker) ; GO attendu.
+
+#### 5.9 Ce qui est livré
+
+1. **La dépose passe par l'aperçu quand le panneau est OUVERT** : le fichier
+   est lu **une fois**, par l'import ordinaire (`geoImportFile` — celui qui
+   produira les fiches), et **aucune fiche n'est créée** avant « Importer ».
+   Panneau fermé, `needsPreview()` est faux et le chemin est celui d'avant le
+   lot E1 : aucune lecture de plus (c'est le verrou du cas A, rejoué).
+2. **L'aperçu** (`AdvancedImportPreview.vue`) : les contours lus, posés sur
+   un rectangle de tôle (origine en bas à gauche, y flippé — piège #20b),
+   avec une **poignée d'angle** au coin haut droit du dessin. La tôle se
+   choisit parmi `SHEET_PRESETS` de l'unité courante ou se saisit
+   (largeur × hauteur, unité courante, conversion à la frontière UI).
+   **Hors-tôle signalé** en clair, les deux orientations de la TÔLE étant
+   acceptées (une tôle se pose comme on veut ; la pièce, elle, n'est pas
+   tournée ici — c'est le moteur qui le fera).
+3. **La poignée n'ajoute pas une arithmétique** : elle écrit la **largeur
+   cible** du dessin, c'est-à-dire le mode `width` du panneau livré au lot
+   E1. Le facteur est donc résolu par le même code, sur l'étendue mesurée du
+   dessin — et il est **affiché** (point 8 du rapport E1 fermé), à côté des
+   **cotes du dessin en direct** dans l'unité courante.
+4. **« Utiliser cette tôle pour le projet »** : à la validation seulement, et
+   uniquement la largeur et la hauteur du PREMIER format (`updateSheet(0, …)`)
+   — rien d'autre n'est écrasé, ni le nombre de tôles, ni l'espacement.
+5. **Changer de tôle ne touche pas le facteur** : la tôle est une référence
+   de lecture, pas un réglage d'échelle. Verrouillé des deux côtés (vitest et
+   harnais).
+6. Neuf libellés nouveaux, **anglais et français**, rien en dur.
+
+#### 5.10 Verrous et mesures
+
+| Verrou | Résultat |
+|---|---|
+| **aucune fiche avant validation** | harnais : fiches avant la dépose **1**, pendant l'aperçu **1** — l'aperçu ne crée rien |
+| **hors-tôle signalé** | le logo tel quel (étendue **2834,3 × 688,8 mm**) sur une tôle 1000 × 2000 : **signalé** |
+| **changer de tôle ne change pas le facteur** | 1000 × 2000 → 1500 × 3000 → 1000 × 2000 : facteur **1 / 1 / 1** |
+| **poignée tirée à 900 mm** | étendue affichée **899,9 mm**, facteur affiché **0,317** (900 mm exactement donnerait 0,3175 → 0,318 ; l'écart est la précision du tirage à la souris, pas celle du calcul) |
+| **les pièces sont importées à CETTE échelle** | après validation : `importScale` **0,317496…**, étendue des pièces importées **899,89 mm** (mesurée dans IndexedDB, exigé 900 ± 0,5) |
+| **« utiliser cette tôle » pré-remplit le projet** | tôle du projet après validation : **1000 × 2000** |
+| **option éteinte : rien ne change** | cas A rejoué : **1 fiche**, nom intact, **882 ms** ; cas E rejoué : **10 fichiers → 10 fiches en 8,8 s**, panneau resté replié |
+| **captures FR et EN** | `docs/qa/eclatement-2026-09-12/lotE1bis/01-reglages-{fr,en}.png` (cotes, facteur, sélecteur de tôle, case, boutons) |
+| suites | vitest **580** (+12 : `advancedImportPreview.test.js`), `nuxt build` vert. Rien d'autre n'a bougé : aucun code wasm, serveur ni worker dans ce lot |
+
+#### 5.11 Non-faits, écarts et arbitrages
+
+1. **Le cas du harnais s'appelle F, pas E** : « E » était déjà pris par la
+   dépose en masse ajoutée au lot E1. Le harnais joue donc `QA_CASES=F` pour
+   l'aperçu, et `QA_LOCALE=fr|en` pour les deux langues.
+2. **Les captures publiées ne montrent pas la tôle avec le dessin** : le
+   dessin est le fichier d'un atelier, il n'a rien à faire dans `docs/`. Les
+   captures portent la bande des réglages (cotes, facteur, tôles, case,
+   boutons) dans les deux langues ; la vue tôle + dessin + poignée est
+   vérifiée par les assertions du harnais (hors-tôle, tirage, facteur), pas
+   par une image.
+3. **Un défaut corrigé en cours de route** : la poignée était posée à
+   `hauteur du dessin` depuis le HAUT de la tôle alors que le dessin est posé
+   en BAS — elle flottait au-dessus du tracé. Vu sur la première capture,
+   corrigé, capture refaite.
+4. **L'aperçu montre le PREMIER fichier de la dépose** quand plusieurs sont
+   déposés (le nombre est affiché). Le réglage vaut pour toute la dépose, et
+   une largeur cible se résout **par fichier** sur l'étendue de chacun —
+   c'est le comportement du mode « largeur cible » livré au lot E1, pas une
+   règle nouvelle.
+5. **L'import relit le fichier après validation** : l'aperçu lit pour
+   mesurer, la chaîne d'import relit pour produire. C'est le prix d'une seule
+   chaîne de code (aucune branche « import depuis l'aperçu ») et il ne se
+   paie **que sur une dépose à panneau ouvert** — mesuré au cas A : panneau
+   fermé, rien de plus.
+6. **La poignée ne tire que la largeur** (rapport conservé, donc la hauteur
+   suit). Tirer par la hauteur demanderait un second mode ; le plan ne le
+   demande pas.

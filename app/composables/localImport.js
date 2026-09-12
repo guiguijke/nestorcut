@@ -11,7 +11,7 @@ import {
     geoImportFile, geoCanonicalDxf, geoCanonicalDxfScaled, geoCanonicalDxfPart,
     IMPORT_MAX_ENTITIES,
 } from './geometryClient'
-import { resolveScale } from './advancedImport'
+import { drawingExtent, resolveScale } from './advancedImport'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 
@@ -116,24 +116,6 @@ function buildPreviewSvg(parts) {
         paths.join('') +
         '</svg>'
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
-}
-
-/** Étendue du DESSIN COMPLET (bbox de toutes les pièces), en mm. */
-function drawingExtent(parts) {
-    let minX = Infinity
-    let minY = Infinity
-    let maxX = -Infinity
-    let maxY = -Infinity
-    for (const p of parts || []) {
-        for (const [x, y] of p.coordinates || []) {
-            if (x < minX) minX = x
-            if (x > maxX) maxX = x
-            if (y < minY) minY = y
-            if (y > maxY) maxY = y
-        }
-    }
-    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return { width: 0, height: 0 }
-    return { width: maxX - minX, height: maxY - minY }
 }
 
 /**

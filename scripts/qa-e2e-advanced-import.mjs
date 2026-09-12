@@ -4,6 +4,9 @@
 // vérification E0 (badge et ligne d'état comptent les PIÈCES) :
 //
 //   A. option ÉTEINTE : une fiche, nom intact, même temps d'import ;
+//   F. aperçu sur une tôle (lot E1-bis) : hors-tôle signalé, poignée tirée
+//      à 900 mm d'étendue -> facteur affiché et pièces importées à cette
+//      échelle, changer de tôle ne change pas le facteur ;
 //   B. éclatement : une fiche par pièce, nommée « (k/N) », quantités
 //      indépendantes, puis imbrication N/N ;
 //   C. échelle ×0,5 : largeur totale du dessin divisée par deux, mesurée
@@ -45,7 +48,16 @@ if (!fs.existsSync(FILE)) {
 }
 
 const browser = await chromium.launch({ headless: true })
-const ctx = await browser.newContext({ locale: 'fr-FR', viewport: { width: 1680, height: 1000 } })
+// QA_LOCALE : les captures doivent exister dans les deux langues (la langue
+// vient du cookie `locale`, pas seulement de l'en-tête du navigateur).
+const LOCALE = process.env.QA_LOCALE || 'fr'
+const ctx = await browser.newContext({
+    locale: LOCALE === 'fr' ? 'fr-FR' : 'en-US',
+    viewport: { width: 1680, height: 1000 },
+})
+await ctx.addCookies([{
+    name: 'locale', value: LOCALE, domain: new URL(BASE).hostname, path: '/',
+}])
 const page = await ctx.newPage()
 page.on('console', (m) => {
     const t = m.type()
@@ -374,6 +386,110 @@ try {
         await shot('07-E-depose-en-masse.png')
         if (cards !== many.length) throw new Error(`E : ${cards} fiches pour ${many.length} fichiers`)
         if (open === 'true') throw new Error('E : le panneau est ouvert alors qu’il doit rester replié')
+    }
+
+    // ------------- F. aperçu sur une tôle (lot E1-bis) -------------
+    if (CASES.includes('F')) {
+        await newProject()
+        // Panneau OUVERT : la dépose passe par l'aperçu, aucune fiche.
+        // Il faut d'abord un projet — on dépose une première fois panneau
+        // fermé pour l'obtenir, puis on règle et on re-dépose.
+        await page.setInputFiles('input[name="dxf"]', [FILE])
+        await page.waitForURL('**/project/**', { timeout: 60000 })
+        await page.waitForFunction(
+            () => document.querySelectorAll('.files__item input.counter__value').length >= 1,
+            null, { timeout: 180000 },
+        )
+        const cardsBefore = await page.locator('.files__item').count()
+        await setAdvanced({ explode: false })
+        await page.setInputFiles('input[name="dxf"]', [FILE])
+
+        // 1) L'aperçu apparaît et AUCUNE fiche n'est créée.
+        await page.waitForSelector('[data-testid="import-preview-svg"]', { timeout: 300000 })
+        await page.waitForTimeout(500)
+        const cardsDuring = await page.locator('.files__item').count()
+        const outside = await page.locator('[data-testid="import-preview-outside"]').count()
+        const dims0 = (await page.locator('[data-testid="import-preview-dims"]').innerText()).trim()
+        const factor0 = (await page.locator('[data-testid="import-preview-factor"]').innerText()).trim()
+        log('F — aperçu :', JSON.stringify({ cardsBefore, cardsDuring, outside, dims0, factor0 }))
+        await shot('08-F-apercu-sur-tole.png')
+        if (cardsDuring !== cardsBefore) throw new Error('F : une fiche est apparue avant validation')
+        if (!outside) throw new Error('F : le hors-tôle n’est pas signalé sur 1000 × 2000')
+
+        // 2) Changer de format de tôle ne change pas le facteur.
+        const readMm = async () => {
+            const txt = (await page.locator('[data-testid="import-preview-dims"]').innerText()).trim()
+            return Number(String(txt).split('×')[0].replace(',', '.').trim())
+        }
+        const readFactor = async () =>
+            (await page.locator('[data-testid="import-preview-factor"]').innerText()).trim()
+        const f0 = await readFactor()
+        await page.locator('[data-testid="import-preview-preset-2"]').click()
+        await page.waitForTimeout(300)
+        const f1 = await readFactor()
+        await page.locator('[data-testid="import-preview-preset-0"]').click()
+        await page.waitForTimeout(300)
+        const f2 = await readFactor()
+        log('F — facteur après changements de tôle :', f0, '|', f1, '|', f2)
+        if (f0 !== f1 || f1 !== f2) throw new Error(`F : la tôle change le facteur (${f0}/${f1}/${f2})`)
+
+        // 3) Tirer la poignée jusqu'à 900 mm d'étendue (recherche linéaire :
+        //    le harnais ne connaît pas la géométrie interne de l'aperçu).
+        const svg = page.locator('[data-testid="import-preview-svg"]')
+        const handle = page.locator('[data-testid="import-preview-handle"]')
+        const box = await svg.boundingBox()
+        let frac = 0.25
+        let mm = null
+        for (let k = 0; k < 10; k++) {
+            // La poignée BOUGE à chaque tirage : relire sa position, sinon le
+            // clic suivant tombe à côté (et ne tire rien).
+            const hbox = await handle.boundingBox()
+            await page.mouse.move(hbox.x + hbox.width / 2, hbox.y + hbox.height / 2)
+            await page.mouse.down()
+            await page.mouse.move(box.x + frac * box.width, box.y + box.height * 0.5, { steps: 4 })
+            await page.mouse.up()
+            await page.waitForTimeout(150)
+            mm = await readMm()
+            if (Math.abs(mm - 900) <= 0.4) break
+            frac = Math.min(0.95, Math.max(0.03, frac * (900 / mm)))
+        }
+        const factorTxt = await readFactor()
+        log('F — poignée :', JSON.stringify({ etendueAffichee: mm, facteur: factorTxt }))
+        await shot('09-F-poignee-900.png')
+        if (!(Math.abs(mm - 900) <= 0.5)) throw new Error(`F : étendue affichée ${mm} au lieu de 900`)
+        if (!/0[.,]3(1|2)/.test(factorTxt)) throw new Error(`F : facteur affiché « ${factorTxt} »`)
+
+        // 4) Valider : les pièces sont importées À CETTE ÉCHELLE.
+        await page.locator('[data-testid="import-preview-use-sheet"]').check()
+        await page.locator('[data-testid="import-preview-confirm"] button, [data-testid="import-preview-confirm"]')
+            .first().click()
+        await page.waitForFunction(
+            (n) => document.querySelectorAll('.files__item input.counter__value').length > n,
+            cardsBefore, { timeout: 300000 },
+        )
+        await page.waitForTimeout(1500)
+        const store = await measureStore()
+        const scaled = store.filter((r) => r.importScale !== null)
+        results.F = {
+            cardsBefore, cardsDuring, outside, dims0, factor0,
+            etendueAffichee: mm, facteur: factorTxt,
+            importees: scaled.map((r) => ({ w: r.width, f: r.importScale })),
+        }
+        log('F — importées :', JSON.stringify(results.F.importees))
+        await shot('10-F-apres-import.png')
+        if (!scaled.length) throw new Error('F : aucune fiche mise à l’échelle')
+        const got = scaled[scaled.length - 1]
+        if (Math.abs(got.width - 900) > 0.5) {
+            throw new Error(`F : étendue importée ${got.width} au lieu de 900`)
+        }
+        // 5) « utiliser cette tôle » a pré-rempli le format du projet.
+        const dims = page.locator('.size__sheet').first().locator('.size__line .input__value')
+        const sheetNow = [await dims.nth(0).inputValue(), await dims.nth(1).inputValue()]
+        results.F.toleProjet = sheetNow
+        log('F — tôle du projet :', sheetNow.join(' × '))
+        if (Number(sheetNow[0]) !== 1000 || Number(sheetNow[1]) !== 2000) {
+            throw new Error(`F : tôle du projet ${sheetNow.join('×')} au lieu de 1000×2000`)
+        }
     }
 
     log('VERDICT : tous les cas demandés passent')
