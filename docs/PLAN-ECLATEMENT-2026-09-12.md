@@ -618,3 +618,23 @@ inerte par défaut, l'aperçu s'y ajoute sans rien casser. Déploiement : app
 homelab non concerné) ; moteur inchangé → pas de benchmarks. Si le
 propriétaire préfère ne montrer le panneau qu'avec son aperçu, E1-bis se
 livre d'abord et les deux se déploient ensemble : c'est un choix produit.
+
+#### Déploiement du lot E1 (implémenteur, 12/09)
+
+Déployé à `76738086` — app `ghcr.io/…/nest2d-app:latest`, worker
+`nest2d-user-file-processing-worker:latest`. Worker nesting et homelab non
+concernés (le moteur n'a pas changé) ; aucun benchmark à régénérer.
+
+| Contrôle | Résultat |
+|---|---|
+| CI du commit | **app-ci vert**, **geometry-locks vert** (parité exports, diff client/serveur, déterminisme natif ≡ wasm), images publiées |
+| conteneurs | app et worker fichiers recréés, `GIT_COMMIT_SHA=76738086…`, tous `Up`, **0 ERROR / Traceback** sur les 120 dernières lignes des trois services |
+| artefacts SERVIS par la prod = dépôt | **octet pour octet** : `geometry/nest_geometry_bg.wasm` `5fe7fec3…`, `geometry/nest_geometry.js` `6ce25db0…`, `workers/geometry.worker.js` `e3b3a218…`, `engine/nest_wasm_bg.wasm` `37f1bee5…` (inchangé, E0) |
+| **le nettoyage est actif dans le bundle SERVI** | bundle téléchargé depuis `app.nestorcut.com`, rejoué sur la copie du logo : **17 pièces, 8 trous réels, 21 micro-découpes ignorées**, et **la volute passe à 0 trou** |
+| **le nettoyage est actif dans le worker de production** | l'image déployée porte `worker_common.geometry.cleanup` avec les seuils **1,0 / 0,5 / 0,01** |
+
+**Non-fait, dit franchement** : l'image `strip-file-processing-worker` (le
+produit « strip », pipeline séparé) **n'embarque pas** `worker_common.geometry`
+— son digest n'a pas bougé à ce build. Le nettoyage n'y est donc pas ; ce
+n'est pas un oubli de déploiement, c'est un autre chemin de code, à traiter
+s'il doit suivre la même règle.
