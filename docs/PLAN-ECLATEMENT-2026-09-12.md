@@ -641,7 +641,7 @@ s'il doit suivre la même règle.
 
 ### Lot E1-bis — l'aperçu du dessin posé sur une tôle (implémenteur, 12/09)
 
-Commit : `HASH`. **Non déployé** — app seule (aucun changement wasm, serveur
+Commit : `7ddef81f`. **Non déployé** — app seule (aucun changement wasm, serveur
 ou worker) ; GO attendu.
 
 #### 5.9 Ce qui est livré
