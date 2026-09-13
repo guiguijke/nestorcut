@@ -17,6 +17,7 @@ import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import {
     isSheetCamJob, jobDrawingName, jobPathRecords, jobSheet, parseSheetCamJob,
 } from '~~/shared/sheetcamJob.js'
+import { assignJobBlocks } from '~~/shared/sheetcamReserve.js'
 
 // Miroir EXACT de workers/common/worker_common/colors.py — ne pas diverger
 // (le rendu liste/live/résultat partage cette palette).
@@ -204,9 +205,19 @@ export function readSheetCamJob(bytes) {
         }
     }
     // Les points de départ, LUS dans le bloc binaire (lot J4-bis-2, §9.42).
-    // Un bloc par NOM de dessin, dans le même ordre de première apparition que
-    // `byName` — vérifié sur les trente-neuf `.job` disponibles : le nombre de
-    // blocs égale toujours le nombre de noms de dessin distincts.
+    //
+    // LES BLOCS NE SONT PAS APPARIÉS ICI, ET C'EST LE CORRECTIF DU LOT
+    // J4-bis-3. Le lot J4-bis-2 appariait le k-ième bloc au k-ième nom de
+    // dessin rencontré dans les sections `[Part N]`. Sur un `.job` dont les
+    // sections déclarent les dessins dans un autre ordre que le cache
+    // binaire, les dessins sont INVERSÉS : les points tombent tous à côté,
+    // les contours sortent en « point non lu » et les trous quittent le
+    // nesting (§9.45, trouvé par le vérificateur sur
+    // `Piece_Trou+Fill_x4_ordre_TEST.job`).
+    //
+    // L'appariement demande la GÉOMÉTRIE des dessins, qui n'existe qu'une
+    // fois l'import fait : c'est `assignJobStarts` ci-dessous qui le fait, et
+    // l'appelant (`files.js`) qui le branche après avoir importé les dessins.
     //
     // Les LONGUEURS d'amorce viennent du binaire (elles y sont par contour),
     // les TYPES de l'opération lue dans le texte (le binaire ne les porte
@@ -214,33 +225,20 @@ export function readSheetCamJob(bytes) {
     // pour « Tangent » — mesuré). Un dessin à plusieurs opérations de types
     // différents n'est donc pas distingué contour par contour : c'est la
     // première opération active qui fait foi, comme pour le reste.
-    const records = jobPathRecords(job.binary)
-    const names = [...byName.keys()]
-    if (records && records.length === names.length) {
-        records.forEach((block, index) => {
-            const entry = byName.get(names[index])
-            entry.origin = block.origin
-            entry.starts = block.paths.map((p) => ({
-                // Relatif au centre de la boîte englobante du dessin.
-                offset: p.start,
-                leadIn: p.leadIn ?? entry.leadIn,
-                leadOut: p.leadOut ?? null,
-                leadInType: entry.leadInType,
-                leadOutType: entry.leadOutType,
-                order: p.order,
-                moved: p.moved,
-            }))
-        })
-    }
+    const blocks = jobPathRecords(job.binary)
 
     return {
         job,
         sheet: jobSheet(job),
         kerfWidth: job.kerfWidth,
+        // Les blocs du cache binaire, DANS L'ORDRE DU FICHIER et sans
+        // affectation : un bloc n'appartient à un dessin que lorsque la
+        // géométrie le dit.
+        blocks: blocks || [],
         // Vrai quand AUCUN point de départ n'a pu être lu : l'appelant doit le
         // dire, pas le taire — sans point, aucun trou n'est nesté (voir
         // `partWithReserve`).
-        startsUnread: !records || records.length !== names.length,
+        startsUnread: !blocks || blocks.length !== byName.size,
         drawings: [...byName.values()],
     }
 }
@@ -248,6 +246,53 @@ export function readSheetCamJob(bytes) {
 /** `readSheetCamJob` sur un `File` du navigateur. */
 export async function readSheetCamJobFile(file) {
     return readSheetCamJob(new Uint8Array(await file.arrayBuffer()))
+}
+
+/**
+ * Apparie les blocs du cache binaire aux dessins IMPORTÉS, et rend les points
+ * de départ par nom de dessin (lot J4-bis-3, §9.45).
+ *
+ * `ringsByName` : `{ 'Piece_Trou.DXF': [anneau, ...] }` — tous les anneaux du
+ * dessin, contours et trous, tels que notre import les rend. C'est l'appelant
+ * qui les fournit, parce qu'ils n'existent qu'après l'import.
+ *
+ * Rend `{ byName, ambiguous, reason }`. `byName[nom]` porte `{ starts, origin,
+ * placed }`. `ambiguous: true` ⇒ AUCUN point n'est attribué : l'appelant garde
+ * le comportement « point non lu », qui retire les trous du nesting et le dit.
+ * On ne devine pas une affectation qu'on ne sait pas trancher.
+ */
+export function assignJobStarts(read, ringsByName) {
+    const drawings = (read?.drawings || []).filter((d) => ringsByName?.[d.name])
+    const blocks = read?.blocks || []
+    if (!drawings.length || !blocks.length) {
+        return { byName: {}, ambiguous: true, reason: 'noGeometry' }
+    }
+    const { pairs, ambiguous, reason } = assignJobBlocks(
+        blocks,
+        drawings.map((d) => ({ name: d.name, rings: ringsByName[d.name] })),
+    )
+    if (ambiguous || !pairs) return { byName: {}, ambiguous: true, reason }
+
+    const byName = {}
+    for (const pair of pairs) {
+        const drawing = drawings[pair.drawing]
+        const block = blocks[pair.block]
+        byName[drawing.name] = {
+            origin: block.origin,
+            placed: pair.placed,
+            starts: (block.paths || []).map((p) => ({
+                // Relatif à l'origine que SheetCam mémorise pour ce dessin.
+                offset: p.start,
+                leadIn: p.leadIn ?? drawing.leadIn,
+                leadOut: p.leadOut ?? drawing.leadOut,
+                leadInType: drawing.leadInType,
+                leadOutType: drawing.leadOutType,
+                order: p.order,
+                moved: p.moved,
+            })),
+        }
+    }
+    return { byName, ambiguous: false, reason: null }
 }
 
 /**

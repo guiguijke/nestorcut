@@ -718,6 +718,105 @@ export function matchStartsToRings(starts, rings, tol = START_MATCH_TOL_MM) {
 }
 
 /**
+ * Apparie les blocs du bloc binaire aux DESSINS, par la géométrie.
+ *
+ * LE DÉFAUT QUE CE BLOC CORRIGE (lot J4-bis-3, §9.45 de l'étude, trouvé par le
+ * vérificateur). Le lot J4-bis-2 appariait par RANG : le k-ième bloc au k-ième
+ * nom de dessin rencontré dans les sections `[Part N]`. Le rapport disait « un
+ * bloc par nom de dessin, dans le même ordre — vérifié sur trente-neuf
+ * fichiers » ; ce qui avait été vérifié, c'est le NOMBRE de blocs, pas leur
+ * correspondance. Sur un `.job` dont les sections déclarent les dessins dans
+ * un autre ordre que le cache binaire, les deux dessins sont INVERSÉS : les
+ * points tombent tous à côté, les contours sortent en « point non lu » et les
+ * trous quittent le nesting. Dégradation sûre, mais injuste, et pour rien.
+ *
+ * LA GÉOMÉTRIE TRANCHE, ET ELLE EST SANS AMBIGUÏTÉ : un point de départ est SUR
+ * son contour à 0,01 mm près (mesuré sur les dix-sept fichiers de la série),
+ * et à des dizaines de millimètres de tout contour de l'autre dessin. On
+ * compte donc, pour chaque couple (bloc, dessin), les points qui tombent sur
+ * un contour, et on retient l'affectation qui en place le plus.
+ *
+ * `blocks` : `[{ origin: [x, y], paths: [{ start: [x, y] }] }]`.
+ * `drawings` : `[{ name, rings: [anneau, ...] }]` — TOUS les anneaux du dessin,
+ * contours et trous, tels que notre import les rend.
+ *
+ * Rend `{ pairs, ambiguous }`. `pairs[i]` donne, pour le dessin `i`, l'indice
+ * de bloc retenu, le nombre de points placés et l'écart d'origine. Un total à
+ * ÉGALITÉ entre deux affectations distinctes, ou un total nul, rend
+ * `ambiguous: true` et aucune paire : on ne devine pas (l'appelant retombe sur
+ * « point non lu », le comportement d'avant).
+ *
+ * Les chemins qui ne tombent sur AUCUN contour d'AUCUN dessin — une entité
+ * POINT, par exemple — ne comptent nulle part : ils ne pèsent donc pas sur le
+ * choix, ce qui est exactement ce qu'on veut.
+ */
+export function assignJobBlocks(blocks, drawings, tol = START_MATCH_TOL_MM) {
+    const nb = (blocks || []).length
+    const nd = (drawings || []).length
+    if (!nb || !nd || nb !== nd) return { pairs: null, ambiguous: true, reason: 'countMismatch' }
+
+    // Score[d][b] : points du bloc `b` qui tombent sur un contour du dessin `d`.
+    const score = drawings.map((drawing) => blocks.map((block) => {
+        let placed = 0
+        for (const path of block.paths || []) {
+            const p = [
+                Number(block.origin?.[0]) + Number(path?.start?.[0]),
+                Number(block.origin?.[1]) + Number(path?.start?.[1]),
+            ]
+            if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) continue
+            let best = Infinity
+            for (const ring of drawing.rings || []) {
+                if (!Array.isArray(ring) || ring.length < 2) continue
+                const d = nearestOnRing(p, ring).d
+                if (d < best) best = d
+            }
+            if (best <= tol) placed += 1
+        }
+        return placed
+    }))
+
+    // n est minuscule (un `.job` porte quelques dessins) : on énumère.
+    const order = []
+    const used = new Array(nb).fill(false)
+    let bestTotal = -1
+    let bestPerm = null
+    let ties = 0
+    const walk = (d, total) => {
+        if (d === nd) {
+            if (total > bestTotal) {
+                bestTotal = total
+                bestPerm = order.slice()
+                ties = 1
+            } else if (total === bestTotal) {
+                ties += 1
+            }
+            return
+        }
+        for (let b = 0; b < nb; b++) {
+            if (used[b]) continue
+            used[b] = true
+            order.push(b)
+            walk(d + 1, total + score[d][b])
+            order.pop()
+            used[b] = false
+        }
+    }
+    if (nb > 7) return { pairs: null, ambiguous: true, reason: 'tooManyDrawings' }
+    walk(0, 0)
+
+    if (!bestPerm || bestTotal <= 0) return { pairs: null, ambiguous: true, reason: 'noPointPlaced' }
+    if (ties > 1) return { pairs: null, ambiguous: true, reason: 'tie' }
+
+    const pairs = bestPerm.map((b, d) => ({
+        drawing: d,
+        block: b,
+        placed: score[d][b],
+        total: (blocks[b].paths || []).length,
+    }))
+    return { pairs, ambiguous: false, reason: null, totalPlaced: bestTotal }
+}
+
+/**
  * Réserve appliquée à une PIÈCE (contour + trous) d'un job `.job`.
  *
  * `starts` : les points de départ LUS dans le `.job`, en coordonnées du

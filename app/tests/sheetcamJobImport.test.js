@@ -141,26 +141,36 @@ describe('J4 — les réglages de coupe transmis au nesting', () => {
         expect(cut.jobName).toBe('mon-job.job')
     })
 
-    it('les points de départ LUS voyagent avec les réglages (lot J4-bis-2)', () => {
+    it('les réglages de coupe partent SANS points : l’appariement vient après', () => {
         // `Start position` ne gouverne plus rien : la série (§9.42) a montré
         // que c'est le coin d'où part la SÉQUENCE de coupe, pas le départ
-        // d'un contour. Ce qui compte maintenant, ce sont les points lus dans
-        // le bloc binaire — ils sont relatifs au centre de la boîte du
-        // dessin, `buildLocalPayload` les y ramène.
+        // d'un contour. Le champ reste LU pour l'affichage et l'étude.
+        //
+        // Et les POINTS DE DÉPART ne sont pas ici (lot J4-bis-3, §9.45) : le
+        // cache binaire ne dit pas à quel dessin appartient chacun de ses
+        // blocs, et le supposer par le rang des sections inverse les dessins
+        // dès qu'un `.job` les déclare dans un autre ordre. C'est la
+        // GÉOMÉTRIE qui tranche, donc après l'import — `assignJobStarts`.
         const cut = cutSettingsFor(read.drawings[0], { kerfWidth: 1.5 })
         expect(cut.startPositionConfirmed).toBeUndefined()
         expect(cut.kerfWidth).toBe(1.5)
-        expect(Array.isArray(cut.starts)).toBe(true)
-        expect(cut.starts.length).toBeGreaterThan(0)
-        for (const s of cut.starts) {
-            expect(s.offset).toHaveLength(2)
-            expect(Number.isFinite(s.offset[0])).toBe(true)
-            expect(Number.isFinite(s.leadIn)).toBe(true)
-        }
+        expect(cut.starts).toEqual([])
+        expect(cut.origin).toBeNull()
+        expect(cut.leadIn).toBe(5)
+        expect(cut.leadInType).toBe(1)
     })
 
-    it('le centre de boîte mémorisé par SheetCam voyage aussi, comme CONTRÔLE', () => {
-        const cut = cutSettingsFor(read.drawings[0])
-        expect(cut.origin).toHaveLength(2)
+    it('les blocs du binaire sont lus, mais laissés SANS affectation', () => {
+        // Le lecteur rend les blocs dans l'ordre du FICHIER. Les attribuer
+        // ici, c'est le défaut du §9.45.
+        expect(read.blocks).toHaveLength(2)
+        for (const block of read.blocks) {
+            expect(block.origin).toHaveLength(2)
+            expect(block.paths.length).toBeGreaterThan(0)
+        }
+        for (const drawing of read.drawings) {
+            expect(drawing.starts).toEqual([])
+            expect(drawing.origin).toBeNull()
+        }
     })
 })

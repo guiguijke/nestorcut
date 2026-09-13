@@ -49,7 +49,7 @@ vi.mock('../composables/localFilesStore', async (importOriginal) => {
 
 import { geoImportFile } from '../composables/geometryClient'
 import {
-    importLocalFiles, readSheetCamJob, readSheetCamJobFile,
+    assignJobStarts, importLocalFiles, readSheetCamJob, readSheetCamJobFile,
 } from '../composables/localImport'
 
 const JOB_BYTES = new Uint8Array(readFileSync(
@@ -210,8 +210,63 @@ const NEW_KEYS = [
     'sheetcamReserve.flatEnvelope', 'sheetcamReserve.startNotRead',
     'sheetcamReserve.reserveCrossesContour', 'sheetcamReserve.holeTooSmall',
     'sheetcamReserve.mouthInsideEnvelope', 'sheetcamReserve.degenerateEdge',
-    'sheetcamReserve.strayPierce',
+    'sheetcamReserve.strayPierce', 'sheetcamReserve.countMismatch',
+    'sheetcamReserve.tooManyDrawings', 'sheetcamReserve.noPointPlaced',
+    'sheetcamReserve.tie',
 ]
+
+describe('J4-bis-3 — les points de départ s’attribuent par la GÉOMÉTRIE', () => {
+    // Les deux dessins du moulinet tels que notre import les rend.
+    const TROU = [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]]
+    const TROU_HOLE = Array.from({ length: 64 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 64
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const FAN = [[-19.799, 2.8284], [19.799, 2.8284], [19.799, 30.8284], [-19.799, 30.8284], [-19.799, 2.8284]]
+    const RINGS = { 'Piece_Trou.DXF': [TROU, TROU_HOLE], 'Piece_Fillx4.DXF': [FAN] }
+
+    it('attribue les bons points même quand les dessins sont déclarés à l’envers', () => {
+        // LE DÉFAUT DU §9.45 : le lot J4-bis-2 attribuait le k-ième bloc au
+        // k-ième dessin. Sur `Piece_Trou+Fill_x4_ordre_TEST.job`, où les
+        // éventails sont déclarés AVANT l'hôte, les deux dessins étaient
+        // inversés : les cinq points tombaient à côté, les deux dessins
+        // sortaient en « point non lu » et le trou quittait le nesting.
+        const read = readSheetCamJob(JOB_BYTES)
+        const droit = assignJobStarts(read, RINGS)
+        expect(droit.ambiguous).toBe(false)
+        // Les cinq chemins du fichier sont distribués : trois pour l'hôte
+        // (dont son entité POINT), deux pour l'éventail.
+        expect(droit.byName['Piece_Trou.DXF'].starts).toHaveLength(3)
+        expect(droit.byName['Piece_Fillx4.DXF'].starts).toHaveLength(2)
+        // Et ce sont les bons : l'origine de l'hôte est (0 ; 0), celle de
+        // l'éventail (0 ; 15,414) — mesurées, elles diffèrent.
+        expect(droit.byName['Piece_Trou.DXF'].origin[1]).toBeCloseTo(0, 6)
+        expect(droit.byName['Piece_Fillx4.DXF'].origin[1]).toBeCloseTo(15.4142, 3)
+        expect(droit.byName['Piece_Trou.DXF'].placed).toBe(2)
+        expect(droit.byName['Piece_Fillx4.DXF'].placed).toBe(1)
+
+        // LE CAS QUI CASSAIT, reproduit : les mêmes blocs, les dessins
+        // présentés dans l'ordre inverse. L'attribution ne doit pas bouger.
+        const inverse = assignJobStarts(
+            { ...read, drawings: [...read.drawings].reverse() },
+            RINGS,
+        )
+        expect(inverse.ambiguous).toBe(false)
+        expect(inverse.byName['Piece_Trou.DXF'].origin)
+            .toEqual(droit.byName['Piece_Trou.DXF'].origin)
+        expect(inverse.byName['Piece_Fillx4.DXF'].origin)
+            .toEqual(droit.byName['Piece_Fillx4.DXF'].origin)
+        expect(inverse.byName['Piece_Trou.DXF'].starts)
+            .toEqual(droit.byName['Piece_Trou.DXF'].starts)
+    })
+
+    it('sans géométrie, on n’attribue rien — et on le dit', () => {
+        const read = readSheetCamJob(JOB_BYTES)
+        const rien = assignJobStarts(read, {})
+        expect(rien.ambiguous).toBe(true)
+        expect(rien.byName).toEqual({})
+    })
+})
 
 describe('libellés du lot J4 : EN et FR', () => {
     it('chaque clé neuve existe dans les deux blocs', () => {

@@ -411,7 +411,7 @@ async function importStagedFiles(files, slug) {
  * (consigne §5 point 2).
  */
 async function addSheetCamJobDrop(drop, slug) {
-    const { readSheetCamJob, importLocalFiles } = await import('./localImport')
+    const { readSheetCamJob, importLocalFiles, assignJobStarts } = await import('./localImport')
     const { matchDrawings, prefillFromJob, cutSettingsFor } = await import('./sheetcamJobImport')
 
     let read
@@ -444,12 +444,17 @@ async function addSheetCamJobDrop(drop, slug) {
     const jobName = drop.jobFile?.name || null
     const wanted = new Map()
     let imported = 0
+    // Lot J4-bis-3 : les fiches importées, gardées pour l'appariement des
+    // blocs du cache binaire — il se fait par la GÉOMÉTRIE, donc APRÈS
+    // l'import (§9.45). Aucune lecture de plus : ce sont les mêmes objets.
+    const importedByName = new Map()
     for (const { drawing, file } of matched) {
         try {
             const records = await importLocalFiles(file, slug, {
                 sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
                 sheetcamJobBytes: drop.jobBytes,
             })
+            if (records?.length) importedByName.set(drawing.name, records)
             imported += records?.length || 0
             // La QUANTITÉ vient du `.job` : c'est le nombre d'exemplaires
             // qu'il pose, copies `copyOf` comprises (règle 4). Elle ne peut
@@ -462,6 +467,52 @@ async function addSheetCamJobDrop(drop, slug) {
         } catch (err) {
             state.localImportError = err?.message || 'localImport.parseError'
             state.localImportErrorParams = err?.params || {}
+        }
+    }
+
+    // 2-bis. LES POINTS DE DÉPART, APPARIÉS PAR LA GÉOMÉTRIE (lot J4-bis-3).
+    //
+    // Le cache binaire du `.job` ne dit pas à quel dessin appartient chacun de
+    // ses blocs ; le lot précédent l'a supposé par le RANG des sections, et
+    // cela casse dès qu'un `.job` déclare ses dessins dans un autre ordre que
+    // son cache (§9.45). C'est la géométrie qui tranche : un point de départ
+    // est SUR son contour à 0,01 mm près et à des dizaines de millimètres de
+    // ceux de l'autre dessin.
+    //
+    // On ne peut donc le faire qu'ICI, une fois les dessins importés — et
+    // sans rien relire : `importLocalFiles` a déjà rendu les fiches, on y
+    // ajoute les points et on ré-enregistre. Un `.job` dont l'affectation
+    // n'est pas tranchable laisse les fiches SANS points : c'est le
+    // comportement « point non lu », qui retire les trous du nesting et
+    // l'affiche, plutôt que de parier.
+    if (importedByName.size) {
+        const ringsByName = {}
+        for (const [name, records] of importedByName) {
+            const rings = []
+            for (const record of records) {
+                for (const part of record.parts || []) {
+                    if (Array.isArray(part.coordinates)) rings.push(part.coordinates)
+                    for (const hole of part.holes || []) rings.push(hole)
+                }
+            }
+            ringsByName[name] = rings
+        }
+        const assigned = assignJobStarts(read, ringsByName)
+        if (!assigned.ambiguous) {
+            const { saveLocalFile } = await import('./localFilesStore')
+            for (const [name, records] of importedByName) {
+                const found = assigned.byName[name]
+                if (!found) continue
+                for (const record of records) {
+                    if (!record.sheetcam) continue
+                    record.sheetcam = {
+                        ...record.sheetcam,
+                        starts: found.starts,
+                        origin: found.origin,
+                    }
+                    await saveLocalFile(record)
+                }
+            }
         }
     }
 

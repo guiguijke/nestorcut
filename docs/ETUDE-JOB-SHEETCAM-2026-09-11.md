@@ -1746,3 +1746,77 @@ fixture `source.job` aux sections permutées) ⇒ 5 points sur 5 appariés,
 livré et rejoué (harnais vert sur les trois fichiers, « ordre » compris), et
 réponse du propriétaire sur le POINT — la recette machine se fait sur le
 fichier produit après ces deux points, pour voir le nichage revenir ou non.
+
+#### 9.47 Lot J4-bis-3 — rapport de l'implémenteur (13/09, nuit)
+
+Le défaut du §9.45 est corrigé. Et la remarque qui l'accompagne est juste :
+j'ai écrit « un bloc par nom de dessin, dans le même ordre de première
+apparition — vérifié sur les trente-neuf `.job` » alors que ma mesure ne
+portait que sur le NOMBRE de blocs. C'est une sur-affirmation, elle a masqué
+le défaut, et c'est exactement ce que la maison interdit.
+
+**L'appariement se fait désormais par la géométrie.** `assignJobBlocks`
+(`shared/sheetcamReserve.js`) compte, pour chaque couple (bloc, dessin), les
+points de départ qui tombent sur un contour du dessin à
+`START_MATCH_TOL_MM` = 0,5 mm, et retient l'affectation — un dessin par bloc —
+qui en place le plus. Le nombre de dessins d'un `.job` est minuscule :
+l'énumération est exhaustive (refus au-delà de sept dessins, plutôt qu'une
+heuristique silencieuse).
+
+**Les chemins d'entité POINT s'excluent tout seuls**, sans règle spéciale :
+ils ne tombent sur aucun contour d'aucun dessin, donc ils ne pèsent sur aucune
+affectation. Mesuré sur `x4-reference.job` : cinq chemins, trois placés (le
+coin du carré et un point du cercle pour l'hôte, le milieu de l'arête basse
+pour l'éventail), deux chemins de POINT placés nulle part.
+
+**On refuse plutôt que de deviner**, et les trois refus sont distincts :
+`countMismatch` (le cache ne porte pas autant de blocs que le fichier déclare
+de dessins), `noPointPlaced` (aucun point sur aucun contour), `tie` (deux
+affectations à égalité — deux dessins qui se ressemblent). Dans les trois cas
+l'appelant retombe sur le comportement « point non lu » d'aujourd'hui : les
+trous sortent du nesting et le rapport le dit. Les quatre raisons ont leur
+libellé EN et FR.
+
+**Où le code vit, et pourquoi là.** La géométrie pure est dans `shared/`, avec
+le reste de la réserve — un seul code, testable sans navigateur. Le branchement
+est dans les deux endroits que la consigne nomme : `assignJobStarts`
+(`app/composables/localImport.js`) fait l'appariement et rend les points par
+nom de dessin ; `addSheetCamJobDrop` (`app/composables/files.js`) le branche
+APRÈS l'import et ré-enregistre les fiches avec leurs points. C'est le seul
+moment possible : l'appariement demande la géométrie, qui n'existe qu'une fois
+l'import fait. **Aucune lecture de plus** — ce sont les fiches que
+`importLocalFiles` vient de rendre, on y ajoute un champ et on ré-enregistre.
+
+`cutSettingsFor` part donc désormais avec `starts: []` et `origin: null` : le
+`.job` ne dit pas à quel dessin appartient un bloc, et le supposer était le
+défaut.
+
+**Verrous, et la preuve qu'ils ne sont pas vides.** Trois tests neufs :
+l'appariement des deux blocs de `x4-reference.job` aux deux dessins réels,
+puis **les mêmes blocs avec les dessins présentés dans l'ordre inverse** — le
+cas qui cassait ; le refus (égalité, aucun point, comptes différents) ; et le
+cas à un seul dessin. J'ai remis l'appariement par RANG pendant un instant
+pour vérifier qu'ils mordent : **trois échecs**, `expected [0, 1] to deeply
+equal [1, 0]`, `expected false to be true`, et l'origine de l'éventail servie
+à la place de celle de l'hôte. Remis en place : verts.
+
+**Mesures** : vitest **720** (63 fichiers) ; `npx nuxt build` vert ;
+`docker compose build app` vert ; harnais navigateur sur quatre `.job` réels,
+**dont `Piece_Trou+Fill_x4_ordre_TEST.job`**, le fichier aux dessins
+inversés — voir le tableau ci-dessous.
+
+**Ce qui ne change pas** : la règle du perçage errant reste en place, faute de
+réponse sur l'entité POINT. La question du §9.43 est toujours ouverte, et
+c'est elle qui décide si le nichage revient dans la recette.
+
+| harnais `qa-e2e-job.mjs` (image reconstruite) | résultat |
+|---|---|
+| `Piece_Trou+Fill_x4_ordre_TEST.job` — **les dessins à l'envers** | **tous les verrous verts**, 5 / 5 ; l'éventail reçoit ses 2 chemins, l'hôte ses 3 |
+| `Piece_Trou+Fill_x4_OK.job` | tous les verrous verts, 5 / 5 |
+| `Piece_Trou+Fill.job` | tous les verrous verts, 2 / 2 |
+| `Piece_Trou.job` | tous les verrous verts, 1 / 1 |
+
+Avant le correctif, le fichier « ordre » sortait avec `F1` en échec, les deux
+dessins en « point non lu » et le trou retiré. Après, l'attribution est la
+même que sur le fichier à l'endroit — c'est la géométrie qui la donne, plus
+l'ordre des sections.

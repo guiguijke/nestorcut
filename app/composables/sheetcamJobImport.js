@@ -154,19 +154,15 @@ export function cutSettingsFor(drawing, {
         startPosition: drawing.startPosition ?? null,
         kerfWidth: Number.isFinite(Number(kerfWidth)) ? Number(kerfWidth) : null,
         pierceMarginMm: Number(pierceMarginMm),
-        starts: (drawing.starts || []).map((s) => ({
-            offset: s.offset,
-            leadIn: Number(s.leadIn) || 0,
-            leadInType: Number(s.leadInType ?? drawing.leadInType) || 0,
-            leadOut: Number(s.leadOut ?? drawing.leadOut) || 0,
-            leadOutType: Number(s.leadOutType ?? drawing.leadOutType) || 0,
-            order: s.order ?? null,
-            moved: Boolean(s.moved),
-        })),
-        // Le centre de boîte que SheetCam a mémorisé pour ce dessin. Sert de
-        // CONTRÔLE : s'il s'écarte de celui que notre import mesure, les
-        // points de départ tomberont à côté des contours et le constat le
-        // dira, au lieu de réserver la place au mauvais endroit en silence.
+        // VIDES À CE STADE, ET C'EST VOULU (lot J4-bis-3, §9.45). Le cache
+        // binaire ne dit pas à quel dessin appartient chacun de ses blocs ; le
+        // lot précédent l'a supposé par le RANG des sections, et cela inverse
+        // les dessins dès qu'un `.job` les déclare dans un autre ordre que son
+        // cache. L'appariement se fait par la GÉOMÉTRIE, donc après l'import :
+        // `assignJobStarts` (`localImport.js`) les remplit, `files.js` les
+        // pose sur la fiche. Un `.job` non tranchable les laisse vides, et
+        // c'est le comportement « point non lu ».
+        starts: (drawing.starts || []),
         origin: drawing.origin ?? null,
     }
 }

@@ -345,6 +345,10 @@ const dict = {
         'sheetcamReserve.mouthInsideEnvelope': 'the lead-in reaches further along the outline than the cutout allows',
         'sheetcamReserve.startNotRead': 'the job file does not say where this contour starts',
         'sheetcamReserve.strayPierce': 'the job file pierces inside this cutout, away from any outline',
+        'sheetcamReserve.countMismatch': 'the job file caches a different number of drawings than it lists',
+        'sheetcamReserve.tooManyDrawings': 'too many drawings in this job file to match them by geometry',
+        'sheetcamReserve.noPointPlaced': 'none of the start points of this job file lands on a drawing',
+        'sheetcamReserve.tie': 'two drawings of this job file look alike: which start points belong to which cannot be told',
         'sheetcamReserve.degenerateEdge': 'the outline has no usable direction at the start point',
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': 'Delete',
@@ -1152,6 +1156,10 @@ const dict = {
         'sheetcamReserve.mouthInsideEnvelope': "l'amorce court plus loin le long du contour que la découpe ne le permet",
         'sheetcamReserve.startNotRead': "le fichier .job ne dit pas où ce contour commence",
         'sheetcamReserve.strayPierce': "le fichier .job perce à l'intérieur de cette découpe, hors de tout contour",
+        'sheetcamReserve.countMismatch': "le fichier .job met en cache un nombre de dessins différent de celui qu'il déclare",
+        'sheetcamReserve.tooManyDrawings': "trop de dessins dans ce fichier .job pour les apparier par la géométrie",
+        'sheetcamReserve.noPointPlaced': "aucun point de départ de ce fichier .job ne tombe sur un dessin",
+        'sheetcamReserve.tie': "deux dessins de ce fichier .job se ressemblent : impossible de dire quels points de départ vont à l'un ou à l'autre",
         'sheetcamReserve.degenerateEdge': "le contour n'a pas de direction exploitable au point de départ",
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': "Supprimer",

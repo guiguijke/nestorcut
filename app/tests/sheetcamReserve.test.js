@@ -34,6 +34,7 @@ import {
     LEAD_PERPENDICULAR,
     LEAD_TANGENT,
     START_MATCH_TOL_MM,
+    assignJobBlocks,
     biteAtStart,
     convexHull,
     leadPathLocal,
@@ -523,6 +524,93 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
         expect(circle.filter((p) => pointInRing(p, res.ring))).toHaveLength(0)
         // CONTRÔLE : sur l'anneau d'ORIGINE, la moitié du cercle est libre.
         expect(circle.filter((p) => pointInRing(p, L_HOLE)).length).toBeGreaterThan(20)
+    })
+})
+
+describe('J4-bis-3 — les blocs du binaire s’apparient par la GÉOMÉTRIE', () => {
+    // Les deux dessins du moulinet, tels que notre import les rend :
+    // `Piece_Trou`, carré 100 × 100 centré sur l'origine avec un trou r 35 ;
+    // `Piece_Fillx4`, l'éventail, non centré. Les deux `.job` du dépôt les
+    // référencent, et leur cache binaire porte un bloc pour chacun.
+    const TROU = [[-50, -50], [50, -50], [50, 50], [-50, 50], [-50, -50]]
+    const TROU_HOLE = Array.from({ length: 64 }, (_, i) => {
+        const a = (2 * Math.PI * i) / 64
+        return [35 * Math.cos(a), 35 * Math.sin(a)]
+    })
+    const FAN = [[-19.799, 2.8284], [19.799, 2.8284], [19.799, 30.8284], [-19.799, 30.8284], [-19.799, 2.8284]]
+
+    const blocksOf = (name) => {
+        const job = parseSheetCamJob(new Uint8Array(fs.readFileSync(path.join(FIX, name))))
+        return jobPathRecords(job.binary)
+    }
+
+    it('apparie chaque bloc au bon dessin, dans N’IMPORTE QUEL ordre', () => {
+        // LE DÉFAUT QUE CE VERROU TIENT (§9.45) : le lot J4-bis-2 appariait le
+        // k-ième bloc au k-ième dessin. Sur un `.job` qui déclare ses dessins
+        // dans l'autre ordre, les deux étaient INVERSÉS, les cinq points
+        // tombaient à côté et les trous quittaient le nesting.
+        const blocks = blocksOf('x4-reference.job')
+        expect(blocks).toHaveLength(2)
+        const trou = { name: 'Piece_Trou.DXF', rings: [TROU, TROU_HOLE] }
+        const fan = { name: 'Piece_Fillx4.DXF', rings: [FAN] }
+
+        const droit = assignJobBlocks(blocks, [trou, fan])
+        expect(droit.ambiguous).toBe(false)
+        expect(droit.pairs.map((p) => p.block)).toEqual([0, 1])
+
+        // LE CAS QUI CASSAIT : les dessins présentés dans l'ordre inverse.
+        // Un appariement par rang donnerait [0, 1] — donc l'éventail sur le
+        // bloc de l'hôte — et zéro point placé. Ici l'ordre des blocs suit
+        // les dessins.
+        const inverse = assignJobBlocks(blocks, [fan, trou])
+        expect(inverse.ambiguous).toBe(false)
+        expect(inverse.pairs.map((p) => p.block)).toEqual([1, 0])
+
+        // Et ce sont bien les points qui tranchent : deux pour l'hôte (le
+        // coin du carré et un point du cercle), un pour l'éventail (le milieu
+        // de son arête basse). Les chemins d'entité POINT, à (0 ; 0), ne
+        // tombent sur aucun contour et ne comptent nulle part.
+        expect(droit.totalPlaced).toBe(3)
+        expect(droit.pairs[0].placed).toBe(2)
+        expect(droit.pairs[0].total).toBe(3)
+        expect(droit.pairs[1].placed).toBe(1)
+        expect(droit.pairs[1].total).toBe(2)
+    })
+
+    it('refuse de deviner plutôt que de se tromper', () => {
+        const blocks = blocksOf('x4-reference.job')
+        const trou = { name: 'Piece_Trou.DXF', rings: [TROU, TROU_HOLE] }
+        // Deux dessins IDENTIQUES : les deux affectations valent autant, rien
+        // ne tranche. On rend `ambiguous`, et l'appelant retombe sur « point
+        // non lu » — la dégradation sûre, jamais un pari.
+        const egalite = assignJobBlocks(blocks, [trou, { ...trou, name: 'bis' }])
+        expect(egalite.ambiguous).toBe(true)
+        expect(egalite.reason).toBe('tie')
+
+        // Aucun point sur aucun contour : même refus, autre raison.
+        const rien = assignJobBlocks(blocks, [
+            { name: 'a', rings: [[[1000, 1000], [1010, 1000], [1010, 1010]]] },
+            { name: 'b', rings: [[[2000, 2000], [2010, 2000], [2010, 2010]]] },
+        ])
+        expect(rien.ambiguous).toBe(true)
+        expect(rien.reason).toBe('noPointPlaced')
+
+        // Autant de blocs que de dessins, sinon on ne tente rien.
+        expect(assignJobBlocks(blocks, [trou]).reason).toBe('countMismatch')
+    })
+
+    it('un seul dessin : le bloc unique lui revient', () => {
+        const blocks = blocksOf('piece-l-none-default.job')
+        expect(blocks).toHaveLength(1)
+        const res = assignJobBlocks(blocks, [{
+            name: 'Pièce L.DXF',
+            rings: [L_OUTER, L_HOLE],
+        }])
+        expect(res.ambiguous).toBe(false)
+        expect(res.pairs[0].block).toBe(0)
+        // Deux des trois contours du dessin sont ici (le fuseau est une
+        // ellipse, absente de ce fichier de test) : deux points placés.
+        expect(res.pairs[0].placed).toBe(2)
     })
 })
 
