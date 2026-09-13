@@ -86,3 +86,11 @@ spike/
 # Corpus de test local (DXF de banc et d'import) — jamais dans le dépôt :
 # volumineux, et licences hétérogènes (LibreDWG GPL v3 dans le corpus import).
 .testparts/
+
+# oh-my-claudecode : etat operationnel de session (HUD, replay, progression du
+# setup). Le plugin les declare lui-meme comme artefacts ignorables ; sans
+# cette ligne ils polluent `git status` et risquent d'etre avales par un
+# `git add`. `.omc/skills/` reste suivi : c'est l'exception committable
+# prevue par OMC pour des skills propres au projet.
+.omc/
+!.omc/skills/
