@@ -104,6 +104,55 @@ export function normalizeJobAngle(angle) {
 }
 
 /**
+ * Centre de la boîte englobante du dessin UNE FOIS TOURNÉ de θ.
+ *
+ * POURQUOI CETTE FONCTION EXISTE (défaut trouvé au lot J4, en branchant J2).
+ *
+ * La règle 3 de l'étude dit : `XPos, YPos` = centre de la boîte englobante de
+ * la pièce POSÉE, donc de la pièce TOURNÉE. Le lot J2 l'a implémentée par
+ * `t + R(θ)·c`, avec `c` le centre de boîte du dessin NON tourné — et l'a
+ * validée contre le fichier de référence. Cette validation ne pouvait pas
+ * attraper le défaut : la référence ne porte que des QUARTS DE TOUR, et
+ * `R(θ)` envoie alors la boîte sur la boîte, si bien que les deux formules
+ * coïncident exactement. Elles ne coïncident nulle part ailleurs.
+ *
+ * Mesuré : sur un L de 100 × 100, l'écart entre les deux vaut 0,000 mm à 0°,
+ * 90°, 180°, 270° — et 8,8 mm à 17°, 15,0 mm à 30°, 21,2 mm à 45°. Sur un
+ * triangle, 14,6 mm à 45°. L'UI, elle, autorise `rotationCount` de 1 à 360
+ * (piège AGENTS #61) : le défaut est atteignable dès qu'un utilisateur
+ * demande autre chose que des quarts de tour.
+ *
+ * Une pièce centralement symétrique (rectangle, cercle) ne le révèle jamais :
+ * son centre de boîte est son centre de symétrie, que la rotation transporte
+ * correctement. C'est pourquoi le verrou de ce défaut utilise un L.
+ */
+export function placedBoxCentre(rings, theta) {
+    const cos = Math.cos(theta)
+    const sin = Math.sin(theta)
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const ring of rings || []) {
+        for (const point of ring || []) {
+            const px = Number(point[0])
+            const py = Number(point[1])
+            if (!Number.isFinite(px) || !Number.isFinite(py)) continue
+            const x = px * cos - py * sin
+            const y = px * sin + py * cos
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+        }
+    }
+    if (!Number.isFinite(minX)) {
+        throw new SheetCamJobError('sheetcamNest.emptyDrawing')
+    }
+    return [(minX + maxX) / 2, (minY + maxY) / 2]
+}
+
+/**
  * Pose `.job` d'un exemplaire, depuis la pose moteur et le centre de boîte.
  *
  * `pose` : `{ x, y, angle }` — translation en millimètres, rotation en
@@ -112,6 +161,13 @@ export function normalizeJobAngle(angle) {
  * Le zéro négatif de `Angle` n'est pas une coquette­rie : `-0` est ce que
  * porte le fichier de référence pour θ = 0, et `formatJobNumber` (lot J1)
  * l'écrit tel quel.
+ *
+ * ATTENTION : cette forme n'est EXACTE QUE POUR LES QUARTS DE TOUR (voir
+ * `placedBoxCentre` ci-dessus, jusqu'à 21 mm d'erreur à 45° sur une pièce
+ * asymétrique). Elle reste exportée parce qu'elle est la formule validée
+ * contre la référence du 11/09 ; tout appelant qui dispose des anneaux doit
+ * préférer `jobPlacementFromRings`, et `nestedJobsPerSheet` le fait dès qu'on
+ * lui passe `rings`.
  */
 export function jobPlacement(pose, centre) {
     const theta = Number(pose.angle) || 0
@@ -123,6 +179,26 @@ export function jobPlacement(pose, centre) {
         yPos: Number(pose.y) + (cx * sin + cy * cos),
         // −θ, ramené dans l'intervalle de SheetCam ; le signe de zéro est
         // conservé (JavaScript : -(0) === -0, et -0 % τ === -0).
+        angle: normalizeJobAngle(-theta),
+    }
+}
+
+/**
+ * Pose `.job` EXACTE, pour toute rotation : le centre de boîte est mesuré sur
+ * le dessin tourné, pas transporté depuis le dessin droit.
+ *
+ * `rings` doit être la géométrie RÉELLE du dessin — celle que SheetCam va
+ * couper —, jamais la géométrie réservée du lot J3/J4 : l'appendice d'amorce
+ * dépasse du contour de `amorce + perçage` (8 mm sur le job du propriétaire)
+ * et déplacerait le centre de boîte de la moitié de cela. La réserve ne sort
+ * que pour le nesting ; le `.job` rendu parle de la vraie pièce.
+ */
+export function jobPlacementFromRings(pose, rings) {
+    const theta = Number(pose.angle) || 0
+    const [cx, cy] = placedBoxCentre(rings, theta)
+    return {
+        xPos: Number(pose.x) + cx,
+        yPos: Number(pose.y) + cy,
         angle: normalizeJobAngle(-theta),
     }
 }
@@ -218,7 +294,7 @@ export function cutOrder(items) {
  * Rend `[{ sheet, placements, order, bytes }]` — `bytes` étant le fichier
  * écrit par le lot J1, chemins masqués.
  */
-export function nestedJobsPerSheet(job, { sheets, centres, maskPaths = true } = {}) {
+export function nestedJobsPerSheet(job, { sheets, centres, rings, maskPaths = true } = {}) {
     if (!Array.isArray(sheets) || sheets.length === 0) {
         throw new SheetCamJobError('sheetcamNest.noSheets')
     }
@@ -229,6 +305,14 @@ export function nestedJobsPerSheet(job, { sheets, centres, maskPaths = true } = 
             })
         }
         const placements = items.map((item) => {
+            // `rings` d'abord : c'est la seule voie EXACTE hors quarts de
+            // tour (jusqu'à 21 mm d'écart à 45°, voir `placedBoxCentre`).
+            // `centres` reste accepté pour les appelants qui n'ont que le
+            // centre — c'est la forme validée contre la référence du 11/09.
+            const partRings = rings?.[item.part]
+            if (partRings) {
+                return { part: item.part, ...jobPlacementFromRings(item.pose, partRings) }
+            }
             const centre = centres?.[item.part]
             if (!centre) {
                 throw new SheetCamJobError('sheetcamNest.missingCentre', {

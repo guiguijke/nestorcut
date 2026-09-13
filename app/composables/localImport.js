@@ -14,6 +14,9 @@ import {
 import { drawingExtent, resolveScale } from './advancedImport'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
+import {
+    isSheetCamJob, jobDrawingName, jobSheet, parseSheetCamJob,
+} from '~~/shared/sheetcamJob.js'
 
 // Miroir EXACT de workers/common/worker_common/colors.py — ne pas diverger
 // (le rendu liste/live/résultat partage cette palette).
@@ -58,7 +61,13 @@ function tooHeavyError(refusal) {
     return err
 }
 
-const ACCEPTED_EXTENSIONS = ['.dxf', '.svg']
+// Ces extensions ne servent qu'à FILTRER : le sélecteur de fichiers du
+// système, la passoire de DxfUpload, et ce garde-ci. La VÉRITÉ du format est
+// la SIGNATURE de contenu (piège #31), lue plus bas sur les octets — un `.job`
+// renommé `.dxf` est reconnu comme `.job`, un DXF nommé `.job` repart dans la
+// chaîne DXF. Lot J4 : `.job` sur le chemin navigateur seulement (le miroir
+// serveur est le lot J5).
+const ACCEPTED_EXTENSIONS = ['.dxf', '.svg', '.job']
 
 /** pick_colors Python : sac mélangé par cycles — des pièces d'un même
  * fichier ont des couleurs distinctes. crypto RNG (jamais Math.random). */
@@ -118,6 +127,89 @@ function buildPreviewSvg(parts) {
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 }
 
+// --- `.job` SheetCam (lot J4) ----------------------------------------------
+//
+// Un `.job` n'est PAS un dessin : il ne porte aucune géométrie exploitable
+// (son bloc binaire est le cache interne de SheetCam, jamais décodé — lot J1).
+// Il porte la TÔLE, le KERF, et la liste des dessins référencés par leur
+// chemin sur le disque de l'utilisateur, avec leur quantité et leur opération
+// de coupe. Les DXF, eux, sont à déposer à côté (règle 9 de l'étude).
+//
+// Pourquoi ce routage doit vivre EN JS, avant le wasm : le détecteur de
+// l'importeur wasm n'a que DEUX branches (premier octet non blanc `<` ⇒ SVG,
+// tout le reste ⇒ DXF). Un `.job` parfaitement valide n'y est donc pas
+// rejeté — il part dans l'importeur DXF et ressort en « erreur d'analyse »
+// générique, un message FAUX pour un fichier valide. On ne touche pas au
+// détecteur Rust : l'étendre imposerait un rebuild du wasm (piège #33b).
+
+/**
+ * Lit un `.job` SheetCam depuis ses OCTETS et rend ce dont l'UI a besoin :
+ * `{ job, sheet, kerfWidth, drawings }`.
+ *
+ *  - `job` : la lecture complète du lot J1 (forme préservée, bloc binaire) ;
+ *  - `sheet` : `{ width, height }` en millimètres, lus dans `[Work]` ;
+ *  - `kerfWidth` : largeur de saignée de `[Tool0]`, en millimètres, ou `null`
+ *    si le fichier n'en déclare pas (l'espacement se déduit du kerf par
+ *    `spacingFromKerf`, lot J3 — ce module ne le calcule pas) ;
+ *  - `drawings` : une entrée par NOM de dessin (le chemin absolu est réduit au
+ *    nom de fichier — règle 9), avec :
+ *      `quantity`   nombre d'exemplaires dans le `.job`, **copies `copyOf`
+ *                   comprises** (c'est la quantité à nester) ;
+ *      `parts`      les rangs des sections `Part N` concernées, copies incluses
+ *                   (l'ordre du fichier, jamais retrié — règle 6) ;
+ *      `leadIn`, `leadInType`, `startPosition` : l'opération de coupe de
+ *                   l'ORIGINAL, celle dont le lot J3 déduit la réserve
+ *                   d'amorce. `null` si le fichier ne la déclare pas ;
+ *      `operations` toutes les opérations de l'original, telles que lues.
+ *
+ * Lève un `SheetCamJobError` (son `code` EST une clé i18n `sheetcamJob.*`) si
+ * le fichier n'est pas un `.job` lisible : version inconnue, bloc binaire
+ * absent, aucune pièce. On refuse plutôt que de deviner.
+ */
+export function readSheetCamJob(bytes) {
+    const job = parseSheetCamJob(bytes)
+    const byName = new Map()
+    for (const part of job.parts) {
+        const name = jobDrawingName(part.drawingFile)
+        if (!byName.has(name)) {
+            byName.set(name, {
+                name,
+                quantity: 0,
+                parts: [],
+                leadIn: null,
+                leadInType: null,
+                startPosition: null,
+                operations: [],
+            })
+        }
+        const entry = byName.get(name)
+        entry.quantity += 1
+        entry.parts.push(part.index)
+        // Les opérations ne vivent que sur les ORIGINAUX : une copie `copyOf`
+        // n'a ni section `Operation`, ni géométrie propre — elle rejoue celle
+        // de son original (règle 4). On prend donc la première opération
+        // ACTIVE du premier original rencontré.
+        if (part.copyOf < 0 && entry.operations.length === 0 && part.operations.length) {
+            entry.operations = part.operations
+            const op = part.operations.find((o) => o.enabled) || part.operations[0]
+            entry.leadIn = op.leadIn
+            entry.leadInType = op.leadInType
+            entry.startPosition = op.startPosition
+        }
+    }
+    return {
+        job,
+        sheet: jobSheet(job),
+        kerfWidth: job.kerfWidth,
+        drawings: [...byName.values()],
+    }
+}
+
+/** `readSheetCamJob` sur un `File` du navigateur. */
+export async function readSheetCamJobFile(file) {
+    return readSheetCamJob(new Uint8Array(await file.arrayBuffer()))
+}
+
 /**
  * Importe UN File (DXF/SVG) d'un projet local et rend la LISTE des fiches
  * stockées — une seule d'ordinaire, une par pièce quand l'« import
@@ -148,6 +240,29 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
     }
 
     const source = new Uint8Array(await file.arrayBuffer())
+
+    // `.job` SheetCam : reconnu par SIGNATURE (piège #31), JAMAIS envoyé au
+    // wasm (il en ressortirait en « erreur d'analyse », un message faux pour
+    // un fichier valide — voir le bloc `.job` plus haut).
+    //
+    // Un `.job` ne crée aucune fiche : il n'a pas de géométrie. Ce que l'on
+    // peut dire à l'utilisateur, et qui est vrai, c'est QUELS dessins il doit
+    // déposer à côté — chacun nommé, avec sa quantité. Le panneau d'aperçu qui
+    // consommera `readSheetCamJob` est un autre chantier du lot J4 ; d'ici là
+    // le refus est explicite et actionnable, jamais silencieux.
+    if (isSheetCamJob(source)) {
+        // `parseSheetCamJob` lève un `SheetCamJobError` dont le `code` est
+        // déjà une clé i18n et dont `message === code` : il traverse tel quel
+        // vers l'UI (`files.js` lit `err.message` et `err.params`).
+        const read = readSheetCamJob(source)
+        const err = new Error('jobImport.dropDrawings')
+        err.params = {
+            n: read.drawings.length,
+            names: read.drawings.map((d) => `${d.name} (× ${d.quantity})`).join(', '),
+        }
+        throw err
+    }
+
     if (ext === '.svg') {
         const head = new TextDecoder('utf-8', { fatal: false }).decode(source.subarray(0, 65536))
         if (/<!ENTITY\b/i.test(head)) {
@@ -215,7 +330,21 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
     const { saveLocalFile } = await import('./localFilesStore')
 
     // Provenance (champs ADDITIFS) : ce que le lot E1 a fait au dessin.
-    const provenance = scale !== 1 ? { importScale: scale } : {}
+    // Lot J4 : + d'où vient ce dessin quand il a été appelé par un `.job`
+    // SheetCam — les réglages de COUPE de ce dessin (`sheetcam` : longueur
+    // d'amorce, coin de départ, marge de perçage), qui servent à réserver la
+    // place de l'amorce au nesting, et les octets du `.job` lui-même, pour
+    // pouvoir le réécrire à la fin du solve. Le fichier fait quelques
+    // kilo-octets et il est recopié sur chaque fiche du dépôt : chaque fiche
+    // reste ainsi AUTONOME (aucune dépendance entre enregistrements
+    // IndexedDB, aucune montée de version de la base).
+    const provenance = {
+        ...(scale !== 1 ? { importScale: scale } : {}),
+        ...(options.sheetcam ? { sheetcam: options.sheetcam } : {}),
+        ...(options.sheetcamJobBytes
+            ? { sheetcamJobBytes: options.sheetcamJobBytes.slice().buffer }
+            : {}),
+    }
 
     // Lot E1 : les fiches sont triées par `addedAt` (localFilesStore) — sans
     // horodatage distinct, dix-sept fiches écrites dans la même milliseconde

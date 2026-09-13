@@ -55,6 +55,30 @@ export function downloadLocalZip(record, filename = null) {
         filename || `nesting-${record.slug}.zip`)
 }
 
+/**
+ * `.job` SheetCam d'une tôle — lot J4.
+ *
+ * LE `.job` EST BINAIRE : il porte un bloc de géométrie en cache après
+ * `[BinaryDataStart]`, recopié octet pour octet par le lot J1. Il passe donc
+ * DIRECTEMENT au `Blob` en `Uint8Array` — jamais par le helper `text()`
+ * ci-dessus, qui forcerait une chaîne et corromprait ce bloc (SheetCam ne
+ * retrouverait plus ses dessins).
+ */
+export function downloadLocalJob(record, altId = 0, sheetIndex = 0) {
+    const alt = (record?.alternatives || [])[altId]
+    const job = alt?.jobs?.[sheetIndex]
+    if (!job?.bytes) throw new Error('job_unavailable')
+    const bytes = job.bytes instanceof Uint8Array ? job.bytes : new Uint8Array(job.bytes)
+    download(new Blob([bytes], { type: 'application/octet-stream' }),
+        job.fileName || `${record.slug}_tole${sheetIndex + 1}.job`)
+}
+
+/** Y a-t-il un `.job` à télécharger pour cette alternative ? (le bouton ne
+ *  s'affiche que pour un projet issu d'un `.job` SheetCam). */
+export function hasLocalJobs(record, altId = 0) {
+    return Boolean((record?.alternatives || [])[altId]?.jobs?.length)
+}
+
 /** Téléchargement principal (bouton carte/modal) : DXF seul en mono-tôle,
  * ZIP en multi-tôles — même comportement que les boutons serveur. */
 export function downloadLocalResult(record, altId = 0) {

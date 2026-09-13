@@ -16,9 +16,11 @@ import {
     cutOrder,
     drawingBoxCentre,
     jobPlacement,
+    jobPlacementFromRings,
     nestedJobsPerSheet,
     nestingDepths,
     normalizeJobAngle,
+    placedBoxCentre,
     writtenRanks,
 } from '../../shared/sheetcamNest'
 
@@ -66,6 +68,55 @@ describe('J2 — la règle 3, contre le fichier du 11/09', () => {
         const g = jobPlacement(HOST_POSE, C_HOST)
         expect([g.xPos, g.yPos]).toEqual([50, 50])
         expect(g.angle).toBe(-0)
+    })
+
+    it('le centre de boîte se mesure sur la pièce TOURNÉE (défaut J2, trouvé en J4)', () => {
+        // La règle 3 dit « centre de boîte de la pièce POSÉE », donc tournée.
+        // Le lot J2 l'a implémentée par `t + R(θ)·c`, avec c mesuré sur le
+        // dessin DROIT, et l'a validée contre la référence. Cette validation
+        // ne POUVAIT PAS voir le défaut : la référence ne porte que des
+        // quarts de tour, et R(θ) envoie alors la boîte sur la boîte.
+        const L = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]]
+        const centre = drawingBoxCentre([{ coordinates: L, holes: [] }])
+        const ecart = (deg) => {
+            const theta = (deg * Math.PI) / 180
+            const a = jobPlacement({ x: 0, y: 0, angle: theta }, centre)
+            const b = jobPlacementFromRings({ x: 0, y: 0, angle: theta }, [L])
+            return Math.hypot(a.xPos - b.xPos, a.yPos - b.yPos)
+        }
+        // Aux quarts de tour, les deux formules sont le MÊME point — c'est
+        // pourquoi la référence du 11/09 ne pouvait rien signaler.
+        for (const deg of [0, 90, 180, 270]) expect(ecart(deg)).toBeCloseTo(0, 9)
+        // Ailleurs, elles divergent de plusieurs CENTIMÈTRES, et l'UI
+        // autorise `rotationCount` de 1 à 360 (piège AGENTS #61).
+        expect(ecart(17)).toBeGreaterThan(8)
+        expect(ecart(30)).toBeGreaterThan(14)
+        expect(ecart(45)).toBeGreaterThan(21)
+
+        // Et la forme exacte est bien le centre de la boîte de la pièce
+        // tournée, vérifié à la main sur le L à 45°.
+        const theta = Math.PI / 4
+        const rot = L.map(([x, y]) => [
+            x * Math.cos(theta) - y * Math.sin(theta),
+            x * Math.sin(theta) + y * Math.cos(theta),
+        ])
+        const xs = rot.map((p) => p[0])
+        const ys = rot.map((p) => p[1])
+        const [cx, cy] = placedBoxCentre([L], theta)
+        expect(cx).toBeCloseTo((Math.min(...xs) + Math.max(...xs)) / 2, 9)
+        expect(cy).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 9)
+
+        // CONTRÔLE NÉGATIF : une pièce centralement symétrique ne révèle
+        // JAMAIS le défaut (son centre de boîte est son centre de symétrie).
+        // C'est pour cela que ce verrou utilise un L et pas un rectangle.
+        const rect = [[-20, 3], [20, 3], [20, 31], [-20, 31]]
+        const cRect = drawingBoxCentre([{ coordinates: rect, holes: [] }])
+        for (const deg of [17, 45]) {
+            const t = (deg * Math.PI) / 180
+            const a = jobPlacement({ x: 0, y: 0, angle: t }, cRect)
+            const b = jobPlacementFromRings({ x: 0, y: 0, angle: t }, [rect])
+            expect(Math.hypot(a.xPos - b.xPos, a.yPos - b.yPos)).toBeCloseTo(0, 9)
+        }
     })
 
     it('le centre de boîte n’est pas décoratif : sans lui, 33,7 mm d’erreur', () => {

@@ -543,6 +543,17 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // a) input_items : ids séquentiels fichier × pièce, géométrie simplifiée
     //    AVANT tout (miroir de convert_files_to_input_items).
     const inputItems = []
+    // Constats de réserve d'amorce, un par pièce concernée — ADDITIF, et
+    // destiné à la fiche (un refus doit se voir, pas se taire).
+    const reserveNotes = []
+    // Chargé SEULEMENT si un fichier vient d'un `.job` : un projet ordinaire
+    // ne paie pas ce module (et le style du fichier est l'import dynamique —
+    // voir l'en-tête, « JAMAIS d'import de geometryClient ici »).
+    const needsReserve = (files || []).some((f) => f.sheetcam
+        && (Number(f.sheetcam.leadIn) > 0 || Number(f.sheetcam.pierceMarginMm) > 0))
+    const { partWithReserve, DEFAULT_PIERCE_MARGIN_MM } = needsReserve
+        ? await import('../../shared/sheetcamReserve.js')
+        : {}
     for (const file of files || []) {
         const fileSlug = file.slug
         const count = file.count
@@ -550,10 +561,41 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         const parts = file.parts || []
         for (let partIndex = 0; partIndex < parts.length; partIndex++) {
             const part = parts[partIndex]
-            const { coords, holes } = simplifyPart(
+            let { coords, holes } = simplifyPart(
                 part.coordinates ?? part.coords ?? [],
                 part.holes ?? [],
             )
+            // --- réserve d'amorce (lot J4), pour les pièces venues d'un `.job`
+            //
+            // L'ORDRE N'EST PAS ARBITRAIRE : la réserve s'applique APRÈS la
+            // simplification, jamais avant. Le disque de perçage est un
+            // 32-gone ; à un rayon de 3 mm sa flèche vaut 0,0144 mm, soit
+            // MOINS que la tolérance Douglas-Peucker (SIMPLIFY_MM = 0,05).
+            // Simplifier après la réserve aplatirait donc le disque et
+            // rognerait la marge qu'on vient de promettre. Mesuré, pas
+            // supposé.
+            //
+            // Un fichier sans `.job` n'a pas de `sheetcam` : rien ne se passe,
+            // et le chemin de nesting ordinaire est inchangé.
+            const sc = file.sheetcam
+            if (sc && (Number(sc.leadIn) > 0 || Number(sc.pierceMarginMm) > 0)) {
+                const reserved = partWithReserve({ coordinates: coords, holes }, {
+                    leadIn: Number(sc.leadIn) || 0,
+                    startPosition: sc.startPosition ?? null,
+                    startPositionConfirmed: sc.startPositionConfirmed === true,
+                    pierceMarginMm: Number(sc.pierceMarginMm ?? DEFAULT_PIERCE_MARGIN_MM),
+                })
+                coords = reserved.coordinates
+                holes = reserved.holes
+                reserveNotes.push({
+                    file_slug: fileSlug,
+                    part: partIndex,
+                    applied: reserved.reserve.applied,
+                    reason: reserved.reserve.reason,
+                    holesDropped: reserved.reserve.holesDropped,
+                    holes: reserved.reserve.holes,
+                })
+            }
             inputItems.push({
                 id: inputItems.length,
                 file_slug: fileSlug,
@@ -911,6 +953,10 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         fillHoles: Boolean(fillHoles),
         outputUnit,
         addOutShape,
+        // Lot J4 — constats de réserve d'amorce. ADDITIF et vide pour tout
+        // job sans `.job` : le champ n'existe même pas, donc rien ne change
+        // pour les jobs ordinaires ni pour les anciens résultats relus.
+        ...(reserveNotes.length ? { leadInReserve: reserveNotes } : {}),
     }
     return {
         payload,

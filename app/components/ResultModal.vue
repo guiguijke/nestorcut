@@ -28,6 +28,7 @@
                     @export="onExportIntent"
                     @download-all="downloadLocalAll"
                     @download-single="downloadLocalSingle"
+                    @download-job="downloadLocalSheetJob"
                     @copy-slug="copySlug"
                     @close="resultDialog = false"
                 />
@@ -84,6 +85,16 @@ const downloadLocalAll = () => {
         downloadLocalZip(unref(localRecord))
     } catch (e) {
         console.warn('local download failed', e)
+    }
+}
+// Lot J4 : le `.job` SheetCam de la TOLE A L'ECRAN (`activePart`), comme le
+// telechargement DXF d'une tole juste au-dessus — un `.job` ne porte qu'une
+// seule `[Work]`, donc une tole = un fichier.
+const downloadLocalSheetJob = () => {
+    try {
+        downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart))
+    } catch (e) {
+        console.warn('local job download failed', e)
     }
 }
 

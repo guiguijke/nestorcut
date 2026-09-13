@@ -1,7 +1,7 @@
 
 import { computed, reactive, readonly } from 'vue'
 import { processingType } from '~~/constants/files.constants'
-import { convertInputValue, displayToMm, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
+import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
 import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
 
@@ -384,12 +384,127 @@ async function importStagedFiles(files, slug) {
     await getProject(API_ROUTES.PROJECT(slug))
 }
 
+/**
+ * Dépose d'un `.job` SheetCam et de ses dessins — lot J4.
+ *
+ * Ce que cette fonction fait, dans cet ordre et pour ces raisons :
+ *
+ *  1. PRÉ-REMPLIT la tôle (`[Work]`) et l'espacement (kerf de `[Tool0]`),
+ *     avant d'importer : si un dessin échoue ensuite, l'utilisateur a déjà
+ *     les réglages que son fichier annonce. L'espacement passe par
+ *     `updateKerfSafety`, JAMAIS par `updateParams({ space })` — c'est le
+ *     seul chemin qui garde `space = kerf + 2 × sécurité` cohérent, et
+ *     l'écrire directement ferait re-dériver une autre valeur à la
+ *     réouverture du projet.
+ *  2. IMPORTE chaque dessin présent comme une fiche NORMALE (quantité,
+ *     rotations, couleur, aperçu, suppression), en lui attachant les
+ *     réglages de coupe que le `.job` donne POUR CE DESSIN, et les octets du
+ *     `.job` pour pouvoir le réécrire à la fin du solve.
+ *  3. NOMME ce qui manque. Un `.job` ne contient pas ses dessins (règle 9) :
+ *     l'utilisateur doit les déposer. Importer à moitié en silence
+ *     produirait un `.job` de sortie amputé — ce que `buildNestedJobs`
+ *     refuse de toute façon, mais mieux vaut le dire ici, à la dépose.
+ *
+ * Les réglages restent MODIFIABLES : on pré-remplit, on n'impose pas
+ * (consigne §5 point 2).
+ */
+async function addSheetCamJobDrop(drop, slug) {
+    const { readSheetCamJob, importLocalFiles } = await import('./localImport')
+    const { matchDrawings, prefillFromJob, cutSettingsFor } = await import('./sheetcamJobImport')
+
+    let read
+    try {
+        read = readSheetCamJob(drop.jobBytes)
+    } catch (err) {
+        state.localImportError = err?.message || 'sheetcamJob.unreadable'
+        state.localImportErrorParams = err?.params || {}
+        return
+    }
+
+    // 1. Les réglages que le fichier DIT.
+    const prefill = prefillFromJob(read, { safetyMm: state.params?.safety })
+    if (prefill.sheet) {
+        const u = getUnitState()
+        updateParams({
+            sheets: [{
+                width: mmToDisplay(prefill.sheet.width, u),
+                height: mmToDisplay(prefill.sheet.height, u),
+                count: 1,
+            }],
+        })
+    }
+    if (prefill.kerf != null) updateKerfSafety({ kerf: prefill.kerf })
+
+    // 2. Les dessins présents.
+    const { matched, missing } = matchDrawings(read, drop.drawings)
+    const jobName = drop.jobFile?.name || null
+    const wanted = new Map()
+    let imported = 0
+    for (const { drawing, file } of matched) {
+        try {
+            const records = await importLocalFiles(file, slug, {
+                sheetcam: cutSettingsFor(drawing, { jobName }),
+                sheetcamJobBytes: drop.jobBytes,
+            })
+            imported += records?.length || 0
+            // La QUANTITÉ vient du `.job` : c'est le nombre d'exemplaires
+            // qu'il pose, copies `copyOf` comprises (règle 4). Elle ne peut
+            // pas être posée ICI : `state.projectFiles` n'est rechargé qu'au
+            // `getProject` qui suit la dépose. On la rend à l'appelant, qui
+            // l'applique une fois la liste à jour.
+            for (const rec of records || []) {
+                wanted.set(rec.slug, Number(drawing.quantity) || 1)
+            }
+        } catch (err) {
+            state.localImportError = err?.message || 'localImport.parseError'
+            state.localImportErrorParams = err?.params || {}
+        }
+    }
+
+    // 3. Ce qui manque, nommé.
+    if (missing.length) {
+        state.localImportError = 'jobImport.missingDrawings'
+        state.localImportErrorParams = {
+            n: missing.length,
+            names: missing.map((d) => d.name).join(', '),
+        }
+    } else if (!imported) {
+        state.localImportError = 'jobImport.dropDrawings'
+        state.localImportErrorParams = {
+            n: read.drawings.length,
+            names: read.drawings.map((d) => `${d.name} (× ${d.quantity})`).join(', '),
+        }
+    }
+    return wanted
+}
+
 async function addFiles(files, slug) {
     if (state.projectLocal) {
         // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
         // byte ne transite par le serveur.
         state.localImportError = ''
         state.localImportErrorParams = {}
+        // Lot J4 — un `.job` SheetCam dans la dépose. Il passe AVANT le
+        // panneau « Import avancé » : un `.job` porte déjà sa tôle, son
+        // espacement et ses quantités, il n'y a rien à éclater ni à mettre à
+        // l'échelle. Reconnu par SIGNATURE (piège #31) ; sans `.job` dans la
+        // dépose, `splitSheetCamDrop` rend `null` et rien ne change.
+        {
+            const { splitSheetCamDrop } = await import('./sheetcamJobImport')
+            const drop = await splitSheetCamDrop(files)
+            if (drop) {
+                const wanted = await addSheetCamJobDrop(drop, slug)
+                await getProject(API_ROUTES.PROJECT(slug))
+                // Les quantités du `.job`, une fois la liste rechargée.
+                if (wanted?.size) {
+                    state.projectFiles.forEach((f, index) => {
+                        const n = wanted.get(f.slug)
+                        if (n != null) updateCount(n, index)
+                    })
+                }
+                return
+            }
+        }
         // Lot E1-bis : panneau « Import avancé » OUVERT ⇒ la dépose passe
         // par l'aperçu (le fichier est lu une fois, aucune fiche n'est
         // créée) et l'import attend « Importer ». Panneau fermé ⇒ chemin

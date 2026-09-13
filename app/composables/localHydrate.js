@@ -129,6 +129,11 @@ export function hydrateLocalItem(item, record = null) {
         svgs: alternatives[0]?.svgs || [],
         alternatives,
         isMultiSheet: (alternatives[0]?.layoutCount ?? 0) > 1,
+        // Lot J4 : ce résultat vient-il d'un `.job` SheetCam ? Le bouton
+        // « Télécharger le .job » n'existe que dans ce cas — un projet
+        // ordinaire ne voit rien de plus qu'avant (champ ADDITIF, absent des
+        // anciens records, donc `false` à la relecture).
+        hasJobs: Boolean(alternatives[0]?.jobs?.length),
         // Marqueur : les boutons de téléchargement passent par localDownloads
         // (contenus persistés, zéro réseau), jamais par une URL serveur.
         downloadUrl: `local:${item.slug}`,

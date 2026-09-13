@@ -337,8 +337,10 @@ async function buildClientPayload(meta) {
     ])
     const files = []
     const sources = {}
+    const records = []
     for (const f of meta.files || []) {
         const record = await getLocalFile(f.slug)
+        if (record) records.push(record)
         if (!record) {
             // Fichier importé sur un autre appareil, ou IndexedDB vidée :
             // erreur explicite — le job sera refundé (local-fail).
@@ -350,6 +352,11 @@ async function buildClientPayload(meta) {
             count: f.count,
             rotations: f.rotations,
             parts: record.parts,
+            // Lot J4 — ce qu'un `.job` SheetCam nous apprend sur la COUPE de
+            // ce dessin : longueur d'amorce et coin de départ, lus par
+            // opération. Absent pour tout fichier importé normalement, et
+            // alors la réserve d'amorce ne s'applique pas (chemin inchangé).
+            ...(record.sheetcam ? { sheetcam: record.sheetcam } : {}),
         })
         sources[f.slug] = new Uint8Array(record.dxfBytes)
     }
@@ -360,7 +367,40 @@ async function buildClientPayload(meta) {
             pinwheelCapacity: (ring, coords, spaceMm, allowed) => geoPinwheelCapacity(ring, coords, spaceMm, allowed),
         },
     )
-    return { payload, sources, itemMap }
+    // Lot J4 — de quoi réécrire un `.job` SheetCam à la fin du solve : le
+    // fichier déposé, les noms de dessins, et les anneaux RÉELS (ceux du
+    // dessin, jamais les anneaux réservés ni les anneaux simplifiés — les
+    // poses `.job` se calculent sur ce que SheetCam va couper).
+    const sheetcam = jobContextFromRecords(records)
+    return { payload, sources, itemMap, ...(sheetcam ? { sheetcam } : {}) }
+}
+
+/**
+ * Contexte `.job` d'un projet, depuis les fiches lues d'IndexedDB.
+ *
+ * Rend `null` dès qu'aucune fiche ne vient d'un `.job` : un projet ordinaire
+ * ne paie rien et ne voit rien changer. Les octets du `.job` sont portés par
+ * chaque fiche issue du dépôt (quelques kilo-octets, dupliqués pour que
+ * chaque fiche soit autonome) : on prend le premier trouvé.
+ */
+function jobContextFromRecords(records) {
+    const ringsByFileSlug = {}
+    const fileNamesBySlug = {}
+    let jobBytes = null
+    let baseName = null
+    for (const rec of records) {
+        if (!rec.sheetcam) continue
+        if (!jobBytes && rec.sheetcamJobBytes) {
+            jobBytes = new Uint8Array(rec.sheetcamJobBytes)
+            baseName = rec.sheetcam.jobName || null
+        }
+        fileNamesBySlug[rec.slug] = rec.sheetcam.drawingName || rec.name
+        ringsByFileSlug[rec.slug] = (rec.parts || [])
+            .flatMap((p) => [p.coordinates, ...(p.holes || [])])
+            .filter((ring) => Array.isArray(ring) && ring.length >= 3)
+    }
+    if (!jobBytes) return null
+    return { jobBytes, ringsByFileSlug, fileNamesBySlug, baseName }
 }
 
 
@@ -381,12 +421,16 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // serveur), elle vient du document job via le registre — sans elle, un
     // refus de géométrie retomberait sur le message générique.
     let itemMap = seedItemMap || null
+    // Lot J4 : de quoi reecrire un `.job` SheetCam a la fin du solve. Reste
+    // `null` pour tout projet ordinaire — le chemin est alors inchange.
+    let sheetcamContext = null
     if (fetched?.mode === 'client-built') {
         try {
             const built = await buildClientPayload(fetched)
             payload = built.payload
             sources = built.sources
             itemMap = built.itemMap
+            sheetcamContext = built.sheetcam || null
         } catch (e) {
             // Géométrie locale absente ou instance invalide : refund propre,
             // jamais de quota consommé sur un job qui n'a pas pu démarrer.
@@ -653,11 +697,53 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             }
         } catch { /* leviers best-effort : le badge unplaced reste */ }
     }
+    // --- lot J4 : un `.job` SheetCam par tôle, si le projet vient d'un `.job`
+    //
+    // On l'attache aux alternatives JUSTE AVANT l'enregistrement, sur les
+    // layouts APRÈS post-pass — c'est l'état livré, celui que l'utilisateur
+    // voit et coupe. Best-effort ENCADRÉ : un `.job` impossible à écrire
+    // (dessin absent du fichier déposé, règle 5 de l'étude) ne doit pas
+    // faire perdre le résultat de nesting lui-même, mais il ne doit pas non
+    // plus se taire — la raison est enregistrée et la fiche l'affiche.
+    let jobError = null
+    if (sheetcamContext && alternatives.length) {
+        try {
+            const { buildNestedJobs, sheetsFromLayouts } = await import('./sheetcamJobResult')
+            const { layoutTransforms, nestedInForLayout, normalizeLayouts } = await import('./localBridge')
+            const { parseSheetCamJob } = await import('../../shared/sheetcamJob')
+            const job = parseSheetCamJob(sheetcamContext.jobBytes)
+            const partsById = new Map((payload?.parts || []).map((p) => [String(p.id), p]))
+            const base = (sheetcamContext.baseName || 'nestorcut').replace(/\.job$/i, '')
+            for (let k = 0; k < alternatives.length; k++) {
+                const layouts = normalizeLayouts(result?.alternatives?.[k] || result)
+                if (!layouts.length) continue
+                const sheets = sheetsFromLayouts(layouts, partsById, {
+                    layoutTransforms, nestedInForLayout,
+                })
+                alternatives[k] = {
+                    ...alternatives[k],
+                    jobs: buildNestedJobs(job, {
+                        sheets,
+                        ringsByFileSlug: sheetcamContext.ringsByFileSlug,
+                        fileNamesBySlug: sheetcamContext.fileNamesBySlug,
+                        baseName: base,
+                    }).map((f) => ({ fileName: f.fileName, bytes: f.bytes })),
+                }
+            }
+        } catch (e) {
+            // `SheetCamJobError.code` est DÉJÀ une clé i18n : elle voyage
+            // telle quelle jusqu'à la fiche, jamais un message technique
+            // brut à l'écran (piège #24).
+            jobError = { code: e?.code || 'sheetcamJob.writeFailed', params: e?.params || {} }
+        }
+    }
+
     try {
         await saveLocalResult({
             slug: jobSlug,
             projectSlug: projectSlug || null,
             createdAt: Date.now(),
+            ...(jobError ? { sheetcamJobError: jobError } : {}),
             problem: result?.problem || payload?.problem || null,
             isSpp: (result?.problem || payload?.problem) === 'spp',
             sheets: [[sheetWidth, sheetHeight]],

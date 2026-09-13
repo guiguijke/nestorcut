@@ -52,15 +52,20 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
-    // Projet « cet appareil » : DXF/SVG seulement (DWG = serveurs).
+    // Projet « cet appareil » : DXF/SVG/.job seulement (DWG = serveurs).
     local: {
         type: Boolean,
         default: false
     }
 })
 
+// Cette liste ne sert qu'au FILTRE du sélecteur de fichiers du système (et à
+// la même passoire dans DxfUpload). La vérité du format reste la SIGNATURE de
+// contenu, lue à l'import (piège #31 : les slugs d'upload finissaient tous en
+// `.dxf` quel que soit le format réel). Lot J4 : `.job` SheetCam sur le chemin
+// navigateur seulement — le miroir serveur est le lot J5.
 const uploadExtensions = computed(() =>
-    props.local ? ['.dxf', '.svg'] : ['.dxf', '.svg', '.dwg']
+    props.local ? ['.dxf', '.svg', '.job'] : ['.dxf', '.svg', '.dwg']
 )
 
 const emit = defineEmits(["addFiles"])

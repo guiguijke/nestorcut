@@ -575,6 +575,105 @@ export function applyHoleFill(parts, layouts, space, postPass = null) {
     return recovered
 }
 
+/**
+ * NICHAGE D'UNE TÔLE — qui est posé dans le trou de qui (lot J4).
+ *
+ * Rend un tableau de la LONGUEUR de `layout.placed_items`, aligné index par
+ * index : pour chaque pièce posée, l'INDEX (dans les pièces posées de CETTE
+ * tôle) de la pièce dont un trou l'héberge, ou `null` si elle est posée à
+ * plat sur la tôle. C'est exactement la forme que `nestingDepths` /
+ * `cutOrder` (`shared/sheetcamNest.js`) attendent sous le nom `nestedIn` :
+ * couper le contour extérieur d'un hôte avant la pièce logée dans son trou
+ * libère cette pièce, qui bouge — l'ordre de coupe du `.job` en dépend.
+ *
+ * Le critère est le MÊME que celui du post-pass (`nestedHole` dans
+ * `_fillOneSheetHoles`) : centroïde d'aire de l'anneau posé à l'intérieur
+ * de l'anneau du trou posé. Quatre écarts DÉLIBÉRÉS, chacun pour une raison
+ * mesurable :
+ *
+ *  - c'est une lecture de l'état FINAL, pas un sous-produit de la passe.
+ *    Le hole-fill n'est pas le seul à nicher : l'expansion J-085
+ *    (`expandMeta` / `expandPacks`) niche AVANT lui, l'alternative
+ *    structurelle (`selfContained`, piège #41) remplit ses trous elle-même
+ *    et saute `applyHoleFill` entièrement, et la ceinture par tôle peut
+ *    ANNULER la passe (piège #58) — une info collectée dans la passe
+ *    mentirait dans ces trois cas ;
+ *  - `_fillOneSheetHoles` ne classe que les pièces SANS trou (elles seules
+ *    peuvent être des fillers) ; ici un hôte niché doit pouvoir l'être à
+ *    son tour, sinon la profondeur 2 (une pièce dans le trou d'une pièce
+ *    elle-même nichée) ne chaînerait pas ;
+ *  - le centroïde seul NE SUFFIT PAS, et c'est le point non évident : sur
+ *    des pièces concentriques (un hôte 100 × 100 à trou 60 × 60, une pièce
+ *    40 × 40 à trou 20 × 20 posée dedans), le centroïde de l'HÔTE tombe dans
+ *    le trou de la pièce qu'il héberge — le critère nu rendrait « l'hôte est
+ *    niché dans son filler ». On exige donc en plus que le trou soit d'AIRE
+ *    STRICTEMENT PLUS GRANDE que l'anneau extérieur du niché : c'est vrai de
+ *    tout nichage réel (un anneau contenu dans un autre a une aire moindre),
+ *    faux du sens inverse, et cela garantit AU PASSAGE qu'aucune chaîne ne
+ *    boucle — les aires décroissent strictement à chaque niveau, ce que
+ *    `nestingDepths` (qui JETTE sur un cycle) attend de nous ;
+ *  - à candidats multiples — le centroïde d'une pièce de profondeur 2 est
+ *    dans le trou de son hôte ET dans celui de l'hôte de son hôte — on
+ *    retient le trou d'AIRE LA PLUS PETITE, c'est-à-dire le plus intérieur.
+ *    C'est ce qui rend la chaîne exacte au lieu de la court-circuiter.
+ *
+ * Piège #52 : en BPP les tôles PARTAGENT le repère de coordonnées. Cette
+ * fonction ne voit qu'UN layout et ne rend que des index de CE layout —
+ * une pièce libre de la tôle 1 posée aux coordonnées d'un trou de la tôle 2
+ * n'est jamais déclarée nichée.
+ */
+export function nestedInForLayout(layout, partsById) {
+    const placed = layout?.placed_items || []
+    const out = new Array(placed.length).fill(null)
+    const polys = new Array(placed.length).fill(null)
+    const areas = new Array(placed.length).fill(0)
+    const holes = [] // { ring, bb, area, owner }
+    for (let i = 0; i < placed.length; i++) {
+        const item = partsById?.get(String(placed[i]?.item_id))
+        if (!item) continue
+        const t = placed[i].transformation || {}
+        const rot = t.rotation ?? 0
+        const tx = t.translation?.[0] ?? 0
+        const ty = t.translation?.[1] ?? 0
+        const coords = _itemCoords(item)
+        if (coords.length >= 3) {
+            polys[i] = _placedPoly(coords, rot, tx, ty)
+            areas[i] = _ringArea(polys[i]) // déjà une aire absolue
+        }
+        for (const h of item.holes || []) {
+            if (!h || h.length < 3) continue
+            const ring = _placedPoly(h, rot, tx, ty)
+            holes.push({ ring, bb: _bbOf(ring), area: _ringArea(ring), owner: i })
+        }
+    }
+    if (!holes.length) return out
+    for (let i = 0; i < placed.length; i++) {
+        const poly = polys[i]
+        if (!poly) continue
+        const c = _centroid(poly)
+        let host = null
+        let hostArea = Infinity
+        for (const h of holes) {
+            // Une pièce ne se niche pas dans son propre trou — le centroïde
+            // d'aire d'un anneau en couronne tombe DANS sa propre découpe.
+            // Le critère d'aire ci-dessous l'écarte déjà sur une géométrie
+            // saine ; cette ligne tient sur une géométrie qui ne l'est pas
+            // (anneau intérieur plus grand que l'extérieur), où elle évite
+            // une boucle `i → i` que `nestingDepths` refuserait.
+            if (h.owner === i) continue
+            // Un trou n'héberge que plus petit que lui (voir l'en-tête : le
+            // cas concentrique, et l'absence de cycle qui en découle). Une
+            // aire NaN — anneau dégénéré — échoue ici et rend `null`.
+            if (!(h.area > areas[i])) continue
+            if (c[0] < h.bb[0] || c[0] > h.bb[2] || c[1] < h.bb[1] || c[1] > h.bb[3]) continue
+            if (!_pin(c, h.ring)) continue
+            if (h.area < hostArea) { hostArea = h.area; host = h.owner }
+        }
+        out[i] = host
+    }
+    return out
+}
+
 const _bbOf = (poly) => {
     let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity
     for (const [x, y] of poly) {
@@ -1350,7 +1449,20 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 const containerId = layout.container_id ?? 0
                 const [binWidth, binHeight] = sheetDims(payload, containerId)
                 const transforms = layoutTransforms(layout, partsById)
-                containers.push({ bin_width: binWidth, bin_height: binHeight, transforms })
+                containers.push({
+                    bin_width: binWidth,
+                    bin_height: binHeight,
+                    transforms,
+                    // J4 : nichage de la tôle, ALIGNÉ index par index sur
+                    // `transforms` (donc sur `layout.placed_items`). Champ
+                    // ADDITIF (règle #19b) : personne n'est obligé de le lire,
+                    // et le rapport wasm ignore les clés qu'il ne connaît pas
+                    // (piège #11 — `transforms` lui passe déjà file_slug,
+                    // handles et color). Lu APRÈS tous les post-pass : c'est
+                    // l'état LIVRÉ qui décide de l'ordre de coupe du `.job`,
+                    // pas l'intention d'une passe.
+                    nestedIn: nestedInForLayout(layout, partsById),
+                })
                 const svg = await geoExportSvgSheet({
                     transforms,
                     items: svgItems,

@@ -307,6 +307,19 @@
                     trackingTag="result_download"
                     @click="downloadLocalSingle"
                 />
+                <!-- Lot J4 — le `.job` SheetCam, un par tôle. Le bouton
+                     n'existe que pour un projet issu d'un `.job` déposé
+                     (`resultModalData.hasJobs`) : un projet ordinaire ne voit
+                     rien de plus qu'avant. -->
+                <MainButton
+                    v-if="isLocal && resultModalData.hasJobs"
+                    :label="t('jobImport.downloadJob')"
+                    :isDisable="isHaveError || isUnfit"
+                    :size="sizeType.s"
+                    :theme="themeType.secondary"
+                    trackingTag="result_download_job"
+                    @click="downloadLocalJob"
+                />
                 <MainButton
                     :label="t('result.tryAgain')"
                     :size="sizeType.s"
@@ -326,7 +339,7 @@ import { themeType } from '~~/constants/theme.constants'
 const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
-    'download-single', 'close', 'copy-slug',
+    'download-single', 'download-job', 'close', 'copy-slug',
 ])
 
 const t = (...a) => props.d.t(...a)
@@ -384,6 +397,9 @@ const copyReport = 'copy'
 const exportCsv = 'csv'
 const downloadLocalAll = () => emit('download-all')
 const downloadLocalSingle = () => emit('download-single')
+// Lot J4 : le `.job` SheetCam d'une tole. L'orchestrateur (ResultModal) sait
+// quelle alternative et quelle tole sont a l'ecran.
+const downloadLocalJob = () => emit('download-job')
 // Le bloc rapport doit rester atteignable par scrollIntoView (ouverture
 // « Rapport de nesting » depuis la carte de resultat).
 const reportEl = ref(null)
