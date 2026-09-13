@@ -2,7 +2,9 @@
 // PROJET, et la fenêtre de choix au dépôt
 // (`docs/PLAN-ECLATEMENT-2026-09-12.md` §6.2).
 //
-// Six cas, ceux de la consigne :
+// Sept cas : les six de la consigne, plus le cas serveur G demandé par la
+// vérification du lot E3 (`docs/PLAN-ECLATEMENT-2026-09-12.md`, section
+// « Lot E3 — vérification »).
 //
 //   A. interrupteur ÉTEINT, un DXF multi-pièces ⇒ UNE fiche, nom intact,
 //      AUCUNE fenêtre, et rien n'est mis en attente de lecture ;
@@ -15,7 +17,11 @@
 //      tous les trois ;
 //   E. ALLUMÉ, un `.job` SheetCam + ses dessins ⇒ AUCUNE fenêtre (un `.job`
 //      porte déjà sa tôle et ses quantités — règle du lot J4) ;
-//   F. captures FR et EN de l'interrupteur allumé et de la fenêtre.
+//   F. captures FR et EN de l'interrupteur allumé et de la fenêtre ;
+//   G. projet « NOS SERVEURS », interrupteur allumé, « Éclater » ⇒ les
+//      fiches sont produites PAR LE WORKER, une par pièce, et mesurées sur la
+//      réponse de `/api/project/<slug>` — jamais sur l'écran. C'est le pendant
+//      serveur du cas C, et l'équivalent du cas G du lot E2.
 //
 // CE QUE CE HARNAIS NE MESURE PAS, et qu'il faut savoir : le NOMBRE D'APPELS
 // WASM. Playwright ne voit pas les appels d'un module wasm chargé dans un
@@ -138,18 +144,26 @@ async function login() {
 }
 
 /**
- * Crée un projet « cet appareil » avec l'interrupteur dans l'état demandé, en
- * déposant `files`. L'interrupteur est celui de la PAGE D'ACCUEIL : son état
- * part avec la création et devient une propriété du projet.
+ * Crée un projet avec l'interrupteur dans l'état demandé, en déposant `files`.
+ * L'interrupteur est celui de la PAGE D'ACCUEIL : son état part avec la
+ * création et devient une propriété du projet.
+ *
+ * `local: false` crée un projet « nos serveurs ». Les cartes de mode sont des
+ * `role=radio` (PrivacyModePicker) : viser le bouton ferait tomber le clic sur
+ * « Activer le coffre ».
  */
-async function createProject(files, { advanced = false } = {}) {
+async function createProject(files, { advanced = false, local = true } = {}) {
     await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
-    const devCard = page
+    const card = page
         .locator('.create__privacy [role="radio"]')
-        .filter({ hasText: /(This device|Cet appareil)/i })
+        .filter({ hasText: local ? /(This device|Cet appareil)/i : /(Our servers|Nos serveurs)/i })
         .first()
-    if (await devCard.count()) await devCard.click().catch(() => {})
+    await card.waitFor({ timeout: 30000 })
+    await card.click().catch(() => {})
+    if (!local && (await card.getAttribute('aria-checked')) !== 'true') {
+        throw new Error('le projet « nos serveurs » n’est pas sélectionné (aria-checked)')
+    }
 
     const sw = page.locator('[data-testid="advanced-import-switch-btn"]')
     await sw.waitFor({ timeout: 30000 })
@@ -173,6 +187,49 @@ async function createProject(files, { advanced = false } = {}) {
  * faire cette erreur (0 ligne au cas B) et c'est le harnais qui était faux,
  * pas la fenêtre.
  */
+/**
+ * Fiches d'un projet SERVEUR, lues dans la réponse de l'API — jamais déduites
+ * de l'écran (cas G). Reprises du harnais du lot E2.
+ */
+const serverCards = (slug) => page.evaluate(async (s) => {
+    const data = await $fetch(`/api/project/${s}`)
+    return (data.files || []).map((f) => {
+        const ws = (f.parts || []).map((p) => p.width)
+        const hs = (f.parts || []).map((p) => p.height)
+        return {
+            name: f.name,
+            status: f.processingStatus,
+            parts: (f.parts || []).length,
+            maxWidth: ws.length ? Math.max(...ws) : null,
+            maxHeight: hs.length ? Math.max(...hs) : null,
+        }
+    })
+}, slug)
+
+/**
+ * Attend que TOUTES les fiches du projet serveur soient traitées.
+ *
+ * Boucle côté Node, PAS `waitForFunction` : un prédicat `async` y rend une
+ * Promesse, que le polling injecté juge VRAIE tout de suite — l'attente
+ * réussit alors sans rien attendre (mesure du lot E2 : 1 fiche
+ * « in-progress » acceptée pour 18 attendues).
+ */
+async function waitServerDone(slug, expected, timeoutMs = 300000) {
+    const t0 = Date.now()
+    let files = []
+    while (Date.now() - t0 < timeoutMs) {
+        files = await serverCards(slug)
+        const done = files.filter((f) => f.status === 'done').length
+        if (files.length >= expected && done === files.length) return files
+        if (files.some((f) => f.status === 'error')) {
+            throw new Error(`fiche en erreur côté serveur (${done}/${files.length} prêtes)`)
+        }
+        await page.waitForTimeout(2000)
+    }
+    throw new Error(`attente serveur épuisée : ${files.length} fiche(s), `
+        + `${files.filter((f) => f.status === 'done').length} prêtes, ${expected} attendues`)
+}
+
 async function choiceOpen(timeout = 8000, expectFiles = 0) {
     try {
         await page.locator('[data-testid="import-choice"]').waitFor({ timeout })
@@ -338,6 +395,52 @@ try {
         } catch (e) { log('capture échouée (non fatale):', String(e).slice(0, 100)) }
     }
     check('F1 captures produites', fs.existsSync(path.join(OUT, `F-fenetre-${LOCALE}.png`)))
+
+    // ---------- G. projet « NOS SERVEURS » : la même fenêtre, l'éclatement
+    // fait par le WORKER -------------------------------------------------
+    //
+    // Pourquoi DEUX dépôts. Sur le chemin « nos serveurs », la création
+    // emporte les octets avec elle (`home.vue` : le multipart part avec le
+    // POST du projet). L'interrupteur ne gouverne donc PAS cette première
+    // dépose — il est posé juste après, par le même PATCH que la page projet,
+    // et il gouverne les suivantes. La séquence de l'utilisateur est celle-ci,
+    // et c'est elle qu'on mesure : une fiche ordinaire, puis une dépose qui
+    // passe par la fenêtre.
+    //
+    // Tout est mesuré sur la réponse de l'API, jamais sur l'écran.
+    const slugG = await createProject([FILE], { advanced: true, local: false })
+    log('cas G, projet serveur :', slugG)
+    const g0 = await waitServerDone(slugG, 1)
+    check('G1 la création « nos serveurs » donne la fiche ordinaire',
+        g0.length === 1 && g0[0].parts === PARTS,
+        `${g0.length} fiche(s), ${g0[0]?.parts} pièces`)
+
+    await page.setInputFiles('input[name="dxf"]', [FILE])
+    check('G2 la fenêtre s’ouvre AUSSI sur un projet « nos serveurs »',
+        await choiceOpen(30000, 1))
+    await page.locator('[data-testid="import-choice-explode"]').click()
+    await page.locator('[data-testid="import-preview"]').waitFor({ timeout: 30000 })
+    await shot('G-apercu-serveur.png')
+    await page.locator('[data-testid="import-preview-confirm"]').click()
+
+    // L'éclatement serveur redépose une fiche par pièce dans la boucle
+    // ordinaire du worker : 1 (première dépose) + PARTS. Le dessin éclaté,
+    // lui, est marqué et masqué — il ne compte pas.
+    const gFiles = await waitServerDone(slugG, 1 + PARTS, 600000)
+    const gExploded = gFiles.filter((f) => /\(\d+\/\d+\)/.test(f.name))
+    log('cas G, fiches serveur :', gFiles.length, 'dont éclatées', gExploded.length,
+        JSON.stringify(gExploded.slice(0, 3).map((f) => `${f.name} [${f.parts}p]`)))
+    check('G3 une fiche serveur par pièce, produite par le worker',
+        gExploded.length === PARTS,
+        `${gExploded.length} fiches éclatées pour ${PARTS} pièces`)
+    check('G4 chaque fiche éclatée porte UNE pièce, rangs 1..N sans trou',
+        gExploded.length === PARTS
+        && gExploded.every((f) => f.parts === 1)
+        && new Set(gExploded.map((f) => Number(f.name.match(/\((\d+)\/\d+\)/)?.[1]))).size === PARTS,
+        JSON.stringify(gExploded.map((f) => f.parts).slice(0, 5)))
+    check('G5 le dessin éclaté n’est plus une fiche (1 dépose ordinaire + N)',
+        gFiles.length === 1 + PARTS, `${gFiles.length} fiches pour ${1 + PARTS} attendues`)
+    await shot('G-eclatement-serveur.png')
 
     log(failures ? `${failures} VERROU(S) EN ÉCHEC` : 'TOUS LES VERROUS SONT VERTS')
 } catch (e) {

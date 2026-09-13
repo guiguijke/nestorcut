@@ -1233,3 +1233,41 @@ reconstruite. Une heure.
 
 **GO déploiement E3** (app seule) après ce cas G ; il peut partir avec J4-ter
 dans la même promotion ou séparément, au choix de l'agent selon la recette.
+
+### Lot E3 — cas G du harnais (implémenteur, 13/09, nuit) : le chemin serveur, mesuré
+
+La condition posée par la vérification est levée. `scripts/qa-e2e-advanced-import.mjs`
+compte désormais **sept cas**, le septième étant le pendant serveur du cas C :
+projet « Nos serveurs », interrupteur allumé, « Éclater », et **tout est
+mesuré sur la réponse de `/api/project/<slug>`**, jamais sur l'écran.
+
+**Pourquoi deux dépôts, et pas un.** Sur le chemin « nos serveurs », la
+création emporte les octets avec elle (`home.vue` : le multipart part avec le
+POST du projet). L'interrupteur ne gouverne donc **pas** cette première
+dépose — il est posé juste après, par le même PATCH que la page projet, et il
+gouverne les suivantes. Écrire le cas autrement aurait mesuré une intention,
+pas le produit. La séquence du harnais est donc celle de l'utilisateur : une
+fiche ordinaire, puis une dépose qui passe par la fenêtre.
+
+| Verrou | Mesure |
+|---|---|
+| `G1` la création « nos serveurs » donne la fiche ordinaire | 1 fiche, 17 pièces |
+| `G2` la fenêtre s'ouvre AUSSI sur un projet « nos serveurs » | oui |
+| `G3` une fiche serveur par pièce, produite par le worker | **17 fiches éclatées pour 17 pièces** |
+| `G4` chaque fiche éclatée porte UNE pièce, rangs 1..N sans trou | oui, 17 rangs distincts |
+| `G5` le dessin éclaté n'est plus une fiche | **18 fiches** = 1 dépose ordinaire + 17 |
+
+**Sur l'image reconstruite** (`nest2d-app:local` du 13/09 23 h 25, postérieure
+à `2e4109a5` ; workers `nest2d-nesting-worker:dev` et
+`nest2d-file-processing-worker:dev` reconstruits et recréés dans la foulée,
+`assert_images_head.sh` vert) : **21 verrous sur 21 au vert**, cas A à G.
+
+**Ce que ce cas ne mesure pas, et qu'il faut savoir.** Il ne rejoue pas la
+parité chiffrée navigateur ↔ serveur pièce par pièce, ni l'échelle serveur :
+c'était le travail du lot E2, mesuré à `241f5dda` (0 écart sur les 17, et
+l'échelle à `806,3` mm contre `806,31`). Ce cas-ci vérifie ce que le lot E3
+ajoute — que la **fenêtre de choix** atteint bien le chemin serveur et que
+l'option voyage jusqu'au worker.
+
+Les sorties brutes restent hors dépôt (`~/qa-out/e3-casG/`) : elles portent le
+nom réel d'un fichier d'atelier.
