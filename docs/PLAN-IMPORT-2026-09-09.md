@@ -995,3 +995,83 @@ déploiement — l'import est derrière `auth`. Ce qui est mesuré à la place :
 l'A/B sur les 148 fichiers du corpus (148/148 identiques, pièces, aire,
 trous, handles et constats) et la présence du code dans le conteneur qui
 l'exécute.
+
+
+### Lot 2e — le temps d'import du NAVIGATEUR (implémenteur, 13/09)
+
+Le lot 2d a réglé le serveur (132 s → 15 s sur le corpus). Restait l'écart
+mesuré au 2d : **deux fichiers au-delà de 10 s côté navigateur**, dont un
+refusé à 20,2 s par le budget… alors que le serveur le lit en 0,85 s. Autre
+cause, autre lot.
+
+#### Le correctif : un index de boîtes, et pourquoi il ne change RIEN
+
+`node_segments` testait **toutes les paires** de segments, deux fois (une
+passe pour les intersections canoniques, une passe pour les points et les
+jonctions en T) : O(n²) sur 30 000 arêtes.
+
+Le point qui rend l'index sûr est que les deux prédicats du noding sont
+**exacts et stricts** :
+
+- `seg_intersection` exige `t, u ∈ (0,1)` et rend `None` sur des segments
+  parallèles ou colinéaires ;
+- `point_on_segment` exige `cross == 0.0` **exactement**, puis `t ∈ (0,1)`.
+
+Dans les deux cas, le point retenu est à l'intérieur des deux segments, donc
+**dans les deux boîtes englobantes fermées**. Écarter une paire dont les
+boîtes fermées sont disjointes n'est donc pas une approximation, c'est une
+**implication** : aucune tolérance n'entre dans le filtre, et c'est pour cela
+que le lot peut exiger « même sortie » au lieu de « sortie proche ».
+
+L'index est une grille uniforme. Sa maille ne descend jamais sous la taille
+moyenne des boîtes (sinon un segment long peuplerait des milliers de
+cellules), et un segment qui couvrirait plus de 64 cellules va dans une liste
+`wide`, candidate à tout — le pire cas est borné sans qu'une paire soit
+jamais perdue. Les candidats sont rendus **triés et dédupliqués** : l'ordre
+de visite des paires retenues est celui de la double boucle d'origine, ce qui
+compte parce que `ts` est trié par `t` de façon STABLE puis dédupliqué —
+l'ordre d'insertion décide en cas d'égalité.
+
+#### Mesures — coureur wasm sur les 153 fichiers du corpus
+
+| | avant | après |
+|---|---|---|
+| temps total | **76,7 s** | **30,5 s** — −60,2 % |
+| le fichier REFUSÉ à 20,2 s | refusé (budget 20 s dépassé) | **lu en 7,92 s** |
+| le second au-delà de 10 s | 10,29 s | **3,33 s** |
+| fichiers au-delà de 10 s | 2 | **0** |
+| fichiers plus lents de plus de 10 % | — | **0** |
+| meilleur gain sur un fichier | — | −94,1 % (2,94 s → 0,17 s) |
+
+**La seule sortie qui change est celle qu'on voulait changer** : sur 148
+fichiers comparés champ par champ (statut, pièces, trous, tracés ouverts,
+tracés refermés, blocs, splines, unité déclarée, unité détectée, facteur,
+erreur, entité fautive, constats), **un seul diffère** — celui qui passait de
+`refused` à `read`. Il rend maintenant 1 pièce, 238 trous et un constat
+`import.splinesSampled:679`. C'est le cas prévu par la consigne (« SAUF
+preuve que l'ancien était faux ») : le refus ne venait pas du fichier, il
+venait de notre lenteur.
+
+#### Verrous
+
+| Verrou | Résultat |
+|---|---|
+| `cargo test --release` (workspace géométrie) | **134 passés, 0 échec** |
+| parité golden wasm ≡ ezdxf | **100,0 %** — 63/67 bit-identiques + 2 error-parity + 2 metrics-ok (porte : ≥ 99 %) ; **aucun golden régénéré** |
+| déterminisme natif ≡ wasm32 | **68/68** hash identiques, tolérance 0 (et `nest-preprocess` 17/17) |
+| handles canoniques | dans les 134 (`handles_canonical`) |
+| A/B sortie sur le corpus | **147 / 148 identiques**, le 148ᵉ étant le refus devenu lecture |
+| aucun fichier plus lent | **0** au-delà de 200 ms |
+| wasm géométrie reconstruit (piège #33b) | `public/geometry/nest_geometry_bg.wasm`, 731 944 octets bruts (268 349 gzip) |
+
+#### Non-faits
+
+1. **Le serveur n'est pas re-mesuré** : le lot ne touche que le crate Rust
+   (`nest-import`), pas `build_geometry.py`. Le chemin serveur reste aux
+   chiffres du lot 2d.
+2. **`polygonize` garde sa forme** : le profil du 2a le donnait derrière
+   `node_segments` et l'attachement ; après ce lot, le pire fichier
+   navigateur est à 7,9 s, donc sous la cible. Je n'ai pas ouvert ce
+   troisième chantier sans mesure qui le demande.
+3. **Rien n'est déployé** : le wasm géométrie reconstruit attend le GO (et,
+   depuis le lot D1, `:latest` ne bougera pas tout seul).

@@ -148,10 +148,157 @@ pub fn node_segments(segments: &[(Pt, Pt)]) -> Vec<(Pt, Pt)> {
         .unwrap_or_else(|_| unreachable!("échéance illimitée"))
 }
 
-/// `node_segments` sous ÉCHÉANCE (lot 2a). C'est LE poste dominant mesuré
-/// sur le corpus réel : 7,4 s des 16 s natifs du pire fichier (30 000 arêtes,
-/// O(n²)), ~5× cela en wasm. Le contrôle est échantillonné sur la boucle
-/// EXTERNE (`Deadline::STRIDE`), dont le corps est déjà en O(n).
+/// Index de boîtes englobantes pour le noding (lot 2e).
+///
+/// Les DEUX prédicats du noding sont EXACTS et STRICTS : `seg_intersection`
+/// exige `t, u ∈ (0,1)` (et rend None sur des segments parallèles ou
+/// colinéaires), `point_on_segment` exige `cross == 0.0` exactement puis
+/// `t ∈ (0,1)`. Dans les deux cas le point retenu est **à l'intérieur des
+/// deux segments**, donc **dans les deux boîtes englobantes fermées**.
+///
+/// Écarter une paire dont les boîtes fermées sont DISJOINTES ne peut donc
+/// rien changer au résultat : ce n'est pas une approximation, c'est une
+/// implication. Aucune tolérance n'entre ici — et c'est pour cela que le lot
+/// peut exiger « même sortie » plutôt que « sortie proche ».
+///
+/// La grille est uniforme. Sa maille ne descend pas sous la taille moyenne
+/// des boîtes (sinon un segment long peuple des milliers de cellules) et un
+/// segment qui couvre trop de cellules va dans une liste `wide`, candidate à
+/// tout — borne le pire cas sans jamais perdre une paire.
+struct BboxGrid {
+    cell: f64,
+    minx: f64,
+    miny: f64,
+    cols: usize,
+    rows: usize,
+    cells: Vec<Vec<u32>>,
+    wide: Vec<u32>,
+    boxes: Vec<[f64; 4]>,
+}
+
+/// Au-delà de ce nombre de cellules couvertes, un segment devient `wide`.
+const GRID_MAX_SPAN: usize = 64;
+
+impl BboxGrid {
+    fn build(segments: &[(Pt, Pt)]) -> Self {
+        let n = segments.len();
+        let boxes: Vec<[f64; 4]> = segments
+            .iter()
+            .map(|&(a, b)| {
+                [
+                    a[0].min(b[0]),
+                    a[1].min(b[1]),
+                    a[0].max(b[0]),
+                    a[1].max(b[1]),
+                ]
+            })
+            .collect();
+        let mut minx = f64::INFINITY;
+        let mut miny = f64::INFINITY;
+        let mut maxx = f64::NEG_INFINITY;
+        let mut maxy = f64::NEG_INFINITY;
+        let mut span = 0.0f64;
+        for bb in &boxes {
+            minx = minx.min(bb[0]);
+            miny = miny.min(bb[1]);
+            maxx = maxx.max(bb[2]);
+            maxy = maxy.max(bb[3]);
+            span += (bb[2] - bb[0]) + (bb[3] - bb[1]);
+        }
+        if n == 0 || !minx.is_finite() {
+            return Self {
+                cell: 1.0,
+                minx: 0.0,
+                miny: 0.0,
+                cols: 1,
+                rows: 1,
+                cells: vec![Vec::new()],
+                wide: Vec::new(),
+                boxes,
+            };
+        }
+        // Maille : l'étendue divisée par ~√n (une poignée de segments par
+        // cellule), jamais sous la taille moyenne d'une boîte.
+        let extent = ((maxx - minx).max(maxy - miny)).max(1e-9);
+        let target = (n as f64).sqrt().max(1.0);
+        let mean_box = (span / (2.0 * n as f64)).max(0.0);
+        let cell = (extent / target).max(mean_box).max(1e-9);
+        let cols = (((maxx - minx) / cell).floor() as usize + 1).max(1);
+        let rows = (((maxy - miny) / cell).floor() as usize + 1).max(1);
+        let mut grid = Self {
+            cell,
+            minx,
+            miny,
+            cols,
+            rows,
+            cells: vec![Vec::new(); cols * rows],
+            wide: Vec::new(),
+            boxes,
+        };
+        for i in 0..n {
+            let (c0, r0, c1, r1) = grid.span_of(i);
+            let covered = (c1 - c0 + 1) * (r1 - r0 + 1);
+            if covered > GRID_MAX_SPAN {
+                grid.wide.push(i as u32);
+                continue;
+            }
+            for r in r0..=r1 {
+                for c in c0..=c1 {
+                    grid.cells[r * grid.cols + c].push(i as u32);
+                }
+            }
+        }
+        grid
+    }
+
+    fn span_of(&self, i: usize) -> (usize, usize, usize, usize) {
+        let bb = self.boxes[i];
+        let c0 = (((bb[0] - self.minx) / self.cell).floor().max(0.0) as usize).min(self.cols - 1);
+        let r0 = (((bb[1] - self.miny) / self.cell).floor().max(0.0) as usize).min(self.rows - 1);
+        let c1 = (((bb[2] - self.minx) / self.cell).floor().max(0.0) as usize).min(self.cols - 1);
+        let r1 = (((bb[3] - self.miny) / self.cell).floor().max(0.0) as usize).min(self.rows - 1);
+        (c0, r0, c1, r1)
+    }
+
+    /// Boîtes FERMÉES qui se touchent.
+    fn boxes_overlap(&self, i: usize, j: usize) -> bool {
+        let a = self.boxes[i];
+        let b = self.boxes[j];
+        a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
+    }
+
+    /// Candidats de `i`, TRIÉS croissants et sans doublon — l'ordre de visite
+    /// des paires retenues reste donc celui de la double boucle d'origine,
+    /// ce qui compte : `ts` est trié par `t` de façon STABLE puis dédupliqué,
+    /// donc l'ordre d'insertion décide en cas d'égalité.
+    fn candidates(&self, i: usize, out: &mut Vec<u32>) {
+        out.clear();
+        let (c0, r0, c1, r1) = self.span_of(i);
+        let covered = (c1 - c0 + 1) * (r1 - r0 + 1);
+        if covered > GRID_MAX_SPAN {
+            // Segment `wide` : on ne peut pas le localiser, tout est candidat.
+            out.extend(0..self.boxes.len() as u32);
+        } else {
+            for r in r0..=r1 {
+                for c in c0..=c1 {
+                    out.extend_from_slice(&self.cells[r * self.cols + c]);
+                }
+            }
+            out.extend_from_slice(&self.wide);
+            out.sort_unstable();
+            out.dedup();
+        }
+        out.retain(|&j| j as usize != i && self.boxes_overlap(i, j as usize));
+    }
+}
+
+/// `node_segments` sous ÉCHÉANCE (lot 2a), avec l'index de boîtes du lot 2e.
+///
+/// C'était LE poste dominant mesuré sur le corpus réel : 7,4 s des 16 s
+/// natifs du pire fichier (30 000 arêtes, O(n²)), ~5× cela en wasm. L'index
+/// ne change pas le résultat (voir `BboxGrid`), il ne fait qu'éviter de
+/// tester des paires qui ne peuvent rien produire. Le contrôle d'échéance
+/// reste échantillonné sur la boucle EXTERNE (`Deadline::STRIDE`).
 pub fn node_segments_until(segments: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
     // Intersections canoniques par PAIRE (i<j) : le point croisé est calculé
     // UNE fois et partagé par les deux segments — sinon chaque côté le
@@ -159,11 +306,18 @@ pub fn node_segments_until(segments: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(
     // polygonize ne fusionne plus (arêtes pendantes, faces perdues). Sans
     // snap en aval (chemin canaux nest-preprocess), c'était fatal.
     let n = segments.len();
+    let grid = BboxGrid::build(segments);
+    let mut cand: Vec<u32> = Vec::new();
     let mut pair_pts: std::collections::HashMap<(usize, usize), Pt> =
         std::collections::HashMap::new();
     for i in 0..n {
         dl.check_at(i)?;
-        for j in (i + 1)..n {
+        grid.candidates(i, &mut cand);
+        for &jj in cand.iter() {
+            let j = jj as usize;
+            if j <= i {
+                continue;
+            }
             let (a1, a2) = segments[i];
             let (b1, b2) = segments[j];
             if let Some(p) = seg_intersection(a1, a2, b1, b2) {
@@ -175,10 +329,10 @@ pub fn node_segments_until(segments: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(
     for (i, &(a1, a2)) in segments.iter().enumerate() {
         dl.check_at(i)?;
         let mut ts: Vec<(f64, Pt)> = Vec::new();
-        for (j, &(b1, b2)) in segments.iter().enumerate() {
-            if i == j {
-                continue;
-            }
+        grid.candidates(i, &mut cand);
+        for &jj in cand.iter() {
+            let j = jj as usize;
+            let (b1, b2) = segments[j];
             let canon = if i < j {
                 pair_pts.get(&(i, j)).copied()
             } else {

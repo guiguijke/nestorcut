@@ -76,7 +76,7 @@ entrée, promouvoir aurait forcé un alignement que personne n'a vérifié.
 Trois des quatre `:latest` désignaient donc autre chose que la production —
 et pour l'app, un contenu **sans GO**. C'est le défaut, chiffré.
 
-**Le verrou, en deux temps** : **Le verrou, en deux temps** (les deux mesures ont été prises sur les
+**Le verrou, en deux temps** (les deux mesures ont été prises sur les
 poussées réelles du jour, pas sur un dépôt d'essai) :
 
 1. **Une poussée sur `main` ne déplace plus `:latest`.** La poussée
