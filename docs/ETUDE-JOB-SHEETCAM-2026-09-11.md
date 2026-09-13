@@ -1820,3 +1820,39 @@ Avant le correctif, le fichier « ordre » sortait avec `F1` en échec, les deux
 dessins en « point non lu » et le trou retiré. Après, l'attribution est la
 même que sur le fichier à l'endroit — c'est la géométrie qui la donne, plus
 l'ordre des sections.
+
+### Lot J4-bis-3 — vérification (vérificateur, 13/09, nuit, `ea6bc5d5`) — GO, il reste la réponse sur le POINT et une limite à lever
+
+Rejoué sur le poste : image `app` reconstruite (HEAD `ea6bc5d5` plus deux
+fichiers serveur du lot E3 en cours dans l'arbre de travail, champ additif
+`advancedImport` — sans effet sur le chemin `.job`), harnais sur les quatre
+`.job`, lecture du code d'affectation.
+
+#### 9.48 Mesures
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **722** |
+| harnais, quatre fichiers | **tous verts** — « ordre » 5 / 5 avec `F1` vert (les deux dessins reçoivent leurs chemins), recette × 4 5 / 5, 2 pièces 2 / 2, 1 pièce 1 / 1 ; trou toujours retiré pour « perçage errant » (question POINT ouverte) |
+| lecture | affectation par score « points de départ sur un contour à 0,5 mm », permutation exhaustive, un dessin par bloc, trois refus nommés (`countMismatch`, `noPointPlaced`, `tie`) qui retombent sur « point non lu » ; appariement après l'import, sur les fiches rendues, aucune lecture de plus |
+
+Le défaut du §9.45 est corrigé : sur le fichier « ordre », l'hôte reçoit ses
+trois chemins et l'éventail ses deux, `F1` vert.
+
+#### 9.49 Une limite à lever avant le déploiement, et la question qui reste
+
+1. **`tooManyDrawings` au-delà de 7 dessins** : l'affectation énumère les
+   permutations et refuse au-delà de 7 dessins distincts — pour un tel
+   `.job`, tous les points passent « non lus » et **plus aucun trou n'est
+   nesté**, en silence côté résultat (raison affichée seulement). Un job
+   d'atelier a couramment 10 à 30 dessins : ce n'est pas un cas limite.
+   **J4-bis-4, une heure** : affectation gloutonne sur la matrice de scores
+   (prendre la meilleure case, retirer sa ligne et sa colonne, recommencer ;
+   `tie` seulement si la case retenue est à égalité), sans plafond ; verrou :
+   douze dessins synthétiques (copies décalées de la pièce L) appariés 12/12.
+2. **Le POINT** : la règle « perçage errant » reste, donc aucun nichage dans
+   la recette tant que le propriétaire n'a pas dit si SheetCam perce sur une
+   entité POINT.
+
+**GO déploiement (app + worker nesting)** dès J4-bis-4 rejoué et la réponse
+sur le POINT reçue, avec la recette machine sur le fichier produit alors.
