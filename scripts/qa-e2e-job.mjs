@@ -191,6 +191,36 @@ try {
         qtyOk.length > 0 && qtyOk.some((n) => n === Math.max(...wanted.values())),
         `attendu au moins une fiche à ×${Math.max(...wanted.values())}, lu ${qtyOk.join(', ')}`)
 
+    // ---------- A4. le panneau « Import avancé » ne détourne pas un `.job` ----------
+    //
+    // Le panneau ouvert intercepte la dépose (aperçu, aucune fiche créée) et
+    // enverrait le fichier au wasm. Un `.job` doit passer AVANT lui : il porte
+    // déjà sa tôle, ses quantités et son espacement, il n'y a rien à éclater
+    // ni à mettre à l'échelle. On rejoue donc la même dépose, panneau OUVERT.
+    {
+        const before = (await page.locator('.file').count()) || 0
+        const toggle = page.locator('[data-testid="advanced-import-toggle"]')
+        if (await toggle.count()) {
+            if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
+            const open = (await toggle.getAttribute('aria-expanded')) === 'true'
+            log('panneau « Import avancé » ouvert :', open)
+            await page.setInputFiles('input[name="dxf"]', [JOB, ...drawings])
+            // Soit des fiches s'ajoutent (le `.job` a été traité), soit un
+            // aperçu s'ouvre (le `.job` est parti dans le chemin avancé).
+            await page.waitForTimeout(4000)
+            const preview = await page.locator('[data-testid="import-preview-svg"], '
+                + '[data-testid="import-preview-confirm"]').count()
+            const after = await page.locator('.file').count()
+            check('A4 un `.job` n’est pas détourné par le panneau « Import avancé »',
+                preview === 0 && after > before,
+                `aperçu=${preview}, fiches ${before} → ${after}`)
+            if ((await toggle.getAttribute('aria-expanded')) === 'true') await toggle.click()
+        } else {
+            log('A4 NON MESURÉ : pas de panneau « Import avancé » sur cette page')
+            results.A4 = { ok: null, detail: 'panneau absent' }
+        }
+    }
+
     // ---------- C. nesting ----------
     const nestBtn = page.locator('.atelier__nest')
     await nestBtn.waitFor({ timeout: 30000 })
@@ -273,7 +303,7 @@ try {
 
     // Relu par NOTRE lecteur : c'est la seule mesure qui vaut.
     const out = parseSheetCamJob(new Uint8Array(fs.readFileSync(saved)))
-    const totalWanted = [...wanted.values()].reduce((a, b) => a + b, 0)
+
     check('D2 Count = le nombre de pièces posées', out.count === out.parts.length,
         `Count=${out.count}, sections=${out.parts.length}`)
     check('D3 Optimisation = 3 (manuel, pièces groupées)', out.optimisation === 3,
@@ -288,9 +318,17 @@ try {
     check('D6 bloc binaire identique à l’octet près',
         Buffer.compare(Buffer.from(out.binary), Buffer.from(source.binary)) === 0,
         `${out.binary.length} vs ${source.binary.length} octets`)
-    check('D7 toutes les pièces demandées sont dans le fichier',
-        out.parts.length <= totalWanted && out.parts.length > 0,
-        `${out.parts.length} sur ${totalWanted} demandées (une tôle peut n’en porter qu’une partie)`)
+    // D7 ne compte PAS les pièces : le cas A4 dépose volontairement une
+    // seconde fois, et une tôle peut de toute façon n'en porter qu'une partie.
+    // Ce qui doit être vrai quoi qu'il arrive : aucune section écrite qui ne
+    // vienne d'un dessin du `.job` (on ne peut pas inventer une pièce, règle 5),
+    // et `Count` cohérent avec le nombre de sections.
+    const known = new Set(source.parts.map((p) => p.drawingName))
+    check('D7 aucune pièce écrite qui ne vienne du `.job`',
+        out.parts.length > 0 && out.parts.every((p) => known.has(p.drawingName)),
+        `${out.parts.length} sections, dessins : ${[...new Set(out.parts.map((p) => p.drawingName))].join(', ')}`)
+    check('D7b Count est cohérent avec le nombre de sections',
+        out.count === out.parts.length, `Count=${out.count}, sections=${out.parts.length}`)
 
     // E. l'intervalle d'angle de SheetCam — le défaut `Angle=-6.283`.
     const angles = out.parts.map((p) => p.angle)
