@@ -714,3 +714,33 @@ ou worker) ; GO attendu.
 6. **La poignée ne tire que la largeur** (rapport conservé, donc la hauteur
    suit). Tirer par la hauteur demanderait un second mode ; le plan ne le
    demande pas.
+
+### Lot E1-bis — vérification (vérificateur, 13/09, `7ddef81f`) — GO déploiement
+
+Rejoué sur le poste, image app reconstruite à HEAD (wasm géométrie servi =
+dépôt `5fe7fec3…`), sorties hors dépôt (`~/qa-out/verif-e1bis/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 580 |
+| **cas F, français puis anglais** (aperçu sur une tôle) | identique dans les deux langues : aucune fiche créée pendant l'aperçu (1 → 1), hors-tôle signalé pour 2834,3 × 688,8 mm sur 1000 × 2000, facteur 1 conservé sur trois changements de tôle, poignée tirée à 899,9 mm → facteur 0,317 affiché, pièces importées à 899,89 mm (`importScale` 0,3175), tôle du projet 1000 × 2000 après « utiliser cette tôle » ; libellés « facteur » / « factor » selon la langue |
+| **cas A et E** (option éteinte, dépose en masse) | A : 1 fiche, nom intact, 0,87 s ; E : 10 fichiers → 10 fiches en 8,6 s, panneau resté replié |
+| langues | 9 clés nouvelles en anglais ET en français ; aucun texte en dur dans `AdvancedImportPreview.vue` |
+| lecture | la poignée écrit la largeur cible (mode `width` du lot E1) : un seul calcul d'échelle ; aucune fiche avant « Importer » ; panneau fermé = chemin d'avant |
+
+Accepté : cas nommé F ; captures limitées à la bande des réglages (le dessin
+d'atelier ne va pas dans `docs/`) ; aperçu du premier fichier d'une dépose
+multiple ; relecture du fichier à la validation (prix d'une seule chaîne,
+payé seulement panneau ouvert) ; poignée par la largeur seule.
+
+**Arbitrage sur le worker « strip »** (non-fait du déploiement E1) : le
+pipeline `strip-file-processing` / `strip-nesting` n'a **aucune source dans
+ce dépôt** (`workers/` ne contient que common, fileprocessing, geometry,
+nesting ; l'image est préconstruite, variante « bande » historique). Il ne
+peut donc pas suivre la règle de nettoyage depuis ici, ni aucune autre
+règle des lots récents. **Question produit pour le propriétaire** : ce
+pipeline est-il encore offert ? Si oui, il faut rapatrier sa source et
+l'aligner (chantier à ranger) ; si non, le retirer du compose et de
+l'architecture. En attendant, il reste tel quel et documenté comme tel.
+
+**GO déploiement E1-bis** : app seule ; rien d'autre n'a changé. Puis lot E2.
