@@ -395,6 +395,100 @@ def plan_hole_fills(input_items, space, budget_sec=PACK_BUDGET_SEC):
     return generic or legacy
 
 
+# Tolérance de comparaison des poses (mm et degrés). Les poses du moulinet
+# centré viennent du MÊME `_centroid(ring)` des deux côtés : l'égalité est
+# exacte, l'epsilon ne sert qu'à ne pas dépendre de l'ordre des additions.
+_POSE_EPS = 1e-6
+
+
+def _meta_replay_poses(hole_rings, fill_id, ring_rotations, budget):
+    """Rejeu EXACT de ce que `expand_meta` produirait pour UN hôte, en
+    coordonnées locales : centroïde de chaque anneau, rotations validées
+    dans l'ordre, budget (`slots[h]`) consommé anneau par anneau."""
+    poses = []
+    for ring, rots in zip(hole_rings, ring_rotations):
+        if budget <= 0:
+            break
+        cx, cy = _centroid(ring)
+        for rot in rots:
+            if budget <= 0:
+                break
+            poses.append((fill_id, float(rot), cx, cy))
+            budget -= 1
+    return poses
+
+
+def _meta_carries_plan(packs, host, fill_id, ring_rotations, slots):
+    """La forme compressée `{host, fill, slots, ringRotations}` peut-elle
+    PORTER le plan ?
+
+    Elle ne sait décrire qu'un moulinet CENTRÉ sur le centroïde de chaque
+    trou. Dès qu'une pose du plan s'en écarte — trou non symétrique (un L,
+    un C, un trou mordu par une réserve) où `pack_hole` trouve une pose hors
+    centre — l'expansion rattache MOINS de pièces que le plan, voire aucune,
+    alors que la demande a déjà été RETIRÉE de l'instance moteur : les pièces
+    ne sont nulle part et le job se termine « réussi » à N − k (mesuré au lot
+    J4, ETUDE-JOB-SHEETCAM §9.25 : 1 hôte + 1 éventail ⇒ 1 posée sur 2).
+
+    Le critère se vérifie tout seul : on rejoue l'expansion depuis la forme
+    compressée et on la compare aux poses réelles du plan. Égalité ⇒ forme
+    compressée (comportement historique, bit-identique) ; sinon ⇒ forme
+    `{packs}`, que `expand_packs` rejoue telle quelle. Couvre au passage le
+    cas `slots[h]` > Σ `ringRotations[r]` (budget non distribuable)."""
+    hole_rings = host.get("holes") or []
+    for pack, budget in zip(packs, slots):
+        replayed = _meta_replay_poses(
+            hole_rings, fill_id, ring_rotations, int(budget))
+        real = [
+            (f.get("fillId"), float(f.get("rot") or 0.0),
+             float(f.get("lx") or 0.0), float(f.get("ly") or 0.0))
+            for f in (pack.get("fills") or [])
+        ]
+        if len(replayed) != len(real):
+            return False
+        for a, b in zip(replayed, real):
+            if a[0] != b[0]:
+                return False
+            if (abs(a[1] - b[1]) > _POSE_EPS
+                    or abs(a[2] - b[2]) > _POSE_EPS
+                    or abs(a[3] - b[3]) > _POSE_EPS):
+                return False
+    return True
+
+
+def expected_expansion(meta, layouts):
+    """Nombre de fillers que l'expansion DOIT rattacher, hôtes réellement
+    posés compris (garde anti-perte, §9.28 point 2).
+
+    Ce n'est pas « le nombre retiré de l'instance » tout court : le moteur
+    peut n'avoir pas posé tous les hôtes (solution partielle, stock serré) —
+    les packs de ces hôtes-là ne sont légitimement pas rattachés. On compte
+    donc ce que la consommation d'`expand_packs` / `expand_meta` doit rendre
+    pour les hôtes effectivement présents dans les layouts. L'écart avec le
+    rattaché réel est une PERTE de pièce, jamais un cas normal."""
+    placed = []
+    for layout in layouts or []:
+        for pi in layout.get("placed_items", []):
+            placed.append(pi.get("item_id"))
+    if meta.get("packs"):
+        # `expand_packs` consomme, pour chaque hôte posé, le premier pack
+        # encore libre qui porte son id (même ordre que la boucle réelle).
+        unused = list(meta["packs"])
+        total = 0
+        for pid in placed:
+            idx = next((i for i, p in enumerate(unused)
+                        if p.get("hostId") == pid), None)
+            if idx is None:
+                continue
+            total += len(unused.pop(idx).get("fills") or [])
+        return total
+    # Forme compressée : `expand_meta` distribue slots[hi] au hi-ème hôte
+    # posé, dans l'ordre de parcours des layouts.
+    slots = meta.get("slots") or []
+    n_hosts = sum(1 for pid in placed if pid == meta.get("host"))
+    return sum(int(s) for s in slots[:n_hosts])
+
+
 def reduce_for_solve(input_items, jaguar_items, packs, space=0):
     """Instance réduite + meta {packs, idMap} (+ clés legacy si 1+1)."""
     used = {}
@@ -416,6 +510,7 @@ def reduce_for_solve(input_items, jaguar_items, packs, space=0):
         id_map.append(it["id"])
     hosts = {p["hostId"] for p in packs or []}
     fills = {f["fillId"] for p in packs or [] for f in p.get("fills") or []}
+    meta = {"packs": packs, "idMap": id_map}
     if len(hosts) == 1 and len(fills) == 1:
         hid, fid = next(iter(hosts)), next(iter(fills))
         host = next(i for i in input_items if i["id"] == hid)
@@ -425,15 +520,19 @@ def reduce_for_solve(input_items, jaguar_items, packs, space=0):
             pinwheel_capacity(ring, fill.get("coords") or fill.get("coordinates") or [], space, allowed=allowed)
             for ring in (host.get("holes") or [])
         ]
-        meta = {
-            "host": hid,
-            "fill": fid,
-            "slots": [len(p.get("fills") or []) for p in packs],
-            "ringRotations": ring_rotations,
-            "idMap": id_map,
-        }
-    else:
-        meta = {"packs": packs, "idMap": id_map}
+        slots = [len(p.get("fills") or []) for p in packs]
+        # La forme compressée n'est prise que si elle PORTE le plan (moulinet
+        # centré) — sinon la demande serait réduite sans que l'expansion
+        # rattache quoi que ce soit (perte silencieuse, cf. docstring de
+        # `_meta_carries_plan`).
+        if _meta_carries_plan(packs, host, fid, ring_rotations, slots):
+            meta = {
+                "host": hid,
+                "fill": fid,
+                "slots": slots,
+                "ringRotations": ring_rotations,
+                "idMap": id_map,
+            }
     return meta, reduced
 
 

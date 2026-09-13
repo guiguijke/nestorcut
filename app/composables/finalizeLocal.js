@@ -143,6 +143,28 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
                 localDiscarded.push({ reason: 'outside_sheet', strategy })
                 return
             }
+            // GARDE ANTI-PERTE (lot J4-bis) — AVANT le contrôle par classe,
+            // parce que celui-ci ne peut pas voir le défaut : il compare aux
+            // comptes du MOTEUR, et le moteur n'a jamais vu les pièces que la
+            // réduction lui avait retirées.
+            //
+            // La réduction retire des pièces de l'instance en pariant que
+            // l'expansion les rattachera. Quand le pari est faux, elles ne
+            // sont nulle part : mesuré sur la recette, 4 posées sur 5, et le
+            // job se terminait « réussi » (étude §9.25). On écarte
+            // l'alternative — refuser vaut mieux que livrer une tôle amputée
+            // en silence (pièges #45 et #56b).
+            const planned = Number(art?.expansionPlanned) || 0
+            const attached = Number(art?.expansionAttached) || 0
+            if (planned !== attached) {
+                localDiscarded.push({
+                    reason: 'expansion_lost',
+                    strategy,
+                    planned,
+                    attached,
+                })
+                return
+            }
             const artCounts = art?.engineCounts
             const enginePlaced = artCounts && Object.keys(artCounts).length
                 ? new Map(Object.entries(artCounts).map(([k, v]) => [k, v]))

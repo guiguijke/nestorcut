@@ -87,6 +87,24 @@ describe('J4 — la structure du `.job` rendu est celle de la recette', () => {
         expect(Array.from(out.binary)).toEqual(Array.from(SOURCE.binary))
     })
 
+    it('`ranks` donne le rang ÉCRIT, pas celui du dessin', () => {
+        // La confusion a coûté une mesure fausse au lot J4-bis :
+        // `placements[i].part` est le rang du DESSIN d'origine (0 ou 1 ici),
+        // celui que le bloc binaire indexe ; `ranks[i]` est le rang de la
+        // SECTION écrite (0 à 4). Les quatre éventails partagent le même
+        // dessin et ont quatre rangs écrits distincts.
+        const files = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+        })
+        expect(files[0].placements.map((p) => p.part)).toEqual([0, 1, 1, 1, 1])
+        expect(files[0].ranks).toEqual([0, 1, 2, 3, 4])
+        // Et l'ordre de coupe parle en rangs ÉCRITS.
+        expect(files[0].order.map((o) => o[0]).sort((a, b) => a - b))
+            .toEqual([0, 1, 2, 3, 4])
+    })
+
     it('[OpOrder] sort les pièces nichées AVANT leur hôte', () => {
         // C'est la règle 8 de l'étude, et ce n'est pas cosmétique : couper le
         // contour extérieur de l'hôte avant les pièces logées dans son trou

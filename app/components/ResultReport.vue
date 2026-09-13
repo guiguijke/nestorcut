@@ -100,6 +100,21 @@
                     </span>
                     <span v-else-if="activeOffcut">{{ t('report.offcut', { w: fmtLengthValue(activeOffcut.width), h: fmtLengthValue(activeOffcut.height), unit: unitLabel }) }}</span>
                 </div>
+                <!-- Lot J4-bis : les constats de réserve d'amorce. Sans eux
+                     la dégradation est SÛRE mais MUETTE : un trou laissé vide
+                     parce que l'amorce n'y tenait pas ne se voyait nulle part.
+                     Bloc ADDITIF, absent pour tout job sans `.job`. -->
+                <div
+                    v-if="leadInNotes.length"
+                    class="report__row report__row--detail report__reserve"
+                    data-testid="reserve-notes"
+                >
+                    <span
+                        v-for="(note, i) in leadInNotes"
+                        :key="i"
+                        class="report__hint"
+                    >{{ note }}</span>
+                </div>
                 <div
                     v-if="reportTotals"
                     class="report__row report__row--detail report__material"
@@ -400,6 +415,26 @@ const downloadLocalSingle = () => emit('download-single')
 // Lot J4 : le `.job` SheetCam d'une tole. L'orchestrateur (ResultModal) sait
 // quelle alternative et quelle tole sont a l'ecran.
 const downloadLocalJob = () => emit('download-job')
+
+// Lot J4-bis : les constats de reserve d'amorce, en phrases. Un refus de
+// reserve ou un trou retire du nesting DOIT se voir — la degradation etait
+// sure, elle etait muette. Les libelles portent deja leur raison ; on ne
+// fabrique aucun nombre nu (piege #24).
+const leadInNotes = computed(() => {
+    const notes = []
+    for (const n of resultModalData.value?.leadInReserve || []) {
+        const name = n.file_slug || ''
+        if (n.applied === false && n.reason && n.reason !== 'nothingToReserve') {
+            notes.push(t('jobImport.reserveRefused', {
+                name,
+                reason: t(`sheetcamReserve.${n.reason}`),
+            }))
+        }
+        const dropped = Number(n.holesDropped) || 0
+        if (dropped > 0) notes.push(t('jobImport.holesDropped', { n: dropped }))
+    }
+    return notes
+})
 // Le bloc rapport doit rester atteignable par scrollIntoView (ouverture
 // « Rapport de nesting » depuis la carte de resultat).
 const reportEl = ref(null)

@@ -336,6 +336,12 @@ export function nestedJobsPerSheet(job, { sheets, centres, rings, maskPaths = tr
             sheet: sheetIndex + 1,
             placements,
             order,
+            // Le rang `[Part N]` ÉCRIT de chaque exemplaire, aligné index par
+            // index sur `placements`. À ne pas confondre avec
+            // `placements[i].part`, qui est le rang du DESSIN d'origine (0 ou
+            // 1 ici) et non celui de la section écrite (0 à 4) — la confusion
+            // a fait produire des paires de nichage fausses au lot J4-bis.
+            ranks,
             bytes: writeNestedSheetCamJob(job, { placements, order, maskPaths }),
         }
     })

@@ -429,6 +429,44 @@ describe('J4 — la réserve d’amorce d’un TROU', () => {
         }
     })
 
+    it('tient pour TOUTE longueur d’amorce, zéro compris (lot J4-bis)', () => {
+        // Mes verrous d'origine n'essayaient QUE `amorce = 5`. À `amorce = 0`
+        // — une opération sans amorce, `Lead in type = 0`, cas réel — la
+        // morsure était doublement fausse : elle refusait d'abord
+        // (`mouthInsideDisc`, les deux lèvres de la bouche tombant dans le
+        // disque centré sur le bord), et le trou entier sortait du nesting ;
+        // et quand on élargissait la bouche, elle s'appliquait en
+        // n'excluant RIEN — l'aire du trou MONTAIT de 2,1 % et les 32 sommets
+        // du disque restaient dans la zone libre. S'appliquer sans exclure
+        // est pire qu'un refus.
+        //
+        // Ce que le balayage mesure, pour chaque longueur : l'aire BAISSE,
+        // l'anneau reste simple, et la moitié INTÉRIEURE du disque réel de la
+        // torche — celui centré à `amorce` du bord, pas celui qu'on dessine —
+        // est entièrement hors de la zone libre.
+        const before = ringArea(RECIPE_HOLE)
+        for (const lead of [0, 0.5, 1, 2, 3, 5, 8]) {
+            const out = holeWithLeadInReserve(RECIPE_HOLE, { leadIn: lead, pierceMarginMm: margin })
+            expect(out.applied, `amorce ${lead}`).toBe(true)
+            expect(ringArea(out.ring), `amorce ${lead} : l'aire doit BAISSER`)
+                .toBeLessThan(before)
+            expect(selfCrossings(out.ring), `amorce ${lead}`).toBe(0)
+            for (const centre of out.pierceAt) {
+                // Le disque RÉEL : centré à `lead` du bord, sur le rayon qui
+                // porte la morsure.
+                const d = Math.hypot(...centre)
+                const edge = [centre[0] * 35 / d, centre[1] * 35 / d]
+                const real = [edge[0] * (1 - lead / 35), edge[1] * (1 - lead / 35)]
+                for (const p of pierceDisc(real, margin - 1e-6)) {
+                    // Seule la moitié intérieure au trou nous concerne :
+                    // l'autre est dans la matière de l'hôte.
+                    if (Math.hypot(...p) >= 35) continue
+                    expect(pointInRing(p, out.ring), `amorce ${lead}`).toBe(false)
+                }
+            }
+        }
+    })
+
     it('refuse plutôt que d’inventer : trou trop petit, anneau intact', () => {
         const tiny = circleRing(3, 24)
         const out = holeWithLeadInReserve(tiny, { leadIn, pierceMarginMm: margin })

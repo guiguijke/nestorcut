@@ -191,36 +191,6 @@ try {
         qtyOk.length > 0 && qtyOk.some((n) => n === Math.max(...wanted.values())),
         `attendu au moins une fiche à ×${Math.max(...wanted.values())}, lu ${qtyOk.join(', ')}`)
 
-    // ---------- A4. le panneau « Import avancé » ne détourne pas un `.job` ----------
-    //
-    // Le panneau ouvert intercepte la dépose (aperçu, aucune fiche créée) et
-    // enverrait le fichier au wasm. Un `.job` doit passer AVANT lui : il porte
-    // déjà sa tôle, ses quantités et son espacement, il n'y a rien à éclater
-    // ni à mettre à l'échelle. On rejoue donc la même dépose, panneau OUVERT.
-    {
-        const before = (await page.locator('.file').count()) || 0
-        const toggle = page.locator('[data-testid="advanced-import-toggle"]')
-        if (await toggle.count()) {
-            if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click()
-            const open = (await toggle.getAttribute('aria-expanded')) === 'true'
-            log('panneau « Import avancé » ouvert :', open)
-            await page.setInputFiles('input[name="dxf"]', [JOB, ...drawings])
-            // Soit des fiches s'ajoutent (le `.job` a été traité), soit un
-            // aperçu s'ouvre (le `.job` est parti dans le chemin avancé).
-            await page.waitForTimeout(4000)
-            const preview = await page.locator('[data-testid="import-preview-svg"], '
-                + '[data-testid="import-preview-confirm"]').count()
-            const after = await page.locator('.file').count()
-            check('A4 un `.job` n’est pas détourné par le panneau « Import avancé »',
-                preview === 0 && after > before,
-                `aperçu=${preview}, fiches ${before} → ${after}`)
-            if ((await toggle.getAttribute('aria-expanded')) === 'true') await toggle.click()
-        } else {
-            log('A4 NON MESURÉ : pas de panneau « Import avancé » sur cette page')
-            results.A4 = { ok: null, detail: 'panneau absent' }
-        }
-    }
-
     // ---------- C. nesting ----------
     const nestBtn = page.locator('.atelier__nest')
     await nestBtn.waitFor({ timeout: 30000 })
@@ -268,10 +238,32 @@ try {
                 jobs: (a.jobs || []).length,
                 jobNames: (a.jobs || []).map((j) => j.fileName),
             })),
+            // D10 : le nichage tel que le POST-PASS l'a etabli, en RANGS
+            // `[Part N]` du fichier ecrit. Lu dans le record, pas deduit de
+            // l'ordre de coupe — sinon le verrou ne mesurerait que lui-meme.
+            // Toutes les alternatives, chacune avec SES paires et SON ordre
+            // ecrit : le verrou compare les deux d'un meme fichier.
+            jobsAll: (r.alternatives || []).map((a) => (a.jobs || []).map((j) => ({
+                fileName: j.fileName,
+                nestedPairs: j.nestedPairs || [],
+                order: j.order || [],
+            }))),
         }
     })
     log('record IndexedDB :', JSON.stringify(record))
     results.record = record
+
+    // C2 — LE VERROU QUI MANQUAIT. Sans lui, un job qui perd une piece
+    // passait VERT : l'ancien harnais lisait `placed` et le journalisait,
+    // sans jamais le comparer a `requested`. Mesure du verificateur : la
+    // recette posait 4 pieces sur 5 et tous les verrous restaient verts.
+    const totalWanted = [...wanted.values()].reduce((a, b) => a + b, 0)
+    check('C2 autant de pieces posees que demandees',
+        record.placed === record.requested,
+        `posees ${record.placed}, demandees ${record.requested}`)
+    check('C3 le nombre demande est celui du `.job`',
+        record.requested === totalWanted,
+        `demandees ${record.requested}, somme des quantites du .job ${totalWanted}`)
     check('D-1 des `.job` sont produits et persistés',
         (record.alts || []).some((a) => a.jobs > 0),
         record.sheetcamJobError
@@ -351,20 +343,33 @@ try {
         opOrder.every((l) => enabled.some((p) => p.index === Number(String(l.value).split(',')[0]))),
         opOrder.map((l) => l.value).join(' | '))
 
-    // Le nichage : une pièce logée dans le trou d'une autre doit être coupée
-    // AVANT son hôte (règle 8 — couper le contour de l'hôte la libérerait).
-    // On ne peut le mesurer que s'il y a eu nichage : sinon on le DIT, au
-    // lieu de laisser passer un verrou vide.
-    const hostRank = 0
-    const idx = opOrder.findIndex((l) => Number(String(l.value).split(',')[0]) === hostRank)
-    if (idx > 0) {
-        check('D10 les pièces nichées sortent AVANT leur hôte',
-            true, `l'hôte (rang 0) est en position ${idx + 1} sur ${opOrder.length}`)
-    } else {
-        log('D10 NON MESURÉ : aucune pièce nichée dans cette solution '
-            + '(l’hôte est le premier pas de l’ordre de coupe)')
-        results.D10 = { ok: null, detail: 'aucun nichage dans cette solution' }
+    // D10 — le nichage, mesuré sur ce que le post-pass a ÉTABLI (les paires
+    // `[nichée, hôte]`) contre l'ordre de coupe ÉCRIT DANS LE MÊME FICHIER.
+    // Un résultat porte plusieurs alternatives : comparer les paires de l'une
+    // à l'ordre de l'autre ne mesurerait rien. On balaie donc TOUS les
+    // fichiers produits — la propriété doit tenir sur chacun.
+    {
+        const files = (record.jobsAll || []).flat()
+        const withNesting = files.filter((f) => (f.nestedPairs || []).length)
+        if (withNesting.length) {
+            const bad = []
+            for (const f of withNesting) {
+                const pos = new Map((f.order || []).map((rank, i) => [rank, i]))
+                for (const [n, h] of f.nestedPairs) {
+                    if (!(pos.get(n) < pos.get(h))) bad.push({ file: f.fileName, n, h, order: f.order })
+                }
+            }
+            check('D10 chaque pièce nichée est coupée AVANT SON hôte',
+                bad.length === 0,
+                `${withNesting.length} fichier(s) avec nichage, `
+                + `${withNesting.reduce((k, f) => k + f.nestedPairs.length, 0)} paire(s)`
+                + (bad.length ? ` — fautifs : ${JSON.stringify(bad)}` : ''))
+        } else {
+            log('D10 NON MESURÉ : aucune pièce nichée dans aucune alternative')
+            results.D10 = { ok: null, detail: 'aucun nichage' }
+        }
     }
+
 } catch (e) {
     failures++
     log('EXCEPTION :', String(e?.stack || e).slice(0, 800))

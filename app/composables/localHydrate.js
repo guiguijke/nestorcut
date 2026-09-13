@@ -142,6 +142,11 @@ export function hydrateLocalItem(item, record = null) {
         // ordinaire ne voit rien de plus qu'avant (champ ADDITIF, absent des
         // anciens records, donc `false` à la relecture).
         hasJobs: Boolean(alternatives[0]?.jobs?.length),
+        // Lot J4-bis : les constats de reserve d'amorce, pour la fiche. La
+        // liste ci-dessus est une LISTE BLANCHE — un champ absent d'ici est
+        // invisible pour l'UI meme s'il est dans le record (c'est ce qui
+        // avait rendu le bouton `.job` introuvable).
+        leadInReserve: Array.isArray(rec.leadInReserve) ? rec.leadInReserve : [],
         // Marqueur : les boutons de téléchargement passent par localDownloads
         // (contenus persistés, zéro réseau), jamais par une URL serveur.
         downloadUrl: `local:${item.slug}`,

@@ -511,13 +511,38 @@ export function holeBite(ring, {
     // Bouche par DÉFAUT = le rayon de perçage, donc une bouche totale égale au
     // diamètre du disque : le lobe retiré n'est jamais plus étroit que ce
     // qu'il doit contenir.
+    //
+    // ET ELLE S'ÉLARGIT QUAND L'AMORCE EST PLUS COURTE QUE LA MARGE. Le disque
+    // est centré à `leadIn` du bord : si `leadIn < margin`, il déborde vers
+    // l'EXTÉRIEUR du trou et avale les deux lèvres de la bouche — la morsure
+    // refuse alors (`mouthInsideDisc`) et l'appelant retire le trou du
+    // nesting. Mesuré au lot J4-bis sur le cas réel « amorce 0, perçage 3 »
+    // (une opération sans amorce, `Lead in type = 0`) : le trou sortait
+    // entièrement du nesting, pour une raison purement géométrique et sans
+    // que rien ne s'affiche. On écarte donc les lèvres de ce que le disque
+    // déborde, et la morsure s'applique.
+    const overhang = Math.max(0, margin - Math.max(0, lead))
     const mouth = Number.isFinite(Number(mouthMm)) && Number(mouthMm) > 0
         ? Number(mouthMm)
-        : Math.max(margin, 1e-3)
+        : Math.max(margin + overhang, 1e-3)
 
     const i = ((Math.trunc(startIndex) % r.length) + r.length) % r.length
     const v = r[i]
-    const centre = add(v, mul(inwardAt(r, i), Math.max(0, lead)))
+    // LE CENTRE DU DISQUE EST POUSSÉ À LA MARGE AU MINIMUM.
+    //
+    // Le perçage a lieu au DÉBUT de l'amorce, donc à `leadIn` du bord. Quand
+    // `leadIn < margin`, ce disque est à CHEVAL sur le bord du trou : sa
+    // moitié extérieure est dans la matière de l'hôte (sans importance), mais
+    // la construction de la morsure, elle, n'est pas définie pour un centre
+    // sur le bord — mesuré à `leadIn = 0` : l'aire du trou MONTAIT de 2,1 %
+    // et les 32 sommets du disque restaient dans la zone libre. La morsure
+    // s'appliquait sans rien exclure, ce qui est pire qu'un refus.
+    //
+    // On centre donc à `max(leadIn, margin)`. Le disque rendu couvre alors
+    // `0 … 2 × margin` vers l'intérieur, ce qui CONTIENT la moitié intérieure
+    // du disque réel (`0 … margin`) : on réserve un peu plus que ce que la
+    // torche prend, jamais moins — la règle du 32-gone circonscrit du lot E0.
+    const centre = add(v, mul(inwardAt(r, i), Math.max(Math.max(0, lead), margin)))
     const back = walkAlongRing(r, i, mouth, -1)
     const fwd = walkAlongRing(r, i, mouth, +1)
     if (!back || !fwd || back.anchor === fwd.anchor) {

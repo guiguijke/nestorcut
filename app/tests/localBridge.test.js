@@ -5,6 +5,9 @@ import {
     layoutTransforms,
     toServerShapeAlternatives,
     expandMeta,
+    expandPacks,
+    planHoleFills,
+    reduceForSolve,
     applyHoleFill,
     decorateLiveLayout,
     holesFillCap,
@@ -649,5 +652,171 @@ describe('A2 — garde par classe, référence avant post-pass (perte injectée)
         const partsById = new Map(parts.map((p) => [String(p.id), p]))
         const containers = [{ transforms: layoutTransforms(layouts[0], partsById) }]
         expect(perClassCountsMatch(containers, new Map(Object.entries(engineCounts)))).toBe(true)
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Lot J4-bis — LA PIÈCE QUI DISPARAÎT.
+//
+// `reduceForSolve` retire des pièces de l'instance moteur en pariant que
+// l'expansion les rattachera. La forme compressée `{host, fill, slots,
+// ringRotations}` ne sait représenter QU'UN moulinet CENTRÉ : `expandMeta`
+// repose chaque pièce au CENTROÏDE du trou. Dès que le plan s'en écarte — une
+// pose excentrée, ce qui arrive sur un trou non symétrique — l'expansion ne
+// rattache rien, et la pièce n'est NULLE PART. Le job se termine « réussi »
+// à N − k.
+//
+// Ce que ces verrous mesurent, et pourquoi ils ne sont pas vides : la
+// propriété VISIBLE (les pièces retirées sont rattachées), pas la forme
+// interne choisie. Sur le code d'avant le correctif, le premier échoue avec
+// 0 rattachée sur 1.
+//
+// Le cas est LATENT EN PRODUCTION, sans aucun `.job` : il suffit d'un trou
+// non circulaire, d'un seul fichier hôte et d'un seul fichier de remplissage.
+// ---------------------------------------------------------------------------
+
+/** Un trou en L — non symétrique, donc le moulinet centré n'y tient pas. */
+const L_HOLE = [
+    [-40, -40], [40, -40], [40, 0], [0, 0], [0, 40], [-40, 40], [-40, -40],
+]
+const SQUARE_HOLE = (r) => {
+    const n = 48
+    const o = Array.from({ length: n }, (_, i) => {
+        const a = (2 * Math.PI * i) / n
+        return [r * Math.cos(a), r * Math.sin(a)]
+    })
+    return [...o, o[0]]
+}
+const HOST_OUTER = [[-60, -60], [60, -60], [60, 60], [-60, 60], [-60, -60]]
+const SMALL = [[-7, -7], [7, -7], [7, 7], [-7, 7], [-7, -7]]
+
+const mkItems = (hole, fillCount) => ([
+    {
+        id: 0, file_slug: 'hote', coords: HOST_OUTER, holes: [hole],
+        count: 1, rotations: [0, 90, 180, 270],
+    },
+    {
+        id: 1, file_slug: 'petite', coords: SMALL, holes: [],
+        count: fillCount, rotations: [0, 90, 180, 270],
+    },
+])
+
+/** Combien de pièces la réduction a-t-elle RETIRÉES de l'instance ? */
+const removedByReduction = (items, reduced) => {
+    let removed = 0
+    for (const it of items) {
+        const kept = reduced.find((r, i) => i >= 0 && r && r.__origId === it.id)
+        void kept
+    }
+    // Plus simple et exact : demande d'origine − demande restante, par id.
+    const rest = new Map()
+    reduced.forEach((r, i) => rest.set(i, r.demand || 0))
+    const totalBefore = items.reduce((n, it) => n + (it.count || 0), 0)
+    const totalAfter = reduced.reduce((n, r) => n + (r.demand || 0), 0)
+    void rest
+    return totalBefore - totalAfter
+}
+
+/** Rejoue l'expansion telle que la production la fait, et compte les ajouts. */
+const expandAndCount = (items, meta, hostPose = { rotation: 0, translation: [500, 500] }) => {
+    const layouts = [{
+        container_id: 0,
+        placed_items: [{ item_id: 0, transformation: hostPose }],
+    }]
+    const before = layouts[0].placed_items.length
+    if (meta.packs) {
+        expandPacks(items, meta.packs, layouts)
+    } else {
+        expandMeta(items, meta.host, meta.fill, meta.slots, layouts, meta.ringRotations)
+    }
+    return layouts[0].placed_items.length - before
+}
+
+const runCase = (hole, fillCount, space = 2) => {
+    const items = mkItems(hole, fillCount)
+    const jag = items.map((it) => ({
+        id: it.id,
+        demand: it.count,
+        allowed_orientations: it.rotations,
+        shape: { type: 'simple_polygon', data: it.coords },
+    }))
+    const packs = planHoleFills(items, space)
+    const { meta, reduced } = reduceForSolve(items, jag, packs, space)
+    return {
+        packs,
+        meta,
+        removed: removedByReduction(items, reduced),
+        attached: expandAndCount(items, meta),
+    }
+}
+
+describe('J4-bis — aucune pièce ne disparaît entre la réduction et l’expansion', () => {
+    it('trou en L, 1 hôte + 1 petite : tout ce qui est retiré est rattaché', () => {
+        const r = runCase(L_HOLE, 1)
+        // Le planificateur trouve bien une place dans le L.
+        expect(r.packs?.length).toBeGreaterThan(0)
+        expect(r.removed).toBeGreaterThan(0)
+        // LA PROPRIÉTÉ QUI COMPTE. Sur le code d'avant le correctif, la forme
+        // compressée était prise, `ringRotations` valait `[[]]` sur ce trou,
+        // et `attached` valait 0 : la pièce disparaissait sans erreur.
+        expect(r.attached).toBe(r.removed)
+    })
+
+    it('trou en L, 1 hôte + 4 petites : idem, rien ne se perd', () => {
+        const r = runCase(L_HOLE, 4)
+        expect(r.removed).toBeGreaterThan(0)
+        expect(r.attached).toBe(r.removed)
+    })
+
+    it('CONTRÔLE NÉGATIF — un trou circulaire garde la forme compressée', () => {
+        // Sans lui, le correctif pourrait basculer TOUT LE MONDE sur la forme
+        // `{packs}` et personne ne le verrait : le chemin de production
+        // d'aujourd'hui doit rester exactement celui d'hier.
+        const r = runCase(SQUARE_HOLE(40), 4)
+        expect(r.meta.packs).toBeUndefined()
+        expect(r.meta.host).toBe(0)
+        expect(r.meta.fill).toBe(1)
+        expect(r.meta.ringRotations?.[0]?.length).toBeGreaterThan(0)
+        expect(r.attached).toBe(r.removed)
+    })
+
+    it('un hôte NON POSÉ ne compte pas comme une perte', () => {
+        // La garde anti-perte compare « rattaché » à « promis ». Si « promis »
+        // comptait TOUT ce que la réduction a retiré, une solution partielle
+        // — le moteur n'a pas placé tous les hôtes, ce qui est légitime —
+        // serait refusée à tort : les pièces destinées aux trous d'un hôte
+        // absent n'ont nulle part où aller. Le contrôle vérifie donc que
+        // l'expansion ne rattache rien ET qu'elle ne PROMETTAIT rien.
+        const items = mkItems(L_HOLE, 2)
+        const jag = items.map((it) => ({
+            id: it.id,
+            demand: it.count,
+            allowed_orientations: it.rotations,
+            shape: { type: 'simple_polygon', data: it.coords },
+        }))
+        const packs = planHoleFills(items, 2)
+        const { meta } = reduceForSolve(items, jag, packs, 2)
+        // Une tôle où l'hôte n'a PAS été posé (seule une petite l'a été).
+        const layouts = [{
+            container_id: 0,
+            placed_items: [{ item_id: 1, transformation: { rotation: 0, translation: [10, 10] } }],
+        }]
+        const before = layouts[0].placed_items.length
+        if (meta.packs) expandPacks(items, meta.packs, layouts)
+        else expandMeta(items, meta.host, meta.fill, meta.slots, layouts, meta.ringRotations)
+        expect(layouts[0].placed_items.length - before).toBe(0)
+    })
+
+    it('la forme compressée n’est prise QUE si elle reproduit le plan', () => {
+        // Le critère, énoncé par la propriété : quelle que soit la forme
+        // choisie, l'expansion doit reposer exactement ce que la réduction a
+        // enlevé. On balaie plusieurs géométries de trou pour que le verrou
+        // ne tienne pas à un cas particulier.
+        for (const hole of [L_HOLE, SQUARE_HOLE(40), SQUARE_HOLE(30)]) {
+            for (const n of [1, 2, 4]) {
+                const r = runCase(hole, n)
+                expect(r.attached).toBe(r.removed)
+            }
+        }
     })
 })

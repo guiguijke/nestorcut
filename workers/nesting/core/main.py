@@ -1631,7 +1631,7 @@ def _nesting_process_impl(doc):
     # J-085 / D-MOT-16 : expansion meta — rattache les fillers figés aux
     # hôtes posés par le solve réduit, avant reveal + finalisation.
     if meta:
-        from core.holefill import expand_meta, expand_packs
+        from core.holefill import expand_meta, expand_packs, expected_expansion
         id_map = meta["idMap"]
         for engine_alt in engine_alternatives:
             engine_alt["postPass"] = {
@@ -1665,6 +1665,9 @@ def _nesting_process_impl(doc):
             # A5 : traçabilité du post-pass (additif, jamais muet) + P8 :
             # ventilation perPass et timing (monotonic hors stats).
             _t0 = _pass_t.monotonic()
+            # J4-bis : ce que l'expansion DOIT rattacher pour les hôtes
+            # réellement posés — mesuré AVANT, sur les layouts du solve.
+            _expected = expected_expansion(meta, layouts)
             if meta.get("packs"):
                 sol["layouts"] = expand_packs(input_items, meta["packs"], layouts)
             else:
@@ -1675,6 +1678,23 @@ def _nesting_process_impl(doc):
             _delta = sum(len(l.get("placed_items", []))
                          for l in sol.get("layouts") or []) - before
             engine_alt["postPass"]["expandMeta"] = _delta
+            # J4-bis (ETUDE-JOB-SHEETCAM §9.28 point 2) : garde anti-perte.
+            # La demande des fillers a été RETIRÉE de l'instance moteur ; si
+            # l'expansion ne les rattache pas tous, ils ne sont NULLE PART et
+            # le job finirait « réussi » à N − k. L'alternative est écartée
+            # comme une alternative physiquement invalide (esprit du piège
+            # #56b : refuser plutôt que livrer), diagnostic persisté.
+            if _delta != _expected:
+                engine_alt["_expandLoss"] = {
+                    "expected": _expected, "attached": _delta}
+                engine_alt["postPass"]["errors"].append(
+                    f"expand_loss:{_delta}/{_expected}")
+                logger.error(
+                    "expansion lost fillers — alternative will be discarded",
+                    extra={"slug": slug, "attached": _delta,
+                           "expected": _expected,
+                           "metaForm": "packs" if meta.get("packs") else "meta"},
+                )
             engine_alt["postPass"].setdefault("perPass", {})["expand"] = {
                 "moved": _delta}
             _pass_timings[engine_alt.get("bias") or "alt"] = {
@@ -1864,6 +1884,10 @@ def _nesting_process_impl(doc):
                 _time.sleep(REVEAL_STEP_SEC)
 
     invalid_alt_count = [0]
+    # J4-bis : alternatives écartées parce que l'expansion du pre-pass
+    # trous-d'abord n'a pas rattaché toutes les pièces retirées de
+    # l'instance (perte de pièce — message d'erreur distinct).
+    expand_loss_count = [0]
     # AB2 (L2-bis) : jamais perdre une alternative en silence — chaque
     # écartage au filet laisse un DIAGNOSTIC persisté (job doc, champ
     # additif discardedAlternatives) : stratégie, vérification, paires en
@@ -1990,6 +2014,21 @@ def _nesting_process_impl(doc):
                 c.container_id = container_map_back.get(
                     getattr(c, "container_id", None),
                     getattr(c, "container_id", None))
+
+        # J4-bis : l'expansion n'a pas rattaché tout ce qui avait été retiré
+        # de l'instance — les pièces manquantes ne sont sur aucune tôle. On
+        # écarte (jamais un « terminé » à N − k) ; si TOUTES les alternatives
+        # tombent ici, le job finit en erreur avec un message DISTINCT.
+        _loss = engine_alt.get("_expandLoss")
+        if _loss:
+            expand_loss_count[0] += 1
+            logger.error(
+                "alternative discarded — hole-fill expansion lost parts",
+                extra={"strategy": strategy, **_loss},
+            )
+            _record_discard(engine_alt, result_containers, "expand_loss",
+                            strategy, rank, _loss)
+            return
 
         # X2 : posé MOTEUR par classe — référence des deux gardes (une
         # solution partielle sur stock serré n'est pas une « perte »).
@@ -2167,6 +2206,13 @@ def _nesting_process_impl(doc):
                    "kept": len(alternatives)},
         )
 
+    if expand_loss_count[0]:
+        logger.error(
+            "alternatives discarded for hole-fill expansion loss",
+            extra={"count": expand_loss_count[0],
+                   "kept": len(alternatives)},
+        )
+
     # Lot E2 : constat « pieces plus fines que l'espacement », nomme. Ecrit
     # sur le job en champ ADDITIF (les anciens jobs n'en ont pas).
     thin = []
@@ -2195,12 +2241,22 @@ def _nesting_process_impl(doc):
         # toutes les alternatives physiquement invalides » (message faux
         # qui masquait une régression du post-pass).
         all_invalid = invalid_alt_count[0] > 0
-        information = (
-            "Post-pass validation rejected every alternative "
-            "(measured overlaps) — please retry"
-            if all_invalid
-            else "Not all items could be placed in the nesting job"
-        )
+        if expand_loss_count[0] > 0:
+            # J4-bis : cause DISTINCTE des deux autres — le pre-pass
+            # trous-d'abord a retiré des pièces de l'instance que l'expansion
+            # n'a pas rattachées. Dire « le moteur n'a pas tout placé » ici
+            # masquerait une perte de pièce.
+            information = (
+                "Hole-fill expansion lost parts, every alternative was "
+                "rejected — please retry"
+            )
+        elif all_invalid:
+            information = (
+                "Post-pass validation rejected every alternative "
+                "(measured overlaps) — please retry"
+            )
+        else:
+            information = "Not all items could be placed in the nesting job"
         _heartbeat_stop.set()
         db["nesting_jobs"].update_one(
             { "slug": slug },

@@ -732,14 +732,38 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                 const sheets = sheetsFromLayouts(layouts, partsById, {
                     layoutTransforms, nestedInForLayout,
                 })
+                const built = buildNestedJobs(job, {
+                    sheets,
+                    ringsByFileSlug: sheetcamContext.ringsByFileSlug,
+                    fileNamesBySlug: sheetcamContext.fileNamesBySlug,
+                    baseName: base,
+                })
                 alternatives[k] = {
                     ...alternatives[k],
-                    jobs: buildNestedJobs(job, {
-                        sheets,
-                        ringsByFileSlug: sheetcamContext.ringsByFileSlug,
-                        fileNamesBySlug: sheetcamContext.fileNamesBySlug,
-                        baseName: base,
-                    }).map((f) => ({ fileName: f.fileName, bytes: f.bytes })),
+                    jobs: built.map((f, s) => ({
+                        fileName: f.fileName,
+                        bytes: f.bytes,
+                        // Le nichage, en RANGS `[Part N]` du fichier écrit :
+                        // `[rang de la nichée, rang de son hôte]`. C'est ce
+                        // dont le verrou d'ordre de coupe a besoin — mesurer
+                        // sur `[OpOrder]` seul ne mesurerait que lui-même.
+                        // Champ ADDITIF, quelques entiers.
+                        nestedPairs: (sheets[s] || []).flatMap((item, i) => {
+                            const host = item.nestedIn
+                            if (host == null) return []
+                            // `f.ranks` = le rang ECRIT de chaque exemplaire.
+                            // `placements[i].part` est le rang du DESSIN, pas
+                            // celui de la section : les confondre produit des
+                            // paires fausses (mesure du lot J4-bis).
+                            return [[f.ranks[i], f.ranks[host]]]
+                        }),
+                        // L'ordre de coupe ECRIT dans CE fichier, en rangs.
+                        // Persiste a cote des paires pour que le verrou
+                        // compare les deux d'un MEME fichier : un resultat
+                        // porte plusieurs alternatives, et comparer les paires
+                        // de l'une a l'ordre de l'autre ne mesure rien.
+                        order: f.order.map(([rank]) => rank),
+                    })),
                 }
             }
         } catch (e) {
@@ -756,6 +780,13 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             projectSlug: projectSlug || null,
             createdAt: Date.now(),
             ...(jobError ? { sheetcamJobError: jobError } : {}),
+            // Lot J4-bis : les constats de reserve d'amorce (refus, trous
+            // retires du nesting) voyagent jusqu'au record, donc jusqu'a
+            // l'ecran. Sans cela la degradation est SURE mais MUETTE :
+            // l'utilisateur ne sait pas qu'un trou a ete laisse vide.
+            ...(payload?.leadInReserve?.length
+                ? { leadInReserve: payload.leadInReserve }
+                : {}),
             problem: result?.problem || payload?.problem || null,
             isSpp: (result?.problem || payload?.problem) === 'spp',
             sheets: [[sheetWidth, sheetHeight]],

@@ -449,18 +449,117 @@ export function reduceForSolve(inputItems, jaguarItems, packs, space = 0) {
         const ringRotations = (host?.holes || []).map((ring) =>
             _jsPinwheelCapacity(ring, _itemCoords(fill), space, allowed),
         )
-        return {
-            meta: {
-                host: hid,
-                fill: fid,
-                slots: (packs || []).map((p) => (p.fills || []).length),
-                ringRotations,
-                idMap,
-            },
-            reduced,
+        const slots = (packs || []).map((p) => (p.fills || []).length)
+        // LA FORME COMPRESSÉE NE SE PREND QUE SI ELLE PORTE LE PLAN.
+        //
+        // `{host, fill, slots, ringRotations}` ne sait représenter QU'UN
+        // moulinet CENTRÉ : `expandMeta` repose chaque pièce au CENTROÏDE du
+        // trou, une par rotation autorisée, dans la limite de `slots`. Or le
+        // planificateur, lui, rend des poses quelconques — et il en rend
+        // d'excentrées dès que le trou n'est pas symétrique.
+        //
+        // Quand les deux divergent, la demande a été RÉDUITE dans l'instance
+        // moteur et l'expansion ne rattache rien : la pièce n'est nulle part,
+        // SANS ERREUR. Le job se termine « réussi » à N − k. Mesuré au
+        // navigateur (étude §9.25) : 1 hôte + 1 pièce ⇒ 1 posée sur 2 ;
+        // 1 + 4 ⇒ 4 sur 5 ; 2 + 2 ⇒ 2 sur 4. Le couplage est ANCIEN — il est
+        // latent en production pour tout trou non circulaire (un L, un C)
+        // avec un seul fichier hôte et un seul fichier de remplissage ; la
+        // réserve d'amorce du lot J4 est seulement la première chose qui a
+        // fait diverger le planificateur du moulinet centré.
+        //
+        // Le critère se vérifie tout seul : on rejoue ce qu'`expandMeta`
+        // produirait et on le compare aux poses réelles. Il couvre au passage
+        // le cas `slots` > somme des rotations disponibles (la liste rejouée
+        // est alors plus courte). Sur un trou circulaire — le cas de tous les
+        // jobs d'aujourd'hui — les deux coïncident et RIEN NE CHANGE.
+        if (_metaCarriesPlan(packs, host, ringRotations, slots)) {
+            return {
+                meta: { host: hid, fill: fid, slots, ringRotations, idMap },
+                reduced,
+            }
         }
     }
     return { meta: { packs, idMap }, reduced }
+}
+
+/**
+ * La forme compressée reproduirait-elle EXACTEMENT le plan ?
+ *
+ * On rejoue la distribution d'`expandMeta` — centroïde du trou, rotations
+ * dans l'ordre de `ringRotations`, budget `slots[h]` — et on la compare aux
+ * poses que le planificateur a réellement trouvées, en coordonnées LOCALES à
+ * l'hôte (c'est le repère commun : `expandMeta` compose ensuite la pose de
+ * l'hôte, `expandPacks` aussi).
+ *
+ * Comparaison en MULTI-ENSEMBLE : `expandMeta` empile trou par trou puis
+ * rotation par rotation, le planificateur peut avoir trouvé ses poses dans un
+ * autre ordre, et l'ordre n'a aucune importance — seul compte l'ensemble des
+ * poses produites.
+ */
+function _metaCarriesPlan(packs, host, ringRotations, slots) {
+    const rings = host?.holes || []
+    if (!rings.length) return false
+    const EPS = 1e-6
+    const near = (a, b) => Math.abs(a - b) <= EPS
+    for (let h = 0; h < (packs || []).length; h++) {
+        const fills = packs[h].fills || []
+        let budget = slots[h] ?? 0
+        if (budget !== fills.length) return false
+        const expected = []
+        for (let ri = 0; ri < rings.length && budget > 0; ri++) {
+            const c = _centroid(rings[ri])
+            for (const frot of ringRotations[ri] || []) {
+                if (budget <= 0) break
+                expected.push({ lx: c[0], ly: c[1], rot: frot })
+                budget--
+            }
+        }
+        if (expected.length !== fills.length) return false
+        const pool = [...expected]
+        for (const f of fills) {
+            const k = pool.findIndex((e) => near(e.lx, f.lx) && near(e.ly, f.ly)
+                && near(((e.rot % 360) + 360) % 360, ((f.rot % 360) + 360) % 360))
+            if (k < 0) return false
+            pool.splice(k, 1)
+        }
+    }
+    return true
+}
+
+/**
+ * Combien de pièces l'expansion DOIT rattacher, compte tenu des hôtes que le
+ * moteur a réellement posés.
+ *
+ * Ce n'est PAS « tout ce que la réduction a retiré » : le moteur peut n'avoir
+ * placé qu'une partie des hôtes (solution partielle, stock serré), et les
+ * pièces destinées aux trous d'un hôte absent ne sont légitimement pas
+ * rattachées. Les compter ferait refuser une alternative saine.
+ *
+ * On reproduit donc la consommation des deux expansions :
+ *   - forme `{packs}` : `expandPacks` apparie chaque pack à UN hôte posé ;
+ *     les packs sans hôte posé restent inutilisés ;
+ *   - forme compressée : `expandMeta` parcourt les hôtes posés dans l'ordre
+ *     et consomme `slots[hi]` pour le hi-ième — les slots au-delà du nombre
+ *     d'hôtes posés ne servent pas.
+ */
+function _plannedExpansion(meta, placedIds) {
+    const ids = (placedIds || []).map((v) => String(v))
+    if (meta.packs) {
+        const pool = [...ids]
+        let n = 0
+        for (const pack of meta.packs || []) {
+            const k = pool.indexOf(String(pack.hostId))
+            if (k < 0) continue
+            pool.splice(k, 1)
+            n += pack.fills?.length || 0
+        }
+        return n
+    }
+    const hostsPlaced = ids.filter((v) => v === String(meta.host)).length
+    return (meta.slots || [])
+        .slice(0, hostsPlaced)
+        .reduce((n, s) => n + (Number(s) || 0), 0)
 }
 
 export function expandPacks(parts, packs, layouts) {
@@ -1337,6 +1436,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             // hôtes ; puis post-pass de sécurité (no-op si trous déjà
             // pleins) — parité serveur.
             let expandedCount = 0
+            let expansionPlanned = 0
             if (payload?.meta && !selfContained) {
                 const idMap = payload.meta.idMap
                 if (Array.isArray(idMap)) {
@@ -1349,6 +1449,10 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 }
                 const nBefore = layouts.reduce(
                     (n, l) => n + (l.placed_items?.length || 0), 0)
+                // Les ids posés AVANT expansion : c'est sur eux que se compte
+                // ce que l'expansion doit rattacher (voir `_plannedExpansion`).
+                const hostsBefore = layouts.flatMap(
+                    (l) => (l.placed_items || []).map((pi) => pi.item_id))
                 if (payload.meta.packs) {
                     expandPacks(parts, payload.meta.packs, layouts)
                 } else {
@@ -1358,6 +1462,26 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 // compteur main.py).
                 expandedCount = layouts.reduce(
                     (n, l) => n + (l.placed_items?.length || 0), 0) - nBefore
+                // GARDE ANTI-PERTE (lot J4-bis).
+                //
+                // La réduction a RETIRÉ ces pièces de l'instance moteur en
+                // pariant que l'expansion les rattacherait. Si le pari est
+                // faux, elles ne sont NULLE PART et le job se termine
+                // « réussi » à N − k — c'est exactement ce qui s'est produit
+                // sur la recette (4 posées sur 5, étude §9.25). Le compteur
+                // existait déjà ; personne ne le confrontait à rien.
+                //
+                // On compte ce que la réduction avait promis, et on le dit à
+                // l'appelant : `finalizeLocal` écarte l'alternative. Refuser
+                // vaut mieux que livrer une tôle amputée en silence (esprit
+                // des pièges #45 et #56b).
+                //
+                // ON NE COMPTE QUE LES HÔTES RÉELLEMENT POSÉS. Le moteur peut
+                // n'en avoir placé qu'une partie (solution partielle, stock
+                // serré) : les pièces destinées aux trous d'un hôte absent ne
+                // sont légitimement pas rattachées, et les compter ferait
+                // refuser une alternative parfaitement saine.
+                expansionPlanned = _plannedExpansion(payload.meta, hostsBefore)
             }
             // A2 (lot 4) : comptes par classe APRÈS expansion, AVANT
             // hole-fill/résiduel — miroir exact du engine_placed_by_id
@@ -1490,6 +1614,14 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 report: report && !report.error ? report : null,
                 postPass,
                 engineCounts,
+                // GARDE ANTI-PERTE (lot J4-bis) : ce que la réduction avait
+                // PROMIS de rattacher, et ce que l'expansion a réellement
+                // rattaché. `finalizeLocal` écarte l'alternative quand les
+                // deux diffèrent — une pièce retirée de l'instance et jamais
+                // reposée n'est nulle part, et le job se terminerait
+                // « réussi » à N − k.
+                expansionPlanned,
+                expansionAttached: expandedCount,
                 // §17.2 : sous drapeau QA seulement — l'état MOTEUR et
                 // l'état LIVRÉ des mêmes layouts, plus la géométrie brute
                 // des pièces, pour que la mesure soit faite hors du
