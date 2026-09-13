@@ -1271,3 +1271,37 @@ l'option voyage jusqu'au worker.
 
 Les sorties brutes restent hors dépôt (`~/qa-out/e3-casG/`) : elles portent le
 nom réel d'un fichier d'atelier.
+
+## 7. Retour du propriétaire après le déploiement d'E3 (14/09) — quatre constats
+
+Le propriétaire a utilisé la production (`9b227ec1`) avec le dessin du
+collègue et rapporte, dans l'ordre :
+
+1. **La vue DXF d'un résultat plante la page** (à reproduire, priorité 1 —
+   voir la vérification ci-dessous).
+2. **Un dessin importé SANS import avancé est quand même « éclaté » au
+   nesting.** C'est le comportement de toujours : une fiche à N contours
+   fermés donne N pièces au moteur (`localPayloadBuilder`, une entrée par
+   `parts[i]`), et l'« import automatique » d'E3 ne change que la FICHE (une
+   seule, quantité unique), pas le nesting. Ce que le propriétaire attend :
+   un dessin non éclaté se neste **comme un bloc rigide** (ses pièces gardent
+   leurs positions relatives), et seul l'éclatement explicite les libère.
+3. **La mise à l'échelle manque de précision** : la poignée est bien, mais il
+   faut pouvoir SAISIR une des deux dimensions (largeur ou hauteur cible,
+   rapport conservé) — l'aperçu E1-bis/E3 n'a que les champs de la TÔLE, les
+   champs de dimension cible du lot E1 ont disparu avec le panneau.
+4. **Le flux voulu** : importer normalement (une fiche = le dessin entier),
+   puis SUR LA FICHE : régler l'échelle (saisie ou poignée), puis un bouton
+   « Éclater en pièces » qui la remplace par N fiches. **La fenêtre de choix
+   au dépôt ne sert alors plus à rien**, et l'interrupteur non plus.
+
+Lecture du vérificateur : les points 2, 3 et 4 forment UN lot cohérent
+(**E4**) — (a) une fiche non éclatée = un item moteur unique dont la forme de
+collision est l'enveloppe convexe de ses pièces (le DXF de coupe transporte
+toutes ses entités avec la même pose ; le rapport compte une pièce) ; (b) sur
+la fiche : « Échelle » (largeur ou hauteur cible saisie, rapport conservé,
+facteur affiché, aperçu sur tôle avec poignée) ; (c) sur la fiche : « Éclater
+en pièces » (N fiches, comme E1) ; (d) suppression de la fenêtre et de
+l'interrupteur ; (e) miroir serveur ; (f) libellés EN + FR ; harnais refait.
+Le propriétaire a demandé de traiter le point 1 d'abord ; E4 s'ouvre après
+son accord sur cette lecture.

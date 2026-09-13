@@ -2311,3 +2311,53 @@ déjà, millimètre pour millimètre. Si le propriétaire tranche pour
 `4 × kerf + sécurité`, c'est une heure de travail plus une migration qui
 préserve l'espacement effectif des projets existants (la même mécanique que
 celle écrite au §9.40) ; je ne l'engage pas sans son mot.
+
+### Déploiement J4-ter + E3 — contrôle du vérificateur (14/09) et conception du « meilleur point de départ »
+
+#### 9.57 Contrôle indépendant du déploiement `9b227ec1`
+
+| Contrôle | Résultat |
+|---|---|
+| dépôt | `main` = `origin/main`, `29711b1f` / `9b227ec1` / `c6291083` poussés ; étude : **0 CR**, `i/lf w/lf` |
+| CI | « Build and publish Docker images » `success` sur `9b227ec1a5a2…` ; `promote-latest` `success` |
+| prod app | la page servie expose **`gitCommitSha: 9b227ec1a5a2…`** (la révision EST lisible depuis le navigateur, même sans label d'image) ; `PATCH /api/project/…/advanced-import` répond **401** sans session (route neuve d'E3 en place ; l'ancien build aurait rendu 404) |
+| homelab | `assert_overflow_head.py` via le module de secrets : **ASSERT OVERFLOW=HEAD: OK**, image du 13/09 23 h 52, trois workers |
+| benchmarks | non réécrits : T-F rend 89 à HEAD et 88 / 90 sur l'image de référence rejouée — la fourchette encadre HEAD, aucun mouvement dû au code. **Décision de page publique pour le propriétaire** : afficher la fourchette (ou la médiane de N passages) plutôt qu'un passage unique — le vérificateur recommande d'afficher « 88-90 » ou de fixer trois passages par fiche |
+
+Le label `org.opencontainers.image.revision` proposé par l'implémenteur est
+pris comme suite de D1 (une ligne dans `build-images.yml`, `docker inspect`
+suffit alors sur les serveurs) — non bloquant, la page l'expose déjà.
+
+**Bandes de kerf** : avis du vérificateur identique à celui de
+l'implémenteur — garder `2 × kerf + sécurité`, où la sécurité est exactement
+la matière qui reste entre les deux bandes ; qui veut plus de matière monte
+la sécurité. Décision du propriétaire attendue, sans urgence.
+
+#### 9.58 « Meilleur point de départ » — réponse au fork de conception
+
+Oui, c'est une passe **après le solve**, et elle ne remplace pas la réserve
+d'avant-solve, elle la complète :
+
+1. **Avant le solve** (inchangé) : réserve au point lu, drapeau ou non — le
+   nesting ne pose rien là où l'amorce lue passerait.
+2. **Après le solve, par contour** (trous des hôtes d'abord, puis contours
+   extérieurs) : candidats = les sommets de l'anneau (et le milieu de chaque
+   arête droite) ; pour chacun, construire l'enveloppe d'amorce du §9.51
+   (entrée, sortie, perçage, bande ± kerf) au bon côté chute, dans le repère
+   de la tôle ; **score = distance minimale arête↔arête entre cette
+   enveloppe et toute autre pièce posée** (nichées comprises) et le bord de
+   tôle ; retenir le candidat de score maximal ; **ne l'écrire que si son
+   score ≥ espacement ET ≥ score du point lu** — sinon garder le point lu.
+   Piège #55 : distance arête↔arête, jamais sommet→arête.
+3. **Écriture** : `writeJobStartPoints` avec le drapeau, comme J4-ter ; le
+   constat dit « point déplacé de A vers B, dégagement X mm ».
+4. **Verrous** : sur la recette à espacement 2 mm (quatre éventails nichés),
+   le point du trou retenu est à ≥ espacement des quatre ; contrôle négatif :
+   aucun candidat dégagé ⇒ point lu conservé, constat « aucun point
+   dégagé » ; le G-code du propriétaire amorce au point écrit (recette).
+5. **Ce qu'on ne fait pas** : re-nester après le déplacement (le point
+   choisi respecte le layout, pas l'inverse) ; modéliser la règle
+   automatique de SheetCam (inutile, on écrit).
+
+Chantier J4-quater, un à deux jours, **avant J5**, parce qu'il change la
+forme du résultat que J5 devra refléter côté serveur.
