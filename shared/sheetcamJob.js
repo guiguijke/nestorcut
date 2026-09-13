@@ -459,15 +459,47 @@ export function writeNestedSheetCamJob(job, { placements, order = null, maskPath
         }
     }
 
-    // 3) les COPIES : une section par exemplaire supplémentaire, insérée
-    //    après la dernière section `Part …` (l'ordre de QSettings n'est pas
-    //    recalculable — voir l'en-tête).
+    // 3) les COPIES.
+    //
+    // UN `.job` DÉJÀ NESTÉ EN CONTIENT DÉJÀ, et les ignorer était un défaut :
+    // on écrivait alors des sections NEUVES par-dessus, si bien qu'un job de
+    // référence à 5 pièces (1 hôte + 1 éventail + 3 `copyOf`) re-nesté en
+    // 5 pièces ressortait avec 8 sections — les 3 copies d'origine restaient
+    // ACTIVES, à leur ancienne pose, et SheetCam aurait coupé trois pièces
+    // fantômes. Mesuré au harnais du lot J4 (`Count=8`, `[OpOrder]` sautant
+    // les rangs 2, 3 et 4).
+    //
+    // On RÉUTILISE donc les sections de copie que le fichier porte déjà pour
+    // le même original — c'est exactement la forme qu'écrit SheetCam, et
+    // celle du fichier de référence — puis on en ajoute s'il en manque, et
+    // enfin on désactive celles qui restent en trop.
+    const freeCopies = new Map()
+    for (const part of job.parts) {
+        if (part.copyOf < 0) continue
+        if (!freeCopies.has(part.copyOf)) freeCopies.set(part.copyOf, [])
+        freeCopies.get(part.copyOf).push(part.index)
+    }
+    const reused = new Set()
     const existing = job.parts.map((p) => p.index)
     let nextIndex = existing.length ? Math.max(...existing) + 1 : 0
     const copies = []
     for (const [index, poses] of byPart) {
         const original = job.parts.find((q) => q.index === index)
+        const pool = freeCopies.get(index) || []
         for (const pose of poses.slice(1)) {
+            const recycled = pool.shift()
+            if (recycled != null) {
+                const s = `Part ${recycled}`
+                reused.add(recycled)
+                setEntry(lines, s, 'XPos', formatJobNumber(pose.xPos))
+                setEntry(lines, s, 'YPos', formatJobNumber(pose.yPos))
+                setEntry(lines, s, 'Angle', formatJobNumber(pose.angle))
+                setEntry(lines, s, 'enabled', '1')
+                setEntry(lines, s, 'copyOf', String(index))
+                if (pose.hRef != null) setEntry(lines, s, 'HRef', formatJobNumber(pose.hRef))
+                if (pose.vRef != null) setEntry(lines, s, 'VRef', formatJobNumber(pose.vRef))
+                continue
+            }
             const rank = nextIndex++
             copies.push({ kind: 'section', name: `Part ${rank}` })
             // MÊMES clés, MÊME ordre que la section d'un original : c'est ce
@@ -488,6 +520,15 @@ export function writeNestedSheetCamJob(job, { placements, order = null, maskPath
         }
     }
     if (copies.length) lines.splice(afterLastPartSection(lines), 0, ...copies)
+
+    // 3b) les copies d'origine dont on n'a pas eu besoin sortent du job —
+    //     même traitement que les originaux non posés : désactivées, jamais
+    //     supprimées (leur rang appartient à la numérotation du fichier).
+    for (const part of job.parts) {
+        if (part.copyOf >= 0 && !reused.has(part.index)) {
+            setEntry(lines, `Part ${part.index}`, 'enabled', '0')
+        }
+    }
 
     // 4) `Count` = originaux (toutes sections `Part N` d'origine) + copies.
     setEntry(lines, 'Misc', 'Count', String(job.parts.length + copies.filter(

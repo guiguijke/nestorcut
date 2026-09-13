@@ -70,6 +70,22 @@
  *     (Python le lit toujours en float depuis Mongo).
  */
 
+// Import STATIQUE, et il faut dire pourquoi dans un fichier qui n'en a aucun
+// autre. La regle de l'en-tete (« JAMAIS d'import de geometryClient ici »)
+// vise les dependances LOURDES et injectables — le wasm. `sheetcamReserve`
+// est de la geometrie pure, sans aucune dependance, des deux cotes.
+//
+// ET L'ALIAS `~~/shared/…` EST OBLIGATOIRE, un chemin relatif ne marche pas
+// (piege AGENTS #29c). Un module de `app/composables/` atteint par un import
+// dynamique devient son propre chunk ; le bundle serveur reecrit alors ses
+// imports relatifs depuis l'emplacement du CHUNK et non de la source, si bien
+// que `../../shared/sheetcamReserve.js` devient `../../../../../shared/…` et
+// ne resout plus. Mesure : le build de l'IMAGE le refuse (« RollupError:
+// Could not resolve »), celui du poste ne le voyait pas — c'est exactement
+// pourquoi la maison exige des images a HEAD avant tout banc.
+
+import { partWithReserve, DEFAULT_PIERCE_MARGIN_MM } from '~~/shared/sheetcamReserve.js'
+
 // ---------------------------------------------------------------------------
 // Constantes (miroirs Python)
 // ---------------------------------------------------------------------------
@@ -546,14 +562,6 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // Constats de réserve d'amorce, un par pièce concernée — ADDITIF, et
     // destiné à la fiche (un refus doit se voir, pas se taire).
     const reserveNotes = []
-    // Chargé SEULEMENT si un fichier vient d'un `.job` : un projet ordinaire
-    // ne paie pas ce module (et le style du fichier est l'import dynamique —
-    // voir l'en-tête, « JAMAIS d'import de geometryClient ici »).
-    const needsReserve = (files || []).some((f) => f.sheetcam
-        && (Number(f.sheetcam.leadIn) > 0 || Number(f.sheetcam.pierceMarginMm) > 0))
-    const { partWithReserve, DEFAULT_PIERCE_MARGIN_MM } = needsReserve
-        ? await import('../../shared/sheetcamReserve.js')
-        : {}
     for (const file of files || []) {
         const fileSlug = file.slug
         const count = file.count

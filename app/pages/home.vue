@@ -121,9 +121,17 @@
     const privacyChoice = ref(localImportEnabled.value ? 'device' : 'cloud')
     const localProject = computed(() => privacyChoice.value === 'device')
     watch(privacyChoice, () => { error.value = '' })
+    // La page d'accueil porte SA PROPRE liste : c'est elle qui filtre la
+    // toute première dépose, celle qui CRÉE le projet. Lot J4 : sans `.job`
+    // ici, un `.job` déposé à la création était écarté par la dropzone, en
+    // silence — les DXF partaient seuls et le nesting se faisait sans les
+    // réserves d'amorce. Défaut trouvé par le harnais navigateur, qu'aucun
+    // test unitaire ne pouvait voir. Garder cette liste alignée sur celle de
+    // `ProjectFiles.vue`. La liste ne sert qu'au filtre du sélecteur de
+    // fichiers : la vérité du format reste la SIGNATURE (piège #31).
     const uploadExtensions = computed(() =>
         localProject.value && localImportEnabled.value
-            ? ['.dxf', '.svg']
+            ? ['.dxf', '.svg', '.job']
             : ['.dxf', '.svg', '.dwg']
     )
 

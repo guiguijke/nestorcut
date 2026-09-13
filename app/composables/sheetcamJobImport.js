@@ -28,8 +28,10 @@
  * refus pour rien.
  */
 
-import { isSheetCamJob, jobSheet } from '../../shared/sheetcamJob.js'
-import { DEFAULT_PIERCE_MARGIN_MM, spacingFromKerf } from '../../shared/sheetcamReserve.js'
+import { isSheetCamJob, jobSheet } from '~~/shared/sheetcamJob.js'
+import {
+    DEFAULT_KERF_SAFETY_MM, DEFAULT_PIERCE_MARGIN_MM, spacingFromKerf,
+} from '~~/shared/sheetcamReserve.js'
 
 /** Nom comparable : casse et espaces ignorés (voir l'en-tête). */
 const key = (name) => String(name || '').trim().toLowerCase()
@@ -91,18 +93,25 @@ export function matchDrawings(read, droppedFiles) {
  * exploitable ne pré-remplit pas l'espacement : on ne remplit pas un champ
  * avec une valeur inventée.
  */
-export function prefillFromJob(read, { safetyMm } = {}) {
+export function prefillFromJob(read, { safetyMm = DEFAULT_KERF_SAFETY_MM } = {}) {
     const out = {}
     const sheet = read.sheet || jobSheet(read.job)
     if (sheet?.width > 0 && sheet?.height > 0) {
         out.sheet = { width: sheet.width, height: sheet.height, count: 1 }
     }
-    const space = safetyMm == null
-        ? spacingFromKerf(read.kerfWidth)
-        : spacingFromKerf(read.kerfWidth, Number(safetyMm))
+    // LA SÉCURITÉ PRÉ-REMPLIE EST CELLE DE LA RÈGLE, PAS CELLE DU PROJET.
+    // Un projet neuf porte la sécurité d'usine (1 mm), qui donnerait 3,5 mm
+    // pour un kerf de 1,5 — alors que l'atelier coupe ce job à 2 mm
+    // (kerf + 2 × 0,25, la règle 3.10 déjà en production, §9.11 de l'étude).
+    // Et l'écart n'est pas cosmétique : mesuré au harnais, à 3,5 mm les
+    // quatre éventails de la recette ne tiennent plus dans le trou de l'hôte
+    // et sortent posés à côté ; à 2 mm ils s'y nichent. On pré-remplit donc
+    // avec ce que le `.job` IMPLIQUE, et l'utilisateur reste libre de changer
+    // les deux champs.
+    const space = spacingFromKerf(read.kerfWidth, Number(safetyMm))
     if (space != null) {
         out.kerf = String(read.kerfWidth)
-        if (safetyMm != null) out.safety = String(safetyMm)
+        out.safety = String(safetyMm)
         out.space = space
     }
     return out

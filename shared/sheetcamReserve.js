@@ -82,6 +82,40 @@ function openRing(ring) {
     return out
 }
 
+/** L'anneau porte-t-il son point de fermeture dupliqué ? */
+function isClosedRing(ring) {
+    return Array.isArray(ring) && ring.length > 1
+        && ring[0][0] === ring[ring.length - 1][0]
+        && ring[0][1] === ring[ring.length - 1][1]
+}
+
+/**
+ * Rend `out` dans LA MÊME CONVENTION DE FERMETURE que `source`.
+ *
+ * CE N'EST PAS DE LA COSMÉTIQUE, ET LE PRIX D'UN OUBLI EST UN JOB REFUSÉ.
+ * Le calcul interne travaille sur des anneaux OUVERTS (`openRing`), mais tout
+ * le pipeline — et en particulier la validation physique du rapport wasm —
+ * attend des anneaux FERMÉS. `nest-report` balaie ses arêtes par
+ * `for i in 0..ring.len() - 1` : sur un anneau ouvert, l'arête de fermeture
+ * n'existe tout simplement pas pour lui, et son test d'appartenance
+ * (`point_in_ring`, un lancer de rayon) en devient FAUX — il déclare des
+ * contenances qui n'existent pas, donc des chevauchements qui n'existent pas.
+ *
+ * Mesuré le 13/09 sur la recette : le lot J4 rendait des anneaux ouverts (27
+ * et 41 sommets, `fermé = false` là où le chemin ordinaire donne `true`), et
+ * le job à 1 hôte + 4 éventails partait en « toutes les options rejetées par
+ * la validation physique (chevauchements mesurés) » — alors que la mesure
+ * arête↔arête des mêmes poses donne un écart minimal de 3,501 mm pour un
+ * espacement exigé de 3,500. A/B : même `.job`, `Lead in=0` ⇒ le job aboutit ;
+ * réserve sur l'hôte seul ⇒ aboutit ; réserve sur les quatre éventails ⇒
+ * refusé. Le défaut dormait depuis le lot J3, qui n'avait aucun appelant.
+ */
+function matchClosure(out, source) {
+    if (!isClosedRing(source)) return out
+    if (isClosedRing(out)) return out
+    return [...out, [out[0][0], out[0][1]]]
+}
+
 /** Aire signée : > 0 = sens trigonométrique. */
 export function signedArea(ring) {
     const r = openRing(ring)
@@ -343,7 +377,13 @@ export function withLeadInReserve(ring, {
         }
     }
 
-    return { ring: out, applied: true, reason: null, startIndex: index, pierceAt: centre }
+    return {
+        ring: matchClosure(out, ring),
+        applied: true,
+        reason: null,
+        startIndex: index,
+        pierceAt: centre,
+    }
 }
 
 // --- la réserve d'amorce d'un TROU (lot J4) --------------------------------
@@ -547,7 +587,13 @@ export function holeBite(ring, {
             }
         }
     }
-    return { ring: out, applied: true, reason: null, pierceAt: centre, startIndex: i }
+    return {
+        ring: matchClosure(out, ring),
+        applied: true,
+        reason: null,
+        pierceAt: centre,
+        startIndex: i,
+    }
 }
 
 /**
@@ -634,7 +680,7 @@ export function holeWithLeadInReserve(hole, {
         pierceAt.push(res.pierceAt)
         bites += 1
     }
-    return { ring, applied: true, reason: null, bites, pierceAt }
+    return { ring: matchClosure(ring, hole), applied: true, reason: null, bites, pierceAt }
 }
 
 /**

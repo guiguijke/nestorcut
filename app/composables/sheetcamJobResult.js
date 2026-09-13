@@ -30,8 +30,8 @@
  *    complet — on le dit, au lieu de livrer un fichier amputé en silence.
  */
 
-import { SheetCamJobError, jobDrawingName } from '../../shared/sheetcamJob.js'
-import { nestedJobsPerSheet } from '../../shared/sheetcamNest.js'
+import { SheetCamJobError, jobDrawingName, parseSheetCamJob } from '~~/shared/sheetcamJob.js'
+import { nestedJobsPerSheet } from '~~/shared/sheetcamNest.js'
 
 /**
  * Les tôles d'une alternative, dans la forme qu'attend `buildNestedJobs`.
@@ -153,3 +153,9 @@ export function buildNestedJobs(job, {
             fileName: `${baseName}_tole${file.sheet}.job`,
         }))
 }
+
+// Re-export : l'appelant du resultat (localJobPrivate) a besoin du lecteur,
+// et un import DYNAMIQUE relatif vers `../../shared/…` ne resout pas dans le
+// bundle serveur (Rollup resout depuis l'emplacement du chunk). Passer par ce
+// module, qui l'importe STATIQUEMENT, est la voie sure.
+export { parseSheetCamJob }

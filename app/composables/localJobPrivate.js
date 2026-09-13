@@ -708,14 +708,26 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     let jobError = null
     if (sheetcamContext && alternatives.length) {
         try {
-            const { buildNestedJobs, sheetsFromLayouts } = await import('./sheetcamJobResult')
+            // `sheetcamJobResult` ré-exporte le lecteur : un import DYNAMIQUE
+            // relatif vers `../../shared/…` ne resterait pas valide dans le
+            // bundle serveur (Rollup résout depuis l'emplacement du CHUNK, pas
+            // de la source — le build de l'image le refuse, celui du poste ne
+            // le voit pas). Les imports dynamiques VOISINS (`./…`) sont sûrs.
+            const {
+                buildNestedJobs, sheetsFromLayouts, parseSheetCamJob,
+            } = await import('./sheetcamJobResult')
             const { layoutTransforms, nestedInForLayout, normalizeLayouts } = await import('./localBridge')
-            const { parseSheetCamJob } = await import('../../shared/sheetcamJob')
             const job = parseSheetCamJob(sheetcamContext.jobBytes)
             const partsById = new Map((payload?.parts || []).map((p) => [String(p.id), p]))
             const base = (sheetcamContext.baseName || 'nestorcut').replace(/\.job$/i, '')
             for (let k = 0; k < alternatives.length; k++) {
-                const layouts = normalizeLayouts(result?.alternatives?.[k] || result)
+                // `normalizeLayouts` prend la SOLUTION, pas l'alternative :
+                // c'est la convention de tout le fichier (localBridge 1303 et
+                // 1576, finalizeLocal 17 et 197). Lui passer l'alternative
+                // rendait une liste VIDE, donc aucun `.job` — sans erreur,
+                // ce qui est le pire des cas. Trouvé par le harnais.
+                const alt = result?.alternatives?.[k]
+                const layouts = normalizeLayouts(alt?.solution || alt || result?.solution || result)
                 if (!layouts.length) continue
                 const sheets = sheetsFromLayouts(layouts, partsById, {
                     layoutTransforms, nestedInForLayout,

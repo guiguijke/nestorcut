@@ -116,6 +116,14 @@ export function hydrateLocalItem(item, record = null) {
         report: alt.report ?? null,
         svgs: (alt.svgs || []).filter((s) => typeof s === 'string').map(svgToDataUri),
         dxfs: (alt.dxfs || []).filter((d) => d?.content).map((d) => dxfToBlobUrl(d.content)),
+        // Lot J4 — les `.job` SheetCam. Cette liste est une LISTE BLANCHE :
+        // un champ absent d'ici est invisible pour l'UI, même s'il est dans
+        // le record. C'est ce qui rendait le bouton « Télécharger le .job »
+        // introuvable alors que les fichiers étaient bien produits et
+        // persistés (défaut trouvé par le harnais navigateur).
+        // Seuls les NOMS voyagent : les octets restent dans `localRecord`,
+        // que `downloadLocalJob` lit directement — inutile de les recopier.
+        jobs: (alt.jobs || []).filter((j) => j?.bytes).map((j) => ({ fileName: j.fileName })),
     }))
     return {
         ...item,

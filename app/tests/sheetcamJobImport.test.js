@@ -102,12 +102,19 @@ describe('J4 — les réglages pré-remplis viennent du fichier', () => {
         const p = prefillFromJob(read)
         expect(p.sheet).toEqual({ width: 1000, height: 1250, count: 1 })
         expect(p.kerf).toBe('1.5')
+        expect(p.safety).toBe('0.25')
         expect(p.space).toBe(2)          // 1,5 + 2 × 0,25, règle 3.10
     })
 
-    it('la sécurité du projet est respectée, pas écrasée', () => {
-        // On pré-remplit le KERF (ce que le fichier dit) ; la sécurité reste
-        // le choix de l'utilisateur, et l'espacement s'en déduit.
+    it('la sécurité pré-remplie est celle de la RÈGLE, pas celle du projet', () => {
+        // Un projet neuf porte la sécurité d'usine (1 mm), qui donnerait
+        // 3,5 mm pour ce kerf — alors que l'atelier coupe ce job à 2 mm.
+        // L'écart n'est pas cosmétique : mesuré au harnais navigateur, à
+        // 3,5 mm les quatre éventails de la recette ne tiennent plus dans le
+        // trou de l'hôte et sortent posés à côté ; à 2 mm ils s'y nichent.
+        expect(prefillFromJob(read).space).toBe(2)
+        // La valeur reste une ENTRÉE : un appelant qui sait ce qu'il fait
+        // peut en imposer une autre.
         expect(prefillFromJob(read, { safetyMm: 1 }).space).toBe(3.5)
     })
 

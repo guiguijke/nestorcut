@@ -461,6 +461,55 @@ describe('J4 — la réserve d’amorce d’un TROU', () => {
         expect(out.reserve.applied).toBe(true)
     })
 
+    it('la réserve rend l’anneau dans la MÊME convention de fermeture', () => {
+        // LE VERROU LE PLUS CHER DU LOT, et il ne ressemble à rien.
+        //
+        // Le calcul interne travaille sur des anneaux OUVERTS ; tout le reste
+        // du pipeline les attend FERMÉS (point de fermeture dupliqué). La
+        // validation physique du rapport wasm balaie ses arêtes par
+        // `for i in 0..ring.len() - 1` : sur un anneau ouvert l'arête de
+        // fermeture n'existe pas pour elle, et son test d'appartenance
+        // devient FAUX — elle déclare des contenances qui n'existent pas,
+        // donc des chevauchements qui n'existent pas.
+        //
+        // Mesuré le 13/09 dans le navigateur : le lot rendait des anneaux
+        // ouverts et le job 1 hôte + 4 éventails partait en « toutes les
+        // options rejetées par la validation physique », alors que la mesure
+        // arête↔arête des mêmes poses donnait 3,501 mm pour 3,500 exigés.
+        // A/B : `Lead in=0` ⇒ aboutit ; réserve sur l'hôte seul ⇒ aboutit ;
+        // réserve sur les quatre éventails ⇒ refusé. Le défaut dormait depuis
+        // le lot J3, qui n'avait aucun appelant.
+        const closed = (r) => r.length > 1
+            && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1]
+        const SQ_CLOSED = [...SQUARE, [SQUARE[0][0], SQUARE[0][1]]]
+        const HOLE_CLOSED = [...RECIPE_HOLE, [RECIPE_HOLE[0][0], RECIPE_HOLE[0][1]]]
+        const opts = { startPosition: 0, leadIn, pierceMarginMm: margin }
+
+        // Entrée FERMÉE ⇒ sortie FERMÉE, contour comme trou.
+        const outer = withLeadInReserve(SQ_CLOSED, opts)
+        expect(outer.applied).toBe(true)
+        expect(closed(outer.ring)).toBe(true)
+        const hole = holeWithLeadInReserve(HOLE_CLOSED, opts)
+        expect(hole.applied).toBe(true)
+        expect(closed(hole.ring)).toBe(true)
+
+        // Et la pièce entière, qui est ce que le nesting consomme.
+        const part = partWithReserve(
+            { coordinates: SQ_CLOSED, holes: [HOLE_CLOSED] }, opts,
+        )
+        expect(closed(part.coordinates)).toBe(true)
+        expect(closed(part.holes[0])).toBe(true)
+
+        // Entrée OUVERTE ⇒ sortie OUVERTE : on ne CHOISIT pas une convention,
+        // on rend celle qu'on a reçue.
+        expect(closed(withLeadInReserve(SQUARE, opts).ring)).toBe(false)
+        expect(closed(holeWithLeadInReserve(RECIPE_HOLE, opts).ring)).toBe(false)
+
+        // Le point de fermeture ne doit pas être compté comme un sommet de
+        // plus par la géométrie : l'aire ne bouge pas.
+        expect(ringArea(outer.ring)).toBeCloseTo(ringArea(withLeadInReserve(SQUARE, opts).ring), 9)
+    })
+
     it('la direction entrante est bien l’opposée de la sortante', () => {
         for (const [ring, index] of [[SQUARE, 0], [L_SHAPE, 3]]) {
             const out = outwardAt(ring, index)

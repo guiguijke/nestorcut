@@ -422,7 +422,9 @@ async function addSheetCamJobDrop(drop, slug) {
     }
 
     // 1. Les réglages que le fichier DIT.
-    const prefill = prefillFromJob(read, { safetyMm: state.params?.safety })
+    // Pas de `safetyMm` : le pre-remplissage suit la REGLE (kerf + 2 x 0,25),
+    // pas la securite d'usine du projet — voir `prefillFromJob`.
+    const prefill = prefillFromJob(read)
     if (prefill.sheet) {
         const u = getUnitState()
         updateParams({
@@ -433,7 +435,7 @@ async function addSheetCamJobDrop(drop, slug) {
             }],
         })
     }
-    if (prefill.kerf != null) updateKerfSafety({ kerf: prefill.kerf })
+    if (prefill.kerf != null) updateKerfSafety({ kerf: prefill.kerf, safety: prefill.safety })
 
     // 2. Les dessins présents.
     const { matched, missing } = matchDrawings(read, drop.drawings)

@@ -349,7 +349,8 @@ export function nestedJobsPerSheet(job, { sheets, centres, rings, maskPaths = tr
  */
 export function writtenRanks(job, items) {
     const firstSeen = new Map()
-    let next = job.parts.length
+    const existing = job.parts.map((p) => p.index)
+    let next = existing.length ? Math.max(...existing) + 1 : 0
     const order = []
     for (const item of items) {
         if (!firstSeen.has(item.part)) {
@@ -357,16 +358,34 @@ export function writtenRanks(job, items) {
             order.push(item.part)
         }
     }
-    // Miroir exact de `writeNestedSheetCamJob` : il regroupe par pièce (Map,
-    // donc ordre de première apparition) et numérote les copies pièce par
-    // pièce.
+    // Miroir EXACT de `writeNestedSheetCamJob` : il regroupe par pièce (Map,
+    // donc ordre de première apparition), RÉUTILISE les sections de copie que
+    // le fichier porte déjà pour le même original, puis numérote les copies
+    // manquantes à la suite.
+    //
+    // La réutilisation n'est pas une optimisation : sans elle, un `.job` déjà
+    // nesté ressortait avec ses anciennes copies ENCORE ACTIVES en plus des
+    // nouvelles (5 pièces demandées, 8 sections écrites — mesuré au harnais),
+    // et `[OpOrder]` désignait des rangs qui n'étaient pas ceux des poses.
+    const freeCopies = new Map()
+    for (const part of job.parts) {
+        if (part.copyOf < 0) continue
+        if (!freeCopies.has(part.copyOf)) freeCopies.set(part.copyOf, [])
+        freeCopies.get(part.copyOf).push(part.index)
+    }
     const ranks = new Array(items.length)
     for (const part of order) {
+        const pool = (freeCopies.get(part) || []).slice()
         let first = true
         items.forEach((item, index) => {
             if (item.part !== part) return
-            ranks[index] = first ? part : next++
-            first = false
+            if (first) {
+                ranks[index] = part
+                first = false
+                return
+            }
+            const recycled = pool.shift()
+            ranks[index] = recycled != null ? recycled : next++
         })
     }
     return ranks

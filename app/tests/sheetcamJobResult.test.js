@@ -122,6 +122,54 @@ describe('J4 — la structure du `.job` rendu est celle de la recette', () => {
     })
 })
 
+describe('J4 — re-nester un `.job` DÉJÀ nesté', () => {
+    // Le cas que personne n'avait mesuré : le fichier d'entrée porte déjà des
+    // copies. Avant ce lot, on écrivait des sections NEUVES par-dessus — un
+    // job de 5 pièces (1 hôte + 1 éventail + 3 `copyOf`) re-nesté en 5 pièces
+    // ressortait avec 8 sections, les 3 copies d'origine restant ACTIVES à
+    // leur ANCIENNE pose. SheetCam aurait coupé trois pièces fantômes.
+    // Mesuré au harnais navigateur : `Count=8`, `[OpOrder]` sautant 2, 3, 4.
+    const X4 = parseSheetCamJob(read(path.join(FIX, 'x4-reference.job')))
+
+    it('réutilise les sections de copie au lieu d’en empiler', () => {
+        expect(X4.parts).toHaveLength(5)
+        expect(X4.parts.filter((p) => p.copyOf >= 0)).toHaveLength(3)
+
+        const files = buildNestedJobs(X4, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+            baseName: 'renest',
+        })
+        const out = parseSheetCamJob(files[0].bytes)
+
+        // 5 pièces demandées ⇒ 5 sections, pas 8.
+        expect(out.parts).toHaveLength(5)
+        expect(out.count).toBe(5)
+        expect(out.parts.map((p) => p.copyOf)).toEqual([-1, -1, 1, 1, 1])
+        // Toutes actives : aucune copie orpheline laissée allumée.
+        expect(out.parts.every((p) => p.enabled)).toBe(true)
+        // Et l'ordre de coupe désigne bien ces cinq rangs-là.
+        expect(files[0].order.map((o) => o[0]).sort()).toEqual([0, 1, 2, 3, 4])
+    })
+
+    it('une copie en trop est DÉSACTIVÉE, jamais laissée à son ancienne pose', () => {
+        // Deux pièces posées seulement : les deux copies restantes sortent
+        // du job. On ne les supprime pas — leur rang appartient à la
+        // numérotation du fichier — on les éteint.
+        const files = buildNestedJobs(X4, {
+            sheets: [recipeSheet().slice(0, 3)],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+        })
+        const out = parseSheetCamJob(files[0].bytes)
+        expect(out.parts).toHaveLength(5)
+        const enabled = out.parts.filter((p) => p.enabled)
+        expect(enabled).toHaveLength(3)
+        expect(files[0].order.map((o) => o[0]).sort()).toEqual([0, 1, 2])
+    })
+})
+
 describe('J4 — les poses se calculent sur les anneaux RÉELS', () => {
     it('la réserve d’amorce ne déplace AUCUNE pose', () => {
         // La réserve du lot J3 ajoute au contour un appendice de
