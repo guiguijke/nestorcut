@@ -89,7 +89,11 @@ jobs:
             REF="${{ env.REGISTRY }}/$OWNER/$image"
             echo "::group::$image"
             docker buildx imagetools create --tag "$REF:latest" "$REF:$SHA"
-            docker buildx imagetools inspect "$REF:latest" | head -5
+            # `| head -N` fermerait le tuyau : imagetools reçoit SIGPIPE et,
+            # sous `pipefail`, l'étape échoue APRÈS avoir retagué (mesuré :
+            # exit 255 alors que `:latest` avait bien bougé). On filtre la
+            # ligne voulue sans fermer la sortie.
+            docker buildx imagetools inspect "$REF:latest" | grep -E '^(Name|Digest):' || true
             echo "::endgroup::"
           done
 
