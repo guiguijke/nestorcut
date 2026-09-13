@@ -1305,3 +1305,100 @@ en pièces » (N fiches, comme E1) ; (d) suppression de la fenêtre et de
 l'interrupteur ; (e) miroir serveur ; (f) libellés EN + FR ; harnais refait.
 Le propriétaire a demandé de traiter le point 1 d'abord ; E4 s'ouvre après
 son accord sur cette lecture.
+
+## 8. Lot E4 — le dessin comme un bloc, l'échelle et l'éclatement sur la fiche (consigne fermée, 14/09)
+
+**Décision du propriétaire (14/09)** : un dessin importé sans éclatement se
+neste **comme un bloc rigide** — ses pièces gardent leurs positions
+relatives. La lecture du §7 est confirmée : l'échelle se règle sur la fiche
+(saisie au clavier ou poignée), l'éclatement est un bouton sur la fiche, la
+fenêtre de choix au dépôt et l'interrupteur disparaissent.
+
+### 8.1 E4-a — la fiche multi-pièces est UN item moteur (à livrer d'abord)
+
+1. **Règle** : une fiche dont `parts.length > 1` et qui n'a pas été éclatée
+   produit **un seul item** pour le moteur : forme de collision =
+   **enveloppe convexe** de l'union de ses contours extérieurs (sans trou :
+   un bloc n'offre aucune zone libre au remplissage), demande = quantité de
+   la fiche, rotations = celles de la fiche, `handles` = union des handles
+   de toutes ses pièces. Une fiche à une seule pièce ne change PAS (polygone
+   exact, trous compris). L'item porte `block: { parts: N }` (additif).
+2. **Export** : le DXF de coupe transporte toutes les entités du bloc avec la
+   même pose (le chemin « entités par handle » suffit, aucun ré-assemblage) ;
+   verrou : les distances entre centroïdes des pièces d'un bloc sont
+   identiques avant et après nesting, à 0,01 mm.
+3. **Rapport** : la densité utilise l'AIRE VRAIE des pièces du bloc (somme
+   des aires nettes, piège #19b), jamais l'aire de l'enveloppe ; la ligne
+   « pièces » compte les blocs et dit « N blocs (M pièces) » ; le badge
+   « toutes les pièces sont placées » compte les blocs demandés.
+4. **Pré-passes** : un bloc n'est ni hôte (pas de trou) ni candidat au
+   remplissage de trou (ni au moulinet) ; les pré-passes le voient comme une
+   pièce pleine ordinaire.
+5. **Miroir serveur** : même règle dans `workers/nesting/core/main.py` /
+   `nesting_input_builder.py` et l'export Python (union des handles) ;
+   fixtures de parité JS ≡ Python sur le dessin du collègue (17 pièces ⇒ 1
+   item, mêmes sommets d'enveloppe à 1e-6).
+6. **Affichage de la fiche** : « 1 bloc · 17 pièces · 2834 × 689 mm », aperçu
+   inchangé.
+7. Verrous : payload navigateur et Python (1 item, aire = somme, handles =
+   union, enveloppe convexe simple, 0 trou) ; export (distances relatives
+   conservées) ; harnais : dessin du collègue déposé tel quel ⇒ 1 fiche,
+   nesting ⇒ « 1 bloc (17 pièces) placé », DXF téléchargé relu : 17 pièces
+   aux mêmes positions relatives ; contrôle négatif : un projet de fiches à
+   une pièce rend un payload bit-identique à aujourd'hui.
+
+Raffinement noté, pas dans ce lot : une enveloppe CONCAVE (union réelle des
+contours) pour laisser d'autres pièces s'approcher des creux du bloc.
+
+### 8.2 E4-b — « Échelle » sur la fiche
+
+1. Sur chaque fiche, une action **« Échelle »** ouvre l'aperçu sur tôle
+   existant (`AdvancedImportPreview`, E1-bis) appliqué à CETTE fiche :
+   **champs largeur cible et hauteur cible** (rapport conservé : saisir l'un
+   recalcule l'autre), champ facteur, poignée d'angle ; presets de tôle et
+   tôle personnalisée comme aujourd'hui ; unité courante.
+2. « Appliquer » remplace la fiche en place (même quantité, même rang) par
+   son ré-import à l'échelle (chaîne E1 : DXF canonique mis à l'échelle →
+   import ordinaire) ; la fiche porte `importScaleApplied` ; « Réinitialiser
+   l'échelle » revient à 1.
+3. Serveur : `PATCH /api/files/:slug/scale` ⇒ retraitement par le worker
+   (`resolve_import_scale` d'E2), fiche remplacée.
+4. Verrous : saisie 1000 en largeur ⇒ facteur 0,353 et hauteur 243,1
+   affichées ; étendue mesurée 1000 ± 0,5 après application ; poignée et
+   saisie donnent le même résultat ; réinitialisation bit-identique à
+   l'import d'origine.
+
+### 8.3 E4-c — « Éclater en pièces » sur la fiche
+
+1. Bouton visible seulement si `parts.length > 1` : remplace la fiche par N
+   fiches « nom (k/N) », une pièce chacune, quantité héritée, à l'échelle
+   déjà appliquée (chaîne E1 : un DXF canonique par pièce depuis ses
+   handles). Irréversible, une confirmation en une ligne.
+2. Serveur : `POST /api/files/:slug/explode` ⇒ `_explode_into_parts` d'E2.
+3. Verrous : 17 fiches, une pièce chacune, somme des aires = aire du bloc ;
+   nesting ensuite ⇒ 17 pièces libres.
+
+### 8.4 E4-d — retrait de la fenêtre et de l'interrupteur
+
+`ImportChoiceDialog`, `AdvancedImportSwitch`, le champ `advancedImport` du
+projet (lecture tolérée, plus jamais écrit), la route PATCH d'E3, leurs
+libellés et leurs tests. Le dépôt redevient l'import ordinaire, sans lecture
+supplémentaire (cas A du harnais E1 : même nombre d'appels wasm). Un `.job`
+reste traité avant tout.
+
+### 8.5 Langues, harnais, ordre, déploiement
+
+- Tout libellé en EN et FR (`app/utils/i18n.js`), parité verrouillée.
+- Harnais `scripts/qa-e2e-advanced-import.mjs` refait : **A** dépôt du
+  dessin ⇒ 1 fiche « 1 bloc · 17 pièces », aucune fenêtre ; **B** nesting ⇒
+  1 bloc placé, DXF relu 17 pièces aux positions relatives d'origine ; **C**
+  « Échelle » saisie 1000 ⇒ 0,353 ; **D** « Éclater » ⇒ 17 fiches, nesting ⇒
+  17 pièces ; **E** projet « Nos serveurs », mêmes B-C-D ; **F** un `.job` +
+  dessins inchangé ; **G** captures FR et EN de la fiche avec ses deux
+  actions et de l'aperçu (réglages seulement).
+- Ordre : E4-a seul d'abord (c'est le sens produit, et il change le nesting
+  de tous les dessins multi-pièces existants — le dire dans le rapport),
+  puis E4-b/c/d ensemble. Trois à quatre jours.
+- Déploiement après GO : app + worker nesting + worker fileprocessing,
+  homelab compris ; le wasm ne change que si l'export l'exige (piège #33b,
+  à dire) ; moteur inchangé ⇒ pas de benchmarks.

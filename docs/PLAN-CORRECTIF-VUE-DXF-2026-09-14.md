@@ -75,3 +75,21 @@ compte d'une SPLINE, drapeau `70`, couleur `62`) décale la paire suivante.
 L'exporteur (lot 2b) est juste : les entiers en entiers sont la forme
 attendue par ezdxf et par SheetCam. Le DXF téléchargé par l'utilisateur est
 le texte BRUT (sans `uniquifyDxfHandles`), il n'a jamais été corrompu.
+
+## 5. Vérification (vérificateur, 14/09, `d8f7fc69`) — GO, rendu a posteriori
+
+| Contrôle | Résultat |
+|---|---|
+| correctif | `uniquifyDxfHandles` : boucle `i += 2`, réécriture sur un CODE `5` seulement ; le reste inchangé |
+| vitest | **744** |
+| reproduction du §1 rejouée sur l'image reconstruite à `d8f7fc69` (dessin du collègue, import ordinaire, nesting 15 s, résultat, bascule « Vue DXF ») | **page réactive à +3, +10, +30, +60 s (1 ms)**, capture rendue, 50 Mo de tas JS — là où la même séquence figeait à +3 s |
+| prod | `app.nestorcut.com` sert `gitCommitSha d8f7fc69…` ; périmètre app seule, aucun changement sous `workers/`, `public/engine`, `admin/` |
+| verrous ajoutés | 5 unitaires (calque 62/5, SPLINE 71/5, drapeau 70/5, handles, témoin non-boucle avec le vrai analyseur), harnais `scripts/qa-e2e-result-dxfview.mjs` (vue DXF sondée à +1 et +5 s), piège AGENTS n° 62 |
+
+**Remarque de procédure, à dire** : le déploiement a été fait AVANT ce GO,
+alors que la règle de la maison est « on déploie après le GO seulement ».
+Le correctif était juste, l'urgence était réelle et le résultat est bon ;
+cela ne change pas la règle, et l'implémenteur l'a lui-même signalé
+(« la passe de contrôle formelle reste la tienne »). Pour un correctif de
+prod à l'avenir : le GO peut être demandé en une ligne et rendu en quelques
+minutes, il ne coûte pas le délai qu'on croit.
