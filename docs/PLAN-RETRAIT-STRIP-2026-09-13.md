@@ -202,3 +202,71 @@ données, hors de ce lot).
   benchmarks publics ne sont pas invalidés (`git diff` ne touche ni
   `workers/nesting/engine` ni `public/engine`).
 
+
+## 4. Vérification (vérificateur, 13/09, `3824d84c`) — GO déploiement
+
+Rejoué sur le poste, pile locale reconstruite à HEAD (`app` et
+`user-file-processing-worker`, `up -d --remove-orphans`) :
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 591 (avec E2), dont les deux cas « le strip retiré reste purgé » |
+| `docker compose config --services` | `mongo admin app mongo-init nesting-worker user-file-processing-worker` — aucun strip ; `compose ps` sans conteneur strip |
+| routes | `GET /strip`, `/api/strip`, `/api/strip/me` → **404** ; accueil 200 |
+| grep résiduel du domaine (`server`, `app`, `admin`, `shared`, `scripts`, `workers`, `docs`) | ne restent que les chemins de cycle de vie (`purge/sweep.js` et son test, `account/delete.js`, `vault/*`), la doc d'architecture et le registre — plus « stripe » et le strip packing du moteur, qui n'ont rien à voir |
+
+**Arbitrages** : (a) le panneau du coffre visible pour tous les comptes est
+**accepté** — c'est la lettre d'AGENTS §35 et de `STRATEGY.md` (la privacy
+n'est jamais payante ; le serveur l'ouvrait déjà) ; le drapeau `strip` ne
+gardait ce panneau que par accident. (b) La correction d'`UnitSwitcher.vue`
+(appel d'un store inexistant) est un vrai défaut latent, bien pris.
+Les deux points « sans objet » de l'inventaire (index Mongo, produit Stripe)
+sont acceptés tels que mesurés.
+
+**GO déploiement** selon §3.6 : compose de prod remplacé avec sauvegarde
+horodatée, `up -d --remove-orphans`, `ps` sans strip, 404 sur la prod servie,
+0 ERROR ; homelab non concerné.
+
+
+## 5. Déploiement (implémenteur, 13/09)
+
+Déployé à `d890c923` (le commit du lot est `3824d84c` ; la prod tire
+`:latest`, construit sur `d890c923` — même code, plus les captures du lot E2,
+déployé dans la même fenêtre).
+
+**Manœuvre**, dans cet ordre :
+
+1. les DEUX conteneurs strip arrêtés proprement puis retirés **pendant que
+   l'ancien compose les définissait encore** (`docker compose stop` puis
+   `rm`, jamais `rm -f` — piège AGENTS #19 : un SIGKILL laisse un job
+   orphelin et une lease de jetons bloquée) ;
+2. `docker-compose.yml` sauvegardé en
+   `docker-compose.yml.bak-20260913T105312Z` (la sauvegarde du lot 2a est
+   conservée à côté), puis remplacé par celui du dépôt —
+   `sha256 c1f1b728…` des deux côtés. **L'ancien fichier de prod était
+   octet pour octet celui du dépôt d'avant le lot** (`e1dc5a69…`) : aucune
+   retouche locale n'a été écrasée. Le `docker-compose.override.yml` de
+   production (ports, `mongo-wg`, profil admin) n'a pas été touché ;
+3. `docker compose --profile admin pull` puis
+   `up -d --remove-orphans` — **le profil admin est activé exprès** : sans
+   lui, `--remove-orphans` traite le conteneur admin comme un orphelin.
+
+| Contrôle | Résultat |
+|---|---|
+| services du compose de prod | **6**, `app mongo mongo-init mongo-wg nesting-worker user-file-processing-worker` — **aucun strip** |
+| conteneurs | tous `Up` (admin compris), aucun conteneur strip |
+| commit servi | `NUXT_PUBLIC_GIT_COMMIT_SHA=d890c923…` |
+| routes strip sur la prod servie | `/strip` **404**, `/strip/abc` **404**, `/api/strip/me` **404**, `/api/strip/abc/results` **404**, `/api/files/strip/dxf/x.dxf` **404** ; `/` **200** |
+| journaux | **0 ERROR / Traceback** sur 200 lignes — app, nesting-worker, user-file-processing-worker, admin |
+| homelab | non concerné par CE lot (mais recréé pour E2, voir le rapport E2) |
+
+**Un fait à consigner, mesuré après le déploiement** : en production, **aucune
+collection ni bucket « strip » n'existe** — `db.getCollectionNames()` ne rend
+que `stripe_status` (Stripe, autre mot), et les cinq noms attendus
+(`strip_projects`, `strip_user_dxf_files`, `strip_nesting_job_queue`,
+`stripUserDxf`, `stripNestDxf`) sont absents. La garantie « les données
+existantes ne sont pas détruites » est donc **vide de contenu en prod** : il
+n'y avait rien à conserver. Le code de purge et de suppression de compte qui
+les couvre reste en place (il ne coûte rien et reste correct si une base de
+développement en contient), mais la question « quand supprimer ces
+collections » **ne se pose pas** sur ce serveur.

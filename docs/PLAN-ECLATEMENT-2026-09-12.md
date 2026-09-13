@@ -951,3 +951,71 @@ sont). À ranger avec la couture des contours (priorité 5).
    fragilité du harnais que je n'ai pas élucidée, et je la déclare.
 4. Deux commentaires périmés du lot S (« both domains ») nettoyés dans
    `server/core/project/service.js`, au passage.
+
+### Lot E2 — vérification (vérificateur, 13/09, `241f5dda`) — GO déploiement
+
+Rejoué sur le poste, pile locale reconstruite à HEAD (wasm moteur servi =
+dépôt `a015521e…`), sorties hors dépôt (`~/qa-out/verif-se2/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 591 |
+| cargo `nest-engine`, `determinism_lock.py` | CARGO_RESULT |
+| **cas G et H du harnais** (projet « Nos serveurs », mesuré sur l'API) | GH_RESULT |
+| lecture | échelle par `Matrix44.scale` après décomposition (piège #26), facteur non rejoué sur reprise (`importScaleApplied`) ; sous-ensemble par handles réécrit en séquence canonique et en millimètres (pièges #33b, #27) ; éclatement redéposé dans la boucle ordinaire du worker (aucune polygonisation parallèle) ; nom du DXF borné `and14more` |
+
+**Arbitrages** : (1) panneau « Import avancé » ouvert aux projets serveur :
+oui, sinon le miroir est inatteignable ; l'aperçu sur tôle reste local, c'est
+cohérent (le serveur mesure lui-même l'étendue) — le propriétaire peut le
+demander plus tard au prix d'une lecture navigateur. (2) Les 704 entités
+attachées à aucune pièce sur 9 fichiers : **à ranger avec la couture des
+contours (priorité 5)**, avec le constat « N entités non attachées » des deux
+côtés ; le correctif d'attachement tangent livré ici (16/17 → 17/17 sur le
+logo, 143/148 fichiers bit-identiques) est pris. (3) Les deux fichiers où le
+navigateur compte des ergots que le serveur a déjà absorbés : écart de
+mesurabilité, même chantier. (4) La fragilité « trois déposes dans un même
+projet » du harnais est déclarée, non élucidée : à garder en tête si un
+utilisateur signale une dépose qui ne part pas — non bloquant.
+
+**GO déploiement E2** : app + worker fileprocessing + worker nesting
+(`thin_parts` dans `main.py`) + wasm moteur, donc **homelab compris**
+(`assert_overflow_head.py`) ; SHA du verrou de déterminisme inchangés →
+benchmarks non invalidés (rejouer `densities_corpus.py`, n'écrire que si un
+chiffre bouge). Avec ce déploiement, la **priorité 3 (pièces unitaires) est
+close** : E0, E1, E1-bis, E2 livrés.
+
+
+#### Déploiement du lot E2 (implémenteur, 13/09)
+
+Déployé à `d890c923` — dans la même fenêtre que le lot S. Images publiées
+`ghcr.io/…:latest` : worker nesting `sha256:6ee233c7…` (**même Id d'image sur
+le poste, sur Hetzner et sur le homelab**).
+
+| Contrôle | Résultat |
+|---|---|
+| conteneurs recréés | app, user-file-processing-worker, nesting-worker (+ admin) — tous `Up`, `GET /` **200** |
+| commit injecté | `NUXT_PUBLIC_GIT_COMMIT_SHA=d890c923…` |
+| artefacts SERVIS = dépôt (piège #14i) | **octet pour octet** : `engine/nest_wasm_bg.wasm` `a015521e…`, `geometry/nest_geometry_bg.wasm` `5fe7fec3…` (ce dernier inchangé par le lot, vérifié quand même) |
+| **le worker fileprocessing de PRODUCTION porte le code E2** | interrogé dans le conteneur : `subset_drawing_bytes`, `scale_drawing`, `resolve_import_scale`, `_explode_into_parts` présents ; `_exploded_names("logo.dxf", 17)` rend `logo (1/17).dxf`, `logo (2/17).dxf` ; le repli d'attachement tangent est dans `build_geometry` |
+| **le bundle SERVI porte les libellés du lot** | le morceau i18n de production (`_nuxt/HA86ooHp2.js`) contient « Advanced import » ET « Import avancé », « Drawing scaled by » ET « à l'échelle × », et la ligne des pièces fines en anglais (« have lines thinner than the requested spacing ») comme en français (« traits plus fins ») |
+| homelab (débordement) | 3 workers recréés sur le même digest ; `assert_overflow_head.py` → **`ASSERT OVERFLOW=HEAD: OK`**, binaire moteur du **13/09 08:16 UTC** ; `NEST_COMPUTE_TOKENS=28` des deux côtés |
+| corpus de torture sur l'**image publiée** | **11/11 OK** — T-J refus attendu, T-K complet 1000/1000, T-A 900/900 sur 2 tôles [587, 313] ; 0 recouvrement, tout dans la tôle, 0 doublon, aucun rollback |
+| benchmarks publics | `densities_corpus.py` rejoué sur l'image publiée : **9 des 10 fiches identiques**, **une a bougé** — T-F passe de 89/90 à **90/90** (densité 89,0 → 90,0 %). C'est sa bande d'oscillation documentée (88, 89, 88, 89, 90, 89, **90** sur sept passages), pas un effet du lot : le verrou de déterminisme est bit-identique et le changement moteur d'E2 n'est qu'un canal d'observation. `data/benchmarks.js` **mis à jour** (version `d890c92`, date du run, T-F et son commentaire) — la page ne doit pas afficher les chiffres d'une autre image |
+| journaux prod | **0 ERROR / Traceback** sur 200 lignes (app, nesting-worker, user-file-processing-worker, admin) |
+
+**Non-fait, dit franchement** : « le logo éclaté depuis un projet serveur,
+17 fiches » n'a **pas** été joué par moi en production — l'import est derrière
+`auth` et je n'ai pas de compte de production ; en créer un est une écriture
+de production qui vous revient (même remarque qu'au lot E0). Ce qui est
+mesuré à la place : la même chaîne, au même commit, sur la pile locale
+reconstruite — **17 fiches serveur, parité navigateur/serveur 17 sur 17 sans
+écart** (cas G du harnais) — plus, en production, la présence effective du
+code d'éclatement dans le conteneur qui l'exécute et des libellés dans le
+bundle servi. Il manque le geste humain, pas la chaîne.
+
+**Un défaut de coureur corrigé au passage** : `bench/eval_corpus.py` mourait
+en `AttributeError` sur deux vieux jobs T-I de mon Mongo local dont
+`report.postPass` est explicitement `null` (`get(k, {})` ne protège pas de
+`None`). Le coureur rendait donc… rien, au lieu de la fiche du run demandé.
+Corrigé (`(a.get("report") or {}).get("postPass") or {}`) et le run est
+cadré par `CORPUS_SINCE`, comme le script le prévoyait.

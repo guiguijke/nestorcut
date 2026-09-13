@@ -46,7 +46,11 @@ def fiche(slug_prefix="bench-corpus-", since=None):
         case = j["slug"].split("-")[2].upper()
         requested = sum(int(f.get("count") or 0) for f in (j.get("files") or []))
         placed = j.get("placed")
-        _mrf = [a.get("report", {}).get("postPass", {})
+        # `report` ou `postPass` peuvent etre explicitement NULL sur des jobs
+        # anciens (mesure : deux alternatives T-I de runs de septembre) —
+        # `get(k, {})` ne protege PAS de None, et le coureur mourait sur une
+        # AttributeError au lieu de rendre la fiche du run demande.
+        _mrf = [((a.get("report") or {}).get("postPass") or {})
                 .get("mergedReceivers") or 0
                 for a in (j.get("alternatives") or [])
                 if a.get("strategy") != "grid"]

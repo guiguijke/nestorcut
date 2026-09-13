@@ -1,8 +1,8 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit 67eef23, run 2026-09-11 16:12 UTC — celui du GO
- * de la garde d'embouchure). Extraction :
+ * Docker PUBLIÉES (commit d890c92, run 2026-09-13 11:00 UTC — celui du GO
+ * des lots S et E2). Extraction :
  * workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
@@ -14,20 +14,19 @@
  */
 export const BENCHMARKS = {
     meta: {
-        runDate: '2026-09-11',
+        runDate: '2026-09-13',
         // Image Docker PUBLIÉE qui a produit les chiffres (workflow
         // « Build and publish Docker images »), régénérée à chaque
-        // livraison moteur (AGENTS.md §6). Run du 2026-09-11 sur
-        // ghcr.io/…/nest2d-nesting-worker:67eef23 (garde d'embouchure : le
-        // moteur rend la paroi du trou que le canal capillaire retire, et
-        // mesure lui-même ce qu'il livre) : corpus 11/11 OK, T-A
-        // [587, 313]. **Les DIX densités publiées sont identiques** au run
-        // e51e294 — la garde ne corrige que les pièces nichées devant une
-        // embouchure, un cas que le corpus public (une direction, hôtes
-        // pré-remplis) ne produit pas. T-F revient à 89 pièces sur 90,
-        // dans sa bande d'oscillation connue (88, 89, 88, 89, 90, 89 sur
-        // six passages).
-        version: '67eef23',
+        // livraison moteur (AGENTS.md §6). Run du 2026-09-13 sur
+        // ghcr.io/…/nest2d-nesting-worker:d890c92 (lots S et E2 : le moteur
+        // NOMME désormais les pièces dont le gonflement a pris le repli du
+        // lot E0 — un canal d'observation, aucune géométrie touchée, verrou
+        // de déterminisme bit-identique) : corpus 11/11 OK, T-A [587, 313].
+        // **NEUF des dix fiches publiées sont identiques** au run 67eef23 ;
+        // seule T-F bouge, de 89 à 90 pièces sur 90 — sa bande
+        // d'oscillation connue (88, 89, 88, 89, 90, 89, 90 sur sept
+        // passages), pas un effet du lot.
+        version: 'd890c92',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
@@ -121,17 +120,18 @@ export const BENCHMARKS = {
             },
             sheets: '1000×1000 + 2000×1000',
             spaceMm: 1.0,
-            placed: 89,
+            placed: 90,
             requested: 90,
             layouts: 2,
-            densityPct: 89.0,
+            densityPct: 90.0,
             smallestGapMm: 1.0,
-            verdict: 'partial',
+            verdict: 'ok',
             // Stock serré : le nombre de pièces posées oscille d'UNE pièce
-            // selon le tirage (88 ou 89 sur 90 — mesuré 88, 89, 88 sur
-            // l'image 179b126, 89 sur e51e294) : bruit d'affectation du BPP,
-            // pas une différence de moteur. Le chiffre publié est celui du
-            // run de vérification daté ci-dessus.
+            // selon le tirage (88 à 90 sur 90 — mesuré 88, 89, 88 sur
+            // l'image 179b126, 89 sur e51e294, 89 sur 67eef23, **90 sur
+            // d890c92**) : bruit d'affectation du BPP, pas une différence de
+            // moteur. Le chiffre publié est celui du run de vérification
+            // daté ci-dessus ; c'est le SEUL des dix qui a bougé.
         },
         {
             id: 'G',
