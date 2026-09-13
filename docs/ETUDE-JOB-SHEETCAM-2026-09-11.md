@@ -550,3 +550,72 @@ raison voyage dans `part.reserve`, prête pour un constat d'UI au lot J4.
 4. **L'amorce d'un TROU n'est pas réservée** : SheetCam perce aussi pour un
    trou intérieur, mais la place y est prise par la matière de la pièce
    elle-même. Le jour où le contraire sera mesuré, ce sera un lot à part.
+
+### Lot J3 — vérification (vérificateur, 13/09, `d9ab6e1f` + `f95582d7`) — GO sous conditions
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 646 (dont le chargement en Node nu de `sheetcamNest.js`, correctif de portabilité du lot J2) |
+| aucun appelant produit | confirmé : `shared/sheetcamReserve.js` n'est importé que par ses tests ; la production ne change pas |
+| lecture | espacement = kerf + 2 × 0,25 ; appendice = enveloppe convexe du sommet de départ et d'un 32-gone circonscrit ; refus nommés (`vertexInsideDisc`, `reserveCrossesContour`, `nothingToReserve`, `ringTooSmall`) ; garde anti-traversée corrigée et verrouillée |
+| déploiement 2e | wasm géométrie servi par la prod = dépôt (`32df2941…`), vérifié |
+| recette | `.testparts/RECETTE_nestorcut_x4.job` : `Count=5`, `Optimisation=3`, `[OpOrder]` nichées puis hôte, quatre `copyOf=1`, angles `−π/2, −π/2, −π, −3π/2, −2π` |
+
+**Conditions** :
+
+1. **Le commit de correction `f95582d7` a retiré du suivi 86 fichiers qui
+   étaient versionnés AVANT le lot J3** (`docs/qa/atelier-ui/` 69,
+   `docs/qa/pr5-acceptation/` 12, `docs/qa/audit-multitoles-2026-09-03/` 5 —
+   dont `RAPPORT-P4/P5/U2.md` et des mesures référencées par
+   `FICHE-LOT4-T2-2026-09-06.md`). À **restaurer en un commit** (commande dans
+   `docs/REPRISE-2026-09-13.md` §4) avant tout autre travail.
+2. **Normaliser l'angle écrit dans (−π, π]** : la recette porte
+   `Angle=-6.283` pour un θ = 2π émis par le moteur ; SheetCam le lira
+   probablement, mais un fichier propre ne porte pas −2π. Une ligne, au
+   lot J4.
+3. Les deux valeurs « à confirmer sur la machine » (rayon de perçage 3 mm,
+   table `Start position → coin`) restent des entrées de fonction : le
+   propriétaire répond, J4 les pose.
+
+Le verdict de la recette SheetCam (propriétaire) est attendu ici avant tout
+déploiement du flux `.job`.
+
+### Recette SheetCam — verdict du propriétaire (13/09, `RECETTE_nestorcut_x4.job`)
+
+**OK** : les pièces (poses des quatre éventails dans le trou de l'hôte, hôte)
+et l'**ordre de découpe** (éventails d'abord, hôte en dernier) sont
+corrects dans SheetCam.
+
+**NOT OK — défaut constaté (capture du propriétaire)** : **l'amorce de la
+dernière opération, le contour du TROU de l'hôte, part de l'intérieur du
+trou et vient couper les éventails qui y sont nichés.** SheetCam trace
+l'amorce d'un contour intérieur **vers l'intérieur du trou**, c'est-à-dire
+du côté chute — précisément là où NestorCut a posé des pièces. Sur la
+capture, l'arc d'amorce (départ S2, sur le cercle du trou) traverse deux
+éventails, marqués en rouge.
+
+Conséquence pour la suite (à traiter par le prochain agent, **non résolu
+ici**, consigne du propriétaire) :
+
+1. Le non-fait 4 du lot J3 (« l'amorce d'un trou n'est pas réservée, la
+   place y est prise par la matière de la pièce ») est **infirmé par la
+   machine** : pour un trou, amorce et perçage tombent DANS le trou, donc
+   dans la zone où le remplissage de trous pose des pièces. Il faut une
+   **réserve d'amorce côté trou** : au point de départ de chaque contour
+   intérieur, un appendice d'exclusion **vers l'intérieur** (longueur
+   d'amorce lue par opération + disque de perçage), soustrait de la zone
+   libre que voit le remplissage de trous (`holeFill` / `pinwheel`), et
+   uniquement là — pas un anneau complet, sinon plus rien ne rentre.
+2. Le point de départ de l'amorce d'un trou dépend de `Start position`
+   (opération du trou) : soit on **prédit** ce point avec la même table
+   `START_CORNERS` (à confirmer, §9.14) et on réserve là ; soit on
+   **choisit** nous-mêmes le point de départ du trou après nesting, là où il
+   reste de la place, si SheetCam accepte un point de départ imposé par
+   contour (à vérifier dans le format : `Start position`, `Start point`
+   par opération) — c'est la voie la plus économe en matière.
+3. Verrous à prévoir : sur la recette, la distance entre l'amorce prédite du
+   trou (et son perçage) et tout éventail ≥ espacement ; et une recette
+   SheetCam **rejouée sur le poste du propriétaire** avec le fichier
+   corrigé, capture à l'appui.
+4. Le même raisonnement vaut pour toute pièce nichée dans une pièce nichée
+   (profondeur 2) : la réserve se calcule trou par trou.
