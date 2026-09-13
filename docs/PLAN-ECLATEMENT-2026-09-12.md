@@ -1207,3 +1207,29 @@ Après le lot J4-bis-2 (bloquant pour le `.job`), **avant J4-ter** : c'est
 une correction d'une livraison jugée non conforme par le propriétaire, app
 seule, sans moteur ni worker. Un à deux jours. Déploiement après GO, app
 seule, sans benchmarks.
+
+### Lot E3 — vérification (vérificateur, 13/09, nuit, `35b27b0a`) — GO déploiement, un cas serveur à mesurer d'abord
+
+Rejoué sur le poste : image reconstruite à HEAD, harnais
+`scripts/qa-e2e-advanced-import.mjs` sur le fichier d'atelier du collègue,
+captures lues, code de la route et de la fenêtre lu.
+
+| Verrou | Résultat |
+|---|---|
+| vitest | 740 (avec J4-ter) |
+| harnais six cas | **six cas, tous verts** sur le dessin du collègue : A éteint ⇒ aucune fenêtre, 1 fiche, 17 pièces entières ; B allumé + automatique ⇒ même fiche que A ; C éclater ⇒ 17 fiches, poignée 1 → 0,548 ; D trois fichiers ⇒ une fenêtre, trois lignes, Annuler ⇒ 0 fiche ; E un job + dessins ⇒ aucune fenêtre, 2 fiches avec réglages de coupe ; F captures FR et EN |
+| captures | interrupteur allumé lisible (rail accent, libellé « Chaque dépôt demande : import automatique, ou éclater et mettre à l'échelle ») ; fenêtre : titre, liste « 17 pièces · 2834,3 × 688,8 mm », trois boutons, « Import automatique » en premier et en accent ; rayons 4 px |
+| route `PATCH /api/project/:slug/advanced-import` | 401 sans session, 404 si le projet n'est pas au demandeur ou s'il est la démo, champ booléen strict |
+| lecture | état porté par le projet, absent = éteint ; retour arrière si le PATCH échoue ; panneau replié supprimé ; `.job` avant la fenêtre |
+
+**Arbitrage du point 4 (chemin serveur par la même fenêtre)** : accepté — le
+retirer aurait supprimé la seule interface de l'éclatement serveur du lot E2,
+et la place demandée de l'interrupteur (entre les deux cartes de mode) dit
+qu'il vaut pour les deux. **Condition avant déploiement** : le chemin serveur
+n'a pas été rejoué de bout en bout ; ajouter au harnais un cas **G** —
+projet « Nos serveurs », interrupteur allumé, « Éclater » ⇒ 17 fiches
+serveur (l'équivalent du cas G du lot E2) — et le passer vert sur l'image
+reconstruite. Une heure.
+
+**GO déploiement E3** (app seule) après ce cas G ; il peut partir avec J4-ter
+dans la même promotion ou séparément, au choix de l'agent selon la recette.

@@ -2020,8 +2020,8 @@ J4-bis-4), les marges du §9.51, et l'écriture du point de départ.
 **1. « Perçage errant » retiré.** Le G-code du propriétaire a tranché : six
 descentes de torche pour six contours, aucune au centre du trou. Un chemin du
 cache qui n'atterrit sur aucun contour est désormais **ignoré et compté**
-(`ignoredPaths`) ; il ne retire plus le trou. Le TROU revient au nesting —
-les éventails, eux, n'y rentrent toujours pas, et c'est l'espacement qui
+(`ignoredPaths`) ; il ne retire plus le trou. Le TROU revient au nesting —
+les éventails, eux, n'y rentrent toujours pas, et c'est l'espacement qui
 l'explique, pas la réserve : voir le point 5, mesuré.
 
 **2. Les marges dérivent du kerf (§9.51).** `DEFAULT_PIERCE_MARGIN_MM` a
@@ -2151,3 +2151,74 @@ relue au moment du nesting.
 | harnais, `Piece_Trou+Fill_x4_OK.job` | tous verts, 5 / 5 — trou **rendu au nesting**, 3 drapeaux « déplacé » levés, 3 octets changés dans le cache et tous dans les champs de départ |
 | harnais, `Piece_Trou+Fill.job` | tous verts, 2 / 2 |
 | harnais, `Piece_Trou.job` | tous verts, 1 / 1 |
+
+### Lot J4-ter — vérification (vérificateur, 13/09, nuit, `2e4109a5`) — GO, déploiement après la recette machine
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, vitest, harnais
+`.job` sur quatre fichiers, lecture de l'écrivain et du fichier de recette.
+
+#### 9.53 Mesures
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **740** |
+| `RECETTE-J4ter_x4.job` | points écrits et drapeaux levés : hôte (24,749 ; 24,749) et (50 ; 50), éventail (0 ; 2,828) ; les deux chemins de l'entité POINT non touchés ; **3 octets** diffèrent du cache source (les trois drapeaux — les points automatiques de la source re-sauvée étaient déjà ceux-là) |
+| harnais `.job`, quatre fichiers | **tous verts** : recette × 4 (5 / 5, 3 drapeaux levés, trou rendu au nesting avec une morsure, rayon de perçage 3 = 2 × kerf), « ordre » 5 / 5, 2 pièces 2 / 2, 1 pièce 1 / 1 ; aucune pièce nichée (espacement 4 mm, voir ci-dessous) |
+| écrivain (`writeJobStartPoints`) | deux doubles et un octet par contour, aux offsets rendus par le lecteur ; rien d'autre n'est réencodé |
+| plafond des 7 dessins | `tooManyDrawings` absent du code (J4-bis-4) |
+| essai indépendant du vérificateur | `.testparts/retro-eng-job/NESTORCUT-3-points-choisis.job` : trois points choisis loin des points automatiques, écrits par un script hors dépôt avec le même codage ; **en attente du G-code du propriétaire** — c'est la preuve directe que SheetCam honore un point écrit |
+
+**Acquis** : le nichage qui ne revient pas est bien un effet de l'espacement
+(tableau du §9.52, quatre lignes ; la dernière, sans réserve à 3 mm, tranche).
+La règle `2 × kerf + sécurité` avec un kerf de 1,5 ne fait plus tenir quatre
+éventails dans ce trou : conséquence connue du §9.40, à rediscuter par le
+propriétaire s'il veut revoir le moulinet — pas un défaut du lot.
+
+**Une hygiène à corriger dans le même commit que les documents** : le commit
+`2e4109a5` a ré-enregistré `docs/ETUDE-JOB-SHEETCAM-2026-09-11.md` en fins de
+ligne **CRLF** (4 150 lignes « changées » pour 331 ajoutées ; git le voit
+désormais comme non-texte). Le contenu est intact (vérifié en ignorant les
+blancs, toutes les sections du vérificateur présentes). À remettre en LF,
+comme tous les autres documents, et à ne pas reproduire (éditeur ou outil qui
+convertit).
+
+**GO** pour J4-ter. Le déploiement (app + worker nesting) attend **la recette
+machine** : le propriétaire ouvre `RECETTE-J4ter_x4.job`, post-traite, et le
+G-code doit amorcer le trou en (74,75 ; 74,75) et le contour extérieur en
+(100 ; 100) dans le repère de la tôle (poses du fichier), donc là où
+NestorCut a écrit ; et le fichier `NESTORCUT-3-points-choisis` doit amorcer
+aux trois points du tableau du 13/09 22 h 52.
+
+#### 9.54 Recette machine J4-ter (13/09, 23 h) : le G-code amorce là où NestorCut a écrit
+
+`.testparts/RECETTE-J4ter_x4.nc`, généré par le propriétaire depuis
+`RECETTE-J4ter_x4.job` (hôte posé en (62,8 ; 54,0), `Angle −1,57`, points
+écrits (24,749 ; 24,749) pour le trou et (50 ; 50) pour le contour).
+
+| contour | point écrit, ramené dans la tôle | départ lu dans le G-code (chemin décalé) | écart |
+|---|---|---|---|
+| trou | (38,05 ; 78,75) | (38,54 ; 78,22) | **0,72 mm** = kerf/2 |
+| extérieur | (12,80 ; 104,00) | (12,01 ; 104,00) | **0,79 mm** = kerf/2 le long de l'arête |
+
+Six perçages pour six contours, aucun sur l'entité POINT. **SheetCam honore
+les points écrits avec le drapeau « déplacé », rotation de la pièce comprise
+(l'amorce du trou est à 10-11 h sur la capture, le coin S3 en haut à gauche :
+ce sont les points écrits tournés de +90°).** La recette J4-ter est **OK**.
+
+Les deux remarques du propriétaire, mesurées sur le même G-code :
+
+1. *« Plus d'éventail dans le trou »* : voulu par la règle d'espacement
+   (§9.52 point 5) — à 4 mm, et même à 3, les quatre éventails ne tiennent
+   plus ; le trou est bien offert au nesting (`applied: true`, une morsure).
+2. *« L'éventail n'est pas à 2 × kerf de la pièce carrée »* : contour à
+   contour, il y est — sommet de l'hôte à y = 104, point bas des éventails
+   du rang inférieur à y = 108, soit **4 mm = 2 × 1,5 + 1**. Ce qui se voit à
+   l'écran, ce sont les BANDES de kerf : celle de l'hôte monte jusqu'à 105,5,
+   celle de l'éventail descend jusqu'à 106,5 — **1 mm de matière entre les
+   deux bandes, c'est la sécurité**. Si le propriétaire veut 2 × kerf entre
+   les bandes elles-mêmes, la règle devient `4 × kerf + sécurité` (7 mm ici) :
+   c'est un autre choix, à dire.
+
+**GO déploiement du `.job`** (app + worker nesting), avec E3 dès son cas
+serveur G. L'essai à trois points choisis du vérificateur n'est plus
+nécessaire à la preuve ; il reste utile s'il est fait.
