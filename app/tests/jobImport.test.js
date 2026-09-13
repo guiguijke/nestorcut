@@ -210,6 +210,7 @@ const NEW_KEYS = [
     'sheetcamReserve.flatEnvelope', 'sheetcamReserve.startNotRead',
     'sheetcamReserve.reserveCrossesContour', 'sheetcamReserve.holeTooSmall',
     'sheetcamReserve.mouthInsideEnvelope', 'sheetcamReserve.degenerateEdge',
+    'sheetcamReserve.strayPierce',
 ]
 
 describe('libellés du lot J4 : EN et FR', () => {

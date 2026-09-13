@@ -779,10 +779,37 @@ export function partWithReserve(part, options = {}) {
         ? applyAll(outer, perRing[0], false)
         : { ring: outer, applied: 0, reason: 'startNotRead' }
 
+    // UN POINT DE DÉPART QUI N'EST SUR AUCUN CONTOUR MAIS QUI TOMBE DANS UN
+    // TROU EST UN PERÇAGE EN PLEINE ZONE NICHÉE.
+    //
+    // Le cas est RÉEL et il a été trouvé au banc, pas imaginé : les deux DXF
+    // de la recette portent une entité POINT que notre import ne retient pas
+    // (elle n'a pas d'aire), et SheetCam lui fabrique un chemin dont le point
+    // de départ est le point lui-même. Sur `Piece_Trou`, ce point est le
+    // CENTRE du trou — exactement là où nous nichons les éventails.
+    //
+    // On ne sait pas si SheetCam amorce vraiment sur une entité POINT (la
+    // série `retro-eng-job` n'en porte aucune, aucun `.nc` ne tranche). Tant
+    // que ce n'est pas mesuré, le trou concerné SORT du nesting : c'est la
+    // règle du §9.42 point 3, appliquée à l'endroit exact du danger plutôt
+    // qu'à tous les trous de la pièce.
+    const stray = new Set()
+    for (const start of unmatched) {
+        const p = start?.point
+        if (!Array.isArray(p)) continue
+        holeRings.forEach((hole, index) => {
+            if (pointInRing([Number(p[0]), Number(p[1])], hole)) stray.add(index)
+        })
+    }
+
     const holes = []
     const holeReports = []
     holeRings.forEach((hole, index) => {
         const list = perRing[index + 1]
+        if (stray.has(index)) {
+            holeReports.push({ index, applied: false, reason: 'strayPierce', bites: 0, dropped: true })
+            return
+        }
         if (!list.length) {
             holeReports.push({ index, applied: false, reason: 'startNotRead', bites: 0, dropped: true })
             return
@@ -807,6 +834,7 @@ export function partWithReserve(part, options = {}) {
             kerf: Number(kerf),
             starts: starts.length,
             unmatched: unmatched.length,
+            strayPierces: stray.size,
             holes: holeReports,
             holesDropped: holeReports.filter((h) => h.dropped).length,
         },

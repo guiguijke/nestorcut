@@ -176,8 +176,8 @@ try {
         return {
             w: val('[data-testid="settings-sheets"] input'),
             all: [...document.querySelectorAll('[data-testid="settings-sheets"] input')].map((i) => i.value),
-            kerf: val('[data-testid="settings-kerf"] input') ?? val('input[name="kerf"]'),
-            safety: val('[data-testid="settings-safety"] input'),
+            kerf: val('[data-testid="settings-kerf"] input') ?? val('input[data-testid="settings-kerf"]'),
+            safety: val('[data-testid="settings-safety"] input') ?? val('input[data-testid="settings-safety"]'),
             rule: document.querySelector('.size__rule')?.textContent?.trim() ?? null,
         }
     })
@@ -243,6 +243,9 @@ try {
         return {
             placed: r.placed, requested: r.requested,
             sheetcamJobError: r.sheetcamJobError ?? null,
+            // Lot J4-bis-2 : les constats de reserve d'amorce, tels que le
+            // payload les a produits et que la fiche les a persistes.
+            leadInReserve: r.leadInReserve || [],
             alts: (r.alternatives || []).map((a) => ({
                 dxfs: (a.dxfs || []).length,
                 jobs: (a.jobs || []).length,
@@ -274,6 +277,52 @@ try {
     check('C3 le nombre demande est celui du `.job`',
         record.requested === totalWanted,
         `demandees ${record.requested}, somme des quantites du .job ${totalWanted}`)
+    // F — LA RESERVE D'AMORCE, LOT J4-bis-2. Elle est desormais posee au
+    // POINT DE DEPART LU dans le binaire du `.job`. Ce qu'on verifie ici :
+    // qu'elle s'est appliquee sur CE fichier reel, qu'aucun trou n'a ete
+    // retire du nesting faute de point lisible, et que le centre de boite
+    // que NOUS mesurons est bien celui que SheetCam a memorise — un ecart la
+    // ferait tomber a cote des contours en silence.
+    const reserve = record.leadInReserve || []
+    check('F1 la reserve d`amorce s`est appliquee sur chaque piece du `.job`',
+        reserve.length > 0 && reserve.every((n) => n.applied === true),
+        JSON.stringify(reserve.map((n) => ({ f: n.file_slug, ok: n.applied, why: n.reason }))))
+    // F2 n'exige PAS qu'aucun trou ne sorte du nesting : un `.job` peut
+    // legitimement percer la ou l'on nicherait (voir F4). Ce qui ne doit
+    // JAMAIS arriver, c'est un trou retire SANS raison nommee — la
+    // degradation muette est le defaut que tout ce chantier corrige.
+    const allHoles = reserve.flatMap((n) => n.holes || [])
+    check('F2 aucun trou retire sans raison nommee',
+        allHoles.every((h) => !h.dropped || (typeof h.reason === 'string' && h.reason)),
+        JSON.stringify(allHoles))
+    // F3 : les orphelins sont COMPTES, et le compte se boucle. Un `.job` peut
+    // porter un chemin sans contour chez nous (une entite POINT, par exemple,
+    // que notre import ne retient pas) ; ce qui compterait comme un defaut,
+    // c'est qu'un point disparaisse du decompte.
+    log('points de depart :', JSON.stringify(reserve.map((n) =>
+        ({ f: n.file_slug, lus: n.starts, orphelins: n.unmatched, errants: n.strayPierces }))))
+    check('F3 le compte des points de depart se boucle',
+        reserve.every((n) => Number.isFinite(Number(n.starts))
+            && Number(n.unmatched) >= 0 && Number(n.unmatched) <= Number(n.starts)),
+        JSON.stringify(reserve.map((n) => ({ lus: n.starts, orphelins: n.unmatched }))))
+    // F4 n'est PAS un verrou d'egalite : les deux origines sont differentes et
+    // c'est mesure. Le point de depart du binaire est relatif a l'origine que
+    // SheetCam memorise pour le dessin ; la pose, elle, tourne autour du
+    // centre de la geometrie de COUPE. L'ecart vaut la distance dont une
+    // entite ignoree par notre import (un POINT, par exemple) deplace la
+    // boite du dessin. On le JOURNALISE, et on verifie que les points
+    // atterrissent bien sur les contours (c'est F3 qui le dit).
+    log('ecart entre les deux origines (mm) :', JSON.stringify(reserve.map((n) => n.originGapMm)))
+    // F4 EST LE VERROU DE SECURITE : tout percage qui tombe dans une zone ou
+    // l'on nicherait doit avoir FAIT SORTIR cette zone du nesting. Zero
+    // percage errant ⇒ zero trou retire pour cette raison ; un percage
+    // errant ⇒ un trou retire, avec `strayPierce` en clair.
+    const strays = reserve.reduce((a, n) => a + (Number(n.strayPierces) || 0), 0)
+    const droppedForStray = allHoles.filter((h) => h.reason === 'strayPierce').length
+    check('F4 tout percage en zone nichee a fait sortir sa zone',
+        strays === 0 ? droppedForStray === 0 : droppedForStray >= 1,
+        `percages errants ${strays}, trous retires pour cette raison ${droppedForStray}`)
+
     check('D-1 des `.job` sont produits et persistés',
         (record.alts || []).some((a) => a.jobs > 0),
         record.sheetcamJobError

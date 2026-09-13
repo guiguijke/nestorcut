@@ -429,6 +429,32 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
         expect(out.holes).toHaveLength(0)
     })
 
+    it('un perçage EN PLEIN TROU fait sortir CE trou du nesting', () => {
+        // Cas réel, trouvé au banc sur les deux DXF de la recette : ils
+        // portent une entité POINT que notre import ne retient pas (pas
+        // d'aire), et SheetCam lui fabrique un chemin dont le départ est le
+        // point lui-même — au CENTRE du trou de l'hôte, là où nous nichons.
+        // Tant qu'aucun `.nc` ne dit si SheetCam amorce vraiment sur un POINT,
+        // le trou concerné sort du nesting : c'est le danger, pas une
+        // hypothèse.
+        const out = partWithReserve(part, {
+            starts: [...starts, { point: [25, 140], leadIn: 5, leadInType: LEAD_ARC }],
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(out.reserve.strayPierces).toBe(1)
+        expect(out.holes).toHaveLength(0)
+        expect(out.reserve.holes[0]).toMatchObject({ dropped: true, reason: 'strayPierce' })
+        // CONTRÔLE : un point égaré HORS de tout trou ne coûte rien.
+        const loin = partWithReserve(part, {
+            starts: [...starts, { point: [900, 900], leadIn: 5, leadInType: LEAD_ARC }],
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(loin.reserve.strayPierces).toBe(0)
+        expect(loin.holes).toHaveLength(1)
+    })
+
     it('un point hors de tout contour est COMPTÉ, pas avalé', () => {
         const out = partWithReserve(part, {
             starts: [...starts, { point: [900, 900], leadIn: 5, leadInType: LEAD_ARC }],

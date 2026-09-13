@@ -344,6 +344,7 @@ const dict = {
         'sheetcamReserve.holeTooSmall': 'the cutout is smaller than the lead-in and its pierce',
         'sheetcamReserve.mouthInsideEnvelope': 'the lead-in reaches further along the outline than the cutout allows',
         'sheetcamReserve.startNotRead': 'the job file does not say where this contour starts',
+        'sheetcamReserve.strayPierce': 'the job file pierces inside this cutout, away from any outline',
         'sheetcamReserve.degenerateEdge': 'the outline has no usable direction at the start point',
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': 'Delete',
@@ -1150,6 +1151,7 @@ const dict = {
         'sheetcamReserve.holeTooSmall': "la découpe est plus petite que l'amorce et son perçage",
         'sheetcamReserve.mouthInsideEnvelope': "l'amorce court plus loin le long du contour que la découpe ne le permet",
         'sheetcamReserve.startNotRead': "le fichier .job ne dit pas où ce contour commence",
+        'sheetcamReserve.strayPierce': "le fichier .job perce à l'intérieur de cette découpe, hors de tout contour",
         'sheetcamReserve.degenerateEdge': "le contour n'a pas de direction exploitable au point de départ",
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': "Supprimer",

@@ -618,13 +618,34 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             // et le chemin de nesting ordinaire est inchangé.
             //
             // LOT J4-bis-2 : la réserve est posée AU POINT DE DÉPART LU dans le
-            // `.job`, plus à un coin prédit. Les points y sont stockés relatifs
-            // au CENTRE DE LA BOÎTE ENGLOBANTE DU DESSIN — la même origine que
-            // celle de la pose (`XPos, YPos`, règle 3). On la mesure ici, sur
-            // TOUTES les pièces du fichier, et une seule fois.
+            // `.job`, plus à un coin prédit.
+            //
+            // DEUX ORIGINES, ET ELLES NE SONT PAS LA MÊME — mesuré, pas déduit.
+            // Les points de départ du bloc binaire sont relatifs à l'origine
+            // que SheetCam a mémorisée POUR CE DESSIN (`sc.origin`, le premier
+            // enregistrement de son bloc). L'origine de la POSE, elle, est le
+            // centre de la boîte de la géométrie de COUPE, celle que nous
+            // mesurons. Sur `Pièce L` les deux coïncident (90 ; 100) ; sur
+            // `Piece_Fillx4` elles diffèrent de 1,414 mm, parce que le DXF
+            // porte une entité POINT à y = 0 que notre import ne retient pas
+            // et que le cache binaire, lui, compte.
+            //
+            // Les deux valeurs sont vérifiées chacune contre un fichier écrit
+            // par SheetCam : l'origine de pose par la résolution exacte du
+            // fichier de référence posé à la main (c = 16,828 sur les deux
+            // axes, t = (50 ; 50) sur les quatre exemplaires), l'origine des
+            // points par le fait que les points ATTERRISSENT sur les contours
+            // (0 ; 2,8284) est le milieu de l'arête basse de l'éventail).
+            // Prendre l'une pour l'autre décalait tous les points de 1,414 mm
+            // et les faisait sortir de la tolérance d'appariement.
             const sc = file.sheetcam
             if (sc && Array.isArray(sc.starts)) {
-                const c0 = fileBoxCentre(file)
+                const boxCentre = fileBoxCentre(file)
+                const c0 = Array.isArray(sc.origin)
+                    && Number.isFinite(Number(sc.origin[0]))
+                    && Number.isFinite(Number(sc.origin[1]))
+                    ? [Number(sc.origin[0]), Number(sc.origin[1])]
+                    : boxCentre
                 const starts = sc.starts.map((s) => ({
                     ...s,
                     point: [c0[0] + Number(s.offset?.[0]), c0[1] + Number(s.offset?.[1])],
@@ -645,18 +666,14 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     holes: reserved.reserve.holes,
                     starts: reserved.reserve.starts,
                     unmatched: reserved.reserve.unmatched,
-                    // Écart entre le centre de boîte que NOUS mesurons et celui
-                    // que SheetCam a mémorisé. Il doit être nul ; s'il ne l'est
-                    // pas, les points de départ tombent à côté et les trous
-                    // sortent du nesting — autant que le constat le nomme.
-                    ...(Array.isArray(sc.origin)
-                        ? {
-                            originGapMm: Math.hypot(
-                                c0[0] - Number(sc.origin[0]),
-                                c0[1] - Number(sc.origin[1]),
-                            ),
-                        }
-                        : {}),
+                    strayPierces: reserved.reserve.strayPierces,
+                    // Écart entre les deux origines, publié parce qu'il est
+                    // RÉEL et instructif : il vaut exactement la distance dont
+                    // l'entité ignorée par notre import déplace la boîte du
+                    // dessin. Ce n'est pas une anomalie, c'est une mesure.
+                    originGapMm: Math.hypot(
+                        c0[0] - boxCentre[0], c0[1] - boxCentre[1],
+                    ),
                 })
             }
             inputItems.push({
