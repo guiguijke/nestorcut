@@ -2222,3 +2222,92 @@ Les deux remarques du propriétaire, mesurées sur le même G-code :
 **GO déploiement du `.job`** (app + worker nesting), avec E3 dès son cas
 serveur G. L'essai à trois points choisis du vérificateur n'est plus
 nécessaire à la preuve ; il reste utile s'il est fait.
+
+#### 9.55 Déploiement de J4-ter et d'E3 (implémenteur, 14/09, 00 h) — fait
+
+Une seule promotion pour les deux lots, comme le permet la vérification d'E3.
+
+| | |
+|---|---|
+| SHA promu | **`9b227ec1a5a267cd7f831ffbd189babbc5d692e4`** (`test(import): lot E3 — cas G`) |
+| build des images | run `34784870439`, **`success`** sur les cinq jobs (moteur + tests worker, puis les quatre images) |
+| `promote-latest` | run `34785161622`, **`success`**, quatre images retaguées sans reconstruction |
+
+**Digests de `:latest` après promotion, et ce qui tourne réellement.** Les
+quatre conteneurs de production tournent l'image `:latest` à l'identifiant
+près — vérifié conteneur par conteneur, pas déduit du `pull` :
+
+| image | digest `:latest` | avant |
+|---|---|---|
+| `nest2d-app` | `sha256:cefe551d78c4…` | `sha256:2fbd88a1ecef…` |
+| `nest2d-nesting-worker` | `sha256:6554e31dc113…` | `sha256:6ee233c737f1…` |
+| `nest2d-user-file-processing-worker` | `sha256:66ed5d34c062…` | `sha256:62906ba722e8…` |
+| `nest2d-admin` | `sha256:ea48d5e3a289…` | inchangé — le conteneur n'a pas été recréé, et c'est correct : le build rend le même digest |
+
+**Hetzner** : `docker compose pull && docker compose up -d` dans
+`/opt/nestorcut`. `app`, `nesting-worker` et `user-file-processing-worker`
+recréés. `https://nestorcut.com/` répond **200** en 0,16 s.
+
+**Homelab** : `docker compose pull && docker compose up -d --force-recreate`
+dans `/containers/nestorcut-overflow`. Les trois workers de débordement
+repartent sur l'image du jour (`e5f1fd77a84e`, 23 h 52).
+`assert_overflow_head.py` : **`ASSERT OVERFLOW=HEAD: OK`**, les trois workers
+nommés. `NEST_COMPUTE_TOKENS` = **28 des deux côtés**.
+
+**Benchmarks publics : rien n'est réécrit, et voici pourquoi — mesuré.**
+`workers/nesting/core/holefill.py` et `core/main.py` ont bougé depuis le
+dernier run publié (`d890c92`), donc le corpus a été rejoué en entier sur
+l'image reconstruite, onze cas.
+
+**Neuf des dix fiches publiées sont identiques au chiffre près** (T-A, B, C,
+D, E, G, H, J, K : densité, posées, tôles, verdict). La dixième, **T-F**,
+rend 89 posées sur 90 au lieu de 90, verdict `partial` au lieu de `ok`.
+
+Avant de publier un chiffre moins bon, j'ai fait l'A/B qui tranche : **la
+même machine, le cas T-F, l'image de RÉFÉRENCE `d890c92`** — celle qui a
+produit les chiffres publiés, retirée du registre par son SHA complet :
+
+| image | passages | posées |
+|---|---|---|
+| HEAD (`9b227ec1`) | 3 | 89, 89, 89 |
+| référence (`d890c92`) | 2 | **88, 90** |
+
+L'image de référence encadre la valeur de HEAD. **T-F n'est pas une
+régression : c'est un cas instable d'un run à l'autre**, et la cause est
+connue — le budget est un temps de MUR (`timeBudgetSec: 90`), donc le nombre
+d'évaluations qui rentrent dépend de la charge de la machine, et T-F se joue
+à une pièce près. Je n'ai donc **rien écrit** dans `data/benchmarks.js` :
+aucun chiffre ne bouge du fait du code.
+
+**Ce que cela révèle, et que je signale plutôt que de le taire** : le `90 /
+ok` publié pour T-F est le HAUT d'une fourchette 88–90, pas un fait stable.
+La page dit « produites par l'image déployée en production à la date
+indiquée » — c'est vrai, mais pour ce cas-là un autre passage de la même
+image aurait donné un autre nombre. Rendre T-F stable (budget en
+évaluations plutôt qu'en secondes pour le corpus, ou fiche marquée
+« à une pièce près ») est une décision de page publique : elle revient au
+propriétaire, je ne la prends pas seul à minuit.
+
+#### 9.56 La question des bandes de kerf (§9.54 point 2) — mon avis, la décision reste au propriétaire
+
+Le vérificateur mesure juste, et la question est bien posée : faut-il
+`2 × kerf + sécurité` (règle actuelle) ou `4 × kerf + sécurité` ?
+
+Ce que la règle actuelle garantit, en clair : **la sécurité EST la matière
+qui reste**. Deux contours à `2 × kerf + sécurité` l'un de l'autre, chacun
+mangé d'un kerf par sa bande, laissent exactement `sécurité` millimètres de
+métal entre les deux saignées. Le 1 mm que le propriétaire voit à l'écran
+n'est pas un reliquat : c'est le nombre qu'il a saisi, rendu au bon endroit.
+
+`4 × kerf + sécurité` dirait autre chose : « je veux deux kerfs de matière
+en plus de ma sécurité ». C'est un réglage légitime — mais il rend le champ
+« sécurité » illisible (on ne saurait plus ce qu'il mesure) et il **double
+presque l'espacement de tous les projets existants** : 4 mm deviennent 7 mm
+au kerf de 1,5, sans que personne n'ait rien demandé.
+
+**Mon avis** : garder `2 × kerf + sécurité`, et dire à qui veut plus de
+matière d'augmenter la SÉCURITÉ — c'est exactement ce que ce champ mesure
+déjà, millimètre pour millimètre. Si le propriétaire tranche pour
+`4 × kerf + sécurité`, c'est une heure de travail plus une migration qui
+préserve l'espacement effectif des projets existants (la même mécanique que
+celle écrite au §9.40) ; je ne l'engage pas sans son mot.
