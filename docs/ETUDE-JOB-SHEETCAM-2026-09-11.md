@@ -275,3 +275,22 @@ refuse d'être écrit, c'est une ligne à changer.
 4. Les questions ouvertes du §4 (miroir `HRef`/`VRef` sur une pièce non
    symétrique, version stable de SheetCam, multi-tôles) restent ouvertes :
    J1 LIT et ÉCRIT ces champs, il ne décide pas de leur sémantique.
+
+### Lot J1 — vérification (vérificateur, 13/09, `85678862`) — GO, J2 peut s'ouvrir
+
+Rejoué sur le poste, hors des tests du dépôt (script à part chargeant
+`shared/sheetcamJob.js`) :
+
+| Verrou | Résultat |
+|---|---|
+| lire → écrire, **les 14 `.job` privés** de `.testparts/` | **14/14 octets identiques** |
+| moulinet ×4 depuis `Piece_Trou+Fill.job` (cinq poses, `[OpOrder]` nichées puis hôte, `maskPaths:false`) | **identique octet pour octet** à `Piece_Trou+Fill_x4_final_TEST.job`, le fichier que le propriétaire a ouvert dans SheetCam le 11/09 (« parfait ») ; avec `maskPaths:true` le fichier diffère de 370 octets, ce sont les chemins réduits — attendu |
+| lecture | version, `Count` 2, tôle 1000 × 1250, kerf 1,5, deux pièces avec leurs poses, noms de dessin réduits, une opération chacune |
+| vitest | 609 |
+
+**Décision de forme acceptée** : une pièce non posée reste dans le fichier à
+`enabled=0` (le rang lie le bloc binaire, la retirer échangerait les
+géométries). Non-fait maintenu : aucun fichier de ce code n'a été ouvert
+DANS SheetCam ; l'égalité avec le fichier validé le 11/09 tient lieu de
+preuve jusqu'à la recette du §8 sur le poste du propriétaire, à faire au
+plus tard à la fin de J2 (premier fichier produit depuis un vrai nesting).

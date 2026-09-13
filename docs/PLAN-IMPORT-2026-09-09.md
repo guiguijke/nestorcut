@@ -943,3 +943,55 @@ importeurs** » est donc tenu **côté serveur seulement**, et je le dis.
 | A/B géométrie sur le corpus | **148 / 148 identiques**, 0 changé |
 | `handles_canonical`, sweep corpus, parité géométrie | **non rejoués, et pas nécessaire** : le lot ne touche que `build_geometry.py` côté Python, et sa SORTIE est prouvée identique sur les 148 fichiers — la parité wasm ≡ ezdxf compare cette sortie |
 | budget de temps | toujours vérifié pendant l'attachement, et désormais aussi pendant le pré-calcul des sondes |
+
+### Lot 2d — vérification (vérificateur, 13/09, `7622f46c`) — GO déploiement
+
+Coureur ezdxf rejoué sur les 153 fichiers réels, image fileprocessing
+reconstruite à HEAD, comparé à la campagne précédente (E1) :
+
+| Verrou | Résultat |
+|---|---|
+| statut, pièces, trous, unité, facteur | **153/153 identiques, 0 changé** |
+| temps total des 153 | **190,5 s → 21,3 s** |
+| pire fichier | **56,6 s → 1,5 s** ; **0 fichier au-delà de 10 s** |
+| navigateur | inchangé (aucun code wasm dans ce lot) |
+
+**GO déploiement 2d** : worker fileprocessing seul (aucun autre service, ni
+homelab, ni benchmarks). Le lot ferme la priorité 2 côté serveur.
+
+**Côté navigateur, à ouvrir** : deux fichiers restent au-delà de 10 s, dont
+un refusé à 20 s alors que le serveur le lit en 0,85 s. Cause mesurée au lot
+2a : `node_segments` en O(n²) et l'attachement Rust en O(arêtes) par couple.
+Consigne **lot 2e** (une attente de GO, comme 2d) : balayage ou index spatial
+dans `nest-import` (`assemble.rs`) pour `node_segments` et l'attachement,
+**même sortie** (goldens de parité inchangés SAUF preuve que l'ancien était
+faux, déterminisme 68/68, handles canoniques 14/14, A/B pièces/trous/handles
+sur les 238 fichiers : 0 changé), ces deux fichiers sous 10 s, aucun fichier
+plus lent qu'avant de plus de 10 %.
+
+
+#### Lot 2d — déploiement (implémenteur, 13/09, `7622f46c`)
+
+**Worker fileprocessing seul**, déployé **par SHA** (la règle d'AGENTS §6
+depuis le constat `:latest` du jour) : `docker pull …:7622f46c…`,
+`docker tag …:7622f46c… …:latest` en local sur le serveur, puis
+`docker compose up -d user-file-processing-worker`. Ni homelab (ce lot ne
+touche ni `workers/nesting` ni le moteur), ni benchmarks (le moteur est
+inchangé).
+
+| Contrôle | Résultat |
+|---|---|
+| conteneur | `user-file-processing-worker` recréé sur l'image du SHA, `Up` ; les cinq autres services intacts |
+| **le code du lot est bien dans le conteneur de production** | interrogé dedans : les sondes sont hors de la boucle (`body_probes[idx].intersects`), la garde de budget est là (`deadline.check(body_idx)`), et **l'ancien `body.buffer(probe_tol)` de la boucle des empreintes a disparu** |
+| journaux | **0 ERROR / Traceback** |
+| app, worker nesting, homelab | **non touchés** — l'app de production reste à `53f93d2c` |
+
+**J1 n'est pas déployé et n'a pas besoin de l'être** : `shared/sheetcamJob.js`
+n'a aucun appelant (aucune route, aucune page, aucun worker ne l'importe).
+Il partira avec le lot qui le branche, J2 ou J4.
+
+**Non-fait** : aucun import réel n'a été rejoué en production après ce
+déploiement — l'import est derrière `auth`. Ce qui est mesuré à la place :
+l'A/B sur les 148 fichiers du corpus (148/148 identiques, pièces, aire,
+trous, handles et constats) et la présence du code dans le conteneur qui
+l'exécute.

@@ -869,6 +869,15 @@ Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --
 
 ## 6. Checklist de déploiement
 
+### `:latest` ne fait pas foi (constat 2026-09-13)
+
+La CI publie une image à chaque poussée sur `main` et déplaçait `:latest`
+avec elle : après un déploiement épinglé par SHA, `:latest` désignait déjà
+des lots SANS GO. Règle : **un déploiement se fait par SHA approuvé**
+(`docker pull …:<sha>`, `docker tag …:<sha> …:latest`, `up -d <service>`),
+jamais par `compose pull` nu — homelab compris. Cible (lot D1) : `:latest`
+n'est déplacé que par le job manuel « promote » de la CI, sur le SHA du GO.
+
 ### Homelab (débordement, constat 2026-09-06)
 
 Les trois workers
