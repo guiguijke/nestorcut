@@ -1,11 +1,20 @@
 <template>
     <div class="files">
+        <!-- Lot E3 : le même interrupteur qu'à la création, avec LE MÊME
+             ÉTAT — il est porté par le projet. Le panneau replié a disparu. -->
+        <AdvancedImportSwitch
+            v-if="!readonly && local"
+            :modelValue="advancedOn"
+            class="files__advanced"
+            @update:modelValue="onAdvanced"
+        />
         <DxfUpload
             v-if="!readonly"
             compact
             :extensions="uploadExtensions"
             advanced
             class="files__upload"
+            :class="{ 'files__upload--advanced': advancedOn }"
             @files="addFiles"
             @rejected="onRejected"
             @oversize="rejectError = 'upload.tooLarge'"
@@ -41,6 +50,8 @@
 <script setup>
 import { processingType } from "~~/constants/files.constants";
 import FileError from "./FileError.vue";
+import { useAdvancedImport } from '~/composables/advancedImport'
+import { filesStore } from '~/composables/files'
 
 const props = defineProps({
     projectFiles: {
@@ -71,6 +82,13 @@ const uploadExtensions = computed(() =>
 const emit = defineEmits(["addFiles"])
 const { t } = useLocale()
 const rejectError = ref('')
+
+// Lot E3 : l'interrupteur « Import avancé » du PROJET. Sa vérité vit dans le
+// document projet ; le composable en porte la copie courante, et le store
+// l'écrit (`setAdvancedImport`, qui revient en arrière si le PATCH échoue).
+const adv = useAdvancedImport()
+const advancedOn = computed(() => adv.state.enabled === true)
+const onAdvanced = (v) => filesStore.actions.setAdvancedImport(v)
 
 const addFiles = (files) => {
     rejectError.value = ''
@@ -105,6 +123,16 @@ const openModal = (file) => {
     display: flex;
     flex-direction: column;
     gap: 12px;
+
+    &__advanced {
+        width: 100%;
+    }
+
+    /* Lot E3 : allume, l'interrupteur TEINTE la bordure de la zone de
+       depot — l'etat doit se voir franchement. */
+    &__upload--advanced :deep(.upload__label) {
+        border-color: var(--blue);
+    }
 
     &__upload {
         width: 100%;

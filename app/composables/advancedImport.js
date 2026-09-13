@@ -1,43 +1,68 @@
 /**
- * « Import avancé » (lot E1 de docs/PLAN-ECLATEMENT-2026-09-12.md §3) :
- * l'état du panneau replié de la dépose — éclatement en pièces unitaires et
- * mise à l'échelle.
+ * « Import avancé » — lots E1, E1-bis puis **E3**
+ * (`docs/PLAN-ECLATEMENT-2026-09-12.md` §3 puis §6) : éclatement d'un dessin
+ * multi-pièces et mise à l'échelle.
  *
- * Deux choix de conception, tous deux demandés par la consigne :
+ * ---------------------------------------------------------------------------
+ * CE QUE LE LOT E3 CHANGE, ET POURQUOI (constat du propriétaire, 13/09 20 h).
  *
- * - **le réglage vaut pour la DÉPOSE, pas pour le compte** : un état de
- *   module (un objet réactif par onglet) + un miroir `sessionStorage`, jamais
- *   une préférence serveur. Fermer l'onglet remet l'option à zéro ;
- * - **éteint par défaut** : `options()` rend `{ scale: 1, explode: false }`
- *   tant que l'utilisateur n'a rien touché, et la chaîne d'import ne fait
- *   alors AUCUN appel de plus qu'avant le lot.
+ * Ce qui était en production n'était pas ce qu'il avait demandé : il fallait
+ * ouvrir un PANNEAU REPLIÉ sur la page projet AVANT de déposer, et l'import
+ * ordinaire ne proposait jamais le choix. Sa demande :
  *
- * L'échelle se donne de trois façons : un facteur, une largeur cible ou une
+ *   - un INTERRUPTEUR « Import avancé » à la création du projet et sur sa
+ *     page, dont l'état est une propriété du PROJET (et non de la session :
+ *     le panneau du lot E1 vivait dans `sessionStorage`, il mourait avec
+ *     l'onglet et ne suivait pas le projet) ;
+ *   - allumé, une FENÊTRE DE CHOIX à chaque dépôt : « import automatique »
+ *     (le défaut, exactement l'import ordinaire) ou « éclater en pièces et
+ *     mettre à l'échelle » (l'aperçu sur tôle du lot E1-bis) ;
+ *   - éteint, RIEN : aucune fenêtre, aucune lecture de plus, la chaîne
+ *     d'avant le lot E1.
+ *
+ * Le panneau replié disparaît : deux chemins pour le même réglage, c'était
+ * précisément le reproche.
+ *
+ * ---------------------------------------------------------------------------
+ * L'ÉCHELLE se donne de trois façons : un facteur, une largeur cible ou une
  * hauteur cible du dessin COMPLET. Les deux dernières ne peuvent être
  * résolues qu'après lecture du dessin (on ne connaît sa taille qu'importé) :
  * `resolveScale` fait ce calcul, la chaîne d'import l'appelle avec l'étendue
  * mesurée. C'est le sens de « l'un calcule l'autre ».
  *
- * LOT E1-BIS — l'aperçu contre une tôle. Quand le panneau est OUVERT, une
- * dépose ne crée aucune fiche : le fichier est lu UNE fois (l'import
- * ordinaire, celui qui produira les fiches), et l'aperçu montre ses contours
- * posés sur une tôle. Tirer la poignée d'angle règle la LARGEUR CIBLE du
- * dessin — c'est-à-dire exactement le mode `width` ci-dessus, pas une
- * seconde façon de calculer une échelle. Le facteur déduit s'affiche, la
- * tôle sert de référence (et peut pré-remplir celle du projet), et rien
- * n'est importé avant validation.
+ * L'APERÇU (E1-bis) montre les contours posés sur une tôle ; tirer la poignée
+ * d'angle règle la LARGEUR CIBLE du dessin — c'est-à-dire le mode `width`,
+ * pas une seconde façon de calculer une échelle. Rien n'est importé avant
+ * validation.
  *
- * Panneau FERMÉ : `needsPreview()` est faux, `addFiles` importe comme avant
- * le lot E1 — aucune lecture de plus (verrou du cas A).
+ * ---------------------------------------------------------------------------
+ * UN `.job` SHEETCAM N'EST JAMAIS CONCERNÉ : il porte déjà sa tôle et ses
+ * quantités, il n'y a rien à éclater ni à mettre à l'échelle. Il passe AVANT
+ * la fenêtre, dans `files.js` (règle du lot J4).
  */
 import { reactive } from 'vue'
-
-const KEY = 'nestorcut.advancedImport'
 
 export const SCALE_MODES = ['factor', 'width', 'height']
 
 function blank() {
-    return { open: false, explode: false, mode: 'factor', value: 1 }
+    return {
+        // L'INTERRUPTEUR, porté par le PROJET (champ `advancedImport` du
+        // document projet, additif, absent = éteint). Il n'est pas persisté
+        // ici : la page le pose depuis le projet chargé, et le repose quand
+        // l'utilisateur le change.
+        enabled: false,
+        projectSlug: null,
+        // Réglages de la fenêtre de choix, quand l'utilisateur choisit
+        // « éclater et mettre à l'échelle ».
+        explode: false,
+        mode: 'factor',
+        value: 1,
+    }
+}
+
+/** État de la FENÊTRE DE CHOIX (lot E3) — vidé après décision. */
+function blankChoice() {
+    return { open: false, projectSlug: null }
 }
 
 /** État de l'aperçu (lot E1-bis) — vidé après import ou annulation. */
@@ -57,39 +82,27 @@ function blankPreview() {
     }
 }
 
-function load() {
-    try {
-        const raw = sessionStorage.getItem(KEY)
-        if (!raw) return blank()
-        const v = JSON.parse(raw)
-        return {
-            open: v.open === true,
-            explode: v.explode === true,
-            mode: SCALE_MODES.includes(v.mode) ? v.mode : 'factor',
-            value: Number.isFinite(Number(v.value)) ? Number(v.value) : 1,
-        }
-    } catch {
-        // Onglet privé, stockage refusé : l'option repart simplement éteinte.
-        return blank()
-    }
-}
-
-const state = reactive(load())
+const state = reactive(blank())
 const preview = reactive(blankPreview())
+const choice = reactive(blankChoice())
 
-function persist() {
-    try {
-        sessionStorage.setItem(KEY, JSON.stringify({ ...state }))
-    } catch {
-        // Sans stockage, le réglage vit le temps de la page : acceptable.
-    }
+/**
+ * L'interrupteur du projet est-il allumé ? C'est le SEUL point de décision :
+ * éteint, la dépose ne lit rien de plus et suit la chaîne d'avant le lot E1.
+ */
+export function isAdvancedActive() {
+    return state.enabled === true
 }
 
-/** Le réglage est-il effectif ? (panneau ouvert ET quelque chose demandé) */
-export function isAdvancedActive() {
-    if (!state.open) return false
-    if (state.explode) return true
-    return state.mode !== 'factor' ? Number(state.value) > 0 : Number(state.value) !== 1
+/**
+ * La dépose doit-elle passer par la FENÊTRE DE CHOIX ? (lot E3)
+ *
+ * Vrai exactement quand l'interrupteur du projet est allumé. Le lot E1
+ * regardait ici l'ouverture d'un panneau de session ; c'est ce que le
+ * propriétaire a jugé non conforme.
+ */
+export function needsChoice() {
+    return state.enabled === true
 }
 
 /**
@@ -99,7 +112,10 @@ export function isAdvancedActive() {
  * frontière UI, AGENTS #25) et la chaîne résout le facteur après lecture.
  */
 export function advancedImportOptions() {
-    if (!state.open) return { scale: 1, explode: false }
+    // Interrupteur éteint ⇒ options NEUTRES, quoi que portent les autres
+    // champs : le contrôle négatif du lot E1 (« éteint ne change rien »)
+    // tient parce que la décision est ici et nulle part ailleurs.
+    if (!state.enabled) return { scale: 1, explode: false }
     const explode = state.explode === true
     const value = Number(state.value)
     if (state.mode === 'factor') {
@@ -124,14 +140,6 @@ export function resolveScale(options, extent) {
     const span = target.mode === 'height' ? Number(extent?.height) : Number(extent?.width)
     if (!Number.isFinite(mm) || mm <= 0 || !Number.isFinite(span) || span <= 1e-9) return 1
     return mm / span
-}
-
-/**
- * Le panneau doit-il intercepter la dépose ? (ouvert = aperçu, fermé = import
- * direct). C'est le seul point de décision : fermé, rien n'est lu de plus.
- */
-export function needsPreview() {
-    return state.open === true
 }
 
 /**
@@ -165,13 +173,25 @@ export function fitsSheet(extent, scale, sheet) {
 export function useAdvancedImport() {
     return {
         state,
-        toggleOpen() {
-            state.open = !state.open
-            persist()
+        choice,
+
+        /**
+         * Pose l'interrupteur du PROJET (lot E3). La page le lit sur le
+         * document projet au chargement, et le repose quand l'utilisateur le
+         * change — c'est l'appelant qui écrit côté serveur (`PATCH
+         * /api/project/:slug/advanced-import`), pas ce module : la géométrie
+         * et le réseau ne se mélangent pas.
+         */
+        setEnabled(v, projectSlug = null) {
+            state.enabled = v === true
+            if (projectSlug) state.projectSlug = projectSlug
+            if (!state.enabled) {
+                Object.assign(choice, blankChoice())
+                Object.assign(preview, blankPreview())
+            }
         },
         setExplode(v) {
             state.explode = v === true
-            persist()
         },
         setMode(m) {
             if (!SCALE_MODES.includes(m)) return
@@ -179,17 +199,68 @@ export function useAdvancedImport() {
             // Changer de mode change le sens du nombre : on repart d'une
             // valeur neutre plutôt que d'interpréter « 1 » comme 1 mm.
             state.value = m === 'factor' ? 1 : 0
-            persist()
         },
         setValue(v) {
             const n = Number(v)
             state.value = Number.isFinite(n) ? n : 0
-            persist()
         },
         reset() {
             Object.assign(state, blank())
             Object.assign(preview, blankPreview())
-            persist()
+            Object.assign(choice, blankChoice())
+        },
+
+        // ------------------------------------------- fenêtre de choix (E3)
+
+        /**
+         * Ouvre la fenêtre de choix sur une dépose, après avoir LU chaque
+         * fichier une fois — la fenêtre montre ce que l'import a lu (nombre
+         * de pièces, étendue), pas une promesse. Aucune fiche n'est créée.
+         *
+         * C'est la même lecture que celle de l'aperçu E1-bis : si
+         * l'utilisateur choisit « éclater », rien n'est relu.
+         */
+        async openChoice(files, { projectSlug = null, readFile = null } = {}) {
+            choice.projectSlug = projectSlug
+            choice.open = true
+            // Une dépose passe par la fenêtre avec des réglages NEUFS : le
+            // choix vaut pour le lot déposé, pas pour le précédent.
+            state.explode = false
+            state.mode = 'factor'
+            state.value = 1
+            await this.stage(files, { projectSlug, readFile })
+        },
+
+        /** « Annuler » : rien n'est créé, rien n'est gardé. */
+        cancelChoice() {
+            Object.assign(choice, blankChoice())
+            Object.assign(preview, blankPreview())
+        },
+
+        /**
+         * « Éclater en pièces et mettre à l'échelle » : la fenêtre se ferme
+         * et l'aperçu sur tôle prend la main, sur les fichiers DÉJÀ lus.
+         */
+        chooseExplode() {
+            state.explode = true
+            choice.open = false
+        },
+
+        /**
+         * « Import automatique » : la fenêtre se ferme, les réglages
+         * retombent à neutre et l'appelant importe comme d'ordinaire.
+         * Rend les fichiers à importer — l'appelant fait l'import, ce module
+         * ne touche pas au stockage.
+         */
+        chooseAuto() {
+            const files = preview.pending.map((p) => p.file)
+            const projectSlug = choice.projectSlug
+            state.explode = false
+            state.mode = 'factor'
+            state.value = 1
+            Object.assign(choice, blankChoice())
+            Object.assign(preview, blankPreview())
+            return { files, projectSlug }
         },
 
         // ------------------------------------------------ aperçu (E1-bis)
@@ -256,7 +327,6 @@ export function useAdvancedImport() {
             if (!Number.isFinite(t) || t <= 0) return
             state.mode = 'width'
             state.value = t
-            persist()
         },
     }
 }

@@ -278,6 +278,14 @@ async function getProject(path, fetchOpts = {}) {
         if (path !== lastProjectRequest) return
         state.projectLocal = Boolean(data.local)
         state.projectDemo = Boolean(data.isDemo)
+        // Lot E3 : l'interrupteur « Import avancé » est une propriété du
+        // PROJET. On le pose ici, au chargement, et nulle part ailleurs —
+        // c'est ce qui remplace l'état de session du panneau du lot E1, qui
+        // mourait avec l'onglet et ne suivait pas le projet.
+        {
+            const { useAdvancedImport } = await import('./advancedImport')
+            useAdvancedImport().setEnabled(Boolean(data.advancedImport), data.slug)
+        }
         if (data.local) {
             // J-090 : les fichiers d'un projet « 100 % privé » vivent dans
             // IndexedDB — le serveur ne sert que le nom/slug du projet.
@@ -367,7 +375,7 @@ function setProjectFiles(files, path) {
     }
     scheduleFilesRefresh(path)
 }
-async function importStagedFiles(files, slug) {
+async function importStagedFiles(files, slug, forcedOptions = null) {
     // `state.projectSlug` porte le CHEMIN d'API, pas le slug : l'aperçu
     // transmet celui qu'il a reçu à la dépose.
     state.localImportError = ''
@@ -375,7 +383,10 @@ async function importStagedFiles(files, slug) {
     try {
         const { importLocalFiles } = await import('./localImport')
         const { advancedImportOptions } = await import('./advancedImport')
-        const options = advancedImportOptions()
+        // Lot E3 : « Import automatique » impose les options NEUTRES, quoi
+        // que porte l'état — c'est ce qui rend ce chemin identique à l'import
+        // ordinaire, et le verrou du lot le compare fiche par fiche.
+        const options = forcedOptions || advancedImportOptions()
         for (const file of files || []) {
             await importLocalFiles(file, slug, options)
         }
@@ -384,6 +395,32 @@ async function importStagedFiles(files, slug) {
         state.localImportErrorParams = err?.params || {}
     }
     await getProject(API_ROUTES.PROJECT(slug))
+}
+
+/**
+ * Lot E3 — pose l'interrupteur « Import avancé » DU PROJET et le persiste.
+ *
+ * L'écriture serveur est un champ ADDITIF sur le document projet : un projet
+ * d'avant ce lot ne le porte pas, et son absence vaut éteint. Si le PATCH
+ * échoue (hors ligne, session expirée), l'interrupteur REVIENT à sa valeur
+ * précédente : un réglage qui s'affiche allumé alors qu'il n'est pas
+ * enregistré mentirait au prochain dépôt.
+ */
+async function setAdvancedImport(value) {
+    const { useAdvancedImport } = await import('./advancedImport')
+    const adv = useAdvancedImport()
+    const before = adv.state.enabled === true
+    const wanted = value === true
+    if (before === wanted) return
+    adv.setEnabled(wanted, state.projectSlug)
+    try {
+        await $fetch(`/api/project/${state.projectSlug}/advanced-import`, {
+            method: 'PATCH',
+            body: { advancedImport: wanted },
+        })
+    } catch {
+        adv.setEnabled(before, state.projectSlug)
+    }
 }
 
 /**
@@ -560,12 +597,13 @@ async function addFiles(files, slug) {
                 return
             }
         }
-        // Lot E1-bis : panneau « Import avancé » OUVERT ⇒ la dépose passe
-        // par l'aperçu (le fichier est lu une fois, aucune fiche n'est
-        // créée) et l'import attend « Importer ». Panneau fermé ⇒ chemin
-        // d'avant, sans lecture de plus.
-        const { needsPreview, useAdvancedImport } = await import('./advancedImport')
-        if (needsPreview()) {
+        // Lot E3 : INTERRUPTEUR « Import avancé » du projet ALLUMÉ ⇒ la
+        // dépose passe par la FENÊTRE DE CHOIX (les fichiers sont lus une
+        // fois, aucune fiche n'est créée) et l'import attend la décision.
+        // Éteint ⇒ chemin d'avant, sans lecture de plus — c'est le contrôle
+        // négatif du lot, et c'est ici qu'il se joue.
+        const { needsChoice, useAdvancedImport } = await import('./advancedImport')
+        if (needsChoice()) {
             const adv = useAdvancedImport()
             if (!adv.preview.sheet) {
                 // Tôle de référence : celle du projet si elle est valide.
@@ -578,7 +616,7 @@ async function addFiles(files, slug) {
                     displayToMm(Number(first?.height), u),
                 )
             }
-            await adv.stage(files, { projectSlug: slug })
+            await adv.openChoice(files, { projectSlug: slug })
             return
         }
         try {
@@ -935,6 +973,7 @@ export const filesStore = readonly({
         // ordinaire la relit — c'est le prix d'une seule chaîne de code, et
         // il ne se paie QUE sur une dépose à panneau ouvert).
         importStagedFiles,
+        setAdvancedImport,
         addSheet,
         removeSheet,
         syncParamsToUnit,

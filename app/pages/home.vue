@@ -35,7 +35,19 @@
                 v-model="privacyChoice"
                 class="create__privacy"
             />
+            <!-- Lot E3 : l'interrupteur « Import avancé », à la CRÉATION du
+                 projet, entre les cartes de mode et la zone de dépôt — à
+                 l'endroit demandé par le propriétaire. Éteint par défaut ; son
+                 état part avec la création et devient une propriété du projet.
+                 Il n'existe que sur le chemin « cet appareil » : l'éclatement
+                 serveur est le lot E2, dont la fenêtre n'est pas ce lot-ci. -->
+            <AdvancedImportSwitch
+                v-if="localProject && localImportEnabled"
+                v-model="advancedImport"
+                class="create__advanced"
+            />
             <DxfUpload
+                :class="{ 'create__drop--advanced': advancedImport }"
                 :extensions="uploadExtensions"
                 @files="handleSubmit"
                 @rejected="handleRejected"
@@ -119,6 +131,9 @@
     // Défaut = cet appareil dès que l'import navigateur est dispo (opt-out
     // cloud : DWG, multi-appareils).
     const privacyChoice = ref(localImportEnabled.value ? 'device' : 'cloud')
+    // Lot E3 : l'interrupteur de la création. Éteint par défaut ; il voyage
+    // dans le corps du POST et devient le champ `advancedImport` du projet.
+    const advancedImport = ref(false)
     const localProject = computed(() => privacyChoice.value === 'device')
     watch(privacyChoice, () => { error.value = '' })
     // La page d'accueil porte SA PROPRE liste : c'est elle qui filtre la
@@ -156,7 +171,7 @@
             try {
                 const data = await $fetch(API_ROUTES.PROJECT(), {
                     method: 'POST',
-                    body: { local: true },
+                    body: { local: true, advancedImport: advancedImport.value },
                 })
                 filesActions.setPendingLocalFiles(files)
                 await getProjects()
@@ -287,6 +302,17 @@
 
         &__privacy {
             margin-bottom: 16px;
+        }
+
+        /* Lot E3 : l'interrupteur, entre les cartes de mode et la zone de
+           dépôt. Allumé, il TEINTE la bordure de la zone de dépôt — le
+           propriétaire demande que l'état se voie franchement, pas une case
+           grise. */
+        &__advanced {
+            margin-bottom: 12px;
+        }
+        &__drop--advanced :deep(.upload__label) {
+            border-color: var(--blue);
         }
 
         &__error {

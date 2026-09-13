@@ -399,6 +399,17 @@ const dict = {
         'advancedImport.mode.width': 'Target width',
         'advancedImport.mode.height': 'Target height',
         'advancedImport.scaleHint': 'Applies to the whole drawing, before splitting. A factor of 1 changes nothing.',
+        // Lot E3 : l'interrupteur porté par le PROJET, et la fenêtre de
+        // choix qu'il ouvre à chaque dépôt.
+        'advancedImport.switchOn': 'Each drop asks: automatic import, or split and scale',
+        'advancedImport.switchOff': 'Drops are imported as they are',
+        'importChoice.title': 'How should these files be imported?',
+        'importChoice.lead': 'Advanced import is on for this project, so the choice is yours for this drop.',
+        'importChoice.read': '{n} parts · {w} × {h} {unit}',
+        'importChoice.auto': 'Automatic import',
+        'importChoice.explode': 'Split into parts and scale',
+        'importChoice.cancel': 'Cancel',
+        'importChoice.hint': 'Automatic import creates one card per file, exactly as usual. Nothing is created until you choose.',
         // Lot E1-bis : aperçu du dessin posé sur une tôle.
         'importPreview.reading': 'Reading the drawing…',
         'importPreview.title': 'Preview on a sheet',
@@ -1205,6 +1216,17 @@ const dict = {
         'advancedImport.mode.width': 'Largeur cible',
         'advancedImport.mode.height': 'Hauteur cible',
         'advancedImport.scaleHint': "S'applique au dessin complet, avant l'éclatement. Un facteur de 1 ne change rien.",
+        // Lot E3 : l'interrupteur porté par le PROJET, et la fenêtre de
+        // choix qu'il ouvre à chaque dépôt.
+        'advancedImport.switchOn': "Chaque dépôt demande : import automatique, ou éclater et mettre à l'échelle",
+        'advancedImport.switchOff': 'Les dépôts sont importés tels quels',
+        'importChoice.title': 'Comment importer ces fichiers ?',
+        'importChoice.lead': "L'import avancé est allumé sur ce projet : le choix est à vous pour cette dépose.",
+        'importChoice.read': '{n} pièces · {w} × {h} {unit}',
+        'importChoice.auto': 'Import automatique',
+        'importChoice.explode': "Éclater en pièces et mettre à l'échelle",
+        'importChoice.cancel': 'Annuler',
+        'importChoice.hint': "L'import automatique crée une fiche par fichier, exactement comme d'habitude. Rien n'est créé avant votre choix.",
         'importPreview.reading': 'Lecture du dessin…',
         'importPreview.title': 'Aperçu sur une tôle',
         'importPreview.batch': '{n} fichiers dans cette dépose',

@@ -61,7 +61,7 @@ export async function createProjectWithFiles(domain, event, userId) {
  * navigateur et vivent dans IndexedDB ; la géométrie ne transite jamais.
  * Aucun fichier à la création (l'import arrive ensuite, côté client).
  */
-export async function createLocalProject(domain, userId) {
+export async function createLocalProject(domain, userId, options = {}) {
   const db = await connectDB();
   const projectName = generateEntityName();
   const projectSlug = `${standardSlugify(projectName, {
@@ -74,6 +74,11 @@ export async function createLocalProject(domain, userId) {
     createdAt: new Date(),
     ownerId: userId,
     local: true,
+    // Lot E3 : « Import avancé » est une propriété du PROJET, posée à sa
+    // création et modifiable ensuite depuis sa page. Champ ADDITIF : un
+    // projet d'avant ne le porte pas, et `Boolean(undefined)` vaut faux —
+    // l'interrupteur est éteint, exactement comme avant le lot.
+    ...(options.advancedImport === true ? { advancedImport: true } : {}),
   });
 
   return {
@@ -186,6 +191,7 @@ export async function getProjectFiles(domain, userId, slug) {
         ownerId: 1,
         isDemo: 1,
         local: 1,
+        advancedImport: 1,
       },
     }
   );
@@ -234,6 +240,8 @@ export async function getProjectFiles(domain, userId, slug) {
     // J-090 : projet 100 % privé — la page hydrate ses fichiers depuis
     // IndexedDB, jamais depuis le serveur.
     local: Boolean(project.local),
+    // Lot E3 : l'état de l'« Import avancé » du projet. Absent = éteint.
+    advancedImport: Boolean(project.advancedImport),
     files,
   };
 }

@@ -91,23 +91,23 @@ beforeEach(() => {
     useAdvancedImport().reset()
 })
 
-describe('E1 — état du panneau « Import avancé »', () => {
+describe('E1/E3 — état de l’« Import avancé »', () => {
     it('éteint par défaut : options neutres', () => {
         expect(advancedImportOptions()).toEqual({ scale: 1, explode: false })
     })
 
-    it('panneau fermé = réglage inerte, même coché', () => {
+    it('interrupteur ÉTEINT = réglage inerte, même coché', () => {
         const adv = useAdvancedImport()
         adv.setExplode(true)
         adv.setValue(0.5)
-        // `open` est faux : rien ne s'applique (le réglage est celui de la
-        // dépose, pas une préférence cachée).
+        // L'interrupteur du PROJET est éteint : rien ne s'applique. C'est le
+        // contrôle négatif du lot E3, et il se joue ici, en un seul endroit.
         expect(advancedImportOptions()).toEqual({ scale: 1, explode: false })
     })
 
-    it('facteur et éclatement voyagent quand le panneau est ouvert', () => {
+    it('facteur et éclatement voyagent quand l’interrupteur est allumé', () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         adv.setExplode(true)
         adv.setValue(0.5)
         expect(advancedImportOptions()).toEqual({ scale: 0.5, explode: true })
@@ -115,7 +115,7 @@ describe('E1 — état du panneau « Import avancé »', () => {
 
     it('un facteur absurde ne multiplie rien', () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         for (const bad of [0, -2, Number.NaN]) {
             adv.setValue(bad)
             expect(advancedImportOptions().scale).toBe(1)
@@ -124,7 +124,7 @@ describe('E1 — état du panneau « Import avancé »', () => {
 
     it('changer de mode remet la valeur à neutre', () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         adv.setValue(2)
         adv.setMode('width')
         expect(adv.state.value).toBe(0)

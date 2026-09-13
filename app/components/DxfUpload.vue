@@ -33,88 +33,29 @@
             </span>
         </label>
 
-        <!-- Lot E1 : « Import avancé », replié et ÉTEINT par défaut. Hors
-             projet « cet appareil », le panneau n'existe pas (la chaîne
-             d'éclatement est celle de l'import navigateur). -->
-        <div
-            v-if="advanced"
-            class="advanced"
-            data-testid="advanced-import"
-        >
-            <button
-                type="button"
-                class="advanced__toggle"
-                :aria-expanded="adv.state.open ? 'true' : 'false'"
-                data-testid="advanced-import-toggle"
-                @click="adv.toggleOpen()"
-            >
-                <span class="advanced__caret" :class="{ 'advanced__caret--open': adv.state.open }">›</span>
-                {{ t('advancedImport.title') }}
-                <span v-if="activeLabel" class="advanced__badge">{{ activeLabel }}</span>
-            </button>
+        <!-- Lot E3 : le panneau replié a DISPARU. L'interrupteur « Import
+             avancé » vit désormais sur la page (accueil et page projet), son
+             état est une propriété du PROJET, et c'est la FENÊTRE DE CHOIX
+             qui s'ouvre au dépôt. Deux chemins pour le même réglage, c'était
+             le reproche du propriétaire (§6 du plan d'éclatement).
 
-            <div v-if="adv.state.open" class="advanced__panel">
-                <label class="advanced__check">
-                    <input
-                        type="checkbox"
-                        :checked="adv.state.explode"
-                        data-testid="advanced-import-explode"
-                        @change="adv.setExplode($event.target.checked)"
-                    />
-                    <span>
-                        <span class="advanced__label">{{ t('advancedImport.explode') }}</span>
-                        <span class="advanced__hint">{{ t('advancedImport.explodeHint') }}</span>
-                    </span>
-                </label>
-
-                <div class="advanced__scale">
-                    <span class="advanced__label">{{ t('advancedImport.scale') }}</span>
-                    <div class="advanced__modes" role="radiogroup" :aria-label="t('advancedImport.scale')">
-                        <button
-                            v-for="m in SCALE_MODES"
-                            :key="m"
-                            type="button"
-                            role="radio"
-                            :aria-checked="adv.state.mode === m ? 'true' : 'false'"
-                            class="advanced__mode"
-                            :class="{ 'advanced__mode--on': adv.state.mode === m }"
-                            :data-testid="`advanced-import-mode-${m}`"
-                            @click="adv.setMode(m)"
-                        >
-                            {{ t(`advancedImport.mode.${m}`) }}
-                        </button>
-                    </div>
-                    <label class="advanced__field">
-                        <input
-                            type="number"
-                            min="0"
-                            step="0.001"
-                            class="advanced__value"
-                            data-testid="advanced-import-value"
-                            :value="displayValue"
-                            @change="onValue($event.target.value)"
-                        />
-                        <span class="advanced__suffix">{{ valueSuffix }}</span>
-                    </label>
-                    <p class="advanced__hint">{{ t('advancedImport.scaleHint') }}</p>
-                </div>
-            </div>
-
-            <!-- Lot E1-bis : l'aperçu contre une tôle. Il n'existe que
-                 lorsqu'une dépose attend (aucune fiche créée avant
-                 validation). -->
-            <AdvancedImportPreview v-if="adv.preview.pending.length || adv.preview.loading" />
-        </div>
+             Ne restent ici que les deux surfaces qui suivent une dépose :
+             la fenêtre de choix, puis l'aperçu sur tôle si l'utilisateur
+             choisit d'éclater. Hors projet « cet appareil », ni l'une ni
+             l'autre n'existent. -->
+        <template v-if="advanced">
+            <ImportChoiceDialog />
+            <AdvancedImportPreview v-if="adv.preview.pending.length && !adv.choice.open" />
+        </template>
     </div>
 </template>
 
 <script setup>
 import { themeType } from '~~/constants/theme.constants';
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
-import { SCALE_MODES, useAdvancedImport } from '~/composables/advancedImport'
+import { useAdvancedImport } from '~/composables/advancedImport'
 
 const { t } = useLocale()
-const { unitLabel, mmToDisplay, displayToMm } = useUnit()
 const adv = useAdvancedImport()
 
 const props = defineProps({
@@ -171,39 +112,6 @@ const onDXFChange = (event) => {
     const addedFiles = Array.from(event.target.files);
     setFiles(addedFiles);
 };
-
-// Le nombre saisi est un FACTEUR (sans unité) ou une longueur cible (dans
-// l'unité courante) : la conversion mm ↔ affichage se fait ici, à la
-// frontière UI (AGENTS #25) — l'état, lui, est toujours en mm.
-const valueSuffix = computed(() =>
-    adv.state.mode === 'factor' ? '×' : unitLabel.value
-)
-const displayValue = computed(() => {
-    const v = Number(adv.state.value)
-    if (!Number.isFinite(v)) return ''
-    if (adv.state.mode === 'factor') return v
-    return Math.round(mmToDisplay(v) * 1000) / 1000
-})
-const onValue = (raw) => {
-    const v = Number(raw)
-    if (!Number.isFinite(v)) return adv.setValue(0)
-    adv.setValue(adv.state.mode === 'factor' ? v : displayToMm(v))
-}
-// Résumé sur le bouton replié : ce que la dépose va faire, sans l'ouvrir.
-const activeLabel = computed(() => {
-    if (!adv.state.open) {
-        const bits = []
-        if (adv.state.explode) bits.push(t('advancedImport.badgeExplode'))
-        const v = Number(adv.state.value)
-        if (adv.state.mode === 'factor' ? v !== 1 && v > 0 : v > 0) {
-            bits.push(adv.state.mode === 'factor'
-                ? `×${v}`
-                : `${Math.round(mmToDisplay(v) * 1000) / 1000} ${unitLabel.value}`)
-        }
-        return bits.join(' · ')
-    }
-    return ''
-})
 
 const labelClasses = computed(() => ({
     'upload__label--hover': unref(isDragOver),
@@ -284,106 +192,4 @@ const labelClasses = computed(() => ({
     }
 }
 
-/* Lot E1 : panneau « Import avancé ». Rayon 4 px comme partout ailleurs,
-   aucune pilule. */
-.advanced {
-    margin-top: 8px;
-    text-align: left;
-
-    &__toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        padding: 4px 6px;
-        border: none;
-        background: none;
-        border-radius: 4px;
-        color: var(--label-secondary);
-        font-size: 13px;
-        cursor: pointer;
-
-        &:hover {
-            color: var(--label-primary);
-            background-color: var(--fill-tertiary);
-        }
-    }
-    &__caret {
-        display: inline-block;
-        transition: transform 0.15s;
-
-        &--open {
-            transform: rotate(90deg);
-        }
-    }
-    &__badge {
-        color: var(--accent-primary);
-    }
-    &__panel {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-        margin-top: 8px;
-        padding: 12px;
-        border: 1px solid var(--fill-tertiary);
-        border-radius: 4px;
-    }
-    &__check {
-        display: flex;
-        align-items: flex-start;
-        gap: 8px;
-        cursor: pointer;
-    }
-    &__label {
-        display: block;
-        color: var(--label-primary);
-        font-size: 14px;
-    }
-    &__hint {
-        display: block;
-        margin: 2px 0 0;
-        color: var(--label-secondary);
-        font-size: 12px;
-    }
-    &__scale {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-    &__modes {
-        display: flex;
-        gap: 4px;
-    }
-    &__mode {
-        padding: 4px 10px;
-        border: 1px solid var(--fill-tertiary);
-        border-radius: 4px;
-        background: none;
-        color: var(--label-secondary);
-        font-size: 13px;
-        cursor: pointer;
-
-        &--on {
-            border-color: var(--accent-primary);
-            color: var(--accent-primary);
-        }
-    }
-    &__field {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        max-width: 180px;
-    }
-    &__value {
-        width: 100%;
-        padding: 4px 8px;
-        border: 1px solid var(--fill-tertiary);
-        border-radius: 4px;
-        background: none;
-        color: var(--label-primary);
-    }
-    &__suffix {
-        color: var(--label-secondary);
-        font-size: 13px;
-    }
-}
 </style>

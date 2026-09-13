@@ -4,7 +4,7 @@
  * Ce qui est mesuré : la poignée règle la LARGEUR CIBLE (donc le mode
  * `width` du panneau, pas une seconde arithmétique), changer de tôle ne
  * touche pas le facteur, le hors-tôle est signalé dans les deux
- * orientations de la tôle, et une dépose à panneau OUVERT ne crée aucune
+ * orientations de la tôle, et une dépose à interrupteur ALLUMÉ ne crée aucune
  * fiche avant validation — panneau fermé, rien n'est lu de plus.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -27,7 +27,7 @@ import {
     advancedImportOptions,
     drawingExtent,
     fitsSheet,
-    needsPreview,
+    needsChoice,
     resolveScale,
     scaleFromHandle,
     useAdvancedImport,
@@ -64,7 +64,7 @@ describe('E1-bis — la poignée', () => {
 
     it('écrit le mode « largeur cible » du panneau, pas une autre échelle', () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         adv.dragToWidth(900)
         expect(adv.state.mode).toBe('width')
         expect(adv.state.value).toBe(900)
@@ -79,7 +79,7 @@ describe('E1-bis — la poignée', () => {
 describe('E1-bis — la tôle est une référence', () => {
     it('changer de tôle ne change pas le facteur', () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         adv.dragToWidth(900)
         const before = advancedImportOptions()
         adv.setSheet(1500, 3000)
@@ -115,16 +115,16 @@ describe('E1-bis — la tôle est une référence', () => {
 })
 
 describe('E1-bis — la dépose', () => {
-    it('panneau FERMÉ : aucun aperçu, donc aucune lecture de plus', async () => {
-        expect(needsPreview()).toBe(false)
+    it('interrupteur ÉTEINT : aucun aperçu, donc aucune lecture de plus', async () => {
+        expect(needsChoice()).toBe(false)
         // (la chaîne d'import, elle, est verrouillée par advancedImport.test.js)
         expect(state.reads).toBe(0)
     })
 
-    it('panneau OUVERT : le fichier est lu UNE fois et aucune fiche n’est créée', async () => {
+    it('interrupteur ALLUMÉ : le fichier est lu UNE fois et aucune fiche n’est créée', async () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
-        expect(needsPreview()).toBe(true)
+        adv.setEnabled(true)
+        expect(needsChoice()).toBe(true)
         const pending = await adv.stage([{ name: 'logo.dxf', arrayBuffer: async () => new ArrayBuffer(3) }], {
             projectSlug: 'p1',
             readFile: async () => {
@@ -142,7 +142,7 @@ describe('E1-bis — la dépose', () => {
 
     it('annuler ne garde rien', async () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         await adv.stage([{ name: 'logo.dxf' }], {
             readFile: async () => ({ parts: LOGO }),
         })
@@ -155,7 +155,7 @@ describe('E1-bis — la dépose', () => {
 
     it('une lecture qui échoue laisse un message, pas une exception', async () => {
         const adv = useAdvancedImport()
-        adv.toggleOpen()
+        adv.setEnabled(true)
         await adv.stage([{ name: 'casse.dxf' }], {
             readFile: async () => { throw new Error('localImport.parseError') },
         })

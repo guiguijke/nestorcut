@@ -23,7 +23,11 @@ export default defineEventHandler(async (event) => {
       if (!enabled) {
         throw createError({ statusCode: 404, message: "Not found" });
       }
-      return await createLocalProject(DOMAINS.bin, userId);
+      // Lot E3 : l'interrupteur « Import avancé » de la page d'accueil est
+      // posé sur le PROJET dès sa création. Champ additif, absent = éteint.
+      return await createLocalProject(DOMAINS.bin, userId, {
+        advancedImport: body?.advancedImport === true,
+      });
     }
   }
 
