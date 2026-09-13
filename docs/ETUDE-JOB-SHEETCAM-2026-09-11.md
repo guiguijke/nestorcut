@@ -1856,3 +1856,69 @@ trois chemins et l'éventail ses deux, `F1` vert.
 
 **GO déploiement (app + worker nesting)** dès J4-bis-4 rejoué et la réponse
 sur le POINT reçue, avec la recette machine sur le fichier produit alors.
+
+#### 9.50 Lot J4-bis-4 — rapport de l'implémenteur (13/09, nuit)
+
+La limite du §9.49 est levée, commit `7658c7bd`.
+
+**Ce que c'était vraiment.** `tooManyDrawings` n'était pas une règle métier,
+c'était un plafond de complexité déguisé en règle : l'énumération des
+permutations coûte `n!`, donc j'avais posé une borne à sept et je l'avais
+nommée comme si elle disait quelque chose sur les fichiers. Le vérificateur a
+eu raison de la sortir avant le déploiement — un `.job` d'atelier porte
+couramment dix à trente dessins, et pour tous ceux-là aucun trou n'aurait été
+nesté.
+
+**L'affectation est gloutonne.** Meilleure case de la matrice de scores,
+retrait de sa ligne et de sa colonne, on recommence. `n³` dans le pire cas,
+soit quelques milliers d'opérations pour trente dessins.
+
+Ce n'est pas l'optimum global — l'algorithme hongrois le serait — et c'est
+suffisant ici parce que **la matrice n'est pas quelconque** : un point de
+départ est SUR son contour à 0,01 mm et à des dizaines de millimètres de tout
+autre dessin. Une case non nulle désigne donc presque toujours le bon couple,
+et un dessin qui n'en a aucune ne peut de toute façon être apparié par
+personne. Je le dis plutôt que de laisser croire à un optimum.
+
+**L'égalité, elle, a changé de définition — et c'est le point qui m'a fait
+faire un aller-retour.** Ma première écriture refusait dès que le meilleur
+score d'un tour était atteint par deux cases. Mesuré sur douze dessins
+distincts marquant chacun 2 sur leur propre bloc : **refus**. C'est-à-dire que
+le cas NORMAL était déclaré ambigu. Deux cases de même valeur dans des lignes
+ET des colonnes différentes ne sont pas en concurrence : chacune est le
+meilleur choix de son dessin ET de son bloc. L'égalité se juge donc sur la
+case retenue, contre ses seules concurrentes directes — les cases libres de sa
+ligne ou de sa colonne. Une vraie ambiguïté, c'est « ce dessin irait aussi
+bien sur un autre bloc » ou « ce bloc irait aussi bien à un autre dessin ».
+
+**Un dessin sans aucune case positive ne reçoit PAS le bloc qui reste** : on
+refuse l'ensemble (`noPointPlaced`) et l'appelant retombe sur « point non
+lu ». Une réserve posée sur le mauvais dessin n'est pas une dégradation sûre.
+
+**Verrous.** Douze dessins synthétiques — copies décalées de la pièce L, blocs
+présentés DANS LE DÉSORDRE — appariés 12 sur 12, un bloc par dessin, 24 points
+placés ; plus le cas du dessin hors de portée, qui refuse. Preuve qu'ils
+mordent : plafond de sept remis un instant, le test des douze tombe
+(`expected true to be false`) ; retiré, vert.
+
+**Mesures, toutes rejouées sur ce poste :**
+
+| banc | résultat |
+|---|---|
+| `npx vitest run` | **724** passés, 63 fichiers |
+| `npx nuxt build` | vert |
+| `docker compose build app` | vert |
+| harnais, `Piece_Trou+Fill_x4_ordre_TEST.job` | tous verts, 5 / 5 |
+| harnais, `Piece_Trou+Fill_x4_OK.job` | tous verts, 5 / 5 |
+| harnais, `Piece_Trou+Fill.job` | tous verts, 2 / 2 |
+| harnais, `Piece_Trou.job` | tous verts, 1 / 1 |
+
+**L'image du banc ne portait QUE le correctif.** Les deux fichiers serveur du
+lot E3 que le vérificateur a vus dans l'arbre de travail étaient mis de côté
+(`git stash`) le temps de la construction et de la mesure, et remis ensuite :
+les quatre harnais ci-dessus mesurent J4-bis-4 seul. E3 est commité à part,
+jamais mêlé à un correctif `.job`.
+
+**Ce qui reste** : la réponse du propriétaire sur l'entité POINT. Tant qu'elle
+n'est pas là, la règle « perçage errant » tient et la recette ne montre aucun
+nichage.
