@@ -1032,7 +1032,7 @@ du disque RÉEL de la torche est hors zone libre dans tous les cas.
 | Verrou | Résultat |
 |---|---|
 | `npx vitest run` | **715** (708 avant le lot) |
-| `python -m pytest` worker nesting | **241 passés, 1 ignoré** (≈233 avant), lancés dans un conteneur — l'image runtime n'embarque ni pytest ni `tests/` |
+| `python -m pytest` worker nesting | **241 passés, 1 ignoré**, lancés DANS UN CONTENEUR (l'image runtime n'embarque ni pytest ni `tests/`). Base **MESURÉE** sur le commit d'avant le correctif, même conteneur : **237 passés, 1 ignoré** — donc +4 verrous. Mon premier jet publiait « ≈233 avant », chiffre repris de la note datée d'`AGENTS.md` §5 et non mesuré : un compte de tests se mesure, il ne se cite pas |
 | `npx nuxt build` | vert |
 | `docker compose build app` | vert |
 | harnais, `.job` à 2 pièces, SANS double dépose | **2 sur 2** (c'était 1 sur 2), tous verrous verts |
@@ -1054,3 +1054,8 @@ du disque RÉEL de la torche est hors zone libre dans tous les cas.
    sont pas identifiés.
 5. **Le miroir Python n'est pas déployé** : il part avec le lot J5, homelab
    compris. Le correctif JS seul suffit au chemin navigateur.
+6. **Une hygiène de collecte pytest** relevée en passant : `core` est un
+   package NAMESPACE, et un test existant insère `workers/fileprocessing` en
+   tête de `sys.path` — `core.main` peut alors se résoudre sur l'homonyme
+   selon l'ordre de collecte. Contourné dans les nouveaux tests ; la cause
+   reste là.

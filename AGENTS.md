@@ -868,7 +868,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ```bash
 npx vitest run                                             # app+server (708 au 2026-09-13)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
-cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # ≈233 + 1 skip (≈233 au 06/09 ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
+cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 48 (image docker)
 cd workers/fileprocessing && python -m pytest tests/ -q    # 33 (+2 skipped) (image docker)
 python workers/nesting/bench/determinism_lock.py           # natif ≡ wasm, SHA identiques
