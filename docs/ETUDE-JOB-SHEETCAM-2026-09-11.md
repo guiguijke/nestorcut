@@ -1059,3 +1059,379 @@ du disque RÉEL de la torche est hors zone libre dans tous les cas.
    tête de `sys.path` — `core.main` peut alors se résoudre sur l'homonyme
    selon l'ordre de collecte. Contourné dans les nouveaux tests ; la cause
    reste là.
+
+#### 9.35 Décision du propriétaire (13/09 soir) : reconstruire les amorces depuis le `.job`, calées sur le G-code
+
+**Ce que le fichier permet, mesuré sur 17 `.job` d'essai** : le parcours
+d'outil n'est PAS dans le `.job` — le bloc binaire est un cache des dessins
+et des opérations (mêmes octets pour toutes les poses, tous les ordres, tous
+les pivots ; il ne change qu'avec une opération). En revanche le texte porte
+tout ce qu'il faut pour RECONSTRUIRE l'enveloppe de coupe : contour, kerf,
+longueur et type d'amorce d'entrée ET de sortie, coin de départ. La seule
+inconnue est la règle interne de SheetCam (point de départ exact, sens et
+forme de l'arc, côté du kerf) — elle se mesure sur le G-code.
+
+**Décision** : la réserve prédictive (disque de perçage aux quatre coins)
+est une étape ; la cible est l'**enveloppe réelle** — contour décalé de
+kerf/2, amorce d'entrée et de sortie à leur vraie forme, au vrai point —
+reconstruite depuis le `.job` et **calée sur une série de G-codes fournis
+par le propriétaire** : plusieurs `.job` du même DXF, tous les types
+d'amorce, chacun avec son `.tap`.
+
+**Protocole de la série** (une variable par fichier, tout le reste figé,
+nom du `.job` = nom du `.tap`) :
+
+1. **Le dessin** : une pièce ASYMÉTRIQUE (un rectangle non carré avec un
+   coin coupé, ou un L), un trou RECTANGULAIRE et un trou ROND, en segments
+   et arcs simples — sur un carré à trou rond, les quatre coins sont
+   indiscernables et la table `Start position` reste indécidable.
+2. **Référence** : amorces à 0, kerf tel quel, `Start position` par défaut —
+   c'est le contour offset seul, il donne le côté et la valeur du kerf.
+3. **Types d'amorce** : pour l'entrée, chaque `Lead in type` (aucune, ligne,
+   arc, et tout autre type que la liste de SheetCam propose), longueur 5 ;
+   puis la même série à longueur 10 (sépare la longueur de la forme) ; puis
+   la sortie seule (`Lead out` 5, entrée 0), par type.
+4. **Coin de départ** : la référence (arc 5 / arc 5) rejouée pour CHAQUE
+   valeur de `Start position` — c'est la table des coins, extérieur ET trous.
+5. **Pose** : la même pièce à 45° (`Angle`) et une fois miroir (`HRef`) —
+   dit si le point de départ suit la pièce ou la tôle.
+6. **Kerf** : une variante à kerf 0 et une à kerf 4 sur la référence — isole
+   l'offset du reste.
+7. Avec la série : le post-processeur utilisé (nom du fichier `.scpost`) et
+   les unités machine — les I/J des arcs G2/G3 se lisent différemment selon
+   le post.
+
+Une quinzaine de fichiers suffisent. **Ce que l'agent en fait** (lot
+J4-ter, après J4-bis) : un lecteur de `.tap` minimal (G0/G1/G2/G3, I/J
+incrémentaux) qui reconstruit le parcours ; un module
+`shared/sheetcamLeads.js` qui, depuis les clés du `.job`, dessine l'enveloppe
+prédite ; un verrou par fichier de la série : **distance de Hausdorff
+enveloppe prédite ↔ parcours G-code ≤ 0,1 mm**. La réserve de nesting
+devient cette enveloppe (extérieur : bosse ; trou : morsure), et
+`startPositionConfirmed` disparaît — la table est mesurée. Le disque de
+perçage reste un paramètre (rayon lu sur la série : diamètre de la zone
+affectée au perçage, ou 3 mm si rien ne le contredit).
+
+Alternative écartée pour l'instant : un plugin SheetCam (Lua) qui exporterait
+le parcours par dessin — plus exact, mais une pièce logicielle de plus à
+installer chez chaque utilisateur ; à rouvrir si la reconstruction ne suit
+pas SheetCam sur un type d'amorce.
+
+### Lot J4-bis — vérification (vérificateur, 13/09 soir, `f0821245`) — GO déploiement, après le verdict machine
+
+Rejoué sur le poste : image `app` reconstruite à HEAD (18:24), harnais
+`scripts/qa-e2e-job.mjs` tel que livré (sans double dépose), constructeur
+de payload rejoué en Node, suite Python DANS le conteneur
+`nest2d-nesting-worker:dev` (arbre de travail monté, pytest installé à la
+volée), sorties hors dépôt (`~/qa-out/verif-j4bis/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **715** |
+| pytest worker nesting, en conteneur | **241 passés, 1 ignoré** |
+| réduction/expansion rejouées (`buildLocalPayload` réel, tôle 1000 × 1250, espacement 2) | sans réserve : forme compressée, sortie inchangée (1 + 1 ⇒ 1 rattachée ; 1 + 4 ⇒ 4 ; 2 + 2 ⇒ 2). **Avec réserve : forme `{packs}`** et `expandPacks` rattache la pose hors centre — 1 + 1 ⇒ **1** (était 0), 1 + 4 ⇒ 1 nichée + 3 dans l'instance, 2 + 2 ⇒ **2** (était 0) |
+| harnais, `.job` × 4 (la recette, 1 hôte + 4 éventails) | **5 posées sur 5**, C2/C3 verts, une nichée coupée avant son hôte (D10 mesuré sur les paires), bloc binaire à l'octet près, angles dans (−2π, 0] |
+| harnais, `.job` à 2 pièces | **2 sur 2**, une nichée, tous verts (deux 429 en console au second lancement rapproché, sans effet — piège #43, comme annoncé) |
+| lecture du correctif | critère « la forme compressée porte le plan » écrit par rejeu de l'expansion, des deux côtés ; garde anti-perte comptée sur les hôtes réellement posés (juste : un hôte non posé n'a rien à rattacher) ; message d'erreur distinct côté serveur ; morsure à amorce nulle : centre poussé à la marge, bouche élargie |
+
+**Ce que le propriétaire verra dans SheetCam, et qu'il faut dire** : avec la
+réserve aux quatre coins, **un seul éventail se niche dans le trou de la
+recette au lieu de quatre** (les trois autres sont posés à côté). Ce n'est
+pas un défaut du correctif : le planificateur ne trouve qu'une pose dans un
+trou mordu quatre fois. C'est le prix, mesuré, de la table `Start position`
+non confirmée — la confirmer ramène à une morsure (§9.16), et l'enveloppe
+reconstruite du lot J4-ter (§9.35) le réduira encore.
+
+**Arbitrage** : le miroir Python (`holefill.py`, `main.py`) corrige un
+défaut **latent en production** (trou non circulaire, un fichier hôte, un
+fichier de remplissage), indépendant du `.job` : il se déploie **avec ce
+lot**, pas avec J5 — worker nesting, homelab compris
+(`assert_overflow_head.py`), et `densities_corpus.py` rejoué (n'écrire que
+si un chiffre bouge ; le moteur n'a pas changé, `determinism_lock.py` sans
+objet).
+
+**GO déploiement** (app + worker nesting), **conditionné au verdict machine
+du propriétaire** sur `.testparts/RECETTE-J4bis_x4.job` (produit par
+l'implémenteur) ou `.testparts/VERIF-J4bis_x4_5sur5_tole1.job` (produit par
+cette vérification, même version) : l'amorce du trou ne doit plus toucher
+l'éventail niché. Si le verdict est NOT OK, le worker peut partir seul, l'app
+attend.
+
+### Recette J4-bis et série de rétro-ingénierie — verdict et mesures (13/09 soir)
+
+#### 9.37 Verdict machine sur `RECETTE-J4bis_x4.job`
+
+Capture SheetCam du propriétaire : 5 pièces, **un** éventail dans le trou,
+**l'amorce du trou ne le touche pas** (elle part à 10 h sur le cercle, vers
+l'intérieur, côté opposé à l'éventail). Sur ce point la recette est **OK**.
+Les trois autres éventails sont posés au-dessus de l'hôte, et le propriétaire
+les voit « grignotés par le kerf de la coupe précédente ».
+
+Lecture du vérificateur : (a) les trois éventails ne sont pas dehors à cause
+d'un conflit d'amorces mais parce que **les quatre morsures** (table des
+coins non confirmée) ne laissent au planificateur qu'une pose dans le trou —
+c'est le prix mesuré au §9.36, et la série ci-dessous permet de le
+supprimer ; (b) le « grignotage » est la marge de sécurité de la règle 3.10
+(espacement = kerf + 2 × 0,25 mm, soit 0,25 mm de matière entre la bande de
+kerf et la pièce voisine) : c'est un paramètre, pas un défaut — relever la
+sécurité à 0,5 mm si l'atelier le préfère.
+
+**Décision du propriétaire** : une option **« autoriser le chevauchement des
+amorces » (`allowOverlappingLeads`, défaut : non)**. Non cochée : la réserve
+d'amorce s'applique (comportement du lot J4). Cochée : aucune réserve, le
+nesting est plus dense, l'utilisateur assume que des amorces puissent
+traverser une zone déjà coupée. Libellé EN + FR, dans les réglages du
+projet quand un `.job` est déposé ; à livrer avec J4-ter.
+
+#### 9.38 Série `retro-eng-job` : ce que trois fichiers établissent déjà
+
+Trois `.job` du même DXF (un L de 180 × 200, un trou rectangulaire, un trou
+en forme de fuseau), même texte à l'octet près (`Lead in = 5`, type 1 ;
+`Lead out = 10`, type 1 ; `Start position = 0` ; kerf 1,5), **points de
+départ déplacés à la main** entre les trois ; chacun avec son `.nc`.
+
+**Règles de SheetCam mesurées sur le G-code (amorce type 1 = arc)** :
+
+| Règle | Mesure |
+|---|---|
+| chemin | contour décalé de **kerf/2** (0,75), coins convexes **arrondis** au rayon kerf/2 (`G3 … I0 J0.75`), coins concaves vifs ; contour extérieur parcouru anti-horaire, trous horaires |
+| amorce d'entrée | **quart de cercle** de rayon **0,64 × longueur** (5 → 3,2 ; le `Lead in` est la longueur d'arc), tangent au chemin au point de départ `P`, du côté CHUTE (extérieur pour le contour, intérieur du trou pour un trou) ; **point de perçage = P − r·t + r·n** (`t` direction de coupe en `P`, `n` normale vers la chute) |
+| amorce de sortie | quart de cercle de rayon **0,64 × longueur** (10 → 6,4), du même côté, se terminant en **P + r·t + r·n** — plus grande que l'entrée ici : ne réserver que l'entrée était insuffisant par construction |
+| perçage | `Pierce height 3,8`, descente à `Z1,5` sur le point de perçage ; aucune clé de rayon de perçage dans le texte — le 3 mm reste une marge à confirmer |
+
+**Le point de départ de chaque contour est dans le bloc binaire**, et il est
+lisible : entre les trois fichiers, seuls **six plages de 7 à 8 octets**
+changent, soit **trois couples de doubles little-endian** (x à l'offset k,
+y à k + 14 ; un enregistrement par contour, **pas de 179 octets**), exprimés
+**par rapport au centre de la pièce** (`XPos`, `YPos`). Vérifié sur les neuf
+valeurs : L-1 (−65,47 ; −10) → (24,53 ; 90) = départ du trou rectangulaire
+dans le G-code ; (−90 ; −100) → (0 ; 0) = coin bas gauche du contour ;
+(−76,32 ; −74,71) → départ du fuseau ; idem L-2 et L-3 au centième. Aucun
+autre octet ne bouge : ni somme de contrôle, ni drapeau visible.
+
+**Conséquence : la voie 2 du verdict du 13/09 (« imposer nous-mêmes le
+point de départ ») ROUVRE.** Le §9.15 la fermait sur le texte seul ; le
+binaire la porte. NestorCut peut choisir, après nesting, le point de départ
+de chaque trou là où il reste de la place, et l'écrire — sous réserve de
+savoir apparier un enregistrement à son contour (ordre des enregistrements
+à établir), et de vérifier dans SheetCam qu'un fichier réécrit s'ouvre avec
+le point déplacé.
+
+**Ce que la série ne dit pas encore** : la règle PAR DÉFAUT du point de
+départ (les trois fichiers ont des points déplacés à la main ; le
+`Start position = 0` ne les gouverne plus), les amorces de type ligne et
+« aucune », le comportement en pose tournée ou miroir, l'ordre des
+enregistrements du binaire.
+
+#### 9.39 Suite de la série — ce que le propriétaire fournit, dans l'ordre d'utilité
+
+1. **Un fichier où RIEN n'est déplacé à la main**, par valeur de
+   `Start position` (0, 1, 2, …, toutes celles que le menu propose), même
+   pièce, arc 5 / arc 10 — c'est la règle par défaut, et la table des coins,
+   pour le contour ET pour les deux trous.
+2. **Les autres types d'amorce**, points non déplacés : type ligne, type
+   « aucune », et tout type restant du menu ; entrée seule puis sortie seule.
+3. **Pose** : la référence à `Angle` 45° et une fois en miroir (`HRef`).
+4. **Un fichier de plus à points déplacés**, où UN SEUL contour est déplacé
+   (le rectangulaire), puis un autre où seul le fuseau l'est : cela fixe
+   l'ordre des enregistrements du binaire.
+5. Kerf 0 et kerf 4 sur la référence (le décalage kerf/2 est déjà lisible,
+   c'est une confirmation).
+
+Les trois fichiers existants restent : ils ont livré le codage des points de
+départ et les règles d'arc. Une dizaine de fichiers de plus suffisent.
+
+**Lot J4-ter, périmètre mis à jour** : (a) module `shared/sheetcamLeads.js`
+qui dessine l'enveloppe réelle depuis les clés du `.job` (chemin kerf/2,
+arcs d'entrée et de sortie à 0,64 × L, point de perçage), verrou Hausdorff
+≤ 0,1 mm contre chaque `.nc` de la série ; (b) lecture des points de départ
+dans le binaire (`shared/sheetcamJob.js`, couples de doubles au pas de 179,
+appariement par proximité au contour) et **écriture** d'un point choisi
+après nesting, avec verrou de relecture octet à octet hors ces 16 octets par
+contour ; (c) la réserve devient l'enveloppe au point choisi — ou rien si
+`allowOverlappingLeads` ; (d) recette machine sur un fichier réécrit. Le
+`.job` seul suffit en production ; les `.nc` restent des fixtures de test.
+
+#### 9.40 Décisions du propriétaire (13/09, fin de soirée) et ce que L-1 apprend
+
+**1. Espacement d'un nesting `.job` : la règle 3.10 est REMPLACÉE.** Le
+propriétaire refuse `kerf + 2 × 0,25` pour un `.job` : la bande de kerf
+est centrée sur le chemin d'outil, lui-même à kerf/2 du contour, donc elle
+s'étend jusqu'à **un kerf entier** hors de chaque pièce. Deux pièces à moins
+de **2 × kerf** ont des bandes qui se recouvrent : la seconde coupe traverse
+de l'air déjà coupé (perte d'arc, bord rongé — le « grignotage » de la
+capture était donc réel, la lecture « marge de 0,25 » du §9.37 était
+fausse). **Règle** : `espacement = 2 × kerf + sécurité`, la sécurité étant
+LE paramètre, **1 mm par défaut**, modifiable. Sur la recette (kerf 1,5) :
+4 mm au lieu de 2. Conséquence attendue : les quatre éventails ne tiennent
+plus ensemble dans le trou (mesuré au §9.19 dès 3,5 mm) — c'est un choix
+de qualité de coupe, assumé.
+
+**À livrer AVANT le déploiement de J4-bis** (l'ancienne règle n'a pas à
+partir en production) : `spacingFromKerf` (`shared/sheetcamReserve.js`)
+et `prefillFromJob` (`app/composables/sheetcamJobImport.js`) passent à
+`2 × kerf + sécurité`, sécurité par défaut 1 mm ; le champ « sécurité »
+pré-rempli à 1 ; tests et cas B du harnais alignés ; libellé d'aide EN + FR
+« espacement = 2 × kerf + sécurité ». Lot **J4-bis-2**, une demi-journée,
+puis rejeu des deux `.job` du harnais et déploiement.
+
+**2. `Pièce L-1.job` est le fichier aux points de départ PAR DÉFAUT** (L-2 et
+L-3 déplacés à la main). Ce que ses points disent, `Start position = 0` :
+
+| contour | point de départ par défaut | remarque |
+|---|---|---|
+| extérieur (L) | **(0 ; 0), coin bas gauche** | cohérent avec `START_CORNERS[0]` = bas gauche |
+| trou rectangulaire (10…40 × 90…190) | **(24,53 ; 90)**, sur l'arête du bas | ni un coin, ni un milieu (25), ni une extrémité d'entité DXF (les LINE vont de coin à coin) |
+| trou en fuseau (ELLIPSE) | **(13,68 ; 25,3)**, pointe gauche | extrémité de l'ellipse, pas la première entité du DXF |
+
+**Capture de la boîte d'opération (onglet « Cut path »)** : `Start position`
+n'est pas une liste mais **cinq boutons** — les quatre coins d'un carré et
+un bouton CENTRAL, coché dans tous les fichiers du propriétaire. **La valeur
+0 est donc le bouton central = choix automatique de SheetCam**, pas un coin :
+c'est pourquoi les points par défaut de L-1 ne sont pas aux coins (le
+(0 ; 0) du contour extérieur est une coïncidence à vérifier). Les quatre
+autres valeurs sont les coins, dans un ordre à mesurer : **quatre fichiers
+« rien déplacé », un par bouton de coin**, avec leur `.nc`, suffisent pour
+la table. L'onglet « Basic » donne aussi l'ordre des types d'amorce — None,
+Arc, Tangent, Perpendicular = codes 0 à 3 — et un réglage « Start at the
+centre of circles smaller than … » (perçage au centre des petits trous, à
+mettre à 0 dans la série, à lire un jour dans le `.job`).
+
+La règle AUTOMATIQUE des trous n'est pas élucidée par un fichier : les fichiers « rien déplacé » par valeur de
+`Start position` (§9.39 point 1) restent nécessaires, et **les libellés du
+menu `Start position` de SheetCam, dans l'ordre**, sont l'information la
+moins chère — le propriétaire les relève.
+
+**3. Priorité de J4-ter, tranchée par ces mesures** : puisque le point de
+départ se LIT et s'ÉCRIT dans le binaire (§9.38), NestorCut impose le sien
+après nesting — la règle par défaut ne gouverne plus que le cas
+`allowOverlappingLeads` et le repli si l'écriture échoue. L'ordre des
+travaux : lecture du binaire et appariement aux contours → enveloppe des
+amorces (arcs 0,64 × L, entrée et sortie) → écriture du point de départ
+choisi → recette machine sur un fichier réécrit.
+
+#### 9.41 Série `retro-eng-job`, état du 13/09 à 19 h — inventaire et règles lues
+
+**Douze `.job`** dans `.testparts/retro-eng-job/` (même DXF, `Start
+position` toujours au bouton central) : L-1 (défaut, ancienne session), L-2
+et L-3 (points déplacés), puis « none », « tangeant », « perpendicular »
+(types 0, 2, 3, entrée 5 et sortie 10 du même type), « kerf0 » (0,0001) et
+« kerf4 », « + 45deg », « mirror » (`HRef = 1`), « start rectangle moved »
+et « start ellipse moved » (un seul contour déplacé). **Dix `.nc`** : il
+manque ceux de **« + 45deg »** et **« mirror »**.
+
+**Ce que le binaire confirme** (comparé octet à octet au fichier « none
+default », référence) :
+
+| Fichier | Octets qui changent | Lecture |
+|---|---|---|
+| kerf 4, + 45°, miroir | **aucun** | le point de départ stocké est en coordonnées LOCALES du dessin, indépendant du kerf, de la pose et du miroir ; les types d'amorce ne le touchent pas non plus |
+| « start rectangle moved » | 3640–3656 (couple 1) + **un octet à 3722** | l'enregistrement 1 (offset 3635/3649) EST le trou rectangulaire ; l'octet à +87 de l'enregistrement passe probablement à « déplacé à la main » |
+| « start ellipse moved » | 3993–4013 (couple 3) + **un octet à 4080** | l'enregistrement 3 EST le fuseau ; même octet de drapeau à +87 |
+| L-1 | couples 1 et 3, plus une dizaine d'octets isolés | ancienne session : ses points « par défaut » (24,53 ; 90) et (13,68 ; 25,29) diffèrent du défaut actuel (25 ; 90) et (14,21 ; 27,44) — le défaut est recalculé, L-1 n'est pas la référence, « none default » l'est |
+
+Donc l'enregistrement 2 (3814/3828) est le contour extérieur, et l'ordre
+des enregistrements est **rectangle, extérieur, fuseau** — ni l'ordre des
+entités du DXF (rectangle, extérieur, ellipse en dernier… cohérent) : à
+vérifier sur un second dessin avant d'en faire une règle ; l'appariement
+par proximité au contour reste la méthode sûre. **Points par défaut au
+bouton central** : rectangle **(25 ; 90) = milieu de l'arête du bas**,
+extérieur (0 ; 0), fuseau (14,21 ; 27,44) près de la pointe gauche — la
+règle automatique n'est toujours pas une formule, mais elle n'a plus à
+l'être.
+
+**Règles d'amorce lues sur les `.nc`** (P = point de départ sur le chemin
+décalé, t = direction de coupe en P, n = normale vers la chute, L =
+longueur) :
+
+| Type | Entrée | Sortie |
+|---|---|---|
+| 0 None | perçage EN P, aucun segment | aucun |
+| 1 Arc | quart de cercle r = 0,64 L, du perçage P − r·t + r·n à P | quart de cercle r = 0,64 L, de P à P + r·t + r·n |
+| 2 Tangent | segment droit de longueur L arrivant en P ; **dans le prolongement de l'arête** quand P est un coin (extérieur : de (−5 ; −0,75) à (0 ; −0,75)), **incliné de 22,5° vers la chute** quand P est au milieu d'une arête (rectangle : de (29,62 ; 92,66) à (25 ; 90,75)) — sinon le segment serait sur le trait | symétrique, à mesurer sur les `.nc` |
+| 3 Perpendicular | segment droit de longueur L le long de n, du côté chute (rectangle : de (25 ; 95,75) à (25 ; 90,75)) | symétrique |
+| kerf | chemin = contour décalé de **kerf/2** (0 → 0 ; 1,5 → 0,75 ; 4 → 2), coins convexes arrondis à ce rayon ; **la géométrie des amorces ne dépend pas du kerf** | |
+
+**Ce qui manque pour clore la série** : les `.nc` de « + 45deg » et
+« mirror » (post-traiter les deux fichiers existants) ; **quatre fichiers
+« rien déplacé », un par bouton de COIN** de `Start position`, avec leur
+`.nc` — c'est la table des coins, la seule inconnue qui reste avec une
+valeur produit (le repli quand NestorCut n'écrit pas le point). Les
+variantes « entrée seule / sortie seule » ne sont plus nécessaires : entrée
+et sortie se lisent séparément dans le G-code.
+
+#### 9.42 Série complète (13/09, 19 h 30) : trois faits qui changent le lot — dont un NO-GO
+
+Dix-sept `.job`, dix-sept `.nc`. Les quatre fichiers de coin et les deux
+`.nc` manquants sont là. Trois mesures, du plus grave au moins grave.
+
+**1. La formule de pose du lot J4 (§9.18 point 1) est FAUSSE, celle du lot
+J2 était juste.** Le fichier « + 45deg » (Angle = +0,785, XPos 90, YPos 100)
+tranche : SheetCam **tourne le dessin autour de (XPos, YPos), qui est la
+position monde du centre de la boîte NON tournée** (`c0`), sens horaire pour
+un `Angle` positif. Testé sur les trois points de départ du G-code :
+
+| contour | G-code (chemin décalé) | pivot `c0` (formule J2 : `XPos = t + R·c0`) | centre de la boîte TOURNÉE (J4, `placedBoxCentre`) |
+|---|---|---|---|
+| rectangle | (37,50 ; 139,42) | (37,0 ; 138,9), **écart 0,75 = kerf/2** | (82,9 ; 138,9), **écart 45,4 mm** |
+| extérieur | (−44,88 ; 92,40) | (−44,4 ; 92,9), écart 0,75 | (1,6 ; 92,9), écart 46,5 |
+| fuseau | (−14,65 ; 101,58) | (−14,9 ; 102,3), écart 0,75 | (31,1 ; 102,3), écart 45,7 |
+
+Le lot J4 a remplacé `t + R(θ)·c` par le centre de la boîte tournée « pour
+corriger 21 mm d'erreur à 45° » — c'est ce remplacement qui crée l'erreur,
+de 45 mm ici. Les deux formules coïncident aux quarts de tour (la boîte
+tournée est la boîte de la boîte), ce qui explique que la référence du
+11/09, le harnais et tous les verrous soient restés verts. **Toute pose non
+quart de tour d'un `.job` écrit par J4 est fausse** ; l'UI autorise 1 à 360
+rotations. **NO-GO déploiement tant que ce n'est pas revenu à la formule
+J2**, avec un verrou sur ce fichier (les trois points à ≤ 1 mm).
+**Miroir** (`HRef = 1`) : `x' = 2·XPos − x`, `y` inchangé, vérifié sur les
+trois contours à 0,75 près.
+
+**2. `Start position` n'est PAS le coin de départ des contours.** Codes :
+**centre = 0, haut gauche = 1, haut droit = 2, bas droit = 3, bas
+gauche = 4**. Mais entre centre, haut gauche et haut droit, les trois points
+de départ du G-code sont **identiques** (rectangle au MILIEU de l'arête du
+bas, extérieur en (0 ; 0), fuseau à la pointe gauche) ; bas droit et bas
+gauche ne changent que le fuseau (pointe droite) et l'ORDRE de coupe (fuseau
+d'abord). Le réglage vit dans le cadre « Cut ordering » : c'est le **coin
+d'où part la séquence de coupe**, pas le départ de chaque contour. Le point
+de départ d'un contour est choisi par SheetCam (règle non formulée : milieu
+d'arête pour le rectangle, sommet pour le L) et **il est écrit dans le bloc
+binaire, à jour dans tous les cas mesurés** (le fuseau passé à la pointe
+droite y est aussi passé). Conséquences : la prémisse `START_CORNERS` des
+lots J3 et J4 tombe ; **la réserve aux quatre coins ne couvre pas le vrai
+départ d'un trou rectangulaire** (milieu d'arête) — elle n'a protégé la
+recette que parce que le trou est rond ; la seule réserve juste est celle
+posée **au point lu dans le binaire**.
+
+**3. Le reste est confirmé** : ordre des enregistrements (rectangle,
+extérieur, fuseau), drapeau à +87 quand le point est déplacé, binaire
+insensible au kerf, à la pose, au miroir et au type d'amorce ; règles
+d'amorce du §9.41.
+
+**Lot J4-bis-2, périmètre RÉVISÉ (bloquant avant déploiement)** :
+
+1. Pose : revenir à `jobPlacement` (`t + R(θ)·c0`, lot J2) pour toutes les
+   rotations ; retirer `placedBoxCentre` / `jobPlacementFromRings` du chemin
+   (ou les garder inertes) ; verrou = les trois points de départ du fichier
+   « + 45deg » reconstruits à ≤ 1 mm, et le miroir `x' = 2·XPos − x`.
+2. Espacement `.job` = 2 × kerf + sécurité (1 mm par défaut), §9.40.
+3. Réserve d'amorce **au point de départ lu dans le binaire** : lecture des
+   enregistrements (couples de doubles relatifs au centre, pas de 179,
+   appariement par proximité au contour — sur les 17 fichiers, chaque point
+   lu est SUR son contour à 0,01 près) ; enveloppe = arc/segment selon le
+   type et la longueur (§9.41), entrée ET sortie, plus le kerf ; si un point
+   ne se lit pas ou n'est sur aucun contour, le trou sort du nesting (repli
+   déjà codé) et le constat s'affiche. `START_CORNERS`,
+   `startPositionConfirmed` et les quatre morsures disparaissent.
+4. Fixture : la pièce L et sa série sont un dessin de test créé pour cela —
+   **accord du propriétaire donné le 13/09** : copie de `Pièce L.DXF`, de deux
+   `.job` (« none default », « + 45deg ») et de leurs `.nc` dans
+   `app/tests/fixtures/sheetcam/`, pour que ces verrous vivent dans le dépôt.
+5. Rejeu des deux `.job` du harnais, vérification, recette du propriétaire
+   sur le fichier × 4 (espacement 4 mm, réserve au vrai point), déploiement.
+
+**J4-ter, réduit** : écriture du point de départ choisi par NestorCut
+(drapeau à +87 compris), option `allowOverlappingLeads`, recette machine sur
+un fichier réécrit. Le mode automatique de SheetCam n'a plus à être compris.

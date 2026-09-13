@@ -1019,3 +1019,73 @@ en `AttributeError` sur deux vieux jobs T-I de mon Mongo local dont
 `None`). Le coureur rendait donc… rien, au lieu de la fiche du run demandé.
 Corrigé (`(a.get("report") or {}).get("postPass") or {}`) et le run est
 cadré par `CORPUS_SINCE`, comme le script le prévoyait.
+
+## 6. Lot E3 — l'import avancé tel que le propriétaire l'a demandé (consigne du 13/09 soir)
+
+**Constat du propriétaire (13/09, 20 h)** : ce qui est en production n'est pas
+ce qu'il avait demandé. Il faut aujourd'hui ouvrir un panneau replié sur la
+page projet AVANT de déposer, et l'import ordinaire ne propose jamais le
+choix. Sa demande : **un interrupteur « Import avancé » à la création d'un
+projet**, et, quand il est allumé, **une fenêtre de choix à chaque dépôt**
+(bouton « Choose files » ou glisser-déposer de plusieurs fichiers) :
+« import automatique » (le défaut) ou « éclater en pièces + mettre à
+l'échelle ». Il ne veut pas éclater ses DXF multi-pièces par défaut.
+
+### 6.1 Ce qui est demandé, exactement
+
+1. **L'interrupteur.** Sur la page d'accueil, bloc « New nesting », entre les
+   deux cartes de mode (« This device » / « Our servers ») et la zone de
+   dépôt — à l'endroit de la ligne « Activate the vault » de la capture du
+   propriétaire — un **switch « Import avancé »**, éteint par défaut. Allumé,
+   son état est **franchement visible** (libellé, couleur d'accent, bordure
+   de la zone de dépôt : pas une case grise). Le même interrupteur existe sur
+   la page projet, dans la zone de dépôt, avec **le même état** : l'état est
+   une propriété du projet (créé allumé ⇒ ses dépôts suivants posent la
+   question ; modifiable ensuite depuis la page projet). Aucun rayon en
+   pilule (mémoire UI : 4 px).
+2. **La fenêtre de choix.** Interrupteur allumé, après le choix des fichiers
+   ou le dépôt, AVANT toute création de fiche, une fenêtre modale :
+   - la liste des fichiers déposés, avec pour chacun ce que l'import a lu
+     (nombre de pièces, étendue) — lecture unique, comme E1-bis ;
+   - deux boutons : **« Import automatique »** (défaut, focus initial) —
+     une fiche par fichier, multi-pièces conservé tel quel, exactement
+     l'import ordinaire ; **« Éclater en pièces et mettre à l'échelle »** —
+     ouvre l'aperçu sur tôle existant (`AdvancedImportPreview`, E1-bis) pour
+     régler l'échelle et confirmer l'éclatement, fichier par fichier pour
+     un dépôt multiple (suivant / passer) ;
+   - le choix vaut pour **le lot déposé** ; « Annuler » ne crée rien.
+   Interrupteur éteint : aucune fenêtre, import ordinaire, zéro lecture
+   supplémentaire (le cas A du harnais E1 reste vrai).
+3. **Le panneau replié actuel disparaît** au profit de l'interrupteur + la
+   fenêtre (pas deux chemins). Le stockage de session du panneau est
+   remplacé par l'état du projet (IndexedDB en local, document projet côté
+   serveur — champ additif, absent = éteint).
+4. **Un `.job` SheetCam n'est jamais concerné** : il porte déjà sa tôle et
+   ses quantités ; il passe avant la fenêtre (règle du lot J4, cas A4 à
+   remettre au harnais).
+5. **Langues** : tout libellé en EN et FR dans `app/utils/i18n.js`, parité
+   verrouillée.
+
+### 6.2 Verrous
+
+- vitest : état du projet (création allumé/éteint, persistance, relecture
+  d'un vieux projet sans le champ ⇒ éteint) ; fenêtre : « Import
+  automatique » ⇒ mêmes fiches que l'import ordinaire (bit-identique du
+  payload, comme le contrôle négatif du lot J4) ; « Éclater » ⇒ le chemin
+  E1/E1-bis inchangé ;
+- harnais `scripts/qa-e2e-advanced-import.mjs` refait : **A** interrupteur
+  éteint, un DXF multi-pièces ⇒ 1 fiche, aucune fenêtre, même nombre
+  d'appels wasm qu'avant ; **B** allumé, même fichier, « Import
+  automatique » ⇒ 1 fiche ; **C** allumé, « Éclater » ⇒ 17 fiches, échelle
+  cible 1000 ⇒ facteur 0,353 ; **D** allumé, dépôt de trois fichiers ⇒ UNE
+  fenêtre pour le lot ; **E** allumé, un `.job` + ses DXF ⇒ aucune fenêtre ;
+  **F** captures FR et EN de l'interrupteur allumé et de la fenêtre
+  (réglages seulement, jamais un dessin d'atelier dans `docs/`) ;
+- `npx nuxt build`, `docker compose build app`, images à HEAD avant le banc.
+
+### 6.3 Place dans l'ordre des travaux
+
+Après le lot J4-bis-2 (bloquant pour le `.job`), **avant J4-ter** : c'est
+une correction d'une livraison jugée non conforme par le propriétaire, app
+seule, sans moteur ni worker. Un à deux jours. Déploiement après GO, app
+seule, sans benchmarks.
