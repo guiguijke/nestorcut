@@ -836,3 +836,119 @@ silencieuse : l'écran affiche « 1 sur 2 » avec ses leviers.
    déclenche la limite anti-force brute (429, piège #43) et le refus qu'on
    lit alors n'a rien de géométrique. Laisser retomber le budget entre deux
    séries.
+
+### Lot J4 — vérification (vérificateur, 13/09, `50ee6f19`) — NO-GO déploiement, un correctif à livrer d'abord
+
+Rejoué sur le poste : image `app` **reconstruite à HEAD** (17:21, l'image de
+l'implémenteur datait d'une minute AVANT le commit `c3b13b33`), harnais
+`scripts/qa-e2e-job.mjs` tel quel puis dans une variante sans le cas A4,
+constructeur de payload et modules `shared/` rejoués en Node (alias `~~/`
+résolu par un hook de chargement), sorties hors dépôt (`~/qa-out/verif-j4/`).
+
+#### 9.24 Ce qui est acquis
+
+| Verrou | Résultat |
+|---|---|
+| dépôt | `b96813fb` restaure les 86 fichiers (86 ajoutés, tous suivis) ; `docs/REPRISE` et les documents de passation commités |
+| vitest | **708** |
+| harnais tel quel, `.job` à 2 pièces | tous verts ; **4 posées / 4** — mais 4 parce que le cas A4 redépose les deux dessins avant le nesting (2 hôtes + 2 éventails) |
+| harnais tel quel, `.job` × 4 (recette) | tous verts ; 10 / 10 (2 hôtes + 8 éventails, même raison), 2 éventails nichés, hôte en 3ᵉ position de l'ordre de coupe |
+| **harnais SANS le cas A4, `.job` × 4** (1 hôte + 4 éventails, la recette exacte) | **4 posées sur 5, et le harnais reste VERT** — c'est le défaut du §9.22, général et invisible au verrou |
+| morsure du trou, mesurée à part (cercle r = 35, 64 sommets, amorce 5, perçage 3) | 4 morsures, 137 sommets, **−4,56 %** d'aire ; disque de perçage dans la zone libre **0 / 128** ; couloir d'amorce **0 / 396** ; **0 croisement** ; convention de fermeture rendue ; `startPositionConfirmed` ⇒ 1 morsure, −1,14 % ; trou r = 4 ⇒ refus, anneau intact |
+| angle | tous les angles écrits dans (−2π, 0] sur les deux fichiers ; le `−0` de la référence conservé |
+| écriture | `Count` = sections, `copyOf` par exemplaire, chemins masqués, **bloc binaire identique à l'octet près** sur les deux fichiers |
+| lecture | signature `Config=` + `[Misc]`/`FileVersion=` en JS avant le wasm ; `Number(null)` du repli corrigé ; centre de boîte sur le dessin TOURNÉ (`placedBoxCentre`) ; copies d'un `.job` déjà nesté réutilisées puis désactivées |
+
+Deux `.job` produits par ce rejeu ont été remis au propriétaire pour la
+recette machine (`.testparts/VERIF-J4_*`, hors dépôt) : le fichier 1 hôte +
+4 éventails (4 sur 5) et le fichier 2 hôtes + 8 éventails (complet).
+
+#### 9.25 Le défaut du §9.22 : cause trouvée, et la pré-passe N'EST PAS hors de cause
+
+Le rapport écartait la pré-passe de remplissage de trous (« `packs: []`,
+`idMap: [0, 1]` »). Mesuré sur le vrai constructeur (`buildLocalPayload`,
+mêmes deux DXF, tôle 1000 × 1250, espacement 2), c'est l'inverse :
+
+| cas | `packs` du planificateur | `meta` produit par `reduceForSolve` | `expandMeta` rattache |
+|---|---|---|---|
+| sans réserve, 1 + 1 | 1 pose, `rot 0 @ (0, 0)` | `slots [1]`, `ringRotations [[0,90,180,270]]` | 1 éventail |
+| sans réserve, 1 + 4 | 4 poses au centre | `slots [4]`, `ringRotations [[0,90,180,270]]` | 4 |
+| **avec réserve, 1 + 1** | 1 pose, **`rot 0 @ (−4,4 ; −21,9)`** (hors centre) | `slots [1]`, **`ringRotations [[]]`** | **0** → 1 posée sur 2 |
+| **avec réserve, 1 + 4** | 1 pose hors centre | `slots [1]`, `ringRotations [[]]`, `idMap [0, 1]` | **0** → 4 sur 5 |
+| avec réserve, 2 + 2 (deux quantités, un fichier chacun) | 1 + 1 | `slots [1, 1]`, `ringRotations [[]]` | **0** → 2 sur 4 |
+
+La mécanique : le planificateur générique (`packHole`) trouve UNE pose
+d'éventail dans le trou mordu, hors centre — le trou n'est plus symétrique,
+le moulinet à quatre ne tient plus, mais une pièce oui. Puis
+`reduceForSolve` (`app/composables/localBridge.js`), dès qu'il n'y a qu'UN
+hôte et UN éventail, **jette ces poses** et retombe sur la forme J-085
+`{host, fill, slots, ringRotations}` : il recalcule les rotations par le
+test de moulinet AU CENTROÏDE (`_jsPinwheelCapacity`), qui rend `[]` sur le
+trou mordu. `expandMeta` distribue alors `slots` sur des listes de rotations
+vides et ne rattache rien. La demande de l'éventail avait été RÉDUITE dans
+l'instance moteur : la pièce n'est nulle part, sans erreur — « 1 sur 2 avec
+ses leviers ». Le couplage est ancien ; la réserve est la première chose qui
+fait diverger le planificateur générique du moulinet centré. Avec deux
+FICHIERS hôtes (le cas A4 du harnais), `hostIds.size === 2` ⇒ forme
+`{packs}` ⇒ `expandPacks` rejoue les vraies poses ⇒ 10 / 10 : c'est pourquoi
+le harnais ne voyait rien.
+
+Le miroir Python `workers/nesting/core/holefill.py::reduce_for_solve` a la
+même structure (même repli 1 + 1, mêmes `ring_rotations` recalculées) : le lot
+J5 hériterait du défaut, et il est **latent en production dès aujourd'hui**
+pour un trou non circulaire (un L, un C) avec un seul fichier hôte et un seul
+fichier de remplissage — à verrouiller des deux côtés.
+
+#### 9.26 Ce que le harnais ne mesure pas (et doit mesurer)
+
+1. Le cas C ne compare **jamais** `placed` à `requested` — il lit le record
+   et le journalise, sans verrou. Le 4 / 5 est passé vert.
+2. Le cas A4 redépose les dessins AVANT le nesting : le projet nesté n'est
+   plus celui du `.job` (deux fichiers hôtes), et c'est précisément la forme
+   qui contourne le défaut. À rejouer après le nesting ou dans un projet à
+   part.
+3. D10 est tautologique (`check(…, true, …)` dès que l'hôte n'est pas
+   premier) : il faut lire `nestedIn` du record et vérifier qu'une nichée
+   précède SON hôte.
+
+#### 9.27 Deux constats de second rang
+
+1. **Amorce 0 avec perçage 3** (opération sans amorce, `Lead in type = 0`) :
+   la morsure refuse (`mouthInsideDisc`, la bouche de 3 mm tombe dans le
+   disque centré sur le bord) et `partWithReserve` **retire le trou du
+   nesting** — plus rien ne s'y niche, en silence puisque les constats ne
+   sont pas affichés (non-fait 1 du §9.23). Dégradation sûre, prix élevé :
+   la bouche doit s'élargir quand l'amorce est plus courte que la marge
+   (bouche ≥ marge + (marge − amorce)), et le constat doit se voir.
+2. Deux erreurs console « 400 Bad request » à l'ouverture du modal de
+   résultat sur un projet local (harnais vert, ressource non nommée par le
+   navigateur) : à identifier, non bloquant.
+
+#### 9.28 Verdict et consigne du correctif (lot J4-bis)
+
+**NO-GO déploiement** tant que le point 1 n'est pas livré et rejoué. Tout le
+reste du lot est pris tel quel.
+
+1. **`reduceForSolve` (`app/composables/localBridge.js`) ne prend la forme
+   `{host, fill, slots, ringRotations}` que si elle peut porter le plan** :
+   pour chaque hôte, `slots[h] ≤ Σ ringRotations[r].length` ET les poses du
+   plan sont celles du moulinet centré ; sinon la forme `{packs, idMap}` est
+   conservée et `expandPacks` rejoue les poses réelles. Même règle dans
+   `workers/nesting/core/holefill.py::reduce_for_solve`.
+2. **Garde anti-perte** à la finalisation (`finalizeLocal` et `main.py`) : le
+   nombre de pièces rattachées par l'expansion = le nombre retiré de
+   l'instance ; sinon **erreur explicite** (jamais un « terminé » à N − k),
+   dans l'esprit des pièges #45 et #56b.
+3. Verrous : `app/tests/localBridge.test.js` — 1 hôte + 1 éventail avec un
+   trou MORDU (4 morsures, poses hors centre) ⇒ 2 / 2 rattachées ; 1 + 4 ⇒
+   5 / 5 ; trou en L sans réserve (le cas latent) ⇒ aucune perte ; miroir
+   `workers/nesting/tests/test_holefill.py`.
+4. Harnais : C vérifie `placed === requested` ET `requested` = somme des
+   quantités du `.job` ; A4 déplacé après le nesting ou dans un second
+   projet ; D10 mesuré sur `nestedIn`.
+5. Bouche de la morsure élargie quand amorce < marge (§9.27) ; les constats
+   de réserve affichés dans la fiche (non-fait 1).
+6. Rejeu, image reconstruite : `.job` à 2 pièces ⇒ 2 / 2, `.job` × 4 ⇒ 5 / 5,
+   les deux SANS double dépose ; puis vérification, puis recette du
+   propriétaire sur le fichier × 4, puis déploiement (app seule pour J4 ;
+   le miroir Python part avec J5, homelab compris).
