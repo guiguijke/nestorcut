@@ -1,5 +1,0 @@
-Nesting report — nested-f-f1d66a7b3806eb40_100-f-3738d139b708e52a_800-8dc32d · Option 1
-Material to plan: 2 × 1000 mm × 1000 mm
-Total: 2 sheet(s) · 1.11 m² of parts · 892,529 mm² free · density 55.4%
-Sheet 1: 1000 mm × 1000 mm · 529 parts · used 774,114 mm² · free 225,886 mm² · density 77.4% · offcut 1000 mm × 5 mm (5,031 mm², scrap, at least)
-Sheet 2: 1000 mm × 1000 mm · 371 parts · used 333,357 mm² · free 666,644 mm² · density 33.3% · offcut 495.7 mm × 1000 mm (495,673 mm², reusable, at least)
