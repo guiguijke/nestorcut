@@ -1,0 +1,196 @@
+{
+ "G": {
+  "slug": "calm-hopper-a05d6318730c",
+  "total": 18,
+  "eclatees": 17,
+  "fiches": [
+   {
+    "name": "logo.dxf",
+    "status": "done",
+    "parts": 17,
+    "maxWidth": 1612.6,
+    "maxHeight": 595.1,
+    "findings": [
+     "import.splinesSampled:813",
+     "import.microVoidsFilled:21"
+    ]
+   },
+   {
+    "name": "logo (1/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 68.2,
+    "maxHeight": 71.7,
+    "findings": [
+     "import.splinesSampled:13"
+    ]
+   },
+   {
+    "name": "logo (2/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 70.9,
+    "maxHeight": 72,
+    "findings": [
+     "import.splinesSampled:13"
+    ]
+   },
+   {
+    "name": "logo (3/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 85.5,
+    "maxHeight": 72,
+    "findings": [
+     "import.splinesSampled:17"
+    ]
+   },
+   {
+    "name": "logo (4/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 89,
+    "maxHeight": 74.6,
+    "findings": [
+     "import.splinesSampled:15"
+    ]
+   },
+   {
+    "name": "logo (5/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 622.3,
+    "maxHeight": 252.9,
+    "findings": [
+     "import.splinesSampled:122"
+    ]
+   },
+   {
+    "name": "logo (6/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 664.6,
+    "maxHeight": 595.1,
+    "findings": [
+     "import.splinesSampled:117"
+    ]
+   },
+   {
+    "name": "logo (7/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 82.4,
+    "maxHeight": 44.9,
+    "findings": [
+     "import.splinesSampled:10"
+    ]
+   },
+   {
+    "name": "logo (8/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 38.3,
+    "maxHeight": 38.3,
+    "findings": [
+     "import.splinesSampled:8"
+    ]
+   },
+   {
+    "name": "logo (9/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 34.2,
+    "maxHeight": 36.5,
+    "findings": [
+     "import.splinesSampled:7"
+    ]
+   },
+   {
+    "name": "logo (10/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 87.4,
+    "maxHeight": 74.6,
+    "findings": [
+     "import.splinesSampled:23"
+    ]
+   },
+   {
+    "name": "logo (11/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 82.1,
+    "maxHeight": 72,
+    "findings": [
+     "import.splinesSampled:27"
+    ]
+   },
+   {
+    "name": "logo (12/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 83.6,
+    "maxHeight": 71.4,
+    "findings": [
+     "import.splinesSampled:22"
+    ]
+   },
+   {
+    "name": "logo (13/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 81.5,
+    "maxHeight": 71.1,
+    "findings": [
+     "import.splinesSampled:17"
+    ]
+   },
+   {
+    "name": "logo (14/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 89.4,
+    "maxHeight": 74.6,
+    "findings": [
+     "import.splinesSampled:19"
+    ]
+   },
+   {
+    "name": "logo (15/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 82,
+    "maxHeight": 73.3,
+    "findings": [
+     "import.splinesSampled:16"
+    ]
+   },
+   {
+    "name": "logo (16/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 68.8,
+    "maxHeight": 70.9,
+    "findings": [
+     "import.splinesSampled:25"
+    ]
+   },
+   {
+    "name": "logo (17/17).dxf",
+    "status": "done",
+    "parts": 1,
+    "maxWidth": 1612.6,
+    "maxHeight": 230.6,
+    "findings": [
+     "import.splinesSampled:342",
+     "import.microVoidsFilled:21"
+    ]
+   }
+  ],
+  "parite": {
+   "navigateur": 17,
+   "serveur": 17,
+   "ecarts": []
+  }
+ }
+}

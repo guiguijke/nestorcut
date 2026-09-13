@@ -1,0 +1,56 @@
+{
+ "H": {
+  "h1": {
+   "slug": "calm-tesla-e5be3e77439b",
+   "base": {
+    "name": "logo.dxf",
+    "status": "done",
+    "parts": 17,
+    "maxWidth": 1612.6,
+    "maxHeight": 595.1,
+    "findings": [
+     "import.splinesSampled:813",
+     "import.microVoidsFilled:21"
+    ]
+   },
+   "scaled": {
+    "name": "logo.dxf",
+    "status": "done",
+    "parts": 17,
+    "maxWidth": 806.3,
+    "maxHeight": 297.6,
+    "findings": [
+     "import.splinesSampled:813",
+     "import.microVoidsFilled:21",
+     "import.scaleApplied:0.5"
+    ]
+   }
+  },
+  "h2": {
+   "slug": "bright-hopper-ce3cb32727ee",
+   "base": {
+    "name": "logo.dxf",
+    "status": "done",
+    "parts": 17,
+    "maxWidth": 1612.6,
+    "maxHeight": 595.1,
+    "findings": [
+     "import.splinesSampled:813",
+     "import.microVoidsFilled:21"
+    ]
+   },
+   "scaled": {
+    "name": "logo.dxf",
+    "status": "done",
+    "parts": 17,
+    "maxWidth": 569,
+    "maxHeight": 210,
+    "findings": [
+     "import.splinesSampled:813",
+     "import.microVoidsFilled:21",
+     "import.scaleApplied:0.3528"
+    ]
+   }
+  }
+ }
+}

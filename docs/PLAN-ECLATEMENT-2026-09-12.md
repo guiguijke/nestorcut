@@ -829,6 +829,11 @@ anonyme du logo d'atelier (17 pièces, étendue 2 834,34 mm).
 | largeur cible 1000 mm : plus grande pièce | — | **568,95 mm** (= 1612,61 × 0,352816) |
 | constat rendu | `import.scaleApplied` « 0.5 » / « 0.3528 » | **identique** (même écriture du nombre : `_jsnum` rend « 0.5 », pas « 0.5000 ») |
 
+Captures et mesures brutes : `docs/qa/eclatement-2026-09-12/lotE2/`
+(`01-eclatement-serveur-17-fiches.png`, `02-parite-navigateur.png`,
+`03-echelle-serveur.png`, et les deux `resultats.json` des cas G et H — le
+fichier d'entrée y porte le nom anonyme `logo.dxf`).
+
 **Jeux de fichiers nettoyés, les deux importeurs sur le même corpus**
 (`specs/import-corpus`, 148 fichiers lus par le serveur, 137 par les deux) :
 
