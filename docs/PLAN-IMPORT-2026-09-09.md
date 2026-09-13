@@ -874,3 +874,72 @@ fileprocessing touchés ; GO attendu.
    seuls les fichiers importés après le déploiement l'auront. Les anciens
    s'affichent sans constat (liste vide) — c'est la discipline additive, pas
    un défaut.
+
+
+### Lot 2d — le temps d'import (implémenteur, 13/09)
+
+La consigne du §9.2 disait « temps des splines ». **Le lot 2a avait déjà
+infirmé cette hypothèse** (§9.5.5 point 1) : cProfile désignait
+`body.buffer(probe_tol)`, refait à CHAQUE empreinte dans l'attachement des
+handles. Ce lot corrige la cause mesurée, et remesure tout.
+
+#### Le correctif
+
+Les deux sondes de proximité de l'attachement (`body.buffer(probe_tol)` et
+`silhouette.buffer(probe_tol)`) ne dépendent que du corps et de la
+tolérance : elles sont maintenant calculées **une fois par corps**, avant la
+boucle des empreintes, au lieu d'une fois par (corps × empreinte). C'est le
+MÊME calcul — shapely ne randomise rien — fait 3 772 fois de moins sur le
+pire fichier.
+
+Le budget de temps garde la main **pendant** ce pré-calcul
+(`deadline.check` par corps) : sans cela, le dépassement possible passerait
+d'un appel shapely (la borne posée au lot 2a) à deux par corps, sur un
+fichier à 133 pièces.
+
+#### Mesures — corpus complet, 148 DXF, machine au repos
+
+| | avant | après |
+|---|---|---|
+| total des 148 imports | **132,3 s** | **15,4 s** — −88,4 % |
+| dont `build_geometry` | 127,4 s | 10,4 s — **−91,8 %** |
+| pire fichier (1 784 entités) | **54,73 s** | **0,95 s** — −98,3 % |
+| deuxième (6 144 entités, l'arbre de vie) | 20,39 s | 1,56 s — −92,3 % |
+| troisième (1 841 entités, 133 pièces) | 9,47 s | 1,14 s — −88,0 % |
+| fichiers au-delà de 10 s | 3 | **0** |
+
+**Rien d'autre ne bouge** : A/B sur les mêmes 148 fichiers, en comparant
+pièces, pièces émises, handles attachés, entités orphelines, aire totale,
+trous et constats — **148 / 148 identiques, 0 changé**. C'est la propriété
+attendue d'un calcul sorti d'une boucle, et elle est vérifiée plutôt que
+supposée.
+
+#### Le côté navigateur, mesuré et NON corrigé
+
+Le coureur wasm sur les mêmes 153 fichiers : **91,5 s au total, deux
+fichiers au-delà de 10 s** — un à 10,29 s (lu) et un **refusé à 20,20 s**
+par le budget du lot 2a (donc dit à l'utilisateur, pas silencieux).
+
+Le fait intéressant est une **asymétrie** : le fichier que le navigateur
+refuse à 20 s (787 entités) est lu par le serveur en **0,85 s** après ce
+lot. Ce n'est donc pas la même cause — l'attachement corrigé ici n'était pas
+son poste dominant. Le profil du lot 2a désignait, pour le navigateur,
+`node_segments` (O(n²) sur 30 000 arêtes) et l'attachement Rust, qui ne
+refait aucun buffer mais paye O(arêtes) par couple empreinte × corps.
+
+**Je ne l'ai pas corrigé** : cela demande un changement algorithmique dans
+`nest-import` (balayage au lieu du quadratique), donc un rebuild du wasm
+géométrie, une régénération des goldens et un rejeu de la parité — un lot à
+lui seul, alors que ce lot-ci est glissé dans une attente de GO. La matière
+est mesurée et nommée ; la décision d'ouvrir ce lot revient au propriétaire.
+Le verrou du §9.2 « ces trois fichiers sous 10 s **dans les deux
+importeurs** » est donc tenu **côté serveur seulement**, et je le dis.
+
+#### Verrous
+
+| Verrou | Résultat |
+|---|---|
+| pytest `fileprocessing` (image docker) | **57 passés** |
+| A/B géométrie sur le corpus | **148 / 148 identiques**, 0 changé |
+| `handles_canonical`, sweep corpus, parité géométrie | **non rejoués, et pas nécessaire** : le lot ne touche que `build_geometry.py` côté Python, et sa SORTIE est prouvée identique sur les 148 fichiers — la parité wasm ≡ ezdxf compare cette sortie |
+| budget de temps | toujours vérifié pendant l'attachement, et désormais aussi pendant le pré-calcul des sondes |

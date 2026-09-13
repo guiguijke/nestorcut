@@ -379,6 +379,24 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
     # containing them.
     silhouettes = [(body, Polygon(body.exterior)) for body in bodies]
     probe_tol = max(tolerance, 1e-6)
+    # Lot 2d — les sondes de proximité sont calculées UNE FOIS par corps.
+    #
+    # Elles ne dépendent que du corps et de la tolérance : les refaire à
+    # chaque empreinte était le poste dominant de l'import serveur, mesuré au
+    # lot 2a par cProfile sur le pire fichier du corpus — **64,7 s des
+    # 66,7 s**, en 3 772 appels à 17 ms. Le résultat est le même à l'objet
+    # près (shapely ne randomise rien) : c'est le MÊME calcul, fait une fois.
+    #
+    # Le budget de temps garde la main PENDANT ce pre-calcul : sans la
+    # verification ici, le depassement possible passerait d'UN appel shapely
+    # (lot 2a) a DEUX PAR CORPS, sur un fichier a 133 pieces.
+    body_probes = []
+    silhouette_probes = []
+    for body_idx, (body, silhouette) in enumerate(silhouettes):
+        if deadline is not None:
+            deadline.check(body_idx)
+        body_probes.append(body.buffer(probe_tol))
+        silhouette_probes.append(silhouette.buffer(probe_tol))
 
     def attachment_hits(body, geom):
         try:
@@ -392,17 +410,13 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
     result: List[ClosedPolygon] = []
     assigned = {i: [] for i in range(len(silhouettes))}
     for fp_idx, (handle, geom) in enumerate(footprints):
-        # Poste dominant mesuré sur le corpus réel (lot 2a) : 64,7 s des
-        # 66,7 s du pire fichier serveur, en `body.buffer(probe_tol)` refait
-        # à CHAQUE empreinte (3 772 appels à 17 ms). Cause à corriger au
-        # lot 2d ; ici, elle est seulement bornée.
         if deadline is not None:
             deadline.check(fp_idx)
         ink = geom.boundary if geom.geom_type == "Polygon" else geom
         hits = [
             (idx, attachment_hits(body, ink))
             for idx, (body, _silhouette) in enumerate(silhouettes)
-            if body.buffer(probe_tol).intersects(ink)
+            if body_probes[idx].intersects(ink)
         ]
         positive = [(idx, measure) for idx, measure in hits if measure > 0]
         if positive:
@@ -437,7 +451,7 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
             candidates = [
                 (idx, silhouette.area)
                 for idx, (_body, silhouette) in enumerate(silhouettes)
-                if silhouette.buffer(probe_tol).intersects(centre)
+                if silhouette_probes[idx].intersects(centre)
             ]
             best_idx = min(candidates, key=lambda entry: entry[1])[0] if candidates else None
         if best_idx is not None:
