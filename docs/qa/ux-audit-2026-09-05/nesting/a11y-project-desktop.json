@@ -1,0 +1,494 @@
+{
+ "contrast": {
+  ".compute__hint": {
+   "text": "One direction = one best layout. Check m",
+   "ratio": 3.11,
+   "size": "12px",
+   "weight": "400"
+  },
+  ".stage__dims": {
+   "text": "1000 × 1000 mm",
+   "ratio": 3.11,
+   "size": "12px",
+   "weight": "400"
+  },
+  ".input__prefix": {
+   "text": "Width (X)",
+   "ratio": 3.11,
+   "size": "11px",
+   "weight": "700"
+  },
+  ".input__suffix": {
+   "text": "mm",
+   "ratio": 3.11,
+   "size": "11px",
+   "weight": "700"
+  },
+  ".button--theme-primary .button__label": {
+   "text": "Nest 900 files",
+   "ratio": 3.83,
+   "size": "12px",
+   "weight": "700"
+  },
+  ".content__count": {
+   "text": "Files: 900",
+   "ratio": 3.11,
+   "size": "13px",
+   "weight": "400"
+  },
+  ".rotations__hint": {
+   "text": "→ 0°, 90°, 180°, 270°",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "400"
+  },
+  ".sheet__label": {
+   "text": "Sheet 1",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "700"
+  },
+  ".compute__label": {
+   "text": "Layout directions ?",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "700"
+  },
+  ".presets__chip": {
+   "text": "1000×2000",
+   "ratio": 6.71,
+   "size": "12px",
+   "weight": "600"
+  },
+  ".content__privacy": {
+   "text": "Parts and results live in this browser. ",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "400"
+  },
+  ".upload__text--gray": {
+   "text": "Up to 20 files (DXF or SVG), max 5 MB ea",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "400"
+  },
+  ".file__name": {
+   "text": "Piece_Trou.DXF",
+   "ratio": 6.71,
+   "size": "13px",
+   "weight": "400"
+  },
+  ".parts__item": {
+   "text": "100 x 100 mm",
+   "ratio": 6.71,
+   "size": "12px",
+   "weight": "400"
+  },
+  ".chip": {
+   "text": "Demo",
+   "ratio": 3.83,
+   "size": "10px",
+   "weight": "800"
+  }
+ },
+ "small": [
+  {
+   "tag": "BUTTON",
+   "cls": "unit-switch__segment unit-switch__segment--active",
+   "w": 38,
+   "h": 22,
+   "text": "mm"
+  },
+  {
+   "tag": "BUTTON",
+   "cls": "unit-switch__segment",
+   "w": 38,
+   "h": 22,
+   "text": "in"
+  },
+  {
+   "tag": "A",
+   "cls": "router-link-active router-link-exact-active projec",
+   "w": 208,
+   "h": 19,
+   "text": "bold-hopper This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "fierce-galileo This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "mighty-curie This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "calm-einstein This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "brave-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "brave-galileo This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "brave-tesla This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "happy-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "calm-einstein This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bold-galileo This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "swift-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "swift-newton This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "swift-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bold-lovelace This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "fierce-curie This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "happy-turing This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "mighty-tesla This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "mighty-curie This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bright-tesla This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "gentle-tesla This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "mighty-turing This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "clever-curie This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bold-curie This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "brave-galileo This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bold-newton This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "gentle-turing This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "calm-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "clever-turing This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "clever-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "happy-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "calm-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "swift-hopper This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "brave-turing This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "calm-bohr This device"
+  },
+  {
+   "tag": "A",
+   "cls": "project__label",
+   "w": 208,
+   "h": 19,
+   "text": "bold-tesla This device"
+  },
+  {
+   "tag": "INPUT",
+   "cls": "input__value",
+   "w": 190,
+   "h": 21,
+   "text": ""
+  },
+  {
+   "tag": "INPUT",
+   "cls": "input__value",
+   "w": 183,
+   "h": 21,
+   "text": ""
+  },
+  {
+   "tag": "INPUT",
+   "cls": "input__value",
+   "w": 193,
+   "h": 21,
+   "text": ""
+  },
+  {
+   "tag": "INPUT",
+   "cls": "input__value",
+   "w": 224,
+   "h": 21,
+   "text": ""
+  },
+  {
+   "tag": "INPUT",
+   "cls": "input__value",
+   "w": 193,
+   "h": 21,
+   "text": ""
+  },
+  {
+   "tag": "LABEL",
+   "cls": "size__checkbox",
+   "w": 340,
+   "h": 19,
+   "text": "Draw sheet outline on export"
+  },
+  {
+   "tag": "INPUT",
+   "cls": "",
+   "w": 16,
+   "h": 16,
+   "text": ""
+  },
+  {
+   "tag": "LABEL",
+   "cls": "size__checkbox",
+   "w": 340,
+   "h": 19,
+   "text": "Nest parts inside holes"
+  },
+  {
+   "tag": "INPUT",
+   "cls": "",
+   "w": 16,
+   "h": 16,
+   "text": ""
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 44,
+   "h": 19,
+   "text": "GitHub"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 48,
+   "h": 19,
+   "text": "Discord"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 78,
+   "h": 19,
+   "text": "Legal Notice"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 39,
+   "h": 19,
+   "text": "Terms"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 47,
+   "h": 19,
+   "text": "Privacy"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 86,
+   "h": 19,
+   "text": "Refund Policy"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 56,
+   "h": 19,
+   "text": "Licences"
+  },
+  {
+   "tag": "A",
+   "cls": "list__link",
+   "w": 68,
+   "h": 19,
+   "text": "Changelog"
+  }
+ ],
+ "unlabeled": [
+  {
+   "tag": "INPUT",
+   "cls": "counter__value",
+   "type": "number"
+  },
+  {
+   "tag": "INPUT",
+   "cls": "counter__value",
+   "type": "number"
+  }
+ ],
+ "lang": "",
+ "headings": [
+  "H1:Piece_Trou",
+  "H2:Ready to nest",
+  "H4:Part:",
+  "H4:Part:"
+ ],
+ "titleOnlyElements": 0
+}

@@ -1,0 +1,37 @@
+GRID
+Option 1 · 2 sheets · 74.2% used
+← –X
+Option 2 · 2 sheets · 93.4% used
+Sheet 1 / 2
+
+Grid · 74.2% used
+
+nested-f-f1d66a7b3806eb40_100-f-3738d139b708e52a_800-8dc32d.zip
+
+Sheet utilization
+74.2%
+Color preview
+DXF view
+X
+Y
+Download sheet 1
+All parts are placed
+Sheet utilization
+74.2%
+1.11 m² parts · 892,529 mm² free
+Clean offcut 495.7 × 1000 mm · 495,673 mm² reusable (at least)
+Material to plan
+2 × 1000 mm × 1000 mm
+#	Sheet	Parts	Used	Free	Density	Offcut
+1	1000 mm × 1000 mm	529	774,114 mm²	225,886 mm²	77.4%	1000 × 5 mm scrap
+2	1000 mm × 1000 mm	371	333,357 mm²	666,644 mm²	33.3%	495.7 × 1000 mm reusable
+400 part(s) nested inside cutouts
+✓ Overlap-free
+✓ Inside sheet
+✓ Gap ≥ 2.5 mm
+✓ All 900 parts placed
+nest-engine · seed — · 1 cores
+Copy report
+Export CSV
+Download All
+Try again

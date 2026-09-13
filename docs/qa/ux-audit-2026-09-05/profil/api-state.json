@@ -1,0 +1,60 @@
+{
+  "me": {
+    "id": "local:guillaume@local.dev",
+    "name": "Guillaume",
+    "email": "guillaume@local.dev",
+    "provider": "local",
+    "avatar": "/api/user/avatar",
+    "isStripFeatureEnable": true,
+    "preferredUnit": "mm",
+    "unitsEnabled": true,
+    "newsletterOptIn": false,
+    "turboHybrid": false,
+    "promo": null,
+    "freeRemaining": 10,
+    "demoRemaining": null,
+    "demoUnlimited": true,
+    "subscriptionStatus": null,
+    "granted": true,
+    "requiresPaywall": false,
+    "compute": {
+      "level": "standard",
+      "vcores": 4,
+      "maxDirections": 3
+    },
+    "encryption": {
+      "enabled": false,
+      "locked": false,
+      "keyId": null
+    }
+  },
+  "sub": {
+    "plan": null,
+    "privacyPlan": null,
+    "isPrivacyTier": false,
+    "cancelAtPeriodEnd": false,
+    "currentPeriodEnd": null,
+    "freeRemaining": 10,
+    "subscriptionStatus": null,
+    "granted": true,
+    "requiresPaywall": false
+  },
+  "vault": {
+    "enabled": false,
+    "locked": false,
+    "expiresAt": null,
+    "keyId": null,
+    "createdAt": null,
+    "eligible": true
+  },
+  "stats": {
+    "projects": 60,
+    "nestings": 64,
+    "nestingsCompleted": 56,
+    "nestingsFailed": 8,
+    "partsNested": 47711,
+    "nestingsThisMonth": 49,
+    "dxfFiles": 0,
+    "dxfProcessed": 0
+  }
+}

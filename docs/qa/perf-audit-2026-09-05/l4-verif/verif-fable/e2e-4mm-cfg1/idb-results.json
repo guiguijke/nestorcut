@@ -1,0 +1,134 @@
+[
+ {
+  "slug": "nested-f-0de6ae7d0e506207_100-f-c8fec9b09c16dd7e_800-11c8c1",
+  "projectSlug": "brave-hopper-334a462eacad",
+  "createdAt": 1788761933066,
+  "requested": 900,
+  "placed": 894,
+  "isSpp": false,
+  "sheets": [
+   [
+    1000,
+    1000
+   ]
+  ],
+  "alternatives": [
+   {
+    "altId": 0,
+    "seed": "3050905590980702036",
+    "strategy": "left",
+    "density": 0.546,
+    "layoutCount": 2,
+    "offcut": {
+     "width": 9.802,
+     "height": 1000,
+     "area": 9801.6
+    },
+    "report": {
+     "duplicatePoses": 0,
+     "holesFilled": 0,
+     "holesOverflow": 0,
+     "holesTotal": 98,
+     "insideSheet": true,
+     "overlapFree": true,
+     "smallestGapMm": 4,
+     "spacingOk": true,
+     "verifyStatus": "measured",
+     "unplaced": 6,
+     "postPass": {
+      "expandMeta": 0,
+      "holeFillRecovered": 0,
+      "residualMoved": 0,
+      "residualRounds": 1,
+      "compactRollback": true,
+      "errors": [],
+      "pre": [
+       {
+        "sheet": 0,
+        "count": 154,
+        "frontX": 993.1
+       },
+       {
+        "sheet": 1,
+        "count": 740,
+        "frontX": 990.2
+       }
+      ],
+      "profile": "compact",
+      "mergedReceivers": 0,
+      "mergedRollbackReason": "restore-recv",
+      "compactRollbackReason": "restore"
+     },
+     "partsAreaMm2": 1092697.6,
+     "sheetAreaMm2": 2000000,
+     "iterations": 148,
+     "vcores": 1,
+     "sheets": [
+      {
+       "densityPct": 54.4,
+       "freeAreaMm2": 456392.7,
+       "heightMm": 1000,
+       "index": 0,
+       "offcut": {
+        "areaMm2": 6897.3,
+        "heightMm": 1000,
+        "reusable": false,
+        "widthMm": 6.897
+       },
+       "partCount": 154,
+       "partsAreaMm2": 543607.3,
+       "sheetAreaMm2": 1000000,
+       "widthMm": 1000
+      },
+      {
+       "densityPct": 54.9,
+       "freeAreaMm2": 450909.7,
+       "heightMm": 1000,
+       "index": 1,
+       "offcut": {
+        "areaMm2": 9801.6,
+        "heightMm": 1000,
+        "reusable": false,
+        "widthMm": 9.802
+       },
+       "partCount": 740,
+       "partsAreaMm2": 549090.3,
+       "sheetAreaMm2": 1000000,
+       "widthMm": 1000
+      }
+     ],
+     "totals": {
+      "densityPct": 54.6,
+      "formats": [
+       {
+        "count": 2,
+        "heightMm": 1000,
+        "widthMm": 1000
+       }
+      ],
+      "freeAreaMm2": 907302.4,
+      "partsAreaMm2": 1092697.6,
+      "sheetAreaMm2": 2000000,
+      "sheetCount": 2
+     },
+     "offcut": {
+      "areaMm2": 9801.6,
+      "heightMm": 1000,
+      "reusable": false,
+      "widthMm": 9.802
+     }
+    },
+    "dxfNames": [
+     "nested-f-0de6ae7d0e506207_100-f-c8fec9b09c16dd7e_800-11c8c1_alt0_part_1.dxf",
+     "nested-f-0de6ae7d0e506207_100-f-c8fec9b09c16dd7e_800-11c8c1_alt0_part_2.dxf"
+    ],
+    "dxfSizes": [
+     89797,
+     295322
+    ]
+   }
+  ],
+  "liveItems": 894,
+  "liveStripWidth": null
+ }
+]

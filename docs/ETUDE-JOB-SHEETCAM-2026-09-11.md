@@ -403,3 +403,150 @@ lui, identique à l'octet près, puisque J1 écrit les poses qu'on lui donne.
    dans J4. J2 ne devine pas une imbrication depuis la géométrie.
 3. **Les miroirs et le multi-tôles dans un seul fichier** restent hors v1
    (questions ouvertes du §4).
+
+### Lot J2 — vérification (vérificateur, 13/09, `a4712b93`) — GO, J3 peut s'ouvrir
+
+Rejoué hors des tests du dépôt : centres de boîte mesurés par le module sur
+nos anneaux importés (`Piece_Trou` (0 ; 0), `Piece_Fillx4` (0 ; 16,8284)),
+puis `nestedJobsPerSheet` sur cinq poses moteur (hôte t = 50;50 θ = 0, quatre
+éventails t = 50;50 θ = 0, π/2, π, 3π/2, `nestedIn` = hôte) contre
+`Piece_Trou+Fill_x4_final_TEST.job` :
+
+| Verrou | Résultat |
+|---|---|
+| poses écrites | `50;66,8284;−0`, `33,1716;50;−π/2`, `50;33,1716;−π`, `66,8284;50;−3π/2`, hôte `50;50;−0` |
+| `[OpOrder]` | `1,0 2,0 3,0 4,0 0,0`, identique |
+| bloc binaire | identique |
+| texte | **5 lignes diffèrent** : quatre coordonnées à **0,4 µm** (la référence porte 16,828, nos anneaux 16,8284 — c'est la référence qui est arrondie) et l'hôte écrit `Angle=-0` là où la référence porte `Angle=0` (θ = 0 négatif par construction ; le fichier du 11/09 avait −0 sur l'éventail et 0 sur l'hôte, SheetCam lit les deux) |
+| vitest | 624 |
+
+**Un défaut de portabilité à corriger dans J3** : `shared/sheetcamNest.js`
+importe `'./sheetcamJob'` sans extension. Vite et Nitro le résolvent, Node
+nu non (`ERR_MODULE_NOT_FOUND`) — mon rejeu a dû passer par vitest. Un
+module « un seul code navigateur/serveur » doit se charger tel quel :
+écrire `'./sheetcamJob.js'` (une ligne), et un verrou `node --input-type=module -e "import('./shared/sheetcamNest.js')"` dans la CI app.
+
+**Recette SheetCam** : J2 produit un `.job` depuis des poses moteur ; la
+recette du §8 (ouvrir dans SheetCam, ordre de coupe) est maintenant possible
+avec un fichier fabriqué depuis un résultat existant — à la demande du
+propriétaire, avant J4.
+
+
+### Recette SheetCam — un `.job` produit depuis un VRAI nesting (implémenteur, 13/09)
+
+Demandée par le propriétaire après le GO de J2. Le fichier lui a été remis
+(`.testparts/RECETTE_nestorcut_x4.job`, privé — jamais dans `docs/`).
+
+**Comment il a été fabriqué**, sans rien inventer :
+
+1. les deux dessins du moulinet déposés dans un projet SERVEUR du produit
+   (le chemin normal, pas un script) ; l'importeur rend l'hôte 100 × 100 avec
+   **un trou de 70 × 70** et l'éventail 39,598 × 28 ;
+2. un nesting RÉEL lancé par l'API : 1 hôte + 4 éventails, tôle
+   **1000 × 1250** (celle du `.job`), espacement **2 mm** (= kerf 1,5 +
+   2 × 0,25), 4 rotations, imbrication dans les trous ;
+3. résultat mesuré : **5 pièces posées, holesFilled 4 / 1** — les quatre
+   éventails sont dans le trou de l'hôte —, écart minimal **2,000 mm**,
+   `overlapFree: true` ;
+4. les poses finales (après post-pass) relevées sur les `Transform` que
+   l'export DXF utilise, puis converties par `shared/sheetcamNest.js` avec
+   les centres de boîte **mesurés sur nos anneaux** : (0 ; 0) pour l'hôte,
+   (0 ; 16,8284) pour l'éventail.
+
+**Ce que porte le fichier** : `Count=5`, `Optimisation=3`, `[OpOrder]` =
+`1,0  2,0  3,0  4,0  0,0` (les quatre éventails puis l'hôte), les quatre
+copies en `copyOf=1`, les chemins réduits au nom de fichier, et le **bloc
+binaire recopié à l'octet** (2 700 octets). Aller-retour lecture → écriture
+vérifié identique. Les poses forment le pinwheel autour de (52 ; 52,5) :
+35,17 / 52,0 / 68,83 en X et 35,68 / 52,51 / 69,34 en Y.
+
+**Une chose à regarder à l'ouverture**, dite avant l'essai : le quatrième
+éventail porte `Angle=-6.283185` (−2π, un tour complet) parce que le moteur a
+émis θ = 2π plutôt que 0. C'est la même pose au radian près, mais si SheetCam
+l'affiche de travers, la normalisation de l'angle dans [0 ; 2π) est une ligne.
+
+**Verdict du propriétaire : à consigner ici** (le fichier est remis, l'essai
+sur sa machine reste à faire — c'est le seul maillon que je ne peux pas
+jouer).
+
+### Lot J3 — réserve d'amorce et disque de perçage (implémenteur, 13/09)
+
+Livré : `shared/sheetcamReserve.js` et `app/tests/sheetcamReserve.test.js`
+(**21 verrous**), plus le correctif de portabilité signalé par le
+vérificateur au lot J2. Un commit. Le moteur n'est pas touché, et **aucun
+module ne consomme encore ces fonctions** (c'est J4).
+
+#### 9.10 Le correctif de portabilité, d'abord
+
+`shared/sheetcamNest.js` importait `'./sheetcamJob'` **sans extension** :
+Vite la devine, Node nu non (`ERR_MODULE_NOT_FOUND`). Reproduit, corrigé, et
+**verrouillé** : le test lance un `node --input-type=module -e "import(...)"`
+dans un processus fils, sans loader ni drapeau expérimental. Sans le verrou,
+la même faute reviendrait au premier module `shared/` suivant.
+
+#### 9.11 La forme du correctif de réserve
+
+C'est celle qu'impose le masterplan §3.5, et elle n'est pas un détail :
+**pas d'anneau d'inflation complet** (il tuerait la densité), mais un
+**appendice d'exclusion LOCAL** au point de départ, soudé au contour.
+L'algorithme de nesting ne change pas — il reçoit un polygone quelconque,
+comme toujours. Et l'appendice ne sort que pour le nesting : le `.job` rendu
+garde le contour réel, puisque c'est SheetCam qui trace l'amorce.
+
+L'appendice est **l'enveloppe convexe du sommet de départ et du disque de
+perçage** : une forme en trou de serrure qui couvre le couloir d'amorce ET le
+perçage sans jamais rentrer dans la pièce. Le disque est un 32-gone
+**circonscrit** (comme le repli du lot E0) : on ne promet jamais moins de
+marge que demandé.
+
+| Réglage | Valeur | D'où elle vient |
+|---|---|---|
+| espacement pré-rempli | **kerf + 2 × sécurité** = 2 mm sur le `.job` du propriétaire | `[Tool0].Kerf width` = 1,5 mm, règle 3.10 déjà en production |
+| longueur d'amorce | lue par opération | `Lead in` du `.job` (lot J1) |
+| point de départ | coin de `Start position`, sinon **début de la plus longue arête droite** | table `START_CORNERS` **à confirmer en SheetCam** ; le repli, lui, ne dépend d'aucune convention (masterplan §3.5) |
+| rayon de perçage | **`pierceMarginMm`, défaut 3 mm** | §7 de l'étude — **à confirmer sur la machine** |
+
+#### 9.12 Mesures
+
+| Mesure | Résultat |
+|---|---|
+| le perçage est DEHORS | à exactement `leadIn` du contour, hors de la pièce d'origine, et la **marge promise de 3 mm est entièrement couverte** par l'anneau rendu |
+| la réserve est LOCALE | sur un carré de 100 mm, amorce 5 + perçage 3 : **+238,2 mm²**, soit **2,4 % de la pièce** — contre ~3 200 mm² pour un anneau d'inflation de 8 mm, **13 fois moins** |
+| l'anneau rendu est SIMPLE | aucune paire d'arêtes ne se croise (test exhaustif sur l'anneau produit) |
+| le prix payé par la voisine | l'amorce + le perçage, **pas plus** : 8,0 mm ≤ coût < 8,1 mm |
+| l'amorce ne perce plus dans la voisine | **avant** : voisine à l'espacement du contour réel, le perçage prédit est DANS sa matière (il mord 6 mm) ; **après** : voisine à l'espacement de la pièce réservée, distance du disque à la voisine **≥ 2 mm**, perçage hors de la voisine |
+| pièces concaves | réserve appliquée sur un L, perçage dehors, aire ajoutée < 120 mm² ; la bissectrice est **orientée par un test d'appartenance**, sinon un sommet réflexe la retourne vers l'intérieur |
+| `npx vitest run` | **58 fichiers, 646 tests verts** |
+
+**Un défaut trouvé par son propre verrou** : la garde anti-traversée sautait
+une arête de trop (`j <= newTo` au lieu de `j < newTo`) — précisément la
+PREMIÈRE arête d'origine après l'appendice, c'est-à-dire celle qu'un
+appendice qui s'échappe traverse. Mesuré sur un C dont la gorge est
+traversée par une amorce de 60 mm : le lot rendait `applied: true` avec un
+anneau auto-intersectant, ce que l'import moteur refuse (piège #2c, le défaut
+qui a tué un job de production). Corrigé, et le cas est un verrou.
+
+#### 9.13 Refus plutôt que géométrie fausse
+
+Trois cas rendent l'anneau **intact** avec leur raison, au lieu de livrer
+une forme douteuse : `vertexInsideDisc` (amorce plus courte que la marge : il
+n'y a plus de sommet à épingler), `reserveCrossesContour` (l'appendice
+ressortirait à travers la pièce), `nothingToReserve` / `ringTooSmall`. La
+raison voyage dans `part.reserve`, prête pour un constat d'UI au lot J4.
+
+#### 9.14 Non-faits
+
+1. **Aucun appelant** : `git grep` le confirme, rien hors des tests n'importe
+   ces modules. Donc **rien ne change pour les jobs sans `.job`** — le
+   verrou « harnais deux configurations inchangé » est tenu par construction,
+   et le déterminisme natif ≡ wasm n'est pas concerné (aucun code Rust,
+   aucun wasm dans ce lot).
+2. **Pas de miroir Python** : le chemin serveur n'a pas encore le flux
+   `.job` (masterplan §0 : le navigateur d'abord). Le miroir viendra avec le
+   lot qui branche le serveur, et le plomberie sera la même qu'au lot E2.
+3. **Deux valeurs à confirmer sur la machine du propriétaire** : la table
+   `Start position` → coin, et le rayon de perçage de 3 mm. Les deux sont des
+   entrées de fonction, pas des constantes enfouies.
+4. **L'amorce d'un TROU n'est pas réservée** : SheetCam perce aussi pour un
+   trou intérieur, mais la place y est prise par la matière de la pièce
+   elle-même. Le jour où le contraire sera mesuré, ce sera un lot à part.

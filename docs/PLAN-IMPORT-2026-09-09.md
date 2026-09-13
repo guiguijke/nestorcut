@@ -1075,3 +1075,39 @@ venait de notre lenteur.
    troisième chantier sans mesure qui le demande.
 3. **Rien n'est déployé** : le wasm géométrie reconstruit attend le GO (et,
    depuis le lot D1, `:latest` ne bougera pas tout seul).
+
+### Lot 2e — vérification (vérificateur, 13/09, `baf39cb7`) — GO déploiement
+
+Coureur wasm rejoué sur les 153 fichiers réels avec le bundle du commit,
+comparé à la campagne E1 :
+
+| Verrou | Résultat |
+|---|---|
+| sorties (statut, pièces, trous, unité, facteur) | **152 identiques, 1 changé** : le fichier refusé à 20,2 s est **lu en 7,4 s** (1 pièce, 238 trous) — le cas « l'ancien était faux » |
+| temps total | 93,0 s → **30,9 s** ; pire fichier 20,16 s → **7,42 s** ; 0 fichier > 10 s ; **0 fichier plus lent** de plus de 10 % |
+| cargo geometry, parité golden, déterminisme | 134 ; 100 % sans golden régénéré ; 68/68 et 17/17 |
+| lecture | filtre par boîtes fermées = implication stricte des deux prédicats exacts, candidats triés et dédupliqués (ordre de la double boucle conservé), segments « larges » candidats à tout |
+
+**GO déploiement 2e** : app + wasm géométrie (aucun worker). Avec ce lot la
+**priorité 2 (import) est close** : garde, unités, messages, temps serveur et
+navigateur.
+
+
+#### Lot 2e — déploiement (implémenteur, 13/09, `baf39cb7`)
+
+**app + wasm géométrie**, par la procédure du lot D1 : `promote-latest` sur
+le SHA approuvé, PUIS `docker compose pull && up -d app` — la commande
+normale, redevenue sûre. Ni worker, ni homelab, ni benchmarks (le lot ne
+touche ni `workers/nesting` ni le moteur).
+
+| Contrôle | Résultat |
+|---|---|
+| promotion | `:latest` de `nest2d-app` → digest `2fbd88a1…`, **exactement celui du tag `:baf39cb7…`** |
+| conteneur | app recréée, `NUXT_PUBLIC_GIT_COMMIT_SHA=baf39cb7…`, les cinq autres services intacts |
+| **wasm géométrie servi = dépôt** | `32df2941…` des deux côtés (octet pour octet) |
+| wasm moteur | `a015521e…` **inchangé**, comme attendu |
+| santé | `GET /` **200**, `GET /benchmarks` **200**, **0 ERROR / Traceback** sur 150 lignes (app, les deux workers, admin) |
+
+**Avec ce déploiement, la priorité 2 (robustesse d'import) est close des deux
+côtés** : serveur 132 s → 15 s au lot 2d, navigateur 77 s → 31 s ici, et plus
+aucun fichier du corpus au-delà de 10 s dans l'un ou l'autre importeur.

@@ -1,0 +1,15 @@
+A. /plans direct connecté : bouton "Connexion" dans le header = true, CTA Free = "Commencer gratuitement"
+A. clic CTA Free connecté → modale de connexion ouverte = true, url = http://localhost:7100/plans
+B. modale coffre : {"role":null,"ariaModal":null,"focusInsideModal":false,"activeTag":"BUTTON.vault-menu__trigger--off vault-menu__trigger","fontFamily":"SFMono, \"monospace\"","fontSize":"14px"}
+B. Escape ferme la modale = true
+B. menu langue ouvert au clavier, Tab → focus sur "unit-switch__segment unit-switch__segment--active" (option de langue focusable = false)
+B. champs profil : [{"type":"text","placeholder":"ex. JD20","ariaLabel":null,"labelledBy":null,"wrappedInLabelWithText":false,"autocomplete":null,"id":""},{"type":"text","placeholder":"guillaume@local.dev","ariaLabel":null,"labelledBy":null,"wrappedInLabelWithText":false,"autocomplete":"off","id":""},{"type":"password","placeholder":"Votre mot de passe","ariaLabel":null,"labelledBy":null,"wrappedInLabelWithText":false,"autocomplete":"current-password","id":""}]
+B. hiérarchie de titres profil : 
+B. <html lang> = "" (cookie locale=fr)
+B. <title> /profile = "NestorCut — State-of-the-art nesting for laser, plasma & CNC cutting"
+B. champs inscription : [{"type":"text","placeholder":"Votre nom","autocomplete":null,"required":false,"minlength":null,"name":"","id":""},{"type":"email","placeholder":"E-mail","autocomplete":null,"required":false,"minlength":null,"name":"","id":""},{"type":"password","placeholder":"Mot de passe (min. 8 caractères)","autocomplete":null,"required":false,"minlength":null,"name":"","id":""},{"type":"checkbox","placeholder":"","autocomplete":null,"required":false,"minlength":null,"name":"","id":""}]
+B. <title> /auth/local = "NestorCut — State-of-the-art nesting for laser, plasma & CNC cutting"
+B. inscription soumise vide → message : Invalid email
+C. profil mobile scrollWidth=390 innerWidth=390 (débordement horizontal = false)
+C. cibles tactiles header mobile : header__logo logo:374x42 ; tabs__link:74x32 ; button--size-m button--t:38x38 ; locale__trigger:84x31 ; unit-switch__segment uni:38x22 ; unit-switch__segment:38x22 ; vault-menu__trigger--off:38x38
+D. couleurs calculées (sombre) : {"promoError":{"color":"rgba(222, 0, 54, 0.4)","bg":"rgba(0, 0, 0, 0)"},"dangerSummary":{"color":"rgba(222, 0, 54, 0.4)","bg":"rgba(0, 0, 0, 0)"},"dangerTitle":{"color":"rgba(222, 0, 54, 0.4)","bg":"rgba(0, 0, 0, 0)"},"muted":{"color":"rgba(248, 251, 255, 0.45)","bg":"rgba(0, 0, 0, 0)"}}

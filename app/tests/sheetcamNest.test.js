@@ -220,3 +220,21 @@ describe('J2 — rangs écrits et fichier par tôle', () => {
         })).toThrow(/missingCentre/)
     })
 })
+
+describe('J2/J3 — portabilité du module', () => {
+    it('se charge en Node NU, sans bundler', async () => {
+        // Vite devine l'extension d'un import relatif, Node non : un
+        // `from './sheetcamJob'` passait les tests et cassait tout appel
+        // hors bundler (script serveur, outil de recette, plugin Nitro).
+        // Défaut trouvé par le vérificateur au lot J2, corrigé au lot J3.
+        const { execFileSync } = await import('node:child_process')
+        const url = new URL('../../shared/sheetcamNest.js', import.meta.url)
+        const code = `import('${url.href}')`
+            + `.then((m) => { if (typeof m.jobPlacement !== 'function') process.exit(3) })`
+            + `.catch(() => process.exit(2))`
+        // Pas de --experimental-*, pas de loader : le Node du poste, nu.
+        execFileSync(process.execPath, ['--input-type=module', '-e', code], {
+            stdio: 'pipe',
+        })
+    })
+})

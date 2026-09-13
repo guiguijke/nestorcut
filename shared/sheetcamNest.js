@@ -31,11 +31,15 @@
  * propre : t = (50 ; 50) pour les quatre, θ = 0, π/2, π, 3π/2. C'est le
  * verrou du lot (`sheetcamNest.test.js`).
  */
+// L'extension `.js` est OBLIGATOIRE : Vite la devine, Node nu non
+// (ERR_MODULE_NOT_FOUND). Le module est censé tourner des deux côtés — un
+// script serveur, un outil de recette ou un plugin Nitro le charge sans
+// bundler. Verrou : `sheetcamNest.test.js` « se charge en Node nu ».
 import {
     OPTIMISATION_MANUAL_KEEP_PARTS,
     SheetCamJobError,
     writeNestedSheetCamJob,
-} from './sheetcamJob'
+} from './sheetcamJob.js'
 
 /**
  * Centre de la boîte englobante d'un dessin, sur les anneaux importés.

@@ -130,3 +130,15 @@ ne peut plus livrer un lot sans GO.
    GO écrit). Brancher une vérification automatique (« ce SHA a-t-il un
    rapport de vérification ? ») serait un autre chantier, et probablement
    plus de cérémonie que de sûreté sur un dépôt à un seul décideur.
+
+## 4. Vérification (vérificateur, 13/09, `c6f403a4`) — GO, règle en vigueur
+
+Lu : `build-images.yml` ne porte plus `:latest` dans ses tags (commentaire de
+tête et bloc `tags:` : `:<sha>` et `:main`) ; `promote-latest.yml` est un
+`workflow_dispatch` qui refuse tout SHA non 40-hex et retague par
+`imagetools create` (même digest, aucune reconstruction), correctif SIGPIPE
+compris. Les deux verrous temporels du rapport (une poussée avant le lot
+déplace `:latest`, deux après ne le déplacent pas ; trois promotions ≡ prod,
+`compose pull && up -d` sans effet) sont acceptés tels que mesurés sur les
+poussées réelles du jour. La règle d'AGENTS §6 reste : déploiement par SHA
+approuvé, puis promotion.

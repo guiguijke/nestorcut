@@ -1,0 +1,30 @@
+BUTTON.presets__chip "1000×2000" outline=auto/1px boxShadow=false
+BUTTON.presets__chip "1250×2500" outline=auto/1px boxShadow=false
+BUTTON.presets__chip "1500×3000" outline=auto/1px boxShadow=false
+INPUT.input__value "" outline=none/0px boxShadow=false
+INPUT.input__value "" outline=none/0px boxShadow=false
+INPUT.input__value "" outline=none/0px boxShadow=false
+BUTTON.size__add "+ Add sheet type" outline=auto/1px boxShadow=false
+INPUT.input__value "" outline=none/0px boxShadow=false
+INPUT.input__value "" outline=none/0px boxShadow=false
+BUTTON.compute__option compute__option--active "← –X" outline=auto/1px boxShadow=true
+BUTTON.compute__option "↓ –Y" outline=auto/1px boxShadow=false
+BUTTON.compute__option "↙ Mixed" outline=auto/1px boxShadow=false
+INPUT. "" outline=auto/1px boxShadow=false
+INPUT. "" outline=auto/1px boxShadow=false
+BUTTON.button--size-m button--theme-primary but "Nest 900 files" outline=auto/1px boxShadow=false
+INPUT.upload__input "" outline=auto/1px boxShadow=false
+BUTTON.button--size-s button--theme-ghost butto "decrement" outline=auto/1px boxShadow=false
+INPUT.counter__value "" outline=none/0px boxShadow=false
+BUTTON.button--size-s button--theme-ghost butto "increment" outline=auto/1px boxShadow=false
+BUTTON.button--size-s button--theme-ghost butto "decrement" outline=auto/1px boxShadow=false
+INPUT.counter__value "" outline=none/0px boxShadow=false
+BUTTON.button--size-s button--theme-ghost butto "increment" outline=auto/1px boxShadow=false
+BUTTON.main__btn btn "Support" outline=auto/1px boxShadow=true
+A.list__link "GitHub" outline=auto/1px boxShadow=false
+A.list__link "Discord" outline=auto/1px boxShadow=false
+A.list__link "Legal Notice" outline=auto/1px boxShadow=false
+A.list__link "Terms" outline=auto/1px boxShadow=false
+A.list__link "Privacy" outline=auto/1px boxShadow=false
+A.list__link "Refund Policy" outline=auto/1px boxShadow=false
+A.list__link "Licences" outline=auto/1px boxShadow=false
