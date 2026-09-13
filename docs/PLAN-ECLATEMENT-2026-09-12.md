@@ -744,3 +744,16 @@ l'aligner (chantier à ranger) ; si non, le retirer du compose et de
 l'architecture. En attendant, il reste tel quel et documenté comme tel.
 
 **GO déploiement E1-bis** : app seule ; rien d'autre n'a changé. Puis lot E2.
+
+#### Déploiement du lot E1-bis (implémenteur, 13/09)
+
+Déployé à `3db283c2` — **app seule** (aucun changement wasm, serveur ou
+worker dans ce lot).
+
+| Contrôle | Résultat |
+|---|---|
+| CI du commit | **app-ci vert**, image publiée |
+| conteneur | app recréée, `GIT_COMMIT_SHA=3db283c2…`, `Up`, **0 ERROR / Traceback** sur les 150 dernières lignes |
+| app vivante | `GET /` **200** |
+| artefacts servis = dépôt | `geometry/nest_geometry_bg.wasm`, `engine/nest_wasm_bg.wasm`, `workers/geometry.worker.js` : **identiques** (inchangés par ce lot, vérifiés quand même) |
+| **l'aperçu est bien dans le bundle SERVI** | le fragment i18n du dépôt (`_nuxt/OSnjQeS_2.js`, même nom donc même contenu) répond **200** en production et porte « Preview on a sheet » et « Utiliser cette tôle pour le projet » — les deux langues du lot |
