@@ -17,16 +17,15 @@ import {
 } from "../../../shared/constants/demo.constants";
 
 /**
- * Shared services for the bin (workspace projects) and strip domains. Every
- * function takes the domain config (server/core/domains.js) as first
- * argument; routes in server/api/project/** and server/api/strip/** are thin
- * shells around them (auth + strip feature flag + domain-specific param
- * validation stay in the routes).
+ * Shared services for the bin domain (workspace projects). Every function
+ * takes the domain config (server/core/domains.js) as first argument; the
+ * routes in server/api/project/** are thin shells around them (auth and
+ * param validation stay in the routes).
  */
 
 /**
  * Creates a project with a generated name/slug and saves the uploaded DXF
- * files (POST /api/project or /api/strip).
+ * files (POST /api/project).
  */
 export async function createProjectWithFiles(domain, event, userId) {
   const db = await connectDB();
@@ -172,7 +171,7 @@ export async function assertProjectAccess(domain, userId, slug) {
 
 /**
  * Project detail with its files mapped for the UI (GET /api/project/[slug]
- * or /api/strip/[slug]). The shared demo project is readable by everyone:
+ * (/api/project/[slug]). The shared demo project is readable by everyone:
  * the 403 check is skipped and its files are listed by the technical demo
  * owner instead of the caller.
  */
@@ -280,39 +279,8 @@ const mapBinFileToUi = async (userId, file) => {
   };
 };
 
-const mapStripFileToUi = async (userId, file) => {
-  return {
-    slug: file.slug,
-    name: file.name,
-    dxfUrl: `/api/files/strip/dxf/${file.slug}`,
-    minHeight: await minRequiredHeight(userId, file),
-    processingStatus: mapProcessingStatus(file.processingStatus),
-    // Purge 24 h (D-PRV-10) — voir mapBinFileToUi.
-    expired: Boolean(file.purgedAt),
-    uploadAt: file.uploadAt ?? null,
-  };
-};
-
-// Minimum strip height required to nest a file is the tallest of its polygon
-// parts, since every part must fit within the strip height.
-// Decrypts the enc blob when the vault is enabled, passes legacy plaintext
-// through untouched.
-const minRequiredHeight = async (userId, file) => {
-  const parts = await resolvePolygonParts(userId, file);
-  const heights = parts
-    .map((part) => part.height)
-    .filter((height) => typeof height === "number");
-
-  if (heights.length === 0) {
-    return null;
-  }
-
-  return Math.max(...heights);
-};
-
 const FILE_MAPPERS = {
   bin: mapBinFileToUi,
-  strip: mapStripFileToUi,
 };
 
 /**

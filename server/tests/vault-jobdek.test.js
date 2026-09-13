@@ -85,7 +85,7 @@ describe('POST /api/security/vault/job-dek (D-PRV-7)', () => {
     it('finds jobs across every vault-capable collection', async () => {
         const worker = makeWorkerKeys()
         state.db = fakeDb({
-            strip_user_dxf_files: [{ slug: 'job-5', ownerId: 'w5', workerKeyPub: worker.pubB64 }],
+            user_dxf_files: [{ slug: 'job-5', ownerId: 'w5', workerKeyPub: worker.pubB64 }],
         })
         await realVault.createVaultSession('w5', crypto.randomBytes(32))
         const res = await jobDekHandler(ev({ jobSlug: 'job-5' }))

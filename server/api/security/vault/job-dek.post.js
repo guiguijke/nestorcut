@@ -24,11 +24,13 @@ import { assertRateLimit } from '~~/server/utils/ratelimit'
  */
 
 // Collections carrying vault-encrypted work, looked up by slug.
+// Lot S (2026-09-13) : les deux collections « strip » sont sorties de cette
+// liste — leurs workers n'existent plus, aucune demande de DEK ne peut venir
+// d'eux. Les DONNEES restent en base et restent couvertes par les chemins de
+// CYCLE DE VIE (purge, suppression de compte, coffre : destroy/disable/rotate).
 const JOB_COLLECTIONS = [
     'nesting_jobs',
-    'strip_nesting_job_queue',
     'user_dxf_files',
-    'strip_user_dxf_files',
 ]
 
 const HKDF_INFO = 'nest2d-job-dek-v1'

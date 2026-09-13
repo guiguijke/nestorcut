@@ -63,7 +63,7 @@ canvas {
  * Vault "secure environment" indicator — a thin accent border around the
  * whole viewport, visible only while the user is working inside an unlocked
  * zero-knowledge vault. Set as data-vault-active="true" on <html> by the
- * auth/strip layouts.
+ * auth layouts.
  *
  * Implementation: a position:fixed pseudo-element pinned to the viewport,
  * above every layer (z-index: 2147483647) but click-through (pointer-events:

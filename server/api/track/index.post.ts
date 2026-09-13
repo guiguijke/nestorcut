@@ -24,7 +24,7 @@ const ALLOWED_ACTIONS = new Set([
     'vault_key_generated',
     'vault_rotated',
     'vault_unlocked',
-    // client-side nesting UI events (from project/strip pages)
+    // client-side nesting UI events (from the project pages)
     'click_file_decrement',
     'click_file_increment',
     'click_nest_files',
@@ -77,12 +77,6 @@ const ALLOWED_ACTIONS = new Set([
     'click_result_part_next',
     'click_result_part_prev',
     'click_result_try_again',
-    'click_strip_file',
-    'click_strip_file_decrement',
-    'click_strip_file_increment',
-    'click_strip_nest_start',
-    'click_strip_result',
-    'click_strip_result_download',
     'click_subscription',
     'click_subscription_start_trial',
     'click_subscription_upgrade_pro',

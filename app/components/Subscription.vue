@@ -128,7 +128,7 @@ const { t, locale } = useLocale()
 const quotaResetLabel = computed(() => formatQuotaReset(new Date(), locale.value))
 
 // Temporarily disable paid-plan CTAs (Unlimited trial + Pro upgrade) until
-// Strip ships to production. Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
+// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
 const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
 
 const { data, refresh } = await useFetch('/api/payment/subscription')

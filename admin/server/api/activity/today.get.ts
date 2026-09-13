@@ -29,38 +29,27 @@ export default defineEventHandler(async (event) => {
         .limit(50)
         .toArray()
 
-    // ---- Finished jobs (nesting + strip) ----
+    // ---- Finished jobs ----
     const jobMatch = { finishedAt: { $gte: since }, status: 'done' }
-    const [classicJobs, stripJobs] = await Promise.all([
-        db
-            .collection(COL.nestingJobs)
-            .aggregate([
-                { $match: jobMatch },
-                {
-                    $group: {
-                        _id: null,
-                        count: { $sum: 1 },
-                        totalTimeMin: { $sum: { $ifNull: ['$timeTaken', 0] } },
-                        avgDensity: { $avg: { $ifNull: ['$density', null] } },
-                    },
+    const classicJobs = await db
+        .collection(COL.nestingJobs)
+        .aggregate([
+            { $match: jobMatch },
+            {
+                $group: {
+                    _id: null,
+                    count: { $sum: 1 },
+                    totalTimeMin: { $sum: { $ifNull: ['$timeTaken', 0] } },
+                    avgDensity: { $avg: { $ifNull: ['$density', null] } },
                 },
-            ])
-            .toArray(),
-        db
-            .collection(COL.stripJobQueue)
-            .aggregate([
-                { $match: jobMatch },
-                { $group: { _id: null, count: { $sum: 1 }, totalTimeMin: { $sum: { $ifNull: ['$timeTaken', 0] } } } },
-            ])
-            .toArray(),
-    ])
+            },
+        ])
+        .toArray()
     const c = classicJobs[0] || {}
-    const s = stripJobs[0] || {}
     const jobsToday = {
-        count: (c.count || 0) + (s.count || 0),
+        count: c.count || 0,
         nestingCount: c.count || 0,
-        stripCount: s.count || 0,
-        totalTimeMin: (c.totalTimeMin || 0) + (s.totalTimeMin || 0),
+        totalTimeMin: c.totalTimeMin || 0,
         avgDensity: c.avgDensity || null,
     }
 

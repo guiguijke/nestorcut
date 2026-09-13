@@ -71,7 +71,7 @@ const queueTiers = [
 
       <!-- Jobs -->
       <section class="space-y-3">
-        <h2 class="text-sm uppercase tracking-wide text-ink-400">Jobs (nesting + strip)</h2>
+        <h2 class="text-sm uppercase tracking-wide text-ink-400">Jobs</h2>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
           <StatCard label="En file" :value="fmt(live?.queued ?? overview.jobs.queued)" accent="warn" :live="!!live" />
           <StatCard label="En traitement" :value="fmt(live?.processing ?? overview.jobs.processing)" :live="!!live" />

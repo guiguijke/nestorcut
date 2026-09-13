@@ -21,8 +21,7 @@ la cartographie fine du pipeline géométrique dans `docs/PIPELINE-MAP.md`.
         │  MongoDB (réseau docker interne) ◄──── workers :                        │
         │        ▲                       │   · nesting-worker ×1 (natif Rust)     │
         │        │ proxy Mongo WG-only  │   · file-processing (DXF→polygonParts)  │
-        │        │ (mongo-wg)           │   · strip-file-processing               │
-        │        │                       │   · strip-nesting (spyrrow)             │
+        │        │ (mongo-wg)           │                                        │
         │        │                       ▼                                          │
         │  admin (IP WireGuard uniquement, profil docker, JAMAIS public)           │
         └─────────┬───────────────────────▲──────────────────────────────────────┘
@@ -56,7 +55,13 @@ la cartographie fine du pipeline géométrique dans `docs/PIPELINE-MAP.md`.
 |---|---|
 | **file-processing** | upload → copie canonique mm (`validDxf`) → `polygonParts` (shapely) + SVG aperçu ; détecte DXF/SVG/DWG par magic bytes ; signature → reroute `1k_entity_count` |
 | **nesting** | orchestrateur Python → moteur Rust **nest-engine** (natif) → DXF/SVG résultats, alternatives, rapport matière, vue live (frames en Mongo `liveLayout`, lues par l'app en SSE) |
-| **strip-file-processing / strip-nesting** | variante « bande » (spyrrow PyPI pour le solve) — pipeline distinct, fichiers `stripUserDxf`/`stripNestDxf` |
+
+> **Retiré le 2026-09-13** (lot S, `docs/PLAN-RETRAIT-STRIP-2026-09-13.md`) :
+> les deux workers `strip-file-processing` / `strip-nesting` (variante
+> « bande » sur spyrrow, images préconstruites sans source dans ce dépôt) ne
+> tournent plus et leurs routes, pages et domaine serveur sont supprimés. Les
+> collections et buckets `strip_*` / `stripUserDxf` / `stripNestDxf` restent en
+> base, intacts, et la purge 24 h continue de les couvrir.
 
 ### Débordement (homelab, 2026-08-30)
 

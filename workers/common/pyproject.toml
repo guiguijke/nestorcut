@@ -9,7 +9,7 @@ description = "Shared plumbing for the Nest2D Python workers (mongo, crypto, log
 requires-python = ">=3.11"
 # Deliberately minimal: shapely is NOT listed here because only the workers
 # that import worker_common.geometry need it, and they already pin it in
-# their own requirements.txt (keeps the stripnesting image free of shapely).
+# their own requirements.txt.
 dependencies = [
     "pymongo>=4.17",
     "python-dotenv>=1.2",

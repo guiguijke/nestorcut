@@ -197,38 +197,3 @@ describe('deleteProjectCascade — idempotence', () => {
         await expect(deleteProjectCascade(DOMAINS.bin, 'u1', 'proj-1')).rejects.toMatchObject({ statusCode: 404 })
     })
 })
-
-describe('deleteProjectCascade — domaine strip', () => {
-    it('résultats dans stripNestDxf, sources dans stripUserDxf, nestDxf (bin) intact', async () => {
-        state.db = fakeDb({
-            strip_projects: [{ slug: 'sp-1', ownerId: 'u1' }],
-            strip_user_dxf_files: [{ slug: 's-a.dxf', name: 'a', svgFileSlug: 's-prev.svg', ownerId: 'u1', stripSlug: 'sp-1' }],
-            strip_nesting_job_queue: [
-                { slug: 'strip-nested-1', ownerId: 'u1', stripSlug: 'sp-1', status: 'done', dxf_files: ['strip-nested-1_part_1.dxf'], svg_files: ['strip-nested-1_part_1.svg'], alternatives: [] },
-            ],
-        })
-        state.buckets = {
-            stripNestDxf: fakeBucket('stripNestDxf', [blob('strip-nested-1_part_1.dxf')]),
-            nestSvg: fakeBucket('nestSvg', [blob('strip-nested-1_part_1.svg')]),
-            stripUserDxf: fakeBucket('stripUserDxf', [blob('s-a.dxf')]),
-            validDxf: fakeBucket('validDxf', [blob('s-a.dxf')]),
-            userDxfFilesSvg: fakeBucket('userDxfFilesSvg', [blob('s-prev.svg')]),
-            // Un blob du MÊME nom dans le bucket bin ne doit pas partir.
-            nestDxf: fakeBucket('nestDxf', [blob('strip-nested-1_part_1.dxf')]),
-        }
-
-        const result = await deleteProjectCascade(DOMAINS.strip, 'u1', 'sp-1')
-
-        expect(result).toEqual({ files: 1, jobs: 1, blobs: 5 })
-        expect(state.buckets.stripNestDxf.deleted).toEqual(['id:strip-nested-1_part_1.dxf'])
-        expect(state.buckets.nestSvg.deleted).toEqual(['id:strip-nested-1_part_1.svg'])
-        expect(state.buckets.stripUserDxf.deleted).toEqual(['id:s-a.dxf'])
-        expect(state.buckets.validDxf.deleted).toEqual(['id:s-a.dxf'])
-        expect(state.buckets.userDxfFilesSvg.deleted).toEqual(['id:s-prev.svg'])
-        expect(state.buckets.nestDxf.deleted).toEqual([])
-        expect(state.buckets.nestDxf.docs).toHaveLength(1)
-        expect(await remaining('strip_projects')).toEqual([])
-        expect(await remaining('strip_user_dxf_files')).toEqual([])
-        expect(await remaining('strip_nesting_job_queue')).toEqual([])
-    })
-})

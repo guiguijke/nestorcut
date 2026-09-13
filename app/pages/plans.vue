@@ -101,7 +101,7 @@ const { t } = useLocale()
 const userIsSet = computed(() => Boolean(unref(authGetters.userIsSet)))
 
 // Temporarily disable paid-plan CTAs (Unlimited trial + Pro upgrade) until
-// Strip ships to production. Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
+// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
 const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
 
 // Shared with the landing via the 'payment-plans' cache key (deduplicated +

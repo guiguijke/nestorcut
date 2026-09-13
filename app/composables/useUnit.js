@@ -32,7 +32,7 @@ let enabledState = false
 let initialized = false
 
 /**
- * Non-composable accessor for module-level stores (files.js / strip.js)
+ * Non-composable accessor for module-level stores (files.js)
  * whose computed request bodies run outside component setup. Honors the
  * master switch: 'mm' whenever the feature is disabled.
  */

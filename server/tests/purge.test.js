@@ -179,3 +179,43 @@ describe('runPurgeOnce — artefacts éphémères de jobs', () => {
         expect(second).toMatchObject({ jobs: 0, blobs: 0, fileDocs: 0, artifacts: 0 })
     })
 })
+
+describe('runPurgeOnce — le strip retiré reste purgé (lot S, 2026-09-13)', () => {
+    // Le pipeline « strip » a été retiré du produit, ses DONNÉES restent en
+    // base. Une purge qui cesse de les couvrir les laisserait à vie : ce
+    // verrou fixe le contrat, buckets ET documents.
+    it('balaie stripUserDxf et stripNestDxf comme les buckets bin', async () => {
+        state.db = fakeDb({
+            'stripUserDxf.files': [blob('vieille-source.dxf', OLD), blob('fraiche.dxf', FRESH)],
+            'stripNestDxf.files': [blob('vieux-resultat.dxf', OLD)],
+            user_dxf_files: [],
+            strip_user_dxf_files: [],
+            nesting_jobs: [],
+            strip_nesting_job_queue: [],
+        })
+        const report = await runPurgeOnce({ now: NOW, db: state.db, deleteBlob })
+        expect(state.deleted).toEqual([
+            ['stripUserDxf', 'id:vieille-source.dxf'],
+            ['stripNestDxf', 'id:vieux-resultat.dxf'],
+        ])
+        expect(report.blobs).toBe(2)
+    })
+
+    it('marque purgedAt et vide la géométrie des fichiers strip', async () => {
+        const files = [
+            { _id: 'sf1', slug: 's-a.dxf', ownerId: 'u1', uploadAt: OLD, polygonParts: [{ x: 1 }] },
+            { _id: 'sf2', slug: 's-b.dxf', ownerId: 'u1', uploadAt: FRESH, polygonParts: [{ x: 2 }] },
+        ]
+        state.db = fakeDb({
+            user_dxf_files: [],
+            strip_user_dxf_files: files,
+            nesting_jobs: [],
+            strip_nesting_job_queue: [],
+        })
+        const report = await runPurgeOnce({ now: NOW, db: state.db, deleteBlob })
+        expect(files[0].purgedAt).toBeInstanceOf(Date)
+        expect(files[0].polygonParts).toBeUndefined()
+        expect(files[1].purgedAt).toBeUndefined() // trop récent
+        expect(report.fileDocs).toBe(1)
+    })
+})

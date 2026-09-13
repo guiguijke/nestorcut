@@ -6,7 +6,7 @@
  * UI boundary:
  *   - display: mm -> preferred unit (fmtLength / fmtArea)
  *   - input:   preferred unit -> mm before anything is sent to the API
- *              (displayToMm in files.js / strip.js requestBody)
+ *              (displayToMm in files.js requestBody)
  *
  * Never convert inside the pipeline or the engine (AGENTS.md rule).
  */

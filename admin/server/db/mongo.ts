@@ -33,8 +33,6 @@ export const COL = {
   admins: 'admins',
   projects: 'projects',
   nestingJobs: 'nesting_jobs',
-  stripProjects: 'strip_projects',
-  stripJobQueue: 'strip_nesting_job_queue',
   transactions: 'transactions',
   subscriptionCheckouts: 'subscription_checkouts',
   paymentFailures: 'payment_failures',

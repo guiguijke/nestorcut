@@ -24,7 +24,7 @@ _client: MongoClient = create_mongo_client()
 db = _client.get_default_database()
 
 # GridFS buckets are created lazily by name: each worker declares the bucket
-# names it needs (e.g. "userDxf", "stripNestDxf") instead of importing a
+# names it needs (e.g. "userDxf", "validDxf") instead of importing a
 # pre-instantiated global.
 _buckets: dict[str, gridfs.GridFSBucket] = {}
 

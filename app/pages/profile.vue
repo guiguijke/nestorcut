@@ -34,10 +34,12 @@
         <Subscription class="profile__block" />
         <PromoCodeSettings class="profile__block" />
         <NewsletterSettings class="profile__block" />
-        <VaultSettings
-            v-if="isStripFeatureEnable"
-            class="profile__block"
-        />
+        <!-- Lot S : le panneau du coffre n'est plus derriere le drapeau
+             `isStripFeatureEnable` (seul garde qui le cachait). Le serveur
+             l'ouvre deja a tous les plans (vault/enable.post.js : « the
+             legacy hasPrivacyTier gate is gone ») et STRATEGY/AGENTS #35
+             posent que la privacy n'est jamais une feature payante. -->
+        <VaultSettings class="profile__block" />
         <DeleteAccount class="profile__block" />
     </div>
 </template>
@@ -60,10 +62,6 @@
     const emailVerified = computed(() => {
         const u = unref(getters.user)
         return u?.provider === 'local' ? u?.emailVerified === true : true
-    })
-
-    const isStripFeatureEnable = computed(() => {
-        return Boolean(unref(getters.user)?.isStripFeatureEnable)
     })
 
     const logoutHandler = async () => {

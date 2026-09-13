@@ -72,8 +72,8 @@ export default defineEventHandler(async (event) => {
     // ---- 2. KPIs ----
     const activeSubscribers = subscriptions.length
     // MRR = sum of monthly prices of PAYING (active, not trialing) subscriptions.
-    // Strip privacy tier is monthly; if interval differs we still sum the stored
-    // price as an approximation.
+    // The Pro (privacy) tier is monthly; if interval differs we still sum the
+    // stored price as an approximation.
     const mrr = subscriptions
         .filter((s: any) => PAYING_SUB_STATUSES.includes(s.status) && s.planPriceEur)
         .reduce((sum: number, s: any) => sum + s.planPriceEur, 0)

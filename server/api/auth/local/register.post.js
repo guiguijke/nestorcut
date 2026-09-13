@@ -61,7 +61,6 @@ export default defineEventHandler(async (event) => {
         passwordHash,
         sessions: [session],
         createdAt: new Date(),
-        isStripFeatureEnable: true,
         freeNestingUsed: 0,
         // Measurement unit preference ('mm' | 'inch') — default metric;
         // switchable via PATCH /api/user/preferences.

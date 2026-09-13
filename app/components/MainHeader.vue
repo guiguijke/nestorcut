@@ -19,14 +19,6 @@
             <NuxtLink to="/home" class="tabs__text" active-class="tabs__text--active">
                 {{ t('nav.workspace') }}
             </NuxtLink>
-            <NuxtLink
-                v-if="isStripFeatureEnabled"
-                to="/strip"
-                class="tabs__text"
-                active-class="tabs__text--active"
-            >
-                {{ t('nav.strip') }}
-            </NuxtLink>
         </nav>
         <nav
             v-if="isSecondaryTheme"
@@ -183,12 +175,6 @@
     ])
 
     const { getters: authGetters } = authStore
-    // The strip tab requires BOTH the global kill-switch
-    // (NUXT_PUBLIC_STRIP_ENABLED) and the per-user feature flag.
-    const isStripFeatureEnabled = computed(() => {
-        const stripGloballyEnabled = useRuntimeConfig().public.stripEnabled === true
-        return stripGloballyEnabled && Boolean(unref(authGetters.user)?.isStripFeatureEnable)
-    })
     const userIsLoggedIn = computed(() => Boolean(unref(authGetters.userIsSet)))
 
     const isPrimaryTheme = computed(() => {
@@ -199,9 +185,6 @@
     })
     const isHomePage = computed(() => {
         return route.path === '/home' || route.path === '/'
-    })
-    const isStripPage = computed(() => {
-        return route.path === '/strip' || route.path.startsWith('/strip/')
     })
     // The logo is always a link back to a meaningful home: the tool's workspace
     // when already inside the app (primary theme), the marketing landing

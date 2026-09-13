@@ -245,7 +245,7 @@ function consumePendingLocalFiles() {
 
 // Keep polling the project while any uploaded file is still being processed
 // by the file processing worker, so the UI flips from a loader to the
-// selectable file as soon as processing completes. Mirrors strip.js.
+// selectable file as soon as processing completes.
 function scheduleFilesRefresh(path) {
     if (updateTimer) {
         clearTimeout(updateTimer)

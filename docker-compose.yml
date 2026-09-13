@@ -47,7 +47,6 @@ services:
       NUXT_LISTMONK_PASSWORD: ${NUXT_LISTMONK_PASSWORD:-}
       NUXT_LISTMONK_LIST_ID: ${NUXT_LISTMONK_LIST_ID:-}
       NUXT_PUBLIC_CLARITY_ID: ${NUXT_PUBLIC_CLARITY_ID:-}
-      NUXT_PUBLIC_STRIP_ENABLED: ${NUXT_PUBLIC_STRIP_ENABLED:-false}
       # Master switch for imperial units (inches) — ships dark.
       NUXT_PUBLIC_UNIT_SWITCH_ENABLED: ${NUXT_PUBLIC_UNIT_SWITCH_ENABLED:-false}
       # Mode Local (calcul navigateur) — ships dark; staging/prod l'activent
@@ -220,50 +219,6 @@ services:
       NEST_WORKER_POLL_SEC: ${NEST_WORKER_POLL_SEC:-1}
     deploy:
       replicas: ${NEST_WORKER_REPLICAS:-2}
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    mem_limit: 2g
-    pids_limit: 512
-    depends_on:
-      mongo:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - nest2d
-
-  strip-file-processing-worker:
-    image: ghcr.io/guiguijke/nest2d-strip-file-processing-worker:latest
-    # build:
-    #   context: ./workers
-    #   dockerfile: stripfileprocessing/Dockerfile
-    env_file: .env
-    environment:
-      MONGO_URI: mongodb://mongo:27017/nest2d
-      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    mem_limit: 2g
-    pids_limit: 512
-    depends_on:
-      mongo:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - nest2d
-
-  strip-nesting-worker:
-    image: ghcr.io/guiguijke/nest2d-strip-nesting-worker:latest
-    # build:
-    #   context: ./workers
-    #   dockerfile: stripnesting/Dockerfile
-    env_file: .env
-    environment:
-      MONGO_URI: mongodb://mongo:27017/nest2d
-      NEST_APP_URL: ${NEST_APP_URL:-http://app:3000}
     security_opt:
       - no-new-privileges:true
     cap_drop:

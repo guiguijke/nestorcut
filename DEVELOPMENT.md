@@ -43,12 +43,13 @@ docker compose up
 ```
 
 This brings up the full stack from `docker-compose.yml`: the app, the admin
-panel, MongoDB and all four workers (file processing, nesting, and their
-"strip" variants). Each worker runs with replication equal to **one**.
+panel, MongoDB and the two workers (file processing, nesting). Each worker runs
+with replication equal to **one**. (The "strip" variants were removed on
+2026-09-13 — see `docs/PLAN-RETRAIT-STRIP-2026-09-13.md`.)
 
 To run only the workers (e.g. while developing the app locally), target the
 worker services explicitly:
 
 ```sh
-docker compose up user-file-processing-worker nesting-worker strip-file-processing-worker strip-nesting-worker
+docker compose up user-file-processing-worker nesting-worker
 ```

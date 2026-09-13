@@ -67,6 +67,5 @@ describe('titleFromFileName', () => {
 describe('domains (pentest M-4)', () => {
     it('rejects foreign bin projects (404, not a 200 name leak)', () => {
         expect(DOMAINS.bin.rejectForeignProject).toBe(true)
-        expect(DOMAINS.strip.rejectForeignProject).toBe(true)
     })
 })

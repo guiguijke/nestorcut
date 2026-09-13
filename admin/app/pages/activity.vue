@@ -90,10 +90,6 @@
                             label="Nesting"
                             :value="data.jobsToday.nestingCount"
                         />
-                        <StatCard
-                            label="Strip"
-                            :value="data.jobsToday.stripCount"
-                        />
                     </div>
                     <p
                         v-if="data.jobsToday.avgDensity"

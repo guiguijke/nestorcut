@@ -10,13 +10,13 @@ run_worker(). The loop handles:
   - success / retry / error status transitions, optional timing fields
     (startAt / finishedAt / timeTaken) and optional refund on failure
 
-Two historical flavours are covered through the config:
+Two flavours are covered through the config:
 
-  - file processing (user_dxf_files / strip_user_dxf_files):
+  - file processing (user_dxf_files):
     status_field="processingStatus", done_status="completed",
     error_field="processingError", result_based_completion=True
     (a falsy result sends the doc back to pending for a later retry)
-  - nesting (nesting_jobs / strip_nesting_job_queue):
+  - nesting (nesting_jobs):
     status_field="status", done_status="done", error_field="error",
     track_timing=True, optional priority sort, refund hook and a
     cancelled_exception type for user-cancelled jobs

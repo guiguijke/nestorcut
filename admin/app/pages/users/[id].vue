@@ -259,10 +259,6 @@
                             <dd class="font-mono text-lg">{{ data.activity.projects }}</dd>
                         </div>
                         <div>
-                            <dt class="text-ink-400">Strip projets</dt>
-                            <dd class="font-mono text-lg">{{ data.activity.stripProjects }}</dd>
-                        </div>
-                        <div>
                             <dt class="text-ink-400">Jobs total</dt>
                             <dd class="font-mono text-lg">{{ data.activity.jobsTotal }}</dd>
                         </div>

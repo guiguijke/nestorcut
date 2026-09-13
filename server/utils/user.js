@@ -37,7 +37,6 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
         },
         $setOnInsert: {
             createdAt: new Date(),
-            isStripFeatureEnable: true,
             freeNestingUsed: 0,
             // Measurement unit preference ('mm' | 'inch') — default metric.
             preferredUnit: 'mm',

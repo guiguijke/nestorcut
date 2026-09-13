@@ -1,5 +1,5 @@
 <script setup lang="ts">
-    // Reusable compact table for nesting/strip jobs.
+    // Reusable compact table for nesting jobs.
     // Used on the user detail page and the activity page.
     defineProps<{
         jobs: any[]

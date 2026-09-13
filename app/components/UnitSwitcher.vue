@@ -33,7 +33,6 @@ watch(
     (to) => {
         if (!enabled.value || !to) return
         filesStore.actions.syncParamsToUnit(to)
-        stripStore.actions.syncParamsToUnit(to)
     },
     { immediate: true }
 )

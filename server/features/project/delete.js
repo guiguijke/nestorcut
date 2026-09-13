@@ -47,7 +47,7 @@ const ACTIVE_JOB_STATUSES = ['pending', 'processing', 'awaiting_local']
 
 // Buckets résultats (hors registry domains.js) : le bucket DXF est par
 // domaine, le bucket SVG est partagé — miroir de features/purge/sweep.js.
-const RESULT_DXF_BUCKET = { bin: 'nestDxf', strip: 'stripNestDxf' }
+const RESULT_DXF_BUCKET = { bin: 'nestDxf' }
 const RESULT_SVG_BUCKET = 'nestSvg'
 // Copie canonique mm et previews : partagées par les deux domaines.
 const VALID_DXF_BUCKET = 'validDxf'

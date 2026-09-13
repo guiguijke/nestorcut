@@ -16,7 +16,6 @@ const dict = {
     en: {
         'nav.home': 'Home',
         'nav.workspace': 'Workspace',
-        'nav.strip': 'Strip',
         'nav.features': 'Features',
         'nav.howItWorks': 'How It Works',
         'nav.pricing': 'Pricing',
@@ -774,7 +773,6 @@ const dict = {
     fr: {
         'nav.home': 'Accueil',
         'nav.workspace': 'Espace',
-        'nav.strip': 'Strip',
         'nav.features': 'Fonctionnalités',
         'nav.howItWorks': 'Comment ça marche',
         'nav.pricing': 'Tarifs',

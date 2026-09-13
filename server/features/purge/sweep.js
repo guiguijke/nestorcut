@@ -27,6 +27,13 @@ export const PURGE_AFTER_MS = 24 * 60 * 60 * 1000
 const GRACE_MS = 60 * 60 * 1000
 
 // Buckets balayés par ancienneté (sources, copies canoniques mm, previews).
+//
+// Lot S (2026-09-13) : le pipeline « strip » a été retiré, mais ses buckets et
+// ses collections RESTENT en base par décision du propriétaire — donc la purge
+// 24 h continue de les couvrir. Une purge qui s'arrête laisse des fichiers à
+// vie (D-PRV-10) : leur retrait d'ici est une décision séparée, à prendre
+// quand les données seront supprimées. Verrou : purge.test.js
+// « le strip retiré reste purgé ».
 const SOURCE_BUCKETS = ['userDxf', 'stripUserDxf', 'validDxf', 'userDxfFilesSvg', 'userSvg']
 
 // Buckets résultats : balayage piloté par les jobs (pose purgedAt → UI

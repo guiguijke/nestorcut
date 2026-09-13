@@ -13,7 +13,6 @@ export default defineEventHandler(async (event) => {
     const db = await connectDB()
     const user = await db.collection('users').findOne({ id: userId })
 
-    const isStripFeatureEnable = user.isStripFeatureEnable || false
     const entitlement = await getEntitlement(userId)
     const config = useRuntimeConfig(event)
     const demo = await getDemoEntitlement(userId, config.public.localComputeEnabled)
@@ -35,7 +34,6 @@ export default defineEventHandler(async (event) => {
         // 3.1.5 (lot 3) : comptes locaux — la bannière « e-mail non vérifié »
         // s'appuie dessus (les comptes Google sont vérifiés d'office).
         emailVerified: user.provider === 'local' ? Boolean(user.emailVerified) : true,
-        isStripFeatureEnable: isStripFeatureEnable,
         // Lazy default: accounts created before the units feature have no
         // preferredUnit field — they are metric.
         preferredUnit: user.preferredUnit === 'inch' ? 'inch' : 'mm',

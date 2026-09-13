@@ -48,7 +48,7 @@ devient inutile. Connectez-vous ensuite normalement à `/login`.
 | **Tableau de bord** (`/`) | KPIs temps réel (utilisateurs, jobs, activité) via SSE |
 | **Utilisateurs** (`/users`) | Liste paginée, recherche, filtres (statut, provider, pays) |
 | **Fiche utilisateur** (`/users/[id]`) | Profil, activité, abonnement, actions (bannir, crédits, mois gratuit, déconnexion) |
-| **Jobs** (`/jobs`) | File d'attente + traitement (nesting + strip), rafraîchi automatiquement |
+| **Jobs** (`/jobs`) | File d'attente + traitement du nesting, rafraîchi automatiquement |
 | **Géographie** (`/geo`) | Répartition des clients par pays (cf-ipcountry) |
 | **Logs** (`/logs`) | Requêtes HTTP + événements de tracking |
 | **Support** (`/support`) | Messagerie avec tous les utilisateurs |

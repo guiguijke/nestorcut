@@ -17,7 +17,7 @@ const MAX_BODY_BYTES = MAX_UPLOAD_FILE_BYTES * MAX_UPLOAD_FILES + 1024 * 1024;
 /**
  * Saves the multipart DXF files of `event` into the domain's bucket and
  * inserts one pending file record per file into the domain's collection.
- * Shared by the bin (workspace projects) and strip domains — the domain
+ * Shared by the bin domain (workspace projects) — the domain
  * config (server/core/domains.js) provides the bucket, collection, slug
  * field, worker tag and tracking event name.
  */

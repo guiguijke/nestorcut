@@ -13,9 +13,4 @@ export const API_ROUTES = {
     NEST: (slug) => `/api/project/${slug}/nest`,
     ADDFILES: (slug) => `/api/project/${slug}/addfiles`,
     LOGIN: (slug) => `/api/auth/${slug}/login`,
-    STRIP_PROJECTS: '/api/strip/me',
-    STRIP_PROJECT: (slug) => slug ? `/api/strip/${slug}` : '/api/strip',
-    STRIP_ADDFILES: (slug) => `/api/strip/${slug}/addfiles`,
-    STRIP_NEST: (slug) => `/api/strip/${slug}/nest`,
-    STRIP_RESULTS: (slug) => `/api/strip/${slug}/results`,
 };

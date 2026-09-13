@@ -36,9 +36,9 @@ function statusCls(s: string) {
     <div class="flex items-center justify-between">
       <div>
         <h1 class="text-xl">Jobs</h1>
-        <p class="text-xs text-ink-400">File d'attente et traitement (nesting + strip), rafraîchi toutes les 15 s</p>
+        <p class="text-xs text-ink-400">File d'attente et traitement, rafraîchi toutes les 15 s</p>
       </div>
-      <span v-if="data" class="text-[11px] text-ink-400">classic : {{ data.counts.classic }} · strip : {{ data.counts.strip }}</span>
+      <span v-if="data" class="text-[11px] text-ink-400">jobs : {{ data.counts.classic }}</span>
     </div>
 
     <div class="card flex flex-wrap items-end gap-3">

@@ -1,7 +1,9 @@
 # worker_common — shared plumbing for the Nest2D Python workers
 
-All 4 workers (fileprocessing, nesting, stripfileprocessing, stripnesting) share
-this package instead of carrying their own copy of the same code.
+Both workers (fileprocessing, nesting) share this package instead of carrying
+their own copy of the same code. (Le pipeline « strip » — deux workers de plus,
+sans source dans ce dépôt — a été retiré le 2026-09-13, voir
+`docs/PLAN-RETRAIT-STRIP-2026-09-13.md`.)
 
 Contents:
 

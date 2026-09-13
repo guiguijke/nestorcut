@@ -22,9 +22,8 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 404, statusMessage: 'Utilisateur introuvable' })
 
   // Parallel activity counts.
-  const [projects, stripProjects, jobsTotal, jobsFailed, dxfFiles, trackingEvents] = await Promise.all([
+  const [projects, jobsTotal, jobsFailed, dxfFiles, trackingEvents] = await Promise.all([
     db.collection(COL.projects).countDocuments({ ownerId: id }),
-    db.collection(COL.stripProjects).countDocuments({ ownerId: id }),
     db.collection(COL.nestingJobs).countDocuments({ ownerId: id }),
     db.collection(COL.nestingJobs).countDocuments({ ownerId: id, status: 'failed' }),
     db.collection('user_dxf_files').countDocuments({ ownerId: id }),
@@ -47,7 +46,7 @@ export default defineEventHandler(async (event) => {
       ...user,
       sessions: undefined, // never leak tokens
     },
-    activity: { projects, stripProjects, jobsTotal, jobsFailed, dxfFiles, trackingEvents, activeSessions },
+    activity: { projects, jobsTotal, jobsFailed, dxfFiles, trackingEvents, activeSessions },
     recentEvents,
   }
 })

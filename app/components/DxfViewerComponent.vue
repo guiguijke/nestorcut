@@ -40,7 +40,7 @@ const props = defineProps({
             clearColor: 0xE9E9E7,
         })
     },
-    // Passed by the modal parents (FileModal/ResultModal/Strip*Modal) to force
+    // Passed by the modal parents (FileModal/ResultModal) to force
     // a remount via :key and signal fullscreen mode. Declared here so it does
     // not leak into $attrs as an invalid `isfullscreen` HTML attribute.
     isFullScreen: {

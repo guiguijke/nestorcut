@@ -19,7 +19,6 @@ export async function getOverviewStats() {
   const db = await connectDB()
   const users = db.collection(COL.users)
   const jobs = db.collection(COL.nestingJobs)
-  const stripJobs = db.collection(COL.stripJobQueue)
   const tracking = db.collection(COL.tracking)
   const support = db.collection(COL.supportMessages)
   const transactions = db.collection(COL.transactions)
@@ -57,12 +56,6 @@ export async function getOverviewStats() {
     jobs.countDocuments({ status: 'failed' }),
     jobs.countDocuments({ status: 'done', updatedAt: { $gte: since24h } }),
   ])
-  const [stripQueued, stripProcessing, stripFailed] = await Promise.all([
-    stripJobs.countDocuments({ status: 'queued' }),
-    stripJobs.countDocuments({ status: 'processing' }),
-    stripJobs.countDocuments({ status: 'failed' }),
-  ])
-
   // Signups per day for the last 30 days (for the sparkline).
   const signupsSeries = await users
     .aggregate([
@@ -110,9 +103,9 @@ export async function getOverviewStats() {
       active5m: activeUsers5m,
     },
     jobs: {
-      queued: jobsQueued + stripQueued,
-      processing: jobsProcessing + stripProcessing,
-      failed: jobsFailed + stripFailed,
+      queued: jobsQueued,
+      processing: jobsProcessing,
+      failed: jobsFailed,
       done24h: jobsDone24h,
     },
     signupsSeries: signupsSeries.map((s: any) => ({ date: s._id, count: s.count })),
