@@ -3,12 +3,20 @@ name: Build and publish Docker images
 # Builds the main app and the 3 worker images and pushes them to the GitHub
 # Container Registry (ghcr.io) under the repository owner's namespace.
 #
-# On the homelab you then just run:
-#   docker compose pull && docker compose up -d
+# TAGS (lot D1, 2026-09-13) :
+#   - :<git-sha>     immuable, epinglee sur le commit exact
+#   - :main          mutable, le dernier build de main (pratique pour voir
+#                    ce qui est construit, JAMAIS tire par la prod)
 #
-# Images are tagged with:
-#   - :latest        (mutable, always the most recent build of main)
-#   - :<git-sha>     (immutable, pinned to the exact commit)
+# `:latest` N'EST PLUS DEPLACE PAR CE WORKFLOW. Il designe ce qui a recu un
+# GO, et seul le workflow manuel « promote-latest » l'y deplace. Avant ce
+# lot, une simple poussee sur main deplacait `:latest`, si bien qu'un
+# `docker compose pull` sur la prod ou le homelab pouvait deployer des lots
+# SANS GO (constat du 2026-09-13 : `:latest` designait J1 et le lot 2d alors
+# que la prod tournait un SHA anterieur approuve).
+#
+# Deployer, cote serveur :
+#   docker compose pull && docker compose up -d          # tire le :latest promu
 #
 # Notes:
 #  - The nesting worker builds the nest-engine Rust workspace (workers/nesting/engine),
@@ -129,8 +137,10 @@ jobs:
           push: true
           # Host + homelab are amd64 — keep the whole matrix explicit.
           platforms: linux/amd64
+          # `:latest` est ABSENT d'ici par decision du lot D1 : il ne bouge
+          # que par « promote-latest », sur un SHA qui a recu un GO.
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:latest
+            ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:main
             ${{ env.REGISTRY }}/${{ steps.owner.outputs.name }}/${{ matrix.image }}:${{ github.sha }}
           build-args: |
             GIT_COMMIT_SHA=${{ github.sha }}

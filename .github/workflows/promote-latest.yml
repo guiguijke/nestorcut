@@ -1,0 +1,105 @@
+name: promote-latest
+
+# Déplace le tag `:latest` des quatre images sur un SHA DONNÉ — le seul
+# geste qui le déplace (lot D1, 2026-09-13).
+#
+# Pourquoi : `build-images.yml` publie `:<sha>` et `:main` à chaque poussée
+# sur `main`. Tant qu'il posait aussi `:latest`, un `docker compose pull` sur
+# la prod ou le homelab pouvait déployer des lots SANS GO — constaté le
+# 2026-09-13, `:latest` désignait J1 et le lot 2d alors que la production
+# tournait un SHA antérieur approuvé. Désormais `:latest` veut dire « ce qui
+# a reçu un GO », et c'est ce workflow, lancé à la main, qui le dit.
+#
+# Usage : onglet Actions → « promote-latest » → Run workflow → coller le SHA
+# complet (40 caractères) du commit qui a le GO du vérificateur. Le SHA doit
+# exister comme tag d'image : il est publié par `build-images.yml`, donc
+# attendre que ce workflow soit `completed` pour le commit visé.
+#
+# Le déploiement reste la même commande côté serveur :
+#   cd /opt/nestorcut && docker compose pull && docker compose up -d
+# (homelab : cd /containers/nestorcut-overflow && docker compose pull &&
+#  docker compose up -d --force-recreate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "SHA complet (40 caractères) du commit qui a reçu le GO"
+        required: true
+        type: string
+      images:
+        description: "Images à promouvoir (toutes, ou une liste séparée par des espaces)"
+        required: false
+        default: "all"
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  ALL_IMAGES: >-
+    nest2d-app
+    nest2d-admin
+    nest2d-user-file-processing-worker
+    nest2d-nesting-worker
+
+jobs:
+  promote:
+    name: promote ${{ inputs.sha }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Valider le SHA
+        # Un SHA court ou un nom de branche produirait un `:latest` qui ne
+        # désigne rien de vérifiable : on refuse avant de toucher au registre.
+        run: |
+          SHA='${{ inputs.sha }}'
+          if ! printf '%s' "$SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "::error::« $SHA » n'est pas un SHA complet de 40 caractères hexadécimaux."
+            exit 1
+          fi
+          echo "SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract lowercase image owner
+        id: owner
+        run: echo "name=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Déplacer :latest sur le SHA
+        # `docker buildx imagetools create` retague SANS retélécharger l'image
+        # et préserve le digest : le `:latest` promu est le MÊME artefact que
+        # le `:<sha>` vérifié, pas une reconstruction.
+        run: |
+          set -euo pipefail
+          OWNER='${{ steps.owner.outputs.name }}'
+          REQUESTED='${{ inputs.images }}'
+          if [ "$REQUESTED" = "all" ] || [ -z "$REQUESTED" ]; then
+            IMAGES="${{ env.ALL_IMAGES }}"
+          else
+            IMAGES="$REQUESTED"
+          fi
+          for image in $IMAGES; do
+            REF="${{ env.REGISTRY }}/$OWNER/$image"
+            echo "::group::$image"
+            docker buildx imagetools create --tag "$REF:latest" "$REF:$SHA"
+            docker buildx imagetools inspect "$REF:latest" | head -5
+            echo "::endgroup::"
+          done
+
+      - name: Récapitulatif
+        run: |
+          {
+            echo "### :latest promu sur \`$SHA\`"
+            echo
+            echo "Déploiement, côté serveur :"
+            echo '```'
+            echo "cd /opt/nestorcut && docker compose pull && docker compose up -d"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

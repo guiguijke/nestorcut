@@ -869,14 +869,32 @@ Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --
 
 ## 6. Checklist de déploiement
 
-### `:latest` ne fait pas foi (constat 2026-09-13)
+### `:latest` = ce qui a reçu un GO (lot D1, 2026-09-13)
 
-La CI publie une image à chaque poussée sur `main` et déplaçait `:latest`
-avec elle : après un déploiement épinglé par SHA, `:latest` désignait déjà
-des lots SANS GO. Règle : **un déploiement se fait par SHA approuvé**
-(`docker pull …:<sha>`, `docker tag …:<sha> …:latest`, `up -d <service>`),
-jamais par `compose pull` nu — homelab compris. Cible (lot D1) : `:latest`
-n'est déplacé que par le job manuel « promote » de la CI, sur le SHA du GO.
+Constat du 13/09 : la CI publiait une image à chaque poussée sur `main` et
+déplaçait `:latest` avec elle — après un déploiement épinglé par SHA,
+`:latest` désignait déjà des lots SANS GO (J1 et le lot 2d, alors que la prod
+tournait un SHA antérieur approuvé). Un `docker compose pull` nu sur la prod
+ou le homelab devenait un déploiement surprise.
+
+**Depuis le lot D1** : `build-images.yml` publie `:<sha>` (immuable) et
+`:main` (le dernier build, *jamais* tiré par un serveur). **`:latest` ne
+bouge que par le workflow manuel `promote-latest`** (Actions → Run workflow
+→ SHA complet du commit qui a le GO), qui RETAGUE sans reconstruire
+(`docker buildx imagetools create`, donc même digest que le `:<sha>`
+vérifié). Le déploiement redevient, sur les deux machines :
+
+```bash
+cd /opt/nestorcut && docker compose pull && docker compose up -d
+cd /containers/nestorcut-overflow && docker compose pull && docker compose up -d --force-recreate
+```
+
+Corollaires : `:main` n'a rien à faire dans un `docker-compose.yml` de
+serveur ; attendre que « Build and publish Docker images » soit `completed`
+sur le commit visé AVANT de promouvoir (le tag `:<sha>` doit exister) ; et un
+déploiement partiel d'urgence reste possible par SHA
+(`docker pull …:<sha>` + `docker tag …:<sha> …:latest` + `up -d <service>`),
+en le DISANT au rapport, puisque `:latest` du registre ne bougera pas.
 
 ### Homelab (débordement, constat 2026-09-06)
 
