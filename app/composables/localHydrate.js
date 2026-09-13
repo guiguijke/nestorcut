@@ -49,12 +49,19 @@ export function svgToDataUri(svg) {
 
 /** Handles DXF uniques (hex). ezdxf réassigne à chaque copie ; notre writer
  * historique répétait le handle source — dxf-viewer indexe par handle et
- * peut lever sur un gros job (100+ copies). */
+ * peut lever sur un gros job (100+ copies).
+ * H1 (2026-09-14) : parcours PAR PAIRES — un DXF est une suite alternée
+ * stricte (indice pair = code de groupe, impair = valeur, la même
+ * convention que le DxfArrayScanner de dxf-viewer). Seule une ligne de
+ * CODE « 5 » désigne un handle : ligne à ligne, une VALEUR « 5 » (couleur
+ * 62, degré 71, drapeau 70…) faisait réécrire la ligne SUIVANTE — le
+ * « 0 » de l'ENDTAB de la table LAYER devenait « 1 » et l'analyseur de
+ * dxf-viewer bouclait à l'infini sur le fil principal (page figée). */
 export function uniquifyDxfHandles(dxf) {
     if (typeof dxf !== 'string' || !dxf) return dxf
     const lines = dxf.split(/\r\n|\r|\n/)
     let n = 1
-    for (let i = 0; i < lines.length - 1; i++) {
+    for (let i = 0; i + 1 < lines.length; i += 2) {
         if (lines[i].trim() === '5') {
             lines[i + 1] = (n++).toString(16).toUpperCase()
         }

@@ -827,6 +827,27 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     « valide » jamais une géométrie qu'on ne sait pas calculer. Et D4 :
     les rotations vivent sur `payload.parts[].rotations` (l'instance
     réduite a des ids réindexés — piège #3b).
+62. **Toute manipulation textuelle d'un DXF se fait par PAIRES (code,
+    valeur), jamais ligne à ligne (constat 2026-09-14, vue DXF figée).**
+    Un DXF est une suite alternée stricte : indice pair = code de groupe,
+    impair = valeur — le `DxfArrayScanner` de dxf-viewer lit exactement
+    ainsi, toute réécriture doit parcourir `i += 2` et ne retoucher que
+    la VALEUR d'un CODE désigné. `uniquifyDxfHandles` testait chaque
+    LIGNE contre `'5'` : la VALEUR `5` de la couleur (`62`) du calque
+    `BIN_BOUNDARY` était prise pour un code de handle, le `0` de
+    l'`ENDTAB` devenait `1`, et `parseLayers` de dxf-viewer bouclait à
+    l'infini (un code `0` dont la valeur n'est pas `LAYER` n'avance
+    JAMAIS le scanner) — fil principal figé, page morte au clic « Vue
+    DXF », deux jours en prod. Corollaire : un exporteur qui change le
+    FORMAT d'une valeur (flottant `5.0` → entier `5` depuis le lot 2b du
+    12/09) doit rejouer les consommateurs TEXTUELS de sa sortie — avant
+    le lot 2b, la collision `'5' === '5.0'` était impossible. Verrous :
+    `localBridge.test.js` (couleur 62/5, SPLINE 71/5, drapeau 70/5,
+    témoin de non-boucle = le VRAI DxfParser rejoué en worker tué au
+    délai, + contrôle négatif sur le texte corrompu) ; harnais
+    `scripts/qa-e2e-result-dxfview.mjs` qui OUVRE la vue DXF d'un
+    résultat local et exige la page réactive à +5 s — aucun harnais ne
+    l'ouvrait, c'est le trou qui a laissé passer le défaut.
 
 ## 3. Banc d'essai (workers/nesting/bench/)
 

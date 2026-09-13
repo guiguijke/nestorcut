@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
+import { Worker } from 'node:worker_threads'
 import {
     normalizeLayouts,
     sheetDims,
@@ -16,6 +19,63 @@ import {
     layoutsCountByClass,
 } from '../composables/localBridge'
 import { uniquifyDxfHandles } from '../composables/localHydrate'
+
+// Résolution du VRAI analyseur consommé par la vue (node_modules), pas une
+// réimplémentation : c'est lui qui bouclait en prod.
+const require = createRequire(import.meta.url)
+const dxfParserUrl = pathToFileURL(require.resolve('dxf-viewer/src/parser/DxfParser.js')).href
+
+const PARSER_WORKER_SRC = `
+const { parentPort, workerData } = require('node:worker_threads');
+import(workerData.parserUrl).then((mod) => {
+    const parser = new mod.default();
+    const parsed = parser.parseSync(workerData.dxf);
+    const layers = (parsed.tables && parsed.tables.layer && parsed.tables.layer.layers) || {};
+    const entities = parsed.entities || [];
+    const spline = entities.find((e) => e.type === 'SPLINE') || {};
+    parentPort.postMessage({
+        ok: true,
+        layerNames: Object.keys(layers),
+        binColor: layers.BIN_BOUNDARY ? layers.BIN_BOUNDARY.colorIndex : null,
+        entities: entities.map((e) => e.type),
+        splineDegree: spline.degreeOfSplineCurve ?? null,
+    });
+}).catch((err) => parentPort.postMessage({ ok: false, error: String((err && err.stack) || err) }));
+`
+
+/** Rejoue parseSync de dxf-viewer dans un worker dédié, tué au bout du
+ * délai : une boucle infinie de l'analyseur devient un ÉCHEC propre du
+ * test au lieu de figer la suite entière. */
+function parseDxfInWorker(dxf, { timeoutMs = 8000, label = 'DxfParser' } = {}) {
+    return new Promise((resolve, reject) => {
+        const worker = new Worker(PARSER_WORKER_SRC, {
+            eval: true,
+            workerData: { parserUrl: dxfParserUrl, dxf },
+        })
+        let settled = false
+        const finish = (fn, arg) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            worker.terminate()
+            fn(arg)
+        }
+        const timer = setTimeout(() => {
+            finish(reject, new Error(`${label} : pas de retour sous ${timeoutMs} ms — boucle infinie de l'analyseur`))
+        }, timeoutMs)
+        worker.on('message', (msg) => {
+            if (!msg.ok) {
+                finish(reject, new Error(`${label} : échec de l'analyseur — ${msg.error}`))
+                return
+            }
+            finish(resolve, msg)
+        })
+        worker.on('error', (err) => finish(reject, err))
+        worker.on('exit', (code) => {
+            if (code !== 0) finish(reject, new Error(`${label} : worker sorti en code ${code}`))
+        })
+    })
+}
 
 // Sortie moteur brute (forme jagua) : SPP = solution.layout (singulier),
 // BPP = solution.layouts ; rotations en DEGRÉS (jagua 0.7.x).
@@ -270,6 +330,97 @@ describe('uniquifyDxfHandles', () => {
         }
         expect(handles).toEqual(['1', '2'])
     })
+
+    // H1 (2026-09-14) : un DXF se manipule par PAIRES (code, valeur), jamais
+    // ligne à ligne. Fixture minimale mais structurellement complète pour
+    // l'analyseur de dxf-viewer : table LAYER dont le calque BIN_BOUNDARY
+    // porte la couleur 62/5 (le déclencheur prod — sa VALEUR « 5 » était
+    // prise pour un code de handle, le « 0 » de l'ENDTAB devenait « 1 »),
+    // une SPLINE de drapeau 70/5 et degré 71/5, et des handles en doublon.
+    const dxfFixture = [
+        '0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
+        '0', 'SECTION', '2', 'TABLES',
+        '0', 'TABLE', '2', 'LAYER', '5', '10', '100', 'AcDbSymbolTable', '70', '1',
+        '0', 'LAYER', '5', '10', '100', 'AcDbSymbolTableRecord',
+        '2', 'BIN_BOUNDARY', '6', 'CONTINUOUS', '70', '0', '62', '5',
+        '0', 'ENDTAB',
+        '0', 'ENDSEC',
+        '0', 'SECTION', '2', 'ENTITIES',
+        '0', 'SPLINE', '5', '2F', '100', 'AcDbSpline', '70', '5', '71', '5',
+        '72', '6', '73', '3', '74', '0',
+        '10', '0.0', '20', '0.0', '30', '0.0',
+        '10', '10.0', '20', '0.0', '30', '0.0',
+        '10', '10.0', '20', '10.0', '30', '0.0',
+        '40', '0.0', '40', '0.0', '40', '0.0', '40', '1.0', '40', '1.0', '40', '1.0',
+        '0', 'LINE', '5', '2F', '100', 'AcDbLine',
+        '10', '0.0', '20', '0.0', '30', '0.0',
+        '11', '50.0', '21', '0.0', '31', '0.0',
+        '0', 'ENDSEC',
+        '0', 'EOF',
+    ].join('\n') + '\n'
+
+    /** Découpe un texte DXF en paires (code, valeur) — la convention du
+     * DxfArrayScanner de dxf-viewer : indices pairs = codes, impairs =
+     * valeurs. Sert de témoin de structure sur la SORTIE de la fonction. */
+    const toPairs = (text) => {
+        const lines = text.split('\n')
+        const pairs = []
+        for (let i = 0; i + 1 < lines.length; i += 2) pairs.push([lines[i], lines[i + 1]])
+        return pairs
+    }
+
+    it('ne touche que les valeurs des codes 5 : couleur 62/5, drapeau 70/5 et degré 71/5 intacts, ENDTAB intact', () => {
+        const out = uniquifyDxfHandles(dxfFixture)
+        const pairs = toPairs(out)
+        const has = (code, value) => pairs.some(([c, v]) => c === String(code) && v === String(value))
+        // La structure de paires reste saine : tout code est un entier.
+        for (const [c] of pairs) expect(c).toMatch(/^\d+$/)
+        // Le marqueur de fin de table a survécu (c'était lui qui était écrasé).
+        expect(has(0, 'ENDTAB')).toBe(true)
+        expect(has(0, 'ENDSEC')).toBe(true)
+        expect(has(0, 'EOF')).toBe(true)
+        // Les VALEURS « 5 » (couleur du calque, drapeau et degré de la
+        // SPLINE) ne sont plus confondues avec des codes de handle.
+        expect(has(62, '5')).toBe(true)
+        expect(has(70, '5')).toBe(true)
+        expect(has(71, '5')).toBe(true)
+        // Les handles réels (codes 5) sont réécrits, uniques, en séquence.
+        const handles = pairs.filter(([c]) => c === '5').map(([, v]) => v)
+        expect(handles).toEqual(['1', '2', '3', '4'])
+        expect(new Set(handles).size).toBe(handles.length)
+    })
+
+    it('les valeurs numériques hors handles restent byte-à-byte identiques', () => {
+        const out = uniquifyDxfHandles(dxfFixture)
+        // Toute paire qui n'est pas un handle (code 5) traverse inchangée.
+        const before = toPairs(dxfFixture).filter(([c]) => c !== '5')
+        const after = toPairs(out).filter(([c]) => c !== '5')
+        expect(after).toEqual(before)
+    })
+
+    // Témoin de non-boucle : l'analyseur de dxf-viewer rejoué en worker
+    // (import direct du module du paquet). Un worker plutôt qu'un appel
+    // direct : la régression H1 fait une BOUCLE INFINIE sur le fil — en
+    // test elle tuerait la suite entière ; le worker est terminé au bout
+    // du délai et le test ÉCHOUE PROPREMENT.
+    it('l\'analyseur de dxf-viewer termine sur le texte produit (témoin de non-boucle)', async () => {
+        const out = uniquifyDxfHandles(dxfFixture)
+        const msg = await parseDxfInWorker(out, { timeoutMs: 8000 })
+        expect(msg.layerNames).toContain('BIN_BOUNDARY')
+        expect(msg.binColor).toBe(5)
+        expect(msg.entities).toEqual(['SPLINE', 'LINE'])
+        expect(msg.splineDegree).toBe(5)
+    }, 15000)
+
+    it('le verrou voit la boucle : le texte corrompu à l\'ancienne (ENDTAB écrasé) ne termine pas', async () => {
+        // Simulation exacte du défaut pré-H1 : la VALEUR « 5 » de la couleur
+        // avait fait réécrire le code « 0 » de l'ENDTAB en « 1 ». Preuve que
+        // le témoin worker détecte cette classe de corruption.
+        const corrupted = dxfFixture.replace('62\n5\n0\nENDTAB', '62\n5\n1\nENDTAB')
+        expect(corrupted).not.toBe(dxfFixture)
+        await expect(parseDxfInWorker(corrupted, { timeoutMs: 3000, label: 'DXF corrompu' }))
+            .rejects.toThrow(/boucle infinie/)
+    }, 10000)
 })
 
 describe('applyHoleFill (exporté pour le live)', () => {
