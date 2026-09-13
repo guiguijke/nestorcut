@@ -177,3 +177,101 @@ non inclus.
 > **Recette** : trois `.job` réels du propriétaire (SheetCam TNG et, si disponible, une version stable), ouverts dans SheetCam après nesting, captures et ordre de coupe numéroté ; vitest ; harnais ; rapport constat par constat, non-faits énoncés, hashes réels. GO du vérificateur avant déploiement (app + wasm, worker si le serveur est touché).
 >
 > **Pas de décision ouverte** : toute question (miroir, multi-tôles, valeur du disque, version SheetCam) = une option chiffrée proposée, puis attente.
+
+## 9. Rapports par lot
+
+### Lot J1 — lecteur / écrivain de `.job` (implémenteur, 13/09)
+
+Livré : `shared/sheetcamJob.js` (un seul code, navigateur et serveur — aucune
+dépendance Node, entrée et sortie en `Uint8Array`), deux fixtures anonymisées
+(`app/tests/fixtures/sheetcam/{source,x4-reference}.job`) et
+`app/tests/sheetcamJob.test.js` (**18 verrous**). Un commit. Aucun octet du
+bloc binaire n'est décodé, aucune pièce n'est inventée, le moteur n'est pas
+touché.
+
+#### 9.1 Ce que le format impose, mesuré avant d'écrire une ligne
+
+Cinq faits pris sur les quatorze `.job` réels — chacun casserait le fichier
+s'il était deviné de travers :
+
+| Fait mesuré | Conséquence dans le code |
+|---|---|
+| le fichier commence par une entrée **hors section** (`Config=`) | un parseur qui exige une section en tête perd la ligne ; le modèle accepte les entrées de tête |
+| `[BinaryDataStart]` **n'est PAS suivi d'un CRLF** : les octets commencent après le crochet | le sérialiseur colle le bloc au marqueur ; un saut de ligne ici décale tout le cache géométrique de SheetCam |
+| l'ordre des sections n'est **ni alphabétique sensible, ni insensible** à la casse (`[pathRules]` vient après `[Part 4]` et avant `[Table]`) | on ne recalcule JAMAIS l'ordre : on préserve celui lu, et une section `[Part N]` neuve s'insère après la dernière section `Part …` — ce qui reproduit la référence à l'octet près |
+| les nombres sont au format **`%.15g`** (`-1.5707963267949` pour −π/2, `66.828` sans zéros de queue) | `formatJobNumber` implémente `%.15g`, bascule exponentielle comprise |
+| la référence porte **`Angle=-0`** | `String(-0)` rend « 0 » en JavaScript : sans traitement explicite du zéro négatif, le fichier rendu diffère d'un octet et le verrou du ×4 tombe. C'est le contrôle négatif du §9.3 |
+
+Le texte est traité en **latin-1** (un octet = un point de code). Ce n'est pas
+une hypothèse sur l'encodage de SheetCam : c'est le seul moyen de garantir que
+« lire puis écrire » rende les mêmes octets quel que soit l'encodage réel des
+noms. Un appelant qui veut AFFICHER un nom le décode à sa frontière (même
+discipline que les unités, AGENTS #25).
+
+#### 9.2 Ce que le module expose
+
+- **lecture** : `parseSheetCamJob(bytes)` → version, `Count`,
+  `Optimisation`, tôle (`[Work]` X1/X2/Y1/Y2 + épaisseur), kerf
+  (`[Tool0].Kerf width`) et nom d'outil, pièces (`DrawingFile` + nom de
+  fichier seul, `XPos`, `YPos`, `Angle`, `HRef`, `VRef`, `copyOf`, `name`,
+  `enabled`, `Locked`, `DrawingDate`) et, par pièce, ses opérations avec
+  **longueur et type d'amorce** (`Lead in`/`out` + types) et `Start
+  position` — ce que le lot J3 utilisera pour PRÉDIRE la réserve d'amorce
+  (la géométrie de l'amorce n'est pas dans le fichier, §7) ;
+  `jobSheet(job)` rend largeur et hauteur ; `jobDrawingName` réduit un
+  chemin au nom de fichier (règle 9).
+- **écriture** : `writeNestedSheetCamJob(job, { placements, order,
+  maskPaths })`. Le PREMIER exemplaire d'un original réécrit sa section — le
+  rang, donc le lien vers le bloc binaire, est conservé (règle 6) ; les
+  exemplaires suivants deviennent des sections `copyOf` (règle 4), avec les
+  mêmes clés dans le même ordre que SheetCam ; `Count` suit ;
+  `[Misc] Optimisation=3` et `[OpOrder]` sont posés dès qu'un ordre est
+  donné (règle 8) ; `DrawingFile` est réduit au nom de fichier par défaut
+  (règle 9).
+- **refus** plutôt que devinette : pas d'octets (`notBytes`), pas de bloc
+  binaire (`noBinaryBlock`), version hors liste blanche
+  (`unsupportedVersion`, avec la version lue et la liste), aucune pièce
+  (`noParts`), aucune pose (`noPlacements`), pose visant une pièce absente
+  (`unknownPart`). Chaque erreur porte un **code i18n** et ses paramètres —
+  le libellé sera posé au lot J4, pas un message technique à l'écran.
+
+**Décision de forme, à valider** : une pièce que le nesting n'a pas posée
+n'est **pas supprimée** — sa section porte le rang qui lie le bloc binaire, la
+retirer échangerait les géométries (règle 6). Elle est mise à `enabled=0`.
+C'est le choix le plus sûr ; si le propriétaire préfère qu'un job partiel
+refuse d'être écrit, c'est une ligne à changer.
+
+#### 9.3 Verrous
+
+| Verrou | Résultat |
+|---|---|
+| lire → écrire = **octets identiques**, fixtures anonymisées | **2/2** |
+| lire → écrire = **octets identiques**, `.job` RÉELS du propriétaire | **14/14** (le test le dit s'il ne trouve pas le dossier privé : il ne passe pas pour vert sans avoir mesuré) |
+| **moulinet ×4** : fichier produit = référence du 11/09 | **identique** — texte, bloc binaire, et donc le fichier entier ; aucune tolérance nécessaire, pas même 1e−9 |
+| `Count`, `copyOf`, `Optimisation=3`, `[OpOrder]` | 5, `[-1, -1, 1, 1, 1]`, 3, `Op000000=1,0 … Op000004=0,0` (nichées puis hôte) |
+| rangs des originaux inchangés | `Piece_Trou`, `Piece_Fillx4` toujours aux rangs 0 et 1 |
+| chemins masqués quand demandé | les cinq `DrawingFile` deviennent `Piece_Trou.DXF` / `Piece_Fillx4.DXF`, plus aucun `C:\…` dans le texte |
+| **contrôle négatif** | une seule pose fausse (angle `0` au lieu de `-0`) et le verrou tombe, avec pour UNIQUE écart la ligne `Angle=0` — le verrou est donc sensible, et le zéro négatif est un vrai fait du format |
+| `%.15g` | −π/2, −π, −3π/2, `66.828`, `50.41421356235`, bascule `1e-05` / `1e+16`, refus de l'infini et du non-nombre |
+| `npx vitest run` | ****56 fichiers, 609 tests verts** (18 de plus, tous du lot J1)** |
+
+#### 9.4 Non-faits, dits franchement
+
+1. **Aucun fichier produit par ce code n'a encore été ouvert dans
+   SheetCam.** Le verrou est l'égalité avec un fichier que le propriétaire a
+   déjà ouvert et validé le 11/09 (« parfait ») — c'est fort, mais ce n'est
+   pas un essai machine. La recette du §8 (trois `.job` réels ouverts dans
+   SheetCam, ordre de coupe numéroté) reste à faire, et elle demande le
+   poste du propriétaire.
+2. **Rien n'est branché au produit** : ni dépôt de `.job`, ni conversion de
+   pose, ni bouton de téléchargement. C'est le périmètre des lots J2 à J4 ;
+   J1 ne change aucun comportement existant (le module n'a encore aucun
+   appelant).
+3. Les fixtures sont **anonymisées par le chemin seulement** : le préfixe
+   absolu du disque du propriétaire est remplacé par `C:\jobs\`. Les noms
+   de dessin (`Piece_Trou.DXF`, `Piece_Fillx4.DXF`) sont des fixtures
+   historiques du dépôt, déjà nommées dans cette étude — sans eux la fixture
+   ne veut plus rien dire.
+4. Les questions ouvertes du §4 (miroir `HRef`/`VRef` sur une pièce non
+   symétrique, version stable de SheetCam, multi-tôles) restent ouvertes :
+   J1 LIT et ÉCRIT ces champs, il ne décide pas de leur sémantique.
