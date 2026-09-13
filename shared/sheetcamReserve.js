@@ -775,45 +775,94 @@ export function assignJobBlocks(blocks, drawings, tol = START_MATCH_TOL_MM) {
         return placed
     }))
 
-    // n est minuscule (un `.job` porte quelques dessins) : on énumère.
-    const order = []
-    const used = new Array(nb).fill(false)
-    let bestTotal = -1
-    let bestPerm = null
-    let ties = 0
-    const walk = (d, total) => {
-        if (d === nd) {
-            if (total > bestTotal) {
-                bestTotal = total
-                bestPerm = order.slice()
-                ties = 1
-            } else if (total === bestTotal) {
-                ties += 1
+    // AFFECTATION GLOUTONNE, SANS PLAFOND (lot J4-bis-4, §9.49).
+    //
+    // Le lot J4-bis-3 énumérait les permutations et refusait au-delà de sept
+    // dessins. C'était un plafond de complexité déguisé en règle métier : un
+    // `.job` d'atelier porte couramment dix à trente dessins, et tous ses
+    // points seraient passés « non lus », donc aucun trou nesté. Le
+    // vérificateur a eu raison de le nommer avant le déploiement.
+    //
+    // On prend la MEILLEURE CASE de la matrice, on retire sa ligne et sa
+    // colonne, on recommence. Coût : n² cases parcourues n fois, soit n³ dans
+    // le pire cas — quelques milliers d'opérations pour trente dessins, rien.
+    //
+    // Ce n'est pas l'optimum global (le problème d'affectation le serait, par
+    // l'algorithme hongrois), et c'est SUFFISANT ici parce que la matrice
+    // n'est pas quelconque : un point de départ est SUR son contour à 0,01 mm
+    // et à des dizaines de millimètres de tout autre dessin. Une case non
+    // nulle désigne donc presque toujours le bon couple, et un dessin qui
+    // n'en a aucune ne peut de toute façon être apparié par personne.
+    //
+    // L'ÉGALITÉ SE JUGE SUR LA CASE RETENUE, ET SEULEMENT CONTRE SES
+    // CONCURRENTES DIRECTES — les cases libres de SA LIGNE ou de SA COLONNE.
+    //
+    // C'est la seule lecture qui a un sens. Deux cases de même valeur dans
+    // des lignes ET des colonnes différentes ne sont pas en concurrence :
+    // chacune est le meilleur choix de son dessin ET de son bloc, et les
+    // prendre toutes les deux ne pose aucune question. Douze dessins
+    // distincts marquent tous 2 sur leur propre bloc, et c'est justement le
+    // cas normal — un refus global les aurait tous déclarés ambigus (mesuré :
+    // douze copies décalées de la pièce L, refus « tie » avec le critère
+    // global, 12/12 appariés avec celui-ci).
+    //
+    // Une vraie ambiguïté, c'est : ce dessin irait aussi bien sur un AUTRE
+    // bloc (même ligne), ou ce bloc irait aussi bien à un AUTRE dessin (même
+    // colonne). Là, rien ne départage, et on refuse.
+    const takenBlock = new Array(nb).fill(false)
+    const takenDrawing = new Array(nd).fill(false)
+    const chosen = new Array(nd).fill(-1)
+    let totalPlaced = 0
+    for (let step = 0; step < nd; step++) {
+        let best = -1
+        let bestD = -1
+        let bestB = -1
+        for (let d = 0; d < nd; d++) {
+            if (takenDrawing[d]) continue
+            for (let b = 0; b < nb; b++) {
+                if (takenBlock[b]) continue
+                if (score[d][b] > best) {
+                    best = score[d][b]
+                    bestD = d
+                    bestB = b
+                }
             }
-            return
         }
+        // Plus rien à placer : les dessins restants n'ont aucun point sur
+        // aucun bloc libre. On s'arrête là plutôt que d'affecter au hasard.
+        if (best <= 0) break
         for (let b = 0; b < nb; b++) {
-            if (used[b]) continue
-            used[b] = true
-            order.push(b)
-            walk(d + 1, total + score[d][b])
-            order.pop()
-            used[b] = false
+            if (b !== bestB && !takenBlock[b] && score[bestD][b] === best) {
+                return { pairs: null, ambiguous: true, reason: 'tie' }
+            }
         }
+        for (let d = 0; d < nd; d++) {
+            if (d !== bestD && !takenDrawing[d] && score[d][bestB] === best) {
+                return { pairs: null, ambiguous: true, reason: 'tie' }
+            }
+        }
+        takenDrawing[bestD] = true
+        takenBlock[bestB] = true
+        chosen[bestD] = bestB
+        totalPlaced += best
     }
-    if (nb > 7) return { pairs: null, ambiguous: true, reason: 'tooManyDrawings' }
-    walk(0, 0)
 
-    if (!bestPerm || bestTotal <= 0) return { pairs: null, ambiguous: true, reason: 'noPointPlaced' }
-    if (ties > 1) return { pairs: null, ambiguous: true, reason: 'tie' }
+    if (totalPlaced <= 0) return { pairs: null, ambiguous: true, reason: 'noPointPlaced' }
+    // Un dessin sans case positive reste sans bloc. Plutôt que de lui en
+    // donner un au hasard, on refuse l'ensemble : l'appelant retombe sur
+    // « point non lu », qui est sûr, plutôt que sur une réserve posée sur le
+    // mauvais dessin, qui ne l'est pas.
+    if (chosen.some((b) => b < 0)) {
+        return { pairs: null, ambiguous: true, reason: 'noPointPlaced' }
+    }
 
-    const pairs = bestPerm.map((b, d) => ({
+    const pairs = chosen.map((b, d) => ({
         drawing: d,
         block: b,
         placed: score[d][b],
         total: (blocks[b].paths || []).length,
     }))
-    return { pairs, ambiguous: false, reason: null, totalPlaced: bestTotal }
+    return { pairs, ambiguous: false, reason: null, totalPlaced }
 }
 
 /**

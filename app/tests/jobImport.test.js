@@ -211,7 +211,7 @@ const NEW_KEYS = [
     'sheetcamReserve.reserveCrossesContour', 'sheetcamReserve.holeTooSmall',
     'sheetcamReserve.mouthInsideEnvelope', 'sheetcamReserve.degenerateEdge',
     'sheetcamReserve.strayPierce', 'sheetcamReserve.countMismatch',
-    'sheetcamReserve.tooManyDrawings', 'sheetcamReserve.noPointPlaced',
+    'sheetcamReserve.noPointPlaced',
     'sheetcamReserve.tie',
 ]
 

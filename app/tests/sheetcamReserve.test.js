@@ -599,6 +599,71 @@ describe('J4-bis-3 — les blocs du binaire s’apparient par la GÉOMÉTRIE', (
         expect(assignJobBlocks(blocks, [trou]).reason).toBe('countMismatch')
     })
 
+    it('DOUZE dessins : appariés 12 sur 12, sans plafond (lot J4-bis-4)', () => {
+        // LA LIMITE QUE CE VERROU LÈVE (§9.49). Le lot J4-bis-3 énumérait les
+        // permutations et REFUSAIT au-delà de sept dessins : pour un `.job`
+        // d'atelier, qui en porte couramment dix à trente, tous les points
+        // seraient passés « non lus » et plus aucun trou n'aurait été nesté.
+        // L'affectation est maintenant gloutonne sur la matrice de scores,
+        // sans plafond.
+        //
+        // Douze copies décalées de la pièce L, chacune avec son bloc : le
+        // décalage est bien plus grand que la tolérance d'appariement, donc
+        // un point d'une copie ne tombe que sur SA copie.
+        const STEP = 500
+        const shift = (ring, k) => ring.map(([x, y]) => [x + k * STEP, y])
+        const drawings = []
+        const blocks = []
+        for (let k = 0; k < 12; k++) {
+            drawings.push({
+                name: `L-${k}.dxf`,
+                rings: [shift(L_OUTER, k), shift(L_HOLE, k)],
+            })
+            blocks.push({
+                origin: [k * STEP, 0],
+                paths: [
+                    { start: HOLE_START },
+                    { start: OUTER_START },
+                    // Un chemin d'entité POINT, comme dans les vrais fichiers :
+                    // il ne tombe sur aucun contour et ne pèse sur rien.
+                    { start: [25, 140] },
+                ],
+            })
+        }
+        // Les blocs sont présentés DANS LE DÉSORDRE : c'est la géométrie qui
+        // doit les replacer, pas leur rang.
+        const melanges = blocks.map((_, i) => blocks[(i * 7) % 12])
+        const res = assignJobBlocks(melanges, drawings)
+        expect(res.ambiguous).toBe(false)
+        expect(res.pairs).toHaveLength(12)
+        // Chaque dessin retrouve SON bloc — celui dont l'origine est la sienne.
+        for (const pair of res.pairs) {
+            expect(melanges[pair.block].origin[0]).toBe(pair.drawing * STEP)
+            expect(pair.placed).toBe(2)
+        }
+        // Et un bloc par dessin, sans doublon.
+        expect(new Set(res.pairs.map((p) => p.block)).size).toBe(12)
+        expect(res.totalPlaced).toBe(24)
+    })
+
+    it('un dessin sans aucun point ne reçoit PAS un bloc au hasard', () => {
+        // Onze dessins appariables et un douzième hors de portée : plutôt que
+        // de lui donner le bloc qui reste, on refuse l'ensemble. Une réserve
+        // posée sur le mauvais dessin n'est pas une dégradation sûre.
+        const STEP = 500
+        const shift = (ring, k) => ring.map(([x, y]) => [x + k * STEP, y])
+        const drawings = []
+        const blocks = []
+        for (let k = 0; k < 3; k++) {
+            drawings.push({ name: `L-${k}`, rings: [shift(L_OUTER, k), shift(L_HOLE, k)] })
+            blocks.push({ origin: [k * STEP, 0], paths: [{ start: HOLE_START }, { start: OUTER_START }] })
+        }
+        drawings[2].rings = [[[9e5, 9e5], [9e5 + 10, 9e5], [9e5 + 10, 9e5 + 10]]]
+        const res = assignJobBlocks(blocks, drawings)
+        expect(res.ambiguous).toBe(true)
+        expect(res.reason).toBe('noPointPlaced')
+    })
+
     it('un seul dessin : le bloc unique lui revient', () => {
         const blocks = blocksOf('piece-l-none-default.job')
         expect(blocks).toHaveLength(1)
