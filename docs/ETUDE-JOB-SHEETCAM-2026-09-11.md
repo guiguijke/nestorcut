@@ -619,3 +619,220 @@ ici**, consigne du propriétaire) :
    corrigé, capture à l'appui.
 4. Le même raisonnement vaut pour toute pièce nichée dans une pièce nichée
    (profondeur 2) : la réserve se calcule trou par trou.
+
+### Lot J4 — rapport de l'implémenteur (13/09)
+
+Branchement produit du `.job` : dépôt, réglages pré-remplis, réserve
+d'amorce appliquée au nesting, un `.job` téléchargé par tôle. Deux commits.
+
+#### 9.15 Le défaut de la recette est traité — et la voie 2 est fermée par le format
+
+Le verdict du propriétaire infirmait le non-fait 4 du lot J3 : l'amorce du
+contour d'un TROU part vers l'intérieur du trou, côté chute, et coupe les
+éventails nichés. Deux voies étaient posées, aucune choisie.
+
+**La voie 2 (« imposer nous-mêmes le point de départ du trou après nesting »)
+est impossible, et c'est mesuré** : le relevé de TOUTES les clés des onze
+`.job` d'essai ne donne, par OPÉRATION, qu'un `Start position` entier — il
+n'existe aucune clé « point de départ » par contour. Et `[OpOrder]` s'arrête
+à la granularité `pièce,opération` : la recette porte cinq lignes pour cinq
+pièces, alors qu'une seule opération « Outside Offset » coupe le contour
+extérieur ET le trou. On ne peut donc que PRÉDIRE le point de départ.
+
+**Voie 1 retenue, mais pas sous la forme de l'appendice du lot J3.** Retourner
+simplement sa direction vers l'intérieur ne produit pas une encoche : mesuré
+sur le trou de la recette (cercle r = 35, amorce 5, perçage 3), l'aire du trou
+MONTE de 3 842 à 3 868 mm² et 21 des 32 sommets du disque de perçage restent
+dans la zone libre — le tour ré-enferme la zone au lieu de la retrancher. Et
+l'encoche épinglée sur un seul sommet pince l'anneau en un point (sommet
+dupliqué, goulot d'épaisseur nulle), c'est-à-dire exactement la famille de
+géométries qui tue l'import moteur (pièges AGENTS #2c et #5b).
+
+La forme livrée est une **morsure de bord à mâchoire large** : on retire de la
+zone libre un lobe ACCROCHÉ au bord du trou, de bouche égale au diamètre du
+disque de perçage, en remplaçant l'arc du contour entre deux points par le
+tour de l'enveloppe convexe qui contourne le disque. Ni goulot, ni pincement,
+ni sommet dupliqué — ni dans la zone libre, ni dans la matière de l'hôte, qui
+gagne ce même lobe (piège #4 : le polygone posé est l'anneau externe MOINS les
+trous, donc rétrécir le trou épaissit l'hôte là où il faut).
+
+#### 9.16 Mesures de la réserve d'amorce des trous
+
+| Mesure | Résultat |
+|---|---|
+| disque de perçage strictement dans la zone libre | **0 / 32** (les 32 sommets, sur chacune des morsures) |
+| couloir d'amorce (bord du trou → perçage) dans la zone libre | **0 / 101** points échantillonnés |
+| anneau rendu SIMPLE | **0 croisement** propre entre arêtes non adjacentes |
+| prix, une morsure | **1,14 %** de l'aire du trou |
+| prix, quatre morsures (ce qui est livré) | **4,56 %** |
+| prix d'une couronne intérieure complète (la solution paresseuse) | **40 %** (rayon libre 27 au lieu de 35) |
+| trou trop petit pour l'amorce | réserve REFUSÉE, anneau rendu INTACT, trou retiré du nesting |
+
+**Pourquoi quatre morsures et pas une.** La table `Start position` → coin
+n'est pas confirmée sur la machine (non-fait 3 du lot J3, question 2 du §9).
+Réserver le seul coin prédit reviendrait à parier sur une table non mesurée,
+et le prix d'un mauvais pari est exactement le défaut que ce lot corrige : la
+pièce coupée par l'amorce. Réserver les QUATRE coins candidats est juste QUEL
+QUE SOIT le sens de la table, pour dix fois moins cher qu'un repli
+conservateur. Le drapeau `startPositionConfirmed` fera tomber la réserve au
+seul coin lu le jour où le propriétaire répondra — et un verrou existe pour
+que ce passage soit un choix, pas un oubli.
+
+**Dégradation sûre.** Un trou dont la réserve est refusée est RETIRÉ de la
+liste des trous du nesting : plus rien ne s'y niche, et la raison voyage dans
+`reserve.holes[]` jusqu'à la fiche. Nicher dans un trou dont on ignore où
+passe l'amorce, c'est livrer le défaut de la recette. Le contour réel, lui,
+n'est jamais touché : le `.job` rendu porte le trou entier, c'est SheetCam
+qui le coupe.
+
+#### 9.17 L'angle normalisé — l'intervalle demandé n'était pas le bon
+
+La consigne demandait « normaliser l'angle écrit dans (−π, π] ». **C'est le
+mauvais intervalle, et le fichier de référence le prouve** : posé À LA MAIN
+dans SheetCam, `x4-reference.job` porte, pour les quatre quarts de tour,
+`Angle = −0, −1.5707963267949, −3.14159265358979, −4.71238898038469`.
+SheetCam garde donc un tour négatif complet — son intervalle est **(−2π, 0]**.
+Normaliser dans (−π, π] récrirait −4,712 en +1,571 et ferait diverger notre
+écriture du fichier de référence, que le verrou du lot J2 compare à 1e−12 près.
+
+`normalizeJobAngle` réduit dans (−2π, 0] : le `Angle=-6.283` de la recette
+devient `−0`, et sur tout θ ∈ [0, 2π) — tout ce que le moteur produit — la
+fonction est l'IDENTITÉ, signe du zéro compris (vérifié sur 360 valeurs).
+
+#### 9.18 Deux défauts trouvés en branchant, et corrigés
+
+1. **`XPos`/`YPos` était faux hors quarts de tour — jusqu'à 21 mm.** La règle 3
+   dit « centre de la boîte englobante de la pièce POSÉE », donc tournée. Le
+   lot J2 l'a implémentée par `t + R(θ)·c` avec `c` mesuré sur le dessin
+   DROIT, et l'a validée contre la référence. Cette validation ne POUVAIT PAS
+   voir le défaut : la référence ne porte que des quarts de tour, et `R(θ)`
+   envoie alors la boîte sur la boîte. Mesuré sur un L de 100 × 100 : écart
+   0,000 mm à 0°, 90°, 180°, 270° — puis **8,8 mm à 17°, 15,0 mm à 30°,
+   21,2 mm à 45°**. Sur un triangle, 14,6 mm à 45°. Or l'UI autorise
+   `rotationCount` de 1 à 360 (piège AGENTS #61). Corrigé par
+   `placedBoxCentre` / `jobPlacementFromRings`, que `nestedJobsPerSheet`
+   préfère dès qu'on lui passe les anneaux. Le verrou utilise un L : une
+   pièce centralement symétrique (rectangle, cercle) ne révèle JAMAIS ce
+   défaut, son centre de boîte étant son centre de symétrie.
+2. **Le repli du point de départ était mort.** `Number(null)` valant 0, un
+   `Start position` ABSENT désignait le coin 0 (bas gauche) au lieu de
+   retomber sur la règle par défaut du masterplan §3.5 (début de la plus
+   longue arête droite). Son verrou passait par coïncidence : sur le
+   rectangle 10 × 5 qu'il utilisait, les deux règles donnent l'index 0.
+   Corrigé, et le verrou est maintenant DISCRIMINANT (rectangle 3 × 50 :
+   coin 0, arête 1).
+
+#### 9.19 Ce qui est branché
+
+| Point de la consigne | État |
+|---|---|
+| 1 — dépôt d'un `.job` par SIGNATURE | livré. `isSheetCamJob` : **15/15** `.job` réels reconnus, zéro faux positif sur DXF, SVG, fichier vide et leurre commençant par `Config=`. La garde est en JS, avant le wasm : le détecteur de l'importeur wasm est à deux branches (`<` ⇒ SVG, tout le reste ⇒ DXF), un `.job` y serait parti dans l'importeur DXF et serait ressorti en « erreur d'analyse » — un message faux pour un fichier valide. Le détecteur Rust n'est PAS touché (l'étendre imposerait un rebuild du wasm, piège #33b) |
+| 1 — une fiche par dessin, quantité = exemplaires | livré. Appariement par NOM de fichier, casse ignorée (un `.job` Windows écrit `Piece_Trou.DXF`) ; les dessins manquants sont NOMMÉS, jamais avalés |
+| 2 — réglages pré-remplis | livré. Tôle depuis `[Work]`, espacement depuis le kerf de `[Tool0]` par `kerf + 2 × sécurité` — et par `updateKerfSafety`, jamais par `updateParams({ space })`, seul chemin qui garde les trois champs cohérents. Un `.job` sans kerf exploitable ne pré-remplit PAS l'espacement : on ne remplit pas un champ avec une valeur inventée. Rien n'est imposé, tout reste modifiable |
+| 3 — réserve appliquée au nesting | livré. Appliquée dans la boucle commune du constructeur de payload, **APRÈS** la simplification : le disque de perçage est un 32-gone dont la flèche vaut 0,0144 mm à r = 3, soit MOINS que la tolérance Douglas-Peucker (0,05 mm) — simplifier après la réserve aplatirait le disque et rognerait la marge promise |
+| 3 — `nestedIn` du post-pass | livré. Déduit des layouts LIVRÉS et non collecté dans la passe : trois chemins nichent sans passer par `applyHoleFill` (expansion meta, alternative structurelle auto-suffisante du piège #41, ceinture par tôle qui peut annuler la passe), une information collectée dans la passe mentirait. Index PAR TÔLE (piège #52) ; profondeur 2 chaînée |
+| 4 — un `.job` par tôle, angle normalisé | livré. `<nom>_tole{k}.job`, bouton dans le modal de résultat. Le `.job` est BINAIRE : il part en `Uint8Array` au `Blob`, jamais par le helper texte qui corromprait le bloc de géométrie en cache |
+| 4 — constats des réserves refusées dans la fiche | **partiel** : les constats voyagent jusqu'au payload (`leadInReserve`) et les libellés existent en EN et FR, mais aucun composant ne les AFFICHE encore. Non-fait, dit franchement |
+| 5 — libellés FR et EN | livré. 26 clés neuves, parité EN/FR verrouillée, chaque code d'erreur levé par le code `.job` a son libellé |
+| 6 — harnais navigateur dédié | livré : `scripts/qa-e2e-job.mjs`, rejoué sur l'image locale reconstruite depuis les sources. Voir 9.20 et 9.21 |
+
+#### 9.20 Verrous
+
+| Verrou | Résultat |
+|---|---|
+| `npx vitest run` | **63 fichiers, 708 tests verts** (58 fichiers / 646 tests avant le lot) |
+| `npx nuxt build` | **vert** |
+| `docker compose build app` | **vert** — et c'est CE gate qui a trouvé le défaut 1 du §9.21, invisible au build du poste |
+| harnais navigateur `scripts/qa-e2e-job.mjs` | **tous les verrous verts**, deux configurations (2 pièces ; 1 hôte + 4 éventails avec nichage) |
+| structure du `.job` rendu | `Count`, `Optimisation=3`, `copyOf` par exemplaire, `[OpOrder]` nichées puis hôte, chemins absolus masqués, **bloc binaire identique à l'octet près** |
+| poses calculées sur les anneaux RÉELS | contrôle chiffré : passer les anneaux RÉSERVÉS déplacerait les éventails de plus de 2 mm |
+| contrôle négatif du lot | un projet SANS `.job` rend un payload rigoureusement identique, et le champ de constats est ABSENT (pas vide : absent) |
+| fixtures de parité Python du payload | inchangées et vertes — la réserve ne fuit pas dans le chemin ordinaire |
+| déterminisme natif ≡ wasm | non concerné : aucun code Rust, aucun wasm dans ce lot |
+
+#### 9.21 Le harnais navigateur, et les six défauts qu'il a trouvés
+
+`scripts/qa-e2e-job.mjs` rejoue le parcours réel — dépôt d'un `.job` avec ses
+DXF, nesting, `.job` téléchargé puis relu par notre propre lecteur — sur
+**l'image locale reconstruite depuis les sources** (règle de la maison :
+images à HEAD avant tout banc). Le lot était verrouillé de bout en bout en
+Node et **ne marchait pas dans un navigateur**. Six défauts, du plus grave au
+moins grave, aucun visible en test unitaire :
+
+1. **Le build de l'IMAGE refusait le lot.** Un module de `app/composables/`
+   atteint par un import dynamique devient son propre chunk ; le bundle
+   serveur réécrit alors ses imports relatifs depuis l'emplacement du CHUNK
+   et non de la source — `../../shared/sheetcamJob.js` devient
+   `../../../../../shared/…` et ne résout plus. C'est le piège AGENTS #29c,
+   et **le build sur le poste ne le voit pas**. Corrigé par l'alias
+   `~~/shared/…`. Élargir `nitro.externals.inline` ne corrigeait rien :
+   essayé, mesuré, annulé.
+2. **La validation physique rejetait TOUT, pour des chevauchements qui
+   n'existaient pas.** Le calcul de la réserve travaille sur des anneaux
+   OUVERTS, le pipeline les attend FERMÉS. `nest-report` balaie ses arêtes
+   par `for i in 0..ring.len() - 1` : sur un anneau ouvert l'arête de
+   fermeture n'existe pas pour lui, et son test d'appartenance en devient
+   faux — il déclare des contenances, donc des chevauchements, qui n'existent
+   pas. Le défaut **dormait depuis le lot J3**, qui n'avait aucun appelant.
+3. **Un `.job` déjà nesté ressortait avec des pièces fantômes** : 5 pièces
+   demandées, 8 sections écrites, les 3 copies d'origine restant ACTIVES à
+   leur ANCIENNE pose. SheetCam aurait coupé trois pièces en trop.
+4. **Le `.job` était rejeté à la dépose sur l'accueil** — la page d'accueil
+   porte sa PROPRE liste d'extensions, et c'est elle qui filtre la première
+   dépose, celle qui crée le projet. Les DXF partaient seuls, sans aucune
+   réserve, en silence.
+5. **Aucun `.job` n'était produit, sans erreur** : `normalizeLayouts` prend
+   la SOLUTION, pas l'alternative — lui passer l'alternative rendait une
+   liste vide, et rien ne le disait.
+6. **Le bouton n'apparaissait pas** alors que les fichiers étaient produits
+   et persistés : `hydrateLocalItem` reconstruit chaque alternative par
+   LISTE BLANCHE de champs, et `jobs` n'y était pas.
+
+L'A/B qui a isolé le défaut 2 mérite d'être gardé : même `.job`, `Lead in=0`
+⇒ le job aboutit ; réserve sur l'hôte seul ⇒ aboutit ; réserve sur les quatre
+éventails ⇒ refusé — alors que la mesure arête↔arête des mêmes poses donne
+**3,501 mm pour 3,500 exigés**.
+
+**Résultat final du harnais, deux configurations : TOUS LES VERROUS VERTS.**
+Structure du fichier rendu (`Count`, `Optimisation=3`, `copyOf`, chemins
+masqués, bloc binaire **identique à l'octet près**), `[OpOrder]` une ligne
+par pièce ACTIVE et ne désignant que des pièces actives, tous les angles dans
+(−2π, 0], et **les pièces nichées coupées AVANT leur hôte** (l'hôte en 2ᵉ
+position sur 4). Le verrou de nichage se DÉCLARE non mesuré quand la solution
+n'en contient pas, au lieu de passer à vide.
+
+#### 9.22 Un défaut OUVERT, et il faut le dire
+
+Avec la réserve, le cas **1 hôte + 1 éventail pose 1 pièce sur 2**, là où le
+même `.job` sans amorce en pose 2 sur 2 — sur une tôle de 1000 × 1250 mm, pour
+deux pièces de 100 × 100 et 40 × 28. Ce n'est pas un coût de densité, c'est
+une pièce qui ne trouve pas sa place.
+
+Ce que la mesure EXCLUT : la pré-passe de remplissage de trous. Rejouée en
+isolation, avec réserve elle ne planifie **aucun** remplissage et **garde les
+deux pièces** dans l'instance moteur (`packs: []`, `idMap: [0, 1]`) — elle ne
+retire donc rien. La perte est plus profonde dans le pipeline. Elle n'est pas
+silencieuse : l'écran affiche « 1 sur 2 » avec ses leviers.
+
+**À traiter avant tout déploiement.**
+
+#### 9.23 Non-faits restants
+
+1. **Les constats de réserve ne sont pas affichés.** Ils voyagent jusqu'au
+   payload (`leadInReserve`), ils sont traduits en EN et FR, aucun composant
+   ne les rend.
+2. **Aucun miroir serveur** : c'est le lot J5, et le masterplan §0 veut le
+   navigateur d'abord.
+3. **La recette machine n'a pas été rejouée par le propriétaire.** Rien ne
+   doit être déployé avant qu'il ait ouvert dans SheetCam un fichier produit
+   par ce lot et confirmé que l'amorce du trou ne coupe plus les éventails.
+4. **La réserve n'est pas mesurée sur un trou CONCAVE** (en L, en C). La
+   garde anti-traversée refuse proprement, mais personne n'a vérifié qu'elle
+   ne refuse pas trop souvent sur des fichiers réels.
+5. **Deux valeurs restent à confirmer sur la machine** : le rayon du disque
+   de perçage (3 mm) et la table `Start position` → coin. Tant que la seconde
+   n'est pas confirmée, la réserve d'un trou coûte 4,6 % au lieu de 1,1 %.
+6. **Le harnais crée un projet par exécution** : enchaîner les lancements
+   déclenche la limite anti-force brute (429, piège #43) et le refus qu'on
+   lit alors n'a rien de géométrique. Laisser retomber le budget entre deux
+   séries.
