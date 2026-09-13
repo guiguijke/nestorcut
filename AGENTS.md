@@ -169,6 +169,22 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    9 fichiers du corpus** (au-delà de `probe_tol`) : non dit à l'utilisateur,
    à traiter avec la couture des contours.
 
+5c. **Un anneau OUVERT fait mentir la validation physique (constat J4,
+   13/09).** `nest-report` balaie ses arêtes par `for i in 0..ring.len() - 1` :
+   l'arête de fermeture n'existe pour lui QUE si l'anneau porte son point de
+   fermeture dupliqué. Sur un anneau ouvert, `point_in_ring` (lancer de rayon)
+   devient FAUX — il déclare des contenances, donc des chevauchements, qui
+   n'existent pas, et `finalizeLocal` écarte toutes les alternatives
+   (« chevauchements mesurés », remboursement). Tout le pipeline produit des
+   anneaux FERMÉS ; un module de géométrie qui travaille en interne sur des
+   anneaux ouverts (`openRing`) doit rendre la convention de son ENTRÉE.
+   Mesuré : la réserve d'amorce rendait 27 et 41 sommets `fermé = false` là
+   où le chemin ordinaire donne `true`, et le job 1 hôte + 4 éventails partait
+   en refus alors que la mesure arête↔arête des mêmes poses donnait 3,501 mm
+   pour 3,500 exigés. A/B : `Lead in=0` ⇒ aboutit ; réserve sur l'hôte seul ⇒
+   aboutit ; réserve sur les quatre éventails ⇒ refusé. Verrou :
+   `sheetcamReserve.test.js` « même convention de fermeture ».
+
 ### Moteur (Rust / sparrow)
 6. **sparrow n'a PAS de borne dure** : une solution « feasible »
    (sans collision) peut dépasser `max_strip_width`. Tout affichage doit
@@ -445,6 +461,16 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     `#shared` / `~~/shared` + `nitro.externals.inline` pour
     `shared/constants`. Les SFC Vue gardent `~~/shared` (le build
     Docker Linux casse si on les convertit en relatifs trop profonds).
+    **Corollaire mesuré au lot J4 : un `app/composables/*.js` atteint par un
+    import DYNAMIQUE devient son propre chunk, et le bundle serveur réécrit
+    alors ses imports relatifs depuis l'emplacement du CHUNK, pas de la
+    source** — `../../shared/x.js` devient `../../../../../shared/x.js` et ne
+    résout plus (« RollupError: Could not resolve »). `npx nuxt build` sur le
+    poste passe, `docker compose build app` REFUSE : c'est le gate qui
+    l'attrape, d'où la règle « images à HEAD avant tout banc ». Depuis
+    `app/`, on importe `shared/` par l'ALIAS, jamais en relatif. Élargir
+    `nitro.externals.inline` à tout `shared/` ne corrige PAS ce cas (essayé,
+    mesuré, annulé) : l'échec est au bundling, pas à l'externalisation.
 30. **`watch` dans un composable singleton = scope du 1er appelant** : il
     meurt au démontage du composant (changement de layout à la navigation)
     et un garde `initialized` empêche toute réinscription → enregistrer le
@@ -840,7 +866,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (517 au 2026-09-09)
+npx vitest run                                             # app+server (708 au 2026-09-13)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # ≈233 + 1 skip (≈233 au 06/09 ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 48 (image docker)
