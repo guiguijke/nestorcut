@@ -294,3 +294,112 @@ géométries). Non-fait maintenu : aucun fichier de ce code n'a été ouvert
 DANS SheetCam ; l'égalité avec le fichier validé le 11/09 tient lieu de
 preuve jusqu'à la recette du §8 sur le poste du propriétaire, à faire au
 plus tard à la fin de J2 (premier fichier produit depuis un vrai nesting).
+
+
+### Lot J2 — conversion de pose et ordre de coupe (implémenteur, 13/09)
+
+Livré : `shared/sheetcamNest.js` (un seul code, aucune dépendance — il prend
+des poses MOTEUR et rend des poses `.job`, puis appelle l'écrivain du lot J1)
+et `app/tests/sheetcamNest.test.js` (**15 verrous**). Un commit. Le moteur
+n'est pas touché ; le module n'a encore aucun appelant produit (c'est J4).
+
+#### 9.5 La règle 3, et ce qu'elle a coûté à mesurer
+
+Notre moteur pose une pièce par une rotation θ autour de l'origine DU DESSIN
+puis une translation t : un point p arrive en `R(θ)·p + t` — c'est
+exactement ce que fait l'export DXF (`z_rotate(angle) * translate(x, y)`).
+SheetCam, lui, ne stocke pas de translation : `XPos`/`YPos` sont la position
+du **centre de boîte de la pièce posée**, et `Angle` tourne dans l'autre
+sens. D'où `XPos, YPos = t + R(θ)·c` et `Angle = −θ`, avec `c` le centre de
+boîte du dessin non tourné.
+
+Le fait qui rend la règle NON facultative, mesuré sur nos anneaux importés :
+
+| dessin | boîte | centre `c` |
+|---|---|---|
+| `Piece_Trou` (l'hôte) | 100 × 100 | **(0 ; 0)** — centré sur l'origine |
+| `Piece_Fillx4` (l'éventail) | 39,598 × 28 | **(0 ; 16,8284)** — PAS centré |
+
+Sur l'éventail, ignorer `c` décale la pièce de `R(θ)·c − c`, soit **16,83 mm
+à 180°** (et jusqu'à 33,7 mm d'écart entre deux exemplaires opposés). Un
+verrou le mesure explicitement : la pose sans centre tombe à plus de 16 mm de
+la référence, contre 0,4 µm pour la pose correcte.
+
+#### 9.6 Le verrou central n'est pas une tautologie
+
+On entre un jeu de poses **moteur** propre — `t = (50 ; 50)` pour les quatre
+éventails, `θ = 0, π/2, π, 3π/2`, c'est-à-dire le pinwheel dans le trou de
+l'hôte — plus les centres de boîte mesurés sur nos anneaux. Il doit en
+sortir les quatre lignes du fichier que le propriétaire a ouvert dans
+SheetCam le 11/09. C'est le cas :
+
+| exemplaire | référence 11/09 | calculé depuis la pose moteur |
+|---|---|---|
+| éventail 1 | `XPos=50`, `YPos=66.828`, `Angle=-0` | 50 ; 66,8284 ; −0 |
+| éventail 2 | `33.172` ; `50` ; `-1.5707963267949` | 33,1716 ; 50 ; −π/2 |
+| éventail 3 | `50` ; `33.172` ; `-3.14159265358979` | 50 ; 33,1716 ; −π |
+| éventail 4 | `66.828` ; `50` ; `-4.71238898038469` | 66,8284 ; 50 ; −3π/2 |
+| hôte | `50` ; `50` ; `0` | 50 ; 50 ; −0 |
+
+**L'écart est de 0,4 µm, et il vient de la RÉFÉRENCE, pas de notre calcul** :
+le fichier du 11/09 a été généré avec un centre de boîte au millième
+(16,828), alors que nos anneaux donnent 16,8284. La tolérance du verrou est
+donc 0,0005 mm — celle de la référence — et les angles, eux, sont comparés à
+1e−12. Je le dis parce qu'un « identique à 1e−9 » aurait été faux : c'est un
+écart de précision de la référence, pas du code. Le fichier du lot J1 reste,
+lui, identique à l'octet près, puisque J1 écrit les poses qu'on lui donne.
+
+#### 9.7 Le reste du lot
+
+- **Ordre de coupe** (`cutOrder`) : pièces nichées d'abord, **par
+  profondeur décroissante** (une pièce dans le trou d'une pièce nichée sort
+  avant), puis les hôtes ; les pièces d'un même hôte **groupées**, pour que
+  la torche ne fasse pas l'aller-retour. Sur le moulinet, la sortie est
+  exactement l'`[OpOrder]` de la référence : `1,0  2,0  3,0  4,0  0,0`.
+  `nestingDepths` refuse une chaîne d'imbrication circulaire plutôt que de
+  boucler.
+- **Rangs écrits** (`writtenRanks`) : miroir exact de l'écrivain J1 — le
+  premier exemplaire d'un dessin garde le rang de son original (règle 6, le
+  bloc binaire est lié aux rangs), les copies prennent les rangs libres à la
+  suite, dessin par dessin. C'est ce qui permet à `[OpOrder]` de désigner les
+  bons rangs sans que J2 ait à réécrire le fichier lui-même.
+- **Un `.job` par tôle** (v1, point 6 de la consigne §6) : `[Work]` ne porte
+  qu'une tôle. Chaque fichier ne contient que les pièces de SA tôle, les
+  autres étant mises à `enabled=0` — jamais supprimées, leur rang porte le
+  binaire. Verrou : deux tôles → deux fichiers, et dans chacun la pièce de
+  l'autre tôle est désactivée.
+- **Miroirs `HRef`/`VRef` : pas en v1**, comme le prévoit la consigne —
+  aucun essai SheetCam sur une pièce non symétrique n'a été fait, donc rien
+  n'est écrit dessus (le lecteur les lit, l'écrivain les recopie). Les
+  rotations seules.
+
+#### 9.8 Verrous
+
+| Verrou | Résultat |
+|---|---|
+| les quatre poses du moulinet | **4/4**, écart ≤ 0,4 µm (précision de la référence), angles à 1e−12 |
+| l'hôte | `50 ; 50 ; -0` exactement |
+| le centre de boîte compte | pose sans `c` : **> 16 mm** d'écart — le verrou le mesure au lieu de l'affirmer |
+| zéro négatif | conservé à l'écriture ET à la lecture (`Number('-0')` est −0) |
+| `[OpOrder]` du moulinet | identique à la référence |
+| profondeur et groupage | 3 cas mesurés, dont une pièce dans une pièce nichée |
+| chaîne circulaire | refusée (`nestingCycle`) |
+| deux tôles | deux fichiers, pièces de l'autre tôle désactivées |
+| refus sans devinette | `noSheets`, `emptySheet`, `missingCentre` |
+| `npx vitest run` | **57 fichiers, 624 tests verts** (15 de plus) |
+
+#### 9.9 Non-faits
+
+1. **La recette SheetCam reste à faire** : aucun fichier produit par ce code
+   n'a été ouvert dans SheetCam. J2 produit maintenant un `.job` depuis des
+   poses moteur — c'est le moment prévu par le propriétaire pour les trente
+   secondes d'essai sur son poste. Il manque encore le branchement (J4) pour
+   qu'un vrai nesting fournisse ces poses : je peux fabriquer un fichier de
+   démonstration à la main depuis un résultat existant si le propriétaire
+   veut faire l'essai avant J4 — à sa demande, pas de moi-même.
+2. **`nestedIn` (l'imbrication) est une ENTRÉE**, pas une déduction : c'est
+   l'appelant qui dit quelle pièce est dans le trou de laquelle. Nos
+   post-pass le savent (`holesFilled`, membres par trou) ; le câblage est
+   dans J4. J2 ne devine pas une imbrication depuis la géométrie.
+3. **Les miroirs et le multi-tôles dans un seul fichier** restent hors v1
+   (questions ouvertes du §4).
