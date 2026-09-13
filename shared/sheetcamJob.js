@@ -193,6 +193,41 @@ function sectionEntries(lines, section) {
     return out
 }
 
+/**
+ * Est-ce un `.job` SheetCam ? Par SIGNATURE DE CONTENU, jamais par extension
+ * (piège AGENTS #31 : les slugs d'upload finissaient tous en `.dxf` quel que
+ * soit le format réel).
+ *
+ * Ce que la signature regarde, mesuré sur les onze `.job` d'essai :
+ *  - le fichier commence par l'entrée HORS SECTION `Config=` (les 80 premiers
+ *    octets de chacun : `C o n f i g = \r \n [ C u t o f f ] …`) ;
+ *  - et il porte `[Misc]` avec un `FileVersion=`, plus le marqueur
+ *    `[BinaryDataStart]`.
+ *
+ * Pourquoi ce test doit vivre EN JS, avant le wasm : le détecteur de
+ * l'importeur wasm est à deux branches (premier octet non blanc `<` ⇒ SVG,
+ * TOUT LE RESTE ⇒ DXF). Un `.job` bien formé n'y serait donc pas rejeté : il
+ * partirait dans l'importeur DXF et ressortirait en « erreur d'analyse »
+ * générique — un message faux pour un fichier parfaitement valide. On ne
+ * touche pas au détecteur Rust pour autant : l'étendre imposerait un rebuild
+ * du wasm (piège #33b) et casserait le contrat à deux branches que ses
+ * propres tests verrouillent.
+ *
+ * On ne lit que la TÊTE du fichier : un `.job` porte un bloc binaire, et un
+ * fichier étranger de plusieurs mégaoctets n'a pas à être décodé en entier
+ * pour être écarté.
+ */
+export function isSheetCamJob(bytes, headBytes = 64 * 1024) {
+    if (!(bytes instanceof Uint8Array) || bytes.length < BINARY_MARKER.length) return false
+    const head = bytesToLatin1(bytes.subarray(0, Math.min(bytes.length, headBytes)))
+    // BOM UTF-8 toléré : un éditeur de texte peut en avoir posé un.
+    const text = head.startsWith('﻿') || head.startsWith('ï»¿')
+        ? head.replace(/^(﻿|ï»¿)/, '')
+        : head
+    if (!text.startsWith('Config=')) return false
+    return text.includes('[Misc]') && /(^|\r\n)FileVersion=/.test(text)
+}
+
 /** Nom de fichier seul, chemin Windows ou POSIX (règle 9 : un `.job` déposé
  *  chez nous porte le chemin absolu du disque de l'utilisateur). */
 export function jobDrawingName(drawingFile) {

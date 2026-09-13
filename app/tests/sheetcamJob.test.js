@@ -23,6 +23,7 @@ import {
     SUPPORTED_JOB_VERSIONS,
     SheetCamJobError,
     formatJobNumber,
+    isSheetCamJob,
     jobDrawingName,
     jobSheet,
     parseSheetCamJob,
@@ -274,5 +275,47 @@ describe('J1 — format des nombres (%.15g, mesuré sur la référence)', () => 
         expect(formatJobNumber(0.0001)).toBe('0.0001')
         expect(() => formatJobNumber(Infinity)).toThrow(/badNumber/)
         expect(() => formatJobNumber('abc')).toThrow(/badNumber/)
+    })
+})
+
+describe('J4 — reconnaître un `.job` par sa SIGNATURE, jamais par l’extension', () => {
+    it('reconnaît les `.job`, et RIEN d’autre', () => {
+        expect(isSheetCamJob(SOURCE)).toBe(true)
+        expect(isSheetCamJob(read(path.join(FIX, 'x4-reference.job')))).toBe(true)
+
+        // Contrôle NÉGATIF — c'est lui qui compte (piège #31). Le détecteur
+        // de l'importeur wasm est à deux branches : premier octet non blanc
+        // `<` ⇒ SVG, TOUT LE RESTE ⇒ DXF. Un `.job` y passerait donc pour un
+        // DXF et sortirait en « erreur d'analyse » générique. Symétriquement,
+        // notre signature ne doit avaler ni DXF ni SVG.
+        const dxf = new TextEncoder().encode('0\r\nSECTION\r\n2\r\nHEADER\r\n')
+        const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')
+        expect(isSheetCamJob(dxf)).toBe(false)
+        expect(isSheetCamJob(svg)).toBe(false)
+        expect(isSheetCamJob(new Uint8Array(0))).toBe(false)
+        expect(isSheetCamJob(null)).toBe(false)
+
+        // Un leurre qui COMMENCE comme un `.job` mais n'en est pas un : la
+        // première ligne ne suffit pas, il faut `[Misc]` et `FileVersion=`.
+        expect(isSheetCamJob(new TextEncoder().encode('Config=\r\nbonjour\r\n'))).toBe(false)
+    })
+
+    it('mesuré sur les `.job` RÉELS du propriétaire quand ils sont là', () => {
+        // `.testparts/` est gitignoré : sans eux la suite reste verte, mais
+        // elle DIT qu'elle n'a pas mesuré (même convention qu'au lot J1).
+        const dir = path.resolve(__dirname, '../../.testparts')
+        if (!fs.existsSync(dir)) {
+            console.warn('[J4] .testparts absent — signature non mesurée sur les fichiers réels')
+            return
+        }
+        const jobs = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.job'))
+        expect(jobs.length).toBeGreaterThan(0)
+        for (const f of jobs) {
+            expect(isSheetCamJob(read(path.join(dir, f)))).toBe(true)
+        }
+        // Et les DXF du même dossier ne passent pas.
+        for (const f of fs.readdirSync(dir).filter((x) => x.toLowerCase().endsWith('.dxf'))) {
+            expect(isSheetCamJob(read(path.join(dir, f)))).toBe(false)
+        }
     })
 })

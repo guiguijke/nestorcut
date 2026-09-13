@@ -75,6 +75,35 @@ export function drawingBoxCentre(parts) {
 }
 
 /**
+ * Ramène l'angle `.job` dans l'intervalle que SheetCam écrit lui-même.
+ *
+ * CET INTERVALLE EST (−2π, 0], ET IL EST MESURÉ, pas choisi. Le fichier de
+ * référence posé À LA MAIN dans SheetCam
+ * (`app/tests/fixtures/sheetcam/x4-reference.job`) porte, pour les quatre
+ * quarts de tour, `Angle = −0, −1.5707963267949, −3.14159265358979,
+ * −4.71238898038469`. SheetCam ne réduit donc PAS dans (−π, π] : il garde un
+ * tour négatif complet. Normaliser dans (−π, π) — la forme qu'on écrit par
+ * réflexe — récrirait −4,712 en +1,571 et ferait diverger notre écriture du
+ * fichier de référence, que le verrou du lot J2 compare à 1e-12 près.
+ *
+ * Ce qu'il fallait corriger, c'est seulement le débordement : la recette du
+ * 13/09 porte `Angle=-6.283` parce que le moteur a émis θ = 2π, qui est un
+ * tour complet, donc l'identité. Un fichier propre écrit `−0`. Pour tout
+ * θ ∈ [0, 2π) — c'est-à-dire tout ce que le moteur produit normalement —
+ * cette fonction est l'IDENTITÉ, signe du zéro compris.
+ */
+export function normalizeJobAngle(angle) {
+    const a = Number(angle)
+    if (!Number.isFinite(a)) return a
+    const turn = 2 * Math.PI
+    // `%` conserve le signe du dividende, donc `-0 % τ` vaut `-0` et
+    // `−2π % τ` vaut `-0` : le tour complet retombe sur le zéro NÉGATIF que
+    // porte la référence.
+    const r = a % turn
+    return r > 0 ? r - turn : r
+}
+
+/**
  * Pose `.job` d'un exemplaire, depuis la pose moteur et le centre de boîte.
  *
  * `pose` : `{ x, y, angle }` — translation en millimètres, rotation en
@@ -92,8 +121,9 @@ export function jobPlacement(pose, centre) {
     return {
         xPos: Number(pose.x) + (cx * cos - cy * sin),
         yPos: Number(pose.y) + (cx * sin + cy * cos),
-        // −θ, et le signe de zéro est conservé (JavaScript : -(0) === -0).
-        angle: -theta,
+        // −θ, ramené dans l'intervalle de SheetCam ; le signe de zéro est
+        // conservé (JavaScript : -(0) === -0, et -0 % τ === -0).
+        angle: normalizeJobAngle(-theta),
     }
 }
 

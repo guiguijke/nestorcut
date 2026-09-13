@@ -18,6 +18,7 @@ import {
     jobPlacement,
     nestedJobsPerSheet,
     nestingDepths,
+    normalizeJobAngle,
     writtenRanks,
 } from '../../shared/sheetcamNest'
 
@@ -74,6 +75,33 @@ describe('J2 — la règle 3, contre le fichier du 11/09', () => {
         expect(Math.abs(withCentre.yPos - withoutCentre.yPos)).toBeCloseTo(16.8284, 4)
         // Et la pose fausse tombe à 16,8 mm de la référence, pas à 0,4 µm.
         expect(Math.abs(withoutCentre.yPos - refParts[3].yPos)).toBeGreaterThan(16)
+    })
+
+    it('ramène l’angle dans l’intervalle que SheetCam écrit lui-même (J4)', () => {
+        // Le défaut relevé sur la recette du 13/09 : `Angle=-6.283`, c'est-
+        // à-dire −2π, pour un θ = 2π émis par le moteur — un tour complet,
+        // donc l'identité. Un fichier propre écrit −0.
+        expect(Object.is(normalizeJobAngle(-2 * Math.PI), -0)).toBe(true)
+        expect(Object.is(jobPlacement({ x: 0, y: 0, angle: 2 * Math.PI }, [0, 0]).angle, -0))
+            .toBe(true)
+
+        // L'INTERVALLE EST MESURÉ, PAS CHOISI. La référence posée à la main
+        // dans SheetCam porte −0, −π/2, −π, −3π/2 : SheetCam garde un tour
+        // négatif complet, il ne réduit pas dans (−π, π]. Normaliser dans
+        // (−π, π] récrirait −4,712 en +1,571 et ferait diverger notre
+        // écriture de la référence — ce verrou l'interdit.
+        for (const a of refParts.slice(1).map((p) => p.angle)) {
+            expect(normalizeJobAngle(a)).toBe(a)
+        }
+        expect(refParts[4].angle).toBeCloseTo(-3 * Math.PI / 2, 9)
+        expect(normalizeJobAngle(refParts[4].angle)).toBeLessThan(-Math.PI)
+
+        // Et sur tout ce que le moteur produit normalement — θ ∈ [0, 2π) —
+        // la fonction est l'IDENTITÉ, signe du zéro compris.
+        for (let k = 0; k < 360; k++) {
+            const theta = (2 * Math.PI * k) / 360
+            expect(Object.is(normalizeJobAngle(-theta), -theta)).toBe(true)
+        }
     })
 
     it('garde le zéro NÉGATIF de l’angle nul', () => {

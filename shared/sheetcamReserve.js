@@ -181,7 +181,15 @@ function bbox(ring) {
 export function predictedStartIndex(ring, startPosition = null) {
     const r = openRing(ring)
     if (r.length < 3) return 0
-    const corner = START_CORNERS[Number(startPosition)] || null
+    // `Number(null)` vaut 0, donc un `Start position` ABSENT désignait le
+    // coin 0 (bas gauche) au lieu de retomber sur la règle par défaut — le
+    // repli documenté juste au-dessus était mort pour `null`, et son verrou
+    // passait par coïncidence (sur un rectangle 10 × 5, le coin bas gauche
+    // ET la plus longue arête donnent tous deux l'index 0). Défaut trouvé au
+    // lot J4 ; le verrou est maintenant DISCRIMINANT (3 × 50 : coin 0, arête 1).
+    const corner = startPosition == null
+        ? null
+        : (START_CORNERS[Number(startPosition)] || null)
     if (corner) {
         const { minX, minY, maxX, maxY } = bbox(r)
         const target = [
@@ -338,20 +346,337 @@ export function withLeadInReserve(ring, {
     return { ring: out, applied: true, reason: null, startIndex: index, pierceAt: centre }
 }
 
+// --- la réserve d'amorce d'un TROU (lot J4) --------------------------------
+
+/**
+ * LE DÉFAUT QUE CE BLOC CORRIGE, et pourquoi le lot J3 s'était trompé.
+ *
+ * Le lot J3 écrivait, en toutes lettres : « les trous ne reçoivent pas de
+ * réserve — l'amorce d'un trou mange dans le trou, pas chez la voisine ».
+ * C'était un raisonnement, pas une mesure, et LA MACHINE L'A INFIRMÉ : la
+ * recette du 13/09 ouverte dans SheetCam montre l'amorce du contour du trou
+ * de l'hôte partir VERS L'INTÉRIEUR du trou — c'est-à-dire du côté chute —
+ * et couper deux des quatre éventails que NestorCut y avait nichés (verdict
+ * du propriétaire, étude §9). La place dans un trou n'est pas prise par la
+ * matière de la pièce : c'est précisément là que notre remplissage pose des
+ * pièces.
+ *
+ * ---------------------------------------------------------------------------
+ * CE QUE LE FORMAT PERMET, mesuré sur les onze `.job` d'essai.
+ *
+ * Il n'existe AUCUNE clé « point de départ » par contour : le relevé de
+ * toutes les clés ne donne, par OPÉRATION, qu'un `Start position` entier. Et
+ * `[OpOrder]` s'arrête à la granularité `pièce,opération` — cinq lignes pour
+ * cinq pièces dans la recette, alors qu'une même opération « Outside Offset »
+ * coupe le contour extérieur ET le trou. La voie 2 du verdict (« imposer
+ * nous-mêmes le point de départ du trou après nesting ») est donc FERMÉE PAR
+ * LE FORMAT : on ne peut que prédire le point de départ, et réserver la place.
+ *
+ * ---------------------------------------------------------------------------
+ * POURQUOI PAS L'APPENDICE DU LOT J3, TEL QUEL.
+ *
+ * Pour le contour extérieur, l'appendice est une BOSSE : l'anneau grossit, le
+ * tour se referme proprement, l'aire monte. Retourner simplement la direction
+ * vers l'intérieur ne donne PAS une encoche — mesuré sur le trou de la
+ * recette (cercle r = 35, amorce 5, perçage 3) : l'aire MONTE de 3 842 à
+ * 3 868 mm² et 21 des 32 sommets du disque de perçage restent dans la zone
+ * libre. Le tour ré-enferme la zone au lieu de la retrancher.
+ *
+ * Et l'encoche « épinglée sur un seul sommet » qu'on obtiendrait en inversant
+ * le sens de parcours est pire : elle pince l'anneau en un point (sommet
+ * dupliqué, goulot d'épaisseur nulle) — exactement la famille de géométries
+ * qui tue l'import moteur (pièges AGENTS #2c et #5b).
+ *
+ * ---------------------------------------------------------------------------
+ * LA FORME RETENUE : une MORSURE DE BORD à mâchoire large.
+ *
+ * On retire de la zone libre un lobe ACCROCHÉ au bord du trou, dont la bouche
+ * mesure `2 × mouthMm` le long du contour :
+ *
+ *   1. point de départ prédit `v` sur l'anneau du trou ;
+ *   2. `E` et `X` : les deux points du contour à `mouthMm` de part et d'autre
+ *      de `v`, mesurés LE LONG de l'anneau (interpolés sur l'arête, donc
+ *      exacts même sur un cercle discrétisé) ;
+ *   3. la morsure = enveloppe convexe de `E`, `X` et du disque de perçage
+ *      centré à `leadIn` vers l'intérieur ;
+ *   4. l'arc du contour entre `E` et `X` est remplacé par le chemin de la
+ *      morsure qui CONTOURNE le disque (le plus long des deux tours).
+ *
+ * Le lobe retiré s'ouvre sur le bord : ni goulot, ni pincement, ni sommet
+ * dupliqué — ni dans la zone libre, ni dans la matière de l'hôte, qui gagne
+ * ce même lobe (piège #4 : le polygone posé est l'anneau externe MOINS les
+ * trous, donc rétrécir le trou épaissit l'hôte là où il faut).
+ *
+ * Mesuré sur le trou de la recette, amorce 5 + perçage 3, bouche 3 mm :
+ *   - disque de perçage strictement dans la zone libre : 0 / 32 ;
+ *   - couloir d'amorce (perçage → bord) dans la zone libre : 0 / 101 ;
+ *   - prix : 1,14 % de l'aire du trou — contre 40 % pour la couronne
+ *     intérieure complète de largeur `amorce + perçage` (rayon libre 27 au
+ *     lieu de 35). C'est ce rapport qui justifie la forme.
+ */
+
+/** Direction ENTRANTE au sommet `i` : l'opposée de la sortante. Sur l'anneau
+ *  d'un TROU, « entrant » veut dire vers l'intérieur du trou, donc du côté
+ *  chute — le côté où SheetCam trace l'amorce d'un contour intérieur. */
+export function inwardAt(ring, index) {
+    return mul(outwardAt(ring, index), -1)
+}
+
+/**
+ * Point à la distance `d` le long de l'anneau depuis le sommet `from`, dans
+ * le sens `step` (+1 avant, −1 arrière). Rend le point INTERPOLÉ sur l'arête
+ * (un cercle discrétisé n'a pas de sommet à 3 mm pile) et le premier sommet
+ * DÉPASSÉ, qui sert d'ancre au recollement.
+ */
+function walkAlongRing(r, from, d, step) {
+    const n = r.length
+    let cur = from
+    let left = d
+    for (let k = 0; k < n; k++) {
+        const nxt = (cur + step + n) % n
+        const seg = norm(sub(r[nxt], r[cur]))
+        if (seg >= left) {
+            const t = seg === 0 ? 0 : left / seg
+            return { point: add(r[cur], mul(sub(r[nxt], r[cur]), t)), anchor: nxt }
+        }
+        left -= seg
+        cur = nxt
+    }
+    // L'anneau entier est plus court que la bouche demandée : le trou est trop
+    // petit pour qu'on y réserve quoi que ce soit proprement.
+    return null
+}
+
+/**
+ * Une morsure, au sommet `startIndex` de l'anneau d'un trou.
+ *
+ * Rend `{ ring, applied, reason, pierceAt }`. `applied: false` laisse l'anneau
+ * INTACT et dit pourquoi — on ne livre jamais une zone libre dont on ne sait
+ * pas si l'amorce la traverse.
+ */
+export function holeBite(ring, {
+    startIndex = 0,
+    leadIn = 0,
+    pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
+    mouthMm = null,
+} = {}) {
+    const r = openRing((ring || []).map((p) => [Number(p[0]), Number(p[1])]))
+    const lead = Number(leadIn)
+    const margin = Number(pierceMarginMm)
+    if (r.length < 3) return { ring, applied: false, reason: 'ringTooSmall' }
+    if (!Number.isFinite(lead) || !Number.isFinite(margin)
+        || (lead <= 0 && margin <= 0)) {
+        return { ring, applied: false, reason: 'nothingToReserve' }
+    }
+    // Bouche par DÉFAUT = le rayon de perçage, donc une bouche totale égale au
+    // diamètre du disque : le lobe retiré n'est jamais plus étroit que ce
+    // qu'il doit contenir.
+    const mouth = Number.isFinite(Number(mouthMm)) && Number(mouthMm) > 0
+        ? Number(mouthMm)
+        : Math.max(margin, 1e-3)
+
+    const i = ((Math.trunc(startIndex) % r.length) + r.length) % r.length
+    const v = r[i]
+    const centre = add(v, mul(inwardAt(r, i), Math.max(0, lead)))
+    const back = walkAlongRing(r, i, mouth, -1)
+    const fwd = walkAlongRing(r, i, mouth, +1)
+    if (!back || !fwd || back.anchor === fwd.anchor) {
+        return { ring, applied: false, reason: 'holeTooSmall' }
+    }
+    const E = back.point
+    const X = fwd.point
+    const hull = convexHull([E, X, ...pierceDisc(centre, Math.max(0, margin))])
+    const iE = hull.findIndex((p) => p[0] === E[0] && p[1] === E[1])
+    const iX = hull.findIndex((p) => p[0] === X[0] && p[1] === X[1])
+    if (iE < 0 || iX < 0) {
+        // Une des deux lèvres de la bouche est DANS le disque : l'amorce est
+        // plus courte que la marge de perçage, il n'y a pas de morsure propre
+        // à découper. On refuse (même esprit que `vertexInsideDisc`).
+        return { ring, applied: false, reason: 'mouthInsideDisc' }
+    }
+    // Des deux tours de l'enveloppe entre E et X, celui qui CONTOURNE le
+    // disque est le plus long ; l'autre est la corde E→X, qui ne retirerait
+    // rien.
+    const walk = (step) => {
+        const out = []
+        for (let k = iE; ; k = (k + step + hull.length) % hull.length) {
+            out.push(hull[k])
+            if (k === iX) break
+        }
+        return out
+    }
+    const pathLen = (p) => p.reduce((s, q, k) => (k ? s + norm(sub(q, p[k - 1])) : 0), 0)
+    const ahead = walk(1)
+    const behind = walk(-1)
+    const path = pathLen(ahead) >= pathLen(behind) ? ahead : behind
+
+    // Recollement : on garde les deux ancres et on jette l'arc entre elles.
+    const dropped = new Set()
+    for (let k = back.anchor; ; k = (k + 1) % r.length) {
+        dropped.add(k)
+        if (k === fwd.anchor) break
+    }
+    dropped.delete(back.anchor)
+    dropped.delete(fwd.anchor)
+    const out = []
+    let spliceAt = -1
+    for (let k = 0; k < r.length; k++) {
+        if (dropped.has(k)) continue
+        out.push(r[k])
+        if (k === back.anchor) {
+            spliceAt = out.length
+            out.push(...path)
+        }
+    }
+    if (out.length < 3 || spliceAt < 0) {
+        return { ring, applied: false, reason: 'holeTooSmall' }
+    }
+
+    // Même garde que le contour extérieur (piège #2c) : aucune arête neuve ne
+    // doit croiser une arête d'origine. Sur un trou très concave, la morsure
+    // peut ressortir par une gorge — auquel cas on refuse plutôt que de livrer
+    // un anneau auto-intersectant, que l'import moteur refuse.
+    const to = spliceAt + path.length
+    for (let s = spliceAt - 1; s < to; s++) {
+        const a1 = out[((s % out.length) + out.length) % out.length]
+        const a2 = out[(((s + 1) % out.length) + out.length) % out.length]
+        for (let t = 0; t < out.length; t++) {
+            if (t >= spliceAt - 2 && t < to) continue
+            if (segmentsCrossProperly(a1, a2, out[t], out[(t + 1) % out.length])) {
+                return { ring, applied: false, reason: 'reserveCrossesContour' }
+            }
+        }
+    }
+    return { ring: out, applied: true, reason: null, pierceAt: centre, startIndex: i }
+}
+
+/**
+ * Les sommets candidats au départ d'un contour, UN PAR COIN de `START_CORNERS`.
+ *
+ * Pourquoi les quatre, et pas seulement le coin lu dans le `.job` : la
+ * correspondance `Start position` → coin n'est PAS CONFIRMÉE sur la machine
+ * (non-fait 3 du lot J3, question ouverte §9 de l'étude). Réserver le seul
+ * coin prédit reviendrait à parier sur une table non mesurée — et le prix
+ * d'un mauvais pari, c'est la pièce coupée par l'amorce, le défaut même que
+ * ce lot corrige. Réserver les QUATRE candidats est juste QUEL QUE SOIT le
+ * sens de la table.
+ *
+ * Le prix mesuré sur le trou de la recette : ≈ 4 × 1,14 % de l'aire du trou,
+ * contre 40 % pour la couronne complète — dix fois moins cher qu'un repli
+ * conservateur, et sans hypothèse. Quand le propriétaire aura confirmé la
+ * table, `startPositionConfirmed` fera tomber la réserve au seul coin lu.
+ */
+export function cornerStartIndices(ring) {
+    const r = openRing(ring)
+    const seen = new Set()
+    const out = []
+    for (let k = 0; k < START_CORNERS.length; k++) {
+        const i = predictedStartIndex(r, k)
+        if (!seen.has(i)) {
+            seen.add(i)
+            out.push(i)
+        }
+    }
+    return out
+}
+
+/**
+ * Réserve d'amorce d'un TROU : une morsure à chaque point de départ candidat.
+ *
+ * Les morsures s'appliquent l'une après l'autre sur l'anneau déjà mordu. Les
+ * index se décalent à chaque passe (la morsure change le nombre de sommets) :
+ * les points de départ sont donc RECALCULÉS sur l'anneau courant à chaque
+ * tour, jamais mémorisés.
+ *
+ * Une morsure refusée fait échouer la réserve ENTIÈRE du trou : on ne garde
+ * pas une zone libre à moitié sûre. L'appelant décide alors quoi faire —
+ * `partWithReserve` retire le trou du nesting plutôt que d'y nicher à
+ * l'aveugle.
+ */
+export function holeWithLeadInReserve(hole, {
+    startPosition = null,
+    startPositionConfirmed = false,
+    leadIn = 0,
+    pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
+    mouthMm = null,
+} = {}) {
+    const lead = Number(leadIn)
+    const margin = Number(pierceMarginMm)
+    if (!Number.isFinite(lead) || !Number.isFinite(margin)
+        || (lead <= 0 && margin <= 0)) {
+        return { ring: hole, applied: false, reason: 'nothingToReserve', bites: 0 }
+    }
+    let ring = openRing((hole || []).map((p) => [Number(p[0]), Number(p[1])]))
+    if (ring.length < 3) {
+        return { ring: hole, applied: false, reason: 'ringTooSmall', bites: 0 }
+    }
+
+    const rounds = startPositionConfirmed ? 1 : START_CORNERS.length
+    const pierceAt = []
+    let bites = 0
+    for (let k = 0; k < rounds; k++) {
+        const index = startPositionConfirmed
+            ? predictedStartIndex(ring, startPosition)
+            : predictedStartIndex(ring, k)
+        const res = holeBite(ring, {
+            startIndex: index,
+            leadIn: lead,
+            pierceMarginMm: margin,
+            mouthMm,
+        })
+        if (!res.applied) {
+            // Deux coins peuvent désigner le même sommet sur un anneau déjà
+            // mordu : la place y est DÉJÀ réservée, ce n'est pas un échec.
+            if (res.reason === 'mouthInsideDisc' && bites > 0) continue
+            return { ring: hole, applied: false, reason: res.reason, bites: 0 }
+        }
+        ring = res.ring
+        pierceAt.push(res.pierceAt)
+        bites += 1
+    }
+    return { ring, applied: true, reason: null, bites, pierceAt }
+}
+
 /**
  * Réserve appliquée à une PIÈCE (contour + trous) d'un job `.job`.
  *
- * Les trous ne reçoivent pas de réserve : SheetCam perce aussi pour un trou
- * intérieur, mais la place y est prise par la matière de la pièce elle-même —
- * l'amorce d'un trou mange dans le trou, pas chez la voisine. Le jour où le
- * contraire sera mesuré, ce sera un lot à part.
+ * Le contour extérieur reçoit l'appendice du lot J3 (une bosse vers
+ * l'extérieur, qui garde la place chez la voisine). Les TROUS reçoivent la
+ * morsure de bord du lot J4 (un lobe retiré vers l'intérieur, qui garde la
+ * place au milieu de nos propres pièces nichées) — le lot J3 croyait la
+ * réserve inutile dans un trou, la machine l'a démenti (verdict du 13/09).
+ *
+ * Un trou dont la réserve est REFUSÉE est retiré de `holes` : la zone libre
+ * disparaît, plus rien ne s'y niche, et le fait est dit dans `reserve.holes[]`
+ * pour que l'UI le constate. C'est la dégradation sûre — nicher dans un trou
+ * dont on ne sait pas où l'amorce passe, c'est livrer le défaut de la recette.
+ * Le contour réel, lui, n'est pas touché : le `.job` rendu garde le trou
+ * entier, c'est SheetCam qui le coupe.
  */
 export function partWithReserve(part, options = {}) {
     const res = withLeadInReserve(part.coordinates, options)
+    const holes = []
+    const holeReports = []
+    ;(part.holes || []).forEach((hole, index) => {
+        const hres = holeWithLeadInReserve(hole, options)
+        if (hres.applied) {
+            holes.push(hres.ring)
+            holeReports.push({ index, applied: true, reason: null, bites: hres.bites, dropped: false })
+            return
+        }
+        if (hres.reason === 'nothingToReserve') {
+            // Ni amorce ni perçage à réserver (le `.job` ne déclare rien) :
+            // le trou reste entier, il n'y a aucun risque à y nicher.
+            holes.push(hole)
+            holeReports.push({ index, applied: false, reason: hres.reason, bites: 0, dropped: false })
+            return
+        }
+        holeReports.push({ index, applied: false, reason: hres.reason, bites: 0, dropped: true })
+    })
     return {
         ...part,
         coordinates: res.ring,
-        holes: part.holes || [],
+        holes,
         reserve: {
             applied: res.applied,
             reason: res.reason,
@@ -359,6 +684,8 @@ export function partWithReserve(part, options = {}) {
             leadIn: Number(options.leadIn ?? 0),
             startIndex: res.startIndex ?? null,
             pierceAt: res.pierceAt ?? null,
+            holes: holeReports,
+            holesDropped: holeReports.filter((h) => h.dropped).length,
         },
     }
 }
