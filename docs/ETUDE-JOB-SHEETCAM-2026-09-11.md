@@ -1922,3 +1922,92 @@ jamais mêlé à un correctif `.job`.
 **Ce qui reste** : la réponse du propriétaire sur l'entité POINT. Tant qu'elle
 n'est pas là, la règle « perçage errant » tient et la recette ne montre aucun
 nichage.
+
+**Observation du propriétaire (13/09, nuit) sur son fichier ORIGINAL
+`Piece_Trou+Fill_x4_OK.job`, nesté à la main dans SheetCam** : l'hôte est coupé
+en deuxième (optimisation automatique de SheetCam) et le point de départ
+automatique du trou, S2 à (24,7 ; −24,7), mord un éventail posé là, amorce de
+sortie comprise. Ce sont les choix de SheetCam, pas les nôtres — et la raison
+même des lots J1 (ordre écrit, nichées avant l'hôte), J4-bis-2 (réserve au
+point lu) et J4-ter (point de départ déplacé par NestorCut). La réponse sur le
+POINT reste attendue : le `.nc` de ce fichier, déposé dans
+`.testparts/retro-eng-job/`, la donnera.
+
+#### 9.50 Le G-code du propriétaire tranche deux choses (13/09, nuit)
+
+`.testparts/Piece_Trou+Fill_x4_OK.nc`, généré par le propriétaire depuis son
+fichier original (hôte à `XPos 50, YPos 50`, quatre éventails en moulinet
+dans le trou).
+
+**1. SheetCam ne perce PAS sur une entité POINT.** Le fichier compte **six
+descentes de torche** (`Z1.5`) pour six contours : quatre éventails, le trou,
+le contour extérieur. Chacune est suivie d'un arc d'amorce puis d'un tracé ;
+aucune n'est un perçage nu au centre du trou (50 ; 50). Les quatre perçages à
+moins d'un millimètre du centre sont ceux des éventails (leur point de départ
+est le milieu de leur arête basse, tournée vers le centre du moulinet). **La
+règle « perçage errant » tombe** : un chemin du binaire qui n'atterrit sur
+aucun contour est ignoré et compté (`ignoredPaths`), il ne retire plus le
+trou. Le nichage revient dans la recette.
+
+**2. Le point de départ AUTOMATIQUE lu dans le binaire n'est pas fiable.**
+Dans ce fichier, le binaire porte pour le trou **(24,7 ; −24,7)**, soit le
+bas droit du cercle, et le G-code amorce à **(74,22 ; 74,22)**, soit le HAUT
+droit (+45°). Même constat sur la recette du matin : `RECETTE-J4bis_x4.job`
+porte (−24,7 ; −24,7) et la capture du propriétaire (§9.37) montre l'amorce
+à 10 h, en haut à gauche. Deux fichiers, deux fois le point du binaire à
+90° du point réel. Sur la pièce L, en revanche, binaire et G-code
+coïncidaient — fichiers générés et sauvés dans la même session. Lecture : le
+point automatique (`moved = false`) est un CACHE que SheetCam **recalcule à
+l'ouverture ou au post-traitement** (ordre de coupe, position de la torche),
+et un cercle centré ne permet pas de le détecter par la géométrie. Les
+points DÉPLACÉS À LA MAIN (`moved = true`, L-2 et L-3) ont, eux, été
+respectés à l'octet près.
+
+**Conséquence sur le plan** : la réserve « au point lu » (J4-bis-2) n'est
+sûre que pour un point marqué déplacé. Pour un point automatique, elle
+réserve peut-être au mauvais endroit, et l'amorce peut couper une pièce
+nichée — c'est le défaut de la recette du 13/09 matin, sous une autre forme.
+**Le lot J4-ter (écrire NOUS-MÊMES le point de départ, drapeau « déplacé »
+levé) n'est donc plus une amélioration : il conditionne le déploiement.**
+En attendant, pour un point automatique, la réserve reste appliquée au point
+lu (mieux que rien) et le constat le dit (`startAuto`).
+
+**À vérifier par le propriétaire, deux minutes, pour fermer l'hypothèse** :
+rouvrir `Piece_Trou+Fill_x4_OK.job`, ne rien toucher, « Enregistrer sous »
+`Piece_Trou+Fill_x4_OK_resaved.job` dans `.testparts/` : si le binaire porte
+alors (24,7 ; 24,7), SheetCam a recalculé le point à l'ouverture.
+
+**Ordre des travaux, révisé** : J4-bis-4 (affectation gloutonne + retrait de
+« perçage errant ») → **J4-ter, écriture du point de départ** (bloquant) →
+vérification → recette machine sur un fichier réécrit (le G-code doit
+amorcer là où NestorCut a écrit) → déploiement. E3 continue en parallèle.
+
+#### 9.51 Décision du propriétaire : les marges de la réserve d'amorce dérivent du KERF
+
+Plus de constante « 3 mm » : le trou de perçage est gros, et la sécurité se
+compte en kerf.
+
+- **Perçage** : disque réservé de rayon **2 × kerf** autour du point de
+  perçage (kerf 1,5 ⇒ 3 mm, la valeur qui servait de défaut ; kerf 4 ⇒
+  8 mm). `DEFAULT_PIERCE_MARGIN_MM` disparaît au profit de `2 × kerf` ; un
+  kerf nul ou absent ⇒ repli 3 mm et constat.
+- **Trajets d'amorce, entrée ET sortie** : bande réservée de **± kerf** de
+  part et d'autre du trajet (largeur 2 × kerf), au lieu du demi-kerf actuel —
+  la même règle que l'espacement du §9.40, pour la même raison physique.
+- La bouche de la morsure suit (au moins le diamètre du disque, 4 × kerf).
+
+À livrer avec J4-ter (la réserve est réécrite au point choisi) ; verrous du
+§9.43 rejoués avec ces marges (36 points de trajet réels hors zone utile,
+cercle de perçage réel de rayon 2 × kerf entièrement hors zone libre).
+
+**Hypothèse du §9.50 CONFIRMÉE (13/09, 22 h 42).** Le propriétaire a rouvert
+`Piece_Trou+Fill_x4_OK.job` sans rien toucher et l'a re-sauvegardé (en place).
+Le binaire porte désormais, pour le trou, **(24,7 ; 24,7)** — le haut droit,
+là où son G-code amorce — au lieu de (24,7 ; −24,7), et pour le contour
+extérieur le coin (50 ; 50) au lieu de (50 ; −50). SheetCam recalcule les
+points de départ automatiques à l'ouverture et les réécrit à la sauvegarde.
+L'ancien état du binaire survit dans `app/tests/fixtures/sheetcam/source.job`
+et les fichiers `RECETTE-*` (même bloc copié). Règle pour le code : un point
+`moved = false` du binaire est une INDICATION, jamais une garantie ; seul un
+point écrit avec `moved = true` engage SheetCam (L-2, L-3 : respectés à
+l'octet).
