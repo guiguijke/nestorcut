@@ -39,10 +39,10 @@
                  projet, entre les cartes de mode et la zone de dépôt — à
                  l'endroit demandé par le propriétaire. Éteint par défaut ; son
                  état part avec la création et devient une propriété du projet.
-                 Il n'existe que sur le chemin « cet appareil » : l'éclatement
-                 serveur est le lot E2, dont la fenêtre n'est pas ce lot-ci. -->
+                 Il vaut pour les DEUX modes : côté « cet appareil » la fenêtre
+                 de choix s'ouvre à chaque dépôt, côté « nos serveurs » ce sont
+                 les mêmes options, appliquées par le worker (lot E2). -->
             <AdvancedImportSwitch
-                v-if="localProject && localImportEnabled"
                 v-model="advancedImport"
                 class="create__advanced"
             />
@@ -190,11 +190,28 @@
         const formData = new FormData()
         files.forEach((file) => formData.append('dxf', file))
 
+
         try {
             const data = await $fetch(API_ROUTES.PROJECT(), {
                 method: 'POST',
                 body: formData,
             })
+
+            // Lot E3 : l'interrupteur est une propriété du PROJET, quel que
+            // soit le mode. Sur ce chemin (« nos serveurs », création AVEC
+            // fichiers) il ne gouverne pas CETTE dépose — les octets partent
+            // avec la création, comme avant le lot — mais il gouverne les
+            // suivantes. On le pose donc APRÈS, par le même PATCH que la page
+            // projet, plutôt que d'aller lire un champ dans le multipart que
+            // l'enregistrement des fichiers est en train de consommer.
+            if (advancedImport.value) {
+                try {
+                    await $fetch(`/api/project/${data.slug}/advanced-import`, {
+                        method: 'PATCH',
+                        body: { advancedImport: true },
+                    })
+                } catch { /* le projet existe ; l'interrupteur se remet sur sa page */ }
+            }
 
             await Promise.all([getProjects(), getProject(API_ROUTES.PROJECT(data.slug))])
 
@@ -312,7 +329,7 @@
             margin-bottom: 12px;
         }
         &__drop--advanced :deep(.upload__label) {
-            border-color: var(--blue);
+            border-color: var(--accent-primary);
         }
 
         &__error {

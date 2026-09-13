@@ -57,9 +57,14 @@ const emit = defineEmits(['update:modelValue'])
     padding: 8px 10px;
     transition: border-color 0.15s ease, background-color 0.15s ease;
 
+    /* `--blue` N'EXISTE PAS dans ce thème (piège AGENTS #21 : ne jamais
+       compter sur une variable de thème sans la vérifier — la première
+       version de cet interrupteur rendait un rail blanc sur fond blanc, et
+       l'état allumé ne se voyait pas). L'accent du produit est
+       `--accent-primary`. */
     &--on {
-        border-color: var(--blue);
-        background-color: rgba(110, 168, 255, 0.08);
+        border-color: var(--accent-primary);
+        background-color: var(--fill-secondary);
     }
 
     &__btn {
@@ -84,7 +89,7 @@ const emit = defineEmits(['update:modelValue'])
         transition: background-color 0.15s ease;
     }
     &--on &__track {
-        background-color: var(--blue);
+        background-color: var(--accent-primary);
     }
     &__knob {
         position: absolute;
@@ -93,7 +98,7 @@ const emit = defineEmits(['update:modelValue'])
         width: 14px;
         height: 14px;
         border-radius: 4px;
-        background-color: #fff;
+        background-color: var(--background-primary, #fff);
         transition: transform 0.15s ease;
     }
     &--on &__knob {
@@ -111,7 +116,7 @@ const emit = defineEmits(['update:modelValue'])
         font-weight: 600;
     }
     &--on &__label {
-        color: var(--blue);
+        color: var(--accent-primary);
     }
     &__hint {
         color: var(--label-secondary);

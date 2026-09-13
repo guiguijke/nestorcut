@@ -121,9 +121,17 @@ const onClose = () => {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    min-width: 320px;
-    max-width: 520px;
+    /* La boîte du dialogue se dimensionne sur son contenu : une largeur
+       MINIMALE faisait déborder les phrases hors du cadre blanc (capture du
+       premier passage). Fluide, plafonnée, et les mots longs coupés. */
+    width: 100%;
+    max-width: 480px;
+    /* La respiration est portee ICI : le contenu du dialogue est teleporte
+       dans une boite qui ne lui en donne pas (capture du premier passage :
+       les phrases touchaient le bord blanc). */
+    padding: 4px 8px 8px;
     text-align: left;
+    overflow-wrap: anywhere;
 
     &__title {
         margin: 0;

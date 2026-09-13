@@ -387,6 +387,12 @@ async function importStagedFiles(files, slug, forcedOptions = null) {
         // que porte l'état — c'est ce qui rend ce chemin identique à l'import
         // ordinaire, et le verrou du lot le compare fiche par fiche.
         const options = forcedOptions || advancedImportOptions()
+        // Projet « nos serveurs » : les mêmes options, mais appliquées par le
+        // worker — la fenêtre de choix sert les deux modes (lot E3).
+        if (!state.projectLocal) {
+            await uploadToServer(files || [], slug, options)
+            return
+        }
         for (const file of files || []) {
             await importLocalFiles(file, slug, options)
         }
@@ -637,16 +643,43 @@ async function addFiles(files, slug) {
         await getProject(API_ROUTES.PROJECT(slug))
         return
     }
+    // Lot E3 — LE CHEMIN SERVEUR PASSE PAR LA MÊME FENÊTRE. L'interrupteur
+    // vit entre les deux cartes de mode, donc il vaut pour les deux ; et sans
+    // cela le lot E2 (éclatement et échelle côté worker) n'aurait plus AUCUNE
+    // interface depuis que le panneau replié a disparu — une régression
+    // silencieuse pour les projets « nos serveurs ».
+    //
+    // La lecture de la fenêtre est locale (le même wasm que l'aperçu) et ne
+    // change rien à ce qui est envoyé : c'est le worker qui applique les
+    // options, comme au lot E2.
+    {
+        const { needsChoice, useAdvancedImport } = await import('./advancedImport')
+        if (needsChoice()) {
+            await useAdvancedImport().openChoice(files, { projectSlug: slug })
+            return
+        }
+    }
+    await uploadToServer(files, slug)
+}
+
+/**
+ * Dépose SERVEUR (« nos serveurs ») : les octets partent, le worker importe.
+ *
+ * Extrait de `addFiles` au lot E3 pour que la fenêtre de choix puisse s'en
+ * servir aussi — le chemin est le même, seul le moment change.
+ *
+ * Lot E2 : miroir serveur de l'« import avancé ». Les options voyagent avec la
+ * dépose et sont posées sur le DOCUMENT fichier ; c'est le worker qui les
+ * applique (échelle sur la copie canonique, éclatement par handles). Options
+ * neutres ⇒ aucun champ ajouté, requête d'avant.
+ */
+async function uploadToServer(files, slug, forcedOptions = null) {
     const formData = new FormData()
     formData.append('projectName', state.projectName)
     files.forEach((file) => formData.append('dxf', file))
-    // Lot E2 : miroir serveur de l'« import avancé ». Les options voyagent
-    // avec la dépose et sont posées sur le DOCUMENT fichier ; c'est le worker
-    // qui les applique (échelle sur la copie canonique, éclatement par
-    // handles). Option éteinte ⇒ aucun champ ajouté, requête d'avant.
     {
         const { advancedImportOptions } = await import('./advancedImport')
-        const opts = advancedImportOptions()
+        const opts = forcedOptions || advancedImportOptions()
         if (opts.explode) formData.append('importExplode', '1')
         if (opts.scaleTarget) {
             formData.append('importScaleMode', String(opts.scaleTarget.mode))

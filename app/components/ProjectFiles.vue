@@ -3,7 +3,7 @@
         <!-- Lot E3 : le même interrupteur qu'à la création, avec LE MÊME
              ÉTAT — il est porté par le projet. Le panneau replié a disparu. -->
         <AdvancedImportSwitch
-            v-if="!readonly && local"
+            v-if="!readonly"
             :modelValue="advancedOn"
             class="files__advanced"
             @update:modelValue="onAdvanced"
@@ -131,7 +131,7 @@ const openModal = (file) => {
     /* Lot E3 : allume, l'interrupteur TEINTE la bordure de la zone de
        depot — l'etat doit se voir franchement. */
     &__upload--advanced :deep(.upload__label) {
-        border-color: var(--blue);
+        border-color: var(--accent-primary);
     }
 
     &__upload {

@@ -1020,6 +1020,124 @@ en `AttributeError` sur deux vieux jobs T-I de mon Mongo local dont
 Corrigé (`(a.get("report") or {}).get("postPass") or {}`) et le run est
 cadré par `CORPUS_SINCE`, comme le script le prévoyait.
 
+
+### Lot E3 — l'interrupteur « Import avancé » et la fenêtre de choix (implémenteur, 13/09)
+
+Consigne fermée du §6, livrée en deux commits : `1d4ae531` (implémentation) et
+celui de la vérification (harnais, captures, ce rapport).
+
+**1. L'interrupteur est une propriété du PROJET.** Champ `advancedImport` du
+document projet, **additif** : un projet d'avant ce lot ne le porte pas, et
+son absence vaut ÉTEINT — la chaîne d'import est alors celle d'avant, sans
+lecture supplémentaire. Il est posé à la création (corps du POST, page
+d'accueil, entre les cartes de mode et la zone de dépôt, à l'endroit demandé)
+et modifiable ensuite depuis la page projet
+(`PATCH /api/project/:slug/advanced-import`).
+
+Le lot E1 en avait fait un état de SESSION (`sessionStorage`) : il mourait
+avec l'onglet et ne suivait pas le projet. C'est exactement ce que le
+propriétaire a jugé non conforme.
+
+**Si le PATCH échoue, l'interrupteur revient à sa valeur précédente.** Un
+réglage qui s'affiche allumé sans être enregistré mentirait au prochain dépôt.
+
+Allumé, il se voit : libellé qui dit ce qui va se passer, couleur d'accent, et
+la bordure de la zone de dépôt prend l'accent. Rayon 4 px partout, aucune
+pilule.
+
+**2. La fenêtre de choix** s'ouvre à chaque dépôt quand l'interrupteur est
+allumé, AVANT toute création de fiche. Elle liste les fichiers déposés avec ce
+que l'import a LU pour chacun — nombre de pièces et étendue —, une seule
+lecture, la même que celle de l'aperçu E1-bis. Trois issues :
+
+- **« Import automatique »** (le défaut, premier bouton) : options NEUTRES
+  imposées. Ce n'est pas « l'import avancé avec des réglages à zéro », c'est
+  l'import ordinaire ;
+- **« Éclater en pièces et mettre à l'échelle »** : l'aperçu sur tôle prend la
+  main, sur les fichiers DÉJÀ lus — aucune relecture ;
+- **« Annuler »** : rien n'est créé, rien n'est gardé, et l'interrupteur reste
+  allumé (annuler une dépose n'est pas changer le réglage du projet).
+
+Le choix vaut pour LE LOT DÉPOSÉ : une dépose neuve repart de réglages neufs.
+
+**3. Le panneau replié a disparu** — son état de session, son badge, son
+bouton, ses champs et son style. Deux chemins pour le même réglage, c'était le
+reproche.
+
+**4. UN ARBITRAGE QUE LA CONSIGNE NE TRANCHAIT PAS, et qu'il faut confirmer.**
+Retirer le panneau supprimait la SEULE interface de l'éclatement serveur du
+lot E2 : les projets « nos serveurs » se seraient retrouvés sans aucun moyen
+de demander un éclatement ou une échelle. Une régression silencieuse.
+
+J'ai donc fait passer le chemin serveur par la MÊME fenêtre, et l'interrupteur
+vaut pour les deux modes — ce qu'implique d'ailleurs sa place demandée, entre
+les deux cartes de mode. La lecture de la fenêtre reste locale (le même wasm
+que l'aperçu) et ne change rien à ce qui est envoyé : c'est le worker qui
+applique les options, comme au lot E2. Le seul cas qui reste comme avant est
+la création d'un projet serveur AVEC des fichiers : les octets partent avec la
+création, l'interrupteur est posé juste après par le même PATCH — plutôt que
+d'aller lire un champ dans le multipart que l'enregistrement des fichiers est
+en train de consommer.
+
+**5. Un `.job` SheetCam n'est jamais concerné** : il porte déjà sa tôle et ses
+quantités, et il passe AVANT la fenêtre (règle du lot J4, inchangée).
+
+**Verrous unitaires** — 11 neufs dans `app/tests/advancedImportChoice.test.js`,
+plus les verrous E1/E1-bis portés à la nouvelle API. Le plus utile : « Import
+automatique » rend une fiche comparée CHAMP PAR CHAMP à celle du chemin
+ordinaire (nom, géométrie, provenance), avec le compte d'appels wasm ; et un
+contrôle négatif montre que « Éclater », lui, ne rend pas la même chose.
+
+**Harnais navigateur**, `scripts/qa-e2e-advanced-import.mjs` refait en six cas,
+rejoué sur l'image reconstruite avec le fichier d'atelier du collègue
+(17 pièces, 2 834,34 mm — d'où le facteur 0,353 pour une cible de 1 000) :
+
+| cas | mesure |
+|---|---|
+| A — interrupteur éteint | aucune fenêtre ; **1 fiche**, nom intact, 17 pièces conservées |
+| B — allumé, « Import automatique » | la fenêtre s'ouvre et liste le fichier ; **1 fiche**, identique au cas A (nom, pièces, étendue) |
+| C — allumé, « Éclater » | **17 fiches**, une pièce chacune, toutes marquées venant du dessin éclaté ; la poignée de l'aperçu fait passer le facteur de **1 à 0,548** |
+| D — dépôt de trois fichiers | **UNE** fenêtre, **3** lignes ; « Annuler » ⇒ **0 fiche** |
+| E — un `.job` + ses dessins | **aucune fenêtre** ; 2 fiches, chacune avec ses réglages de coupe |
+| F — captures | interrupteur allumé et fenêtre, en FR et en EN |
+
+**Captures** (réglages seulement, aucun dessin d'atelier, nom de fichier
+neutre) : `docs/qa/import-avance-e3/` — `interrupteur-fr.png`,
+`interrupteur-en.png`, `fenetre-fr.png`, `fenetre-en.png`.
+
+**TROIS corrections de mon propre travail, dites parce qu'elles disent quelque
+chose.** Au premier passage il lisait IndexedDB **tous projets confondus** :
+les comptes d'un cas s'ajoutaient aux précédents (19 fiches « pour 17 pièces »,
+« Annuler » accusé d'en avoir créé 19). Cinq échecs, tous imaginaires ; le
+filtre par projet les a levés. Et le verrou C4 est d'abord passé au VERT sur
+« facteur 1 » — c'est-à-dire sur une poignée qui n'avait pas bougé : exiger
+qu'un facteur s'affiche ne mesure rien, il faut exiger qu'il CHANGE (mesuré
+après correction : 1 → 0,548).
+
+La troisième n'est pas dans le harnais mais dans le composant, et c'est une
+capture qui l'a montrée — aucun test ne pouvait la voir. J'avais colorié
+l'interrupteur avec `var(--blue)`, **qui n'existe pas dans ce thème** : rail
+blanc sur fond blanc, libellé non accentué, l'état allumé ne se voyait pas.
+C'est le piège AGENTS #21, déjà documenté, et je l'ai refait. L'accent du
+produit est `--accent-primary`.
+
+**Mesures** : vitest **735** (64 fichiers) ; `npx nuxt build` vert ;
+`docker compose build app` vert ; harnais six cas, tous les verrous verts.
+
+**Non-faits, dits franchement :**
+
+- **Le harnais ne mesure pas le nombre d'appels wasm** : Playwright ne voit pas
+  les appels d'un module wasm chargé dans un worker. Le cas A vérifie ce qui
+  est observable (aucune fenêtre, une fiche, nom intact) et le compte d'appels
+  est verrouillé là où il est mesurable, en vitest, wasm moqué.
+- **Le chemin serveur n'est pas rejoué au banc** dans ce lot : les cas G et H
+  du harnais E2 ne sont pas repris ici. L'arbitrage du point 4 est donc
+  implémenté et verrouillé en unitaire, mais pas mesuré de bout en bout côté
+  worker — à faire avant le déploiement si le vérificateur le juge nécessaire.
+- **Deux erreurs console « 400 Bad request »** apparaissent au chargement de la
+  page projet, sans effet visible. Elles sont antérieures à ce lot et toujours
+  non identifiées.
+
 ## 6. Lot E3 — l'import avancé tel que le propriétaire l'a demandé (consigne du 13/09 soir)
 
 **Constat du propriétaire (13/09, 20 h)** : ce qui est en production n'est pas
