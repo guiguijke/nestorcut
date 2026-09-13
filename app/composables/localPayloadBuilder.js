@@ -84,7 +84,7 @@
 // Could not resolve »), celui du poste ne le voyait pas — c'est exactement
 // pourquoi la maison exige des images a HEAD avant tout banc.
 
-import { partWithReserve, DEFAULT_PIERCE_MARGIN_MM } from '~~/shared/sheetcamReserve.js'
+import { partWithReserve } from '~~/shared/sheetcamReserve.js'
 
 /**
  * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
@@ -639,7 +639,19 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             // Prendre l'une pour l'autre décalait tous les points de 1,414 mm
             // et les faisait sortir de la tolérance d'appariement.
             const sc = file.sheetcam
-            if (sc && Array.isArray(sc.starts)) {
+            // `allowOverlappingLeads` : l'atelier assume que les amorces se
+            // croisent. On ne réserve rien, et le constat le DIT — une réserve
+            // absente en silence serait le défaut que ce chantier corrige.
+            if (sc?.allowOverlappingLeads === true) {
+                reserveNotes.push({
+                    file_slug: fileSlug,
+                    part: partIndex,
+                    applied: false,
+                    reason: 'leadsAllowedToOverlap',
+                    holesDropped: 0,
+                    holes: [],
+                })
+            } else if (sc && Array.isArray(sc.starts)) {
                 const boxCentre = fileBoxCentre(file)
                 const c0 = Array.isArray(sc.origin)
                     && Number.isFinite(Number(sc.origin[0]))
@@ -652,8 +664,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                 }))
                 const reserved = partWithReserve({ coordinates: coords, holes }, {
                     starts,
+                    // §9.51 : toutes les marges dérivent du kerf de l'outil.
                     kerf: Number(sc.kerfWidth) || 0,
-                    pierceMarginMm: Number(sc.pierceMarginMm ?? DEFAULT_PIERCE_MARGIN_MM),
                 })
                 coords = reserved.coordinates
                 holes = reserved.holes
@@ -666,7 +678,9 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     holes: reserved.reserve.holes,
                     starts: reserved.reserve.starts,
                     unmatched: reserved.reserve.unmatched,
-                    strayPierces: reserved.reserve.strayPierces,
+                    ignoredPaths: reserved.reserve.ignoredPaths,
+                    pierceRadiusMm: reserved.reserve.pierceRadiusMm,
+                    pierceFallback: reserved.reserve.pierceFallback,
                     // Écart entre les deux origines, publié parce qu'il est
                     // RÉEL et instructif : il vaut exactement la distance dont
                     // l'entité ignorée par notre import déplace la boîte du

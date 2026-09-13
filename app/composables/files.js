@@ -552,6 +552,9 @@ async function addSheetCamJobDrop(drop, slug) {
                         ...record.sheetcam,
                         starts: found.starts,
                         origin: found.origin,
+                        // Lot J4-ter : le rang du dessin dans le cache binaire,
+                        // pour pouvoir y RÉÉCRIRE les points de départ.
+                        blockIndex: found.blockIndex,
                     }
                     await saveLocalFile(record)
                 }

@@ -280,7 +280,13 @@ export function assignJobStarts(read, ringsByName) {
         byName[drawing.name] = {
             origin: block.origin,
             placed: pair.placed,
-            starts: (block.paths || []).map((p) => ({
+            // Lot J4-ter : de quoi RÉÉCRIRE ces points dans le cache binaire.
+            // `blockIndex` désigne le dessin dans le bloc, `pathIndex` le
+            // contour dans ce dessin — les deux suffisent à retrouver les
+            // offsets à l'écriture, sans re-décoder le flux ici.
+            blockIndex: pair.block,
+            starts: (block.paths || []).map((p, pathIndex) => ({
+                pathIndex,
                 // Relatif à l'origine que SheetCam mémorise pour ce dessin.
                 offset: p.start,
                 leadIn: p.leadIn ?? drawing.leadIn,

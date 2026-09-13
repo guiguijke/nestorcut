@@ -424,7 +424,7 @@ const leadInNotes = computed(() => {
     const notes = []
     for (const n of resultModalData.value?.leadInReserve || []) {
         const name = n.file_slug || ''
-        if (n.applied === false && n.reason && n.reason !== 'nothingToReserve') {
+        if (n.applied === false && n.reason) {
             notes.push(t('jobImport.reserveRefused', {
                 name,
                 reason: t(`sheetcamReserve.${n.reason}`),

@@ -136,7 +136,9 @@ describe('J4 — les réglages de coupe transmis au nesting', () => {
         const cut = cutSettingsFor(read.drawings[0], { jobName: 'mon-job.job' })
         expect(cut.leadIn).toBe(5)
         expect(cut.startPosition).toBe(0)
-        expect(cut.pierceMarginMm).toBe(3)
+        // §9.51 : plus de constante de perçage transportée — le kerf de
+        // l'outil est la seule entrée des marges de la réserve.
+        expect(cut.pierceMarginMm).toBeUndefined()
         expect(cut.drawingName).toBe('Piece_Trou.DXF')
         expect(cut.jobName).toBe('mon-job.job')
     })

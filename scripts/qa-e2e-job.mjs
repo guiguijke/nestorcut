@@ -37,6 +37,14 @@ const OUT = process.env.QA_OUT || path.resolve('.qa-pw/j4')
 const JOB = process.env.QA_JOB || path.resolve('app/tests/fixtures/sheetcam/source.job')
 const DXF_DIR = process.env.QA_DXF_DIR || path.resolve('.testparts')
 const LOCALE = process.env.QA_LOCALE || 'fr'
+// QA_SAFETY : force la SECURITE du formulaire avant de nester, pour mesurer
+// l'effet de l'espacement toutes choses egales par ailleurs. Sans elle, le
+// harnais garde ce que le `.job` pre-remplit (1 mm, donc 2 x kerf + 1).
+const SAFETY = process.env.QA_SAFETY || null
+// QA_ALLOW_OVERLAP : allume `allowOverlappingLeads` sur chaque fiche avant de
+// nester. L'option n'a pas encore de commande dans l'interface ; ce drapeau
+// sert a MESURER ce que la reserve coute, toutes choses egales par ailleurs.
+const ALLOW_OVERLAP = process.env.QA_ALLOW_OVERLAP === '1'
 fs.mkdirSync(OUT, { recursive: true })
 
 const logs = []
@@ -202,6 +210,46 @@ try {
         `attendu au moins une fiche à ×${Math.max(...wanted.values())}, lu ${qtyOk.join(', ')}`)
 
     // ---------- C. nesting ----------
+    if (ALLOW_OVERLAP) {
+        const n = await page.evaluate(async () => {
+            const db = await new Promise((res, rej) => {
+                const r = indexedDB.open('nestorcut-local')
+                r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+            })
+            const store = () => db.transaction('files', 'readwrite').objectStore('files')
+            const recs = await new Promise((res, rej) => {
+                const tx = store().getAll()
+                tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
+            })
+            let k = 0
+            for (const r of recs) {
+                if (!r.sheetcam) continue
+                r.sheetcam = { ...r.sheetcam, allowOverlappingLeads: true }
+                await new Promise((res, rej) => {
+                    const tx = store().put(r)
+                    tx.onsuccess = () => res(); tx.onerror = () => rej(tx.error)
+                })
+                k++
+            }
+            return k
+        })
+        // SURTOUT PAS DE RECHARGEMENT ICI. Le premier essai en faisait un, et
+        // la page repartait des params d'usine : le kerf pre-rempli par le
+        // `.job` etait perdu et la mesure se faisait a un espacement de 0 au
+        // lieu de celui qu'on voulait comparer. La fiche est relue depuis
+        // IndexedDB au moment du nesting — l'ecriture suffit.
+        log('allowOverlappingLeads pose sur', n, 'fiche(s) — aucune reserve ne sera appliquee')
+    }
+    if (SAFETY != null) {
+        const champ = page.locator('[data-testid="settings-safety"] input')
+            .or(page.locator('input[data-testid="settings-safety"]')).first()
+        await champ.waitFor({ timeout: 30000 })
+        await champ.fill(String(SAFETY))
+        await champ.dispatchEvent('change')
+        const lu = await page.evaluate(() =>
+            document.querySelector('.size__rule')?.textContent?.trim() ?? null)
+        log('securite forcee a', SAFETY, '— regle affichee :', lu)
+    }
     const nestBtn = page.locator('.atelier__nest')
     await nestBtn.waitFor({ timeout: 30000 })
     await nestBtn.click()
@@ -223,6 +271,7 @@ try {
         await page.waitForTimeout(1500)
     }
     log('nesting :', outcome, `${Math.round((Date.now() - t0) / 1000)} s`)
+    results.spacing = { safetyForcee: SAFETY }
     check('C1 le nesting aboutit', outcome === 'fini', outcome)
     await shot('02-resultat.png')
     if (outcome !== 'fini') throw new Error('nesting non abouti : ' + outcome)
@@ -284,6 +333,16 @@ try {
     // que NOUS mesurons est bien celui que SheetCam a memorise — un ecart la
     // ferait tomber a cote des contours en silence.
     const reserve = record.leadInReserve || []
+    if (ALLOW_OVERLAP) {
+        // Mesure « sans reserve » : F1/F3/F4 n'ont pas de sens, et les exiger
+        // serait un verrou faux. Ce qui DOIT rester vrai, c'est que le refus
+        // est DIT — une reserve absente en silence serait le defaut que tout
+        // ce chantier corrige.
+        check('F0 aucune reserve, et la raison est nommee',
+            reserve.length > 0
+            && reserve.every((n) => n.applied === false && n.reason === 'leadsAllowedToOverlap'),
+            JSON.stringify(reserve.map((n) => ({ f: n.file_slug, why: n.reason }))))
+    } else {
     check('F1 la reserve d`amorce s`est appliquee sur chaque piece du `.job`',
         reserve.length > 0 && reserve.every((n) => n.applied === true),
         JSON.stringify(reserve.map((n) => ({ f: n.file_slug, ok: n.applied, why: n.reason }))))
@@ -300,7 +359,8 @@ try {
     // que notre import ne retient pas) ; ce qui compterait comme un defaut,
     // c'est qu'un point disparaisse du decompte.
     log('points de depart :', JSON.stringify(reserve.map((n) =>
-        ({ f: n.file_slug, lus: n.starts, orphelins: n.unmatched, errants: n.strayPierces }))))
+        ({ f: n.file_slug, lus: n.starts, ignores: n.ignoredPaths,
+           percage: n.pierceRadiusMm, repli: n.pierceFallback }))))
     check('F3 le compte des points de depart se boucle',
         reserve.every((n) => Number.isFinite(Number(n.starts))
             && Number(n.unmatched) >= 0 && Number(n.unmatched) <= Number(n.starts)),
@@ -313,15 +373,17 @@ try {
     // boite du dessin. On le JOURNALISE, et on verifie que les points
     // atterrissent bien sur les contours (c'est F3 qui le dit).
     log('ecart entre les deux origines (mm) :', JSON.stringify(reserve.map((n) => n.originGapMm)))
-    // F4 EST LE VERROU DE SECURITE : tout percage qui tombe dans une zone ou
-    // l'on nicherait doit avoir FAIT SORTIR cette zone du nesting. Zero
-    // percage errant ⇒ zero trou retire pour cette raison ; un percage
-    // errant ⇒ un trou retire, avec `strayPierce` en clair.
-    const strays = reserve.reduce((a, n) => a + (Number(n.strayPierces) || 0), 0)
-    const droppedForStray = allHoles.filter((h) => h.reason === 'strayPierce').length
-    check('F4 tout percage en zone nichee a fait sortir sa zone',
-        strays === 0 ? droppedForStray === 0 : droppedForStray >= 1,
-        `percages errants ${strays}, trous retires pour cette raison ${droppedForStray}`)
+    // F4 — LES MARGES DERIVENT DU KERF (SS9.51) : disque de percage 2 x kerf.
+    // Un kerf illisible ne doit pas rendre une marge NULLE : repli 3 mm, et le
+    // constat doit le dire.
+    check('F4 le rayon de percage vaut 2 x kerf, ou dit son repli',
+        reserve.every((n) => {
+            const r = Number(n.pierceRadiusMm)
+            if (!Number.isFinite(r) || r <= 0) return false
+            return n.pierceFallback === true ? r === 3 : Math.abs(r - 2 * source.kerfWidth) < 1e-9
+        }),
+        JSON.stringify(reserve.map((n) => ({ r: n.pierceRadiusMm, repli: n.pierceFallback }))))
+    }
 
     check('D-1 des `.job` sont produits et persistés',
         (record.alts || []).some((a) => a.jobs > 0),
@@ -366,9 +428,40 @@ try {
     check('D5 chemins absolus masqués',
         out.parts.every((p) => !/[\\/]/.test(p.drawingFile)),
         out.parts.map((p) => p.drawingFile).join(', '))
-    check('D6 bloc binaire identique à l’octet près',
-        Buffer.compare(Buffer.from(out.binary), Buffer.from(source.binary)) === 0,
-        `${out.binary.length} vs ${source.binary.length} octets`)
+    // D6 — LE CACHE BINAIRE RESTE CELUI DE SHEETCAM, SAUF LA OU NOUS ECRIVONS.
+    //
+    // Jusqu'au lot J4-bis-3 ce verrou exigeait l'identite a l'octet. Le lot
+    // J4-ter ecrit desormais le point de depart retenu et leve le drapeau
+    // « deplace a la main » (SS9.50 : sans lui, SheetCam RECALCULE le point a
+    // l'ouverture et amorce ailleurs que la ou la place est gardee). Le verrou
+    // devient donc : rien ne bouge en dehors de ces champs-la.
+    const { jobPathRecords } = await import('../shared/sheetcamJob.js')
+    const champs = new Set()
+    for (const d of jobPathRecords(source.binary) || []) {
+        for (const p of d.paths) {
+            if (Number.isInteger(p.at?.moved)) champs.add(p.at.moved)
+            for (let k = 0; k < 8; k++) {
+                if (Number.isInteger(p.at?.x)) champs.add(p.at.x + k)
+                if (Number.isInteger(p.at?.y)) champs.add(p.at.y + k)
+            }
+        }
+    }
+    const bouges = []
+    if (out.binary.length === source.binary.length) {
+        for (let i = 0; i < out.binary.length; i++) {
+            if (out.binary[i] !== source.binary[i]) bouges.push(i)
+        }
+    }
+    check('D6 bloc binaire intact SAUF les points de depart que nous ecrivons',
+        out.binary.length === source.binary.length && bouges.every((i) => champs.has(i)),
+        `${bouges.length} octet(s) change(s), tous dans les champs de depart : `
+        + `${bouges.every((i) => champs.has(i))}`)
+    // D6b : et nous avons BIEN ecrit — un `.job` rendu dont aucun drapeau
+    // n'est leve signifierait que J4-ter ne fait rien.
+    const leves = (jobPathRecords(out.binary) || [])
+        .flatMap((d) => d.paths).filter((p) => p.moved).length
+    check('D6b au moins un point de depart est marque « deplace »', leves > 0,
+        `${leves} drapeau(x) leve(s)`)
     // D7 ne compte PAS les pièces : le cas A4 dépose volontairement une
     // seconde fois, et une tôle peut de toute façon n'en porter qu'une partie.
     // Ce qui doit être vrai quoi qu'il arrive : aucune section écrite qui ne

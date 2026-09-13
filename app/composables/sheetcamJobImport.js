@@ -30,7 +30,7 @@
 
 import { isSheetCamJob, jobSheet } from '~~/shared/sheetcamJob.js'
 import {
-    DEFAULT_KERF_SAFETY_MM, DEFAULT_PIERCE_MARGIN_MM, spacingFromKerf,
+    DEFAULT_KERF_SAFETY_MM, spacingFromKerf,
 } from '~~/shared/sheetcamReserve.js'
 
 /** Nom comparable : casse et espaces ignorés (voir l'en-tête). */
@@ -138,9 +138,9 @@ export function prefillFromJob(read, { safetyMm = DEFAULT_KERF_SAFETY_MM } = {})
  * gouverne plus rien.
  */
 export function cutSettingsFor(drawing, {
-    pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
     jobName = null,
     kerfWidth = null,
+    allowOverlappingLeads = false,
 } = {}) {
     return {
         drawingName: drawing.name,
@@ -152,8 +152,15 @@ export function cutSettingsFor(drawing, {
         leadOut: Number(drawing.leadOut) || 0,
         leadOutType: Number(drawing.leadOutType) || 0,
         startPosition: drawing.startPosition ?? null,
+        // Lot J4-ter — L'ÉCHAPPATOIRE, ET ELLE EST EXPLICITE. Allumée, la
+        // réserve d'amorce n'est pas appliquée : les pièces se serrent, et
+        // les amorces peuvent se croiser. C'est un choix d'atelier (chutes
+        // sans valeur, tôle chère), jamais un défaut par défaut — éteinte, la
+        // place de l'amorce est gardée comme le lot J4-bis-2 l'établit.
+        allowOverlappingLeads: allowOverlappingLeads === true,
+        // §9.51 : le kerf est la SEULE entrée des marges de la réserve — plus
+        // de constante de perçage à transporter.
         kerfWidth: Number.isFinite(Number(kerfWidth)) ? Number(kerfWidth) : null,
-        pierceMarginMm: Number(pierceMarginMm),
         // VIDES À CE STADE, ET C'EST VOULU (lot J4-bis-3, §9.45). Le cache
         // binaire ne dit pas à quel dessin appartient chacun de ses blocs ; le
         // lot précédent l'a supposé par le RANG des sections, et cela inverse

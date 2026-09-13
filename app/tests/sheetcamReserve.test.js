@@ -28,7 +28,7 @@ import { parseSheetCamJob, jobPathRecords } from '../../shared/sheetcamJob'
 import {
     ARC_RADIUS_FACTOR,
     DEFAULT_KERF_SAFETY_MM,
-    DEFAULT_PIERCE_MARGIN_MM,
+    PIERCE_FALLBACK_MM,
     LEAD_ARC,
     LEAD_NONE,
     LEAD_PERPENDICULAR,
@@ -42,6 +42,7 @@ import {
     nearestOnRing,
     partWithReserve,
     pierceDisc,
+    pierceRadiusFromKerf,
     pointInRing,
     signedArea,
     spacingFromKerf,
@@ -186,7 +187,6 @@ describe('J4-bis-2 — la géométrie des amorces, contre le G-code', () => {
             leadOut: 10,
             leadOutType: LEAD_ARC,
             kerf: KERF,
-            pierceMarginMm: 3,
         })
         expect(res.applied).toBe(true)
         expect(res.pierceAt[0]).toBeCloseTo(28.2, 6)
@@ -204,7 +204,6 @@ describe('J4-bis-2 — la géométrie des amorces, contre le G-code', () => {
             leadOut: 10,
             leadOutType: LEAD_PERPENDICULAR,
             kerf: KERF,
-            pierceMarginMm: 3,
         })
         expect(res.applied).toBe(true)
         expect(res.pierceAt[0]).toBeCloseTo(0, 6)
@@ -254,7 +253,6 @@ describe('J4-bis-2 — LE verrou : le trajet réel ne traverse plus la zone util
                 leadOut: op.leadOut,
                 leadOutType: op.leadOutType,
                 kerf: job.kerfWidth,
-                pierceMarginMm: DEFAULT_PIERCE_MARGIN_MM,
             }
             const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
             const outer = biteAtStart(L_OUTER, { start: OUTER_START, scrapInside: false, ...common })
@@ -292,7 +290,7 @@ describe('J4-bis-2 — LE verrou : le trajet réel ne traverse plus la zone util
     it('et l’aire de la zone libre BAISSE, celle de la pièce MONTE', () => {
         const common = {
             leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC,
-            kerf: KERF, pierceMarginMm: 3,
+            kerf: KERF,
         }
         const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
         const outer = biteAtStart(L_OUTER, { start: OUTER_START, scrapInside: false, ...common })
@@ -314,7 +312,7 @@ describe('J4-bis-2 — LE verrou : le trajet réel ne traverse plus la zone util
             && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1]
         const common = {
             leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC,
-            kerf: KERF, pierceMarginMm: 3,
+            kerf: KERF,
         }
         const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
         expect(closed(L_HOLE)).toBe(true)
@@ -398,7 +396,7 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
     ]
 
     it('réserve le contour ET le trou, et dit ce qu’elle a fait', () => {
-        const out = partWithReserve(part, { starts, kerf: KERF, pierceMarginMm: 3 })
+        const out = partWithReserve(part, { starts, kerf: KERF })
         expect(out.reserve.applied).toBe(true)
         expect(out.reserve.unmatched).toBe(0)
         expect(out.holes).toHaveLength(1)
@@ -413,7 +411,6 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
         const out = partWithReserve(part, {
             starts: [starts[0]],
             kerf: KERF,
-            pierceMarginMm: 3,
         })
         expect(out.holes).toHaveLength(0)
         expect(out.reserve.holesDropped).toBe(1)
@@ -423,44 +420,37 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
     })
 
     it('sans AUCUN point lu, rien n’est réservé et rien n’est inventé', () => {
-        const out = partWithReserve(part, { starts: [], kerf: KERF, pierceMarginMm: 3 })
+        const out = partWithReserve(part, { starts: [], kerf: KERF })
         expect(out.reserve.applied).toBe(false)
         expect(out.reserve.reason).toBe('startNotRead')
         expect(out.coordinates).toBe(L_OUTER)
         expect(out.holes).toHaveLength(0)
     })
 
-    it('un perçage EN PLEIN TROU fait sortir CE trou du nesting', () => {
-        // Cas réel, trouvé au banc sur les deux DXF de la recette : ils
-        // portent une entité POINT que notre import ne retient pas (pas
-        // d'aire), et SheetCam lui fabrique un chemin dont le départ est le
-        // point lui-même — au CENTRE du trou de l'hôte, là où nous nichons.
-        // Tant qu'aucun `.nc` ne dit si SheetCam amorce vraiment sur un POINT,
-        // le trou concerné sort du nesting : c'est le danger, pas une
-        // hypothèse.
+    it('un chemin qui n’atterrit sur aucun contour est IGNORÉ, pas punitif', () => {
+        // Le lot J4-bis-2 faisait sortir du nesting le trou qui contenait un
+        // tel point : les deux DXF de la recette portent une entité POINT que
+        // notre import ne retient pas, et SheetCam lui fabrique un chemin dont
+        // le départ est le point lui-même — au centre du trou de l'hôte.
+        // Faute de savoir si SheetCam y perçait, on retirait le trou, et le
+        // nichage de la recette disparaissait.
+        //
+        // LE G-CODE DU PROPRIÉTAIRE A TRANCHÉ (§9.50) : six descentes de torche
+        // pour six contours, aucune au centre du trou. On compte, on passe.
         const out = partWithReserve(part, {
             starts: [...starts, { point: [25, 140], leadIn: 5, leadInType: LEAD_ARC }],
             kerf: KERF,
-            pierceMarginMm: 3,
         })
-        expect(out.reserve.strayPierces).toBe(1)
-        expect(out.holes).toHaveLength(0)
-        expect(out.reserve.holes[0]).toMatchObject({ dropped: true, reason: 'strayPierce' })
-        // CONTRÔLE : un point égaré HORS de tout trou ne coûte rien.
-        const loin = partWithReserve(part, {
-            starts: [...starts, { point: [900, 900], leadIn: 5, leadInType: LEAD_ARC }],
-            kerf: KERF,
-            pierceMarginMm: 3,
-        })
-        expect(loin.reserve.strayPierces).toBe(0)
-        expect(loin.holes).toHaveLength(1)
+        expect(out.reserve.ignoredPaths).toBe(1)
+        expect(out.holes).toHaveLength(1)
+        expect(out.reserve.holesDropped).toBe(0)
+        expect(out.reserve.holes[0]).toMatchObject({ applied: true, dropped: false })
     })
 
     it('un point hors de tout contour est COMPTÉ, pas avalé', () => {
         const out = partWithReserve(part, {
             starts: [...starts, { point: [900, 900], leadIn: 5, leadInType: LEAD_ARC }],
             kerf: KERF,
-            pierceMarginMm: 3,
         })
         expect(out.reserve.unmatched).toBe(1)
         expect(out.reserve.starts).toBe(3)
@@ -476,7 +466,6 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
             leadOut: 10,
             leadOutType: LEAD_ARC,
             kerf: KERF,
-            pierceMarginMm: 3,
         })
         expect(res.applied).toBe(false)
         expect(res.ring).toBe(small)
@@ -484,14 +473,21 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
             .toContain(res.reason)
     })
 
-    it('ne réserve rien quand il n’y a rien à réserver', () => {
+    it('kerf nul : la torche perce quand même, repli 3 mm et constat', () => {
+        // §9.51 : un kerf nul, absent ou illisible ne rend pas une marge
+        // NULLE — sinon la réserve ne réserverait rien précisément quand on
+        // en sait le moins. L'ancien refus « rien à réserver » est devenu
+        // inatteignable et a été retiré, clés i18n comprises.
         const res = biteAtStart(L_HOLE, {
             start: HOLE_START, scrapInside: true,
             leadIn: 0, leadInType: LEAD_NONE, leadOut: 0, leadOutType: LEAD_NONE,
-            kerf: 0, pierceMarginMm: 0,
+            kerf: 0,
         })
-        expect(res.applied).toBe(false)
-        expect(res.reason).toBe('nothingToReserve')
+        expect(res.applied).toBe(true)
+        expect(Math.abs(signedArea(res.ring))).toBeLessThan(Math.abs(signedArea(L_HOLE)))
+        const out = partWithReserve(part, { starts, kerf: 0 })
+        expect(out.reserve.pierceRadiusMm).toBe(3)
+        expect(out.reserve.pierceFallback).toBe(true)
     })
 
     it('amorce 0 avec perçage 3 : la morsure s’applique (défaut du lot J4-bis)', () => {
@@ -502,7 +498,7 @@ describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
         const res = biteAtStart(L_HOLE, {
             start: HOLE_START, scrapInside: true,
             leadIn: 0, leadInType: LEAD_NONE, leadOut: 0, leadOutType: LEAD_NONE,
-            kerf: KERF, pierceMarginMm: 3,
+            kerf: KERF,
         })
         expect(res.applied).toBe(true)
         expect(Math.abs(signedArea(res.ring))).toBeLessThan(Math.abs(signedArea(L_HOLE)))
@@ -692,8 +688,19 @@ describe('briques géométriques', () => {
         }
     })
 
-    it('le rayon de perçage par défaut reste 3 mm, à confirmer sur la machine', () => {
-        expect(DEFAULT_PIERCE_MARGIN_MM).toBe(3)
+    it('le rayon de perçage DÉRIVE DU KERF : 2 × kerf (§9.51)', () => {
+        // Plus de constante « 3 mm » : le trou de perçage est gros, et la
+        // sécurité se compte en kerf. Le kerf de la recette (1,5) redonne
+        // exactement l'ancien défaut — ce n'est pas une coïncidence, c'est
+        // d'où venait le 3.
+        expect(pierceRadiusFromKerf(1.5)).toEqual({ radius: 3, fallback: false })
+        expect(pierceRadiusFromKerf(4)).toEqual({ radius: 8, fallback: false })
+        // Un kerf nul, absent ou illisible ne rend JAMAIS une marge nulle :
+        // repli 3 mm, et le constat le dit.
+        expect(PIERCE_FALLBACK_MM).toBe(3)
+        for (const bad of [0, -1, null, undefined, NaN, 'abc']) {
+            expect(pierceRadiusFromKerf(bad)).toEqual({ radius: 3, fallback: true })
+        }
     })
 
     it('convexHull est déterministe et rend un tour convexe', () => {

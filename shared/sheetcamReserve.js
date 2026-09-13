@@ -60,10 +60,32 @@
  * le navigateur et le serveur.
  */
 
-/** Rayon du disque de perçage, en millimètres. Défaut à confirmer sur la
- *  machine du propriétaire (plasma : le trou de perçage est plus large que
- *  le kerf, et il n'est pas modélisé par SheetCam — §7 de l'étude). */
-export const DEFAULT_PIERCE_MARGIN_MM = 3
+/**
+ * LES MARGES DE LA RÉSERVE DÉRIVENT DU KERF (§9.51, décision du propriétaire).
+ *
+ * Plus de constante « 3 mm » : le trou de perçage est gros, et la sécurité se
+ * compte en kerf. Trois règles, toutes du même argument physique que
+ * l'espacement du §9.40 — la bande brûlée déborde d'un kerf entier :
+ *
+ *   - **perçage** : disque réservé de rayon `2 × kerf` autour du point de
+ *     perçage (kerf 1,5 ⇒ 3 mm, exactement l'ancien défaut ; kerf 4 ⇒ 8 mm) ;
+ *   - **trajets d'amorce**, entrée ET sortie : bande de `± kerf` de part et
+ *     d'autre du trajet, au lieu du demi-kerf ;
+ *   - **bouche** de la morsure : au moins le diamètre du disque, `4 × kerf`.
+ *
+ * Un kerf nul, absent ou illisible ne doit pas rendre une marge NULLE : on
+ * retombe sur 3 mm et le constat le dit (`pierceFallback`).
+ */
+export const PIERCE_FALLBACK_MM = 3
+
+/** Rayon du disque de perçage à réserver, depuis le kerf de l'outil.
+ *  Rend aussi `fallback: true` quand le kerf n'est pas exploitable — le
+ *  constat doit pouvoir le dire, pas le taire. */
+export function pierceRadiusFromKerf(kerf) {
+    const k = Number(kerf)
+    if (!Number.isFinite(k) || k <= 0) return { radius: PIERCE_FALLBACK_MM, fallback: true }
+    return { radius: 2 * k, fallback: false }
+}
 
 /** Côtés du polygone qui approche le disque de perçage. 32 comme le repli de
  *  gonflement du lot E0, et CIRCONSCRIT : on ne promet jamais moins de marge
@@ -318,7 +340,7 @@ export function leadPathLocal(type, length, side) {
  *   1. le chemin d'outil est décalé de `kerf/2` VERS LA CHUTE — tout le
  *      trajet d'amorce part de là, pas du contour ;
  *   2. la torche brûle `kerf/2` de chaque côté de ce trajet ;
- *   3. le perçage ouvre un disque de `pierceMarginMm` au bout de l'entrée.
+ *   3. le perçage ouvre un disque de `2 × kerf` au bout de l'entrée (§9.51).
  *
  * Rend la liste des points dont l'enveloppe convexe est la réserve.
  */
@@ -331,11 +353,15 @@ export function leadEnvelopePoints({
     leadOut = 0,
     leadOutType = LEAD_NONE,
     kerf = 0,
-    pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
 } = {}) {
     const k = Math.max(0, Number(kerf) || 0)
-    const margin = Math.max(0, Number(pierceMarginMm) || 0)
+    const margin = pierceRadiusFromKerf(k).radius
+    // `half` est le DÉCALAGE du chemin d'outil (kerf/2 du contour) : un fait
+    // géométrique, pas une marge. La marge, c'est `band` ci-dessous.
     const half = k / 2
+    // Bande réservée autour du trajet : ± kerf (§9.51), et non le demi-kerf
+    // de la bande brûlée seule — même argument que l'espacement du §9.40.
+    const band = Math.max(k, 0)
     const finish = endFrame || startFrame
     const toWorld = (frame) => (p) => [
         point[0] + frame.tangent[0] * p[0] + frame.normal[0] * (p[1] + half),
@@ -351,15 +377,15 @@ export function leadEnvelopePoints({
         const map = toWorld(frame)
         for (const p of pts) {
             const w = map(p)
-            if (half > 0) out.push(...pierceDisc(w, half, 8))
+            if (band > 0) out.push(...pierceDisc(w, band, 8))
             else out.push(w)
         }
     }
     push(entry.points, startFrame)
     push(exit.points, finish)
-    // Le perçage, au bout de l'entrée. Rayon planché au demi-kerf : même une
-    // marge de perçage nulle laisse la torche brûler sa largeur.
-    out.push(...pierceDisc(toWorld(startFrame)(entry.far), Math.max(margin, half)))
+    // Le perçage, au bout de l'entrée : `2 × kerf`, planché à la bande (même
+    // sans marge de perçage la torche brûle sa largeur).
+    out.push(...pierceDisc(toWorld(startFrame)(entry.far), Math.max(margin, band)))
     return out
 }
 
@@ -509,7 +535,6 @@ export function biteAtStart(ring, {
     leadOut = 0,
     leadOutType = LEAD_NONE,
     kerf = 0,
-    pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
 } = {}) {
     const src = (ring || []).map((p) => [Number(p[0]), Number(p[1])])
     const base = openRing(src)
@@ -518,11 +543,14 @@ export function biteAtStart(ring, {
         || !Number.isFinite(Number(start[1]))) {
         return { ring, applied: false, reason: 'startNotRead' }
     }
+    // IL Y A TOUJOURS QUELQUE CHOSE À RÉSERVER (§9.51). Même sans amorce
+    // déclarée, la torche PERCE : le disque vaut `2 × kerf`, et un kerf nul ou
+    // illisible retombe sur 3 mm plutôt que sur zéro. L'ancien refus
+    // `nothingToReserve` est donc devenu inatteignable, et il est retiré —
+    // une raison morte dans un dictionnaire est une promesse qu'on ne tient
+    // plus.
     const k = Math.max(0, Number(kerf) || 0)
-    const margin = Math.max(0, Number(pierceMarginMm) || 0)
-    if (k <= 0 && margin <= 0 && !(Number(leadIn) > 0) && !(Number(leadOut) > 0)) {
-        return { ring, applied: false, reason: 'nothingToReserve' }
-    }
+    const margin = pierceRadiusFromKerf(k).radius
 
     const placed = insertOnRing(base, [Number(start[0]), Number(start[1])])
     const r = placed.ring
@@ -539,7 +567,6 @@ export function biteAtStart(ring, {
         leadOut,
         leadOutType,
         kerf: k,
-        pierceMarginMm: margin,
     })
     if (cloud.length < 3) return { ring, applied: false, reason: 'flatEnvelope' }
 
@@ -555,7 +582,9 @@ export function biteAtStart(ring, {
             Math.abs(dot(v, frames.start.tangent)),
             Math.abs(dot(v, frames.end.tangent)))
     }
-    let mouth = Math.max(reach + Math.max(k, 1e-3), 1e-3)
+    // La bouche fait au moins le DIAMÈTRE du disque de perçage, 4 × kerf
+    // (§9.51) : plus étroite, ses deux lèvres tomberaient dans l'enveloppe.
+    let mouth = Math.max(reach + Math.max(k, 1e-3), 4 * k, 1e-3)
 
     let last = 'holeTooSmall'
     for (let attempt = 0; attempt < 4; attempt++, mouth *= 1.5) {
@@ -889,9 +918,9 @@ export function partWithReserve(part, options = {}) {
     const {
         starts = [],
         kerf = 0,
-        pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
         matchTolMm = START_MATCH_TOL_MM,
     } = options
+    const pierce = pierceRadiusFromKerf(kerf)
     const outer = part.coordinates
     const holeRings = part.holes || []
     const entries = [
@@ -913,7 +942,6 @@ export function partWithReserve(part, options = {}) {
                 leadOut: start.leadOut,
                 leadOutType: start.leadOutType,
                 kerf,
-                pierceMarginMm,
             })
             if (!res.applied) return { ring, applied: 0, reason: res.reason }
             cur = res.ring
@@ -927,37 +955,25 @@ export function partWithReserve(part, options = {}) {
         ? applyAll(outer, perRing[0], false)
         : { ring: outer, applied: 0, reason: 'startNotRead' }
 
-    // UN POINT DE DÉPART QUI N'EST SUR AUCUN CONTOUR MAIS QUI TOMBE DANS UN
-    // TROU EST UN PERÇAGE EN PLEINE ZONE NICHÉE.
+    // UN CHEMIN DU BINAIRE QUI N'ATTERRIT SUR AUCUN CONTOUR EST IGNORÉ, ET
+    // COMPTÉ — IL NE RETIRE PLUS RIEN (§9.50, mesure du propriétaire).
     //
-    // Le cas est RÉEL et il a été trouvé au banc, pas imaginé : les deux DXF
-    // de la recette portent une entité POINT que notre import ne retient pas
-    // (elle n'a pas d'aire), et SheetCam lui fabrique un chemin dont le point
-    // de départ est le point lui-même. Sur `Piece_Trou`, ce point est le
-    // CENTRE du trou — exactement là où nous nichons les éventails.
+    // Le lot J4-bis-2 faisait sortir du nesting le trou qui contenait un tel
+    // point : les deux DXF de la recette portent une entité POINT que notre
+    // import ne retient pas, et SheetCam lui fabrique un chemin dont le
+    // départ est le point lui-même — au centre du trou de l'hôte. Faute de
+    // savoir si SheetCam y perçait, on retirait le trou. C'était une
+    // dégradation sûre, et elle coûtait tout le nichage de la recette.
     //
-    // On ne sait pas si SheetCam amorce vraiment sur une entité POINT (la
-    // série `retro-eng-job` n'en porte aucune, aucun `.nc` ne tranche). Tant
-    // que ce n'est pas mesuré, le trou concerné SORT du nesting : c'est la
-    // règle du §9.42 point 3, appliquée à l'endroit exact du danger plutôt
-    // qu'à tous les trous de la pièce.
-    const stray = new Set()
-    for (const start of unmatched) {
-        const p = start?.point
-        if (!Array.isArray(p)) continue
-        holeRings.forEach((hole, index) => {
-            if (pointInRing([Number(p[0]), Number(p[1])], hole)) stray.add(index)
-        })
-    }
-
+    // LE G-CODE DU PROPRIÉTAIRE A TRANCHÉ : `Piece_Trou+Fill_x4_OK.nc` compte
+    // SIX descentes de torche pour SIX contours — quatre éventails, le trou,
+    // le contour extérieur. Aucune au centre du trou. SheetCam ne perce pas
+    // sur une entité POINT. Le chemin est donc du bruit de cache : on le
+    // compte (`ignoredPaths`) et on passe.
     const holes = []
     const holeReports = []
     holeRings.forEach((hole, index) => {
         const list = perRing[index + 1]
-        if (stray.has(index)) {
-            holeReports.push({ index, applied: false, reason: 'strayPierce', bites: 0, dropped: true })
-            return
-        }
         if (!list.length) {
             holeReports.push({ index, applied: false, reason: 'startNotRead', bites: 0, dropped: true })
             return
@@ -978,11 +994,12 @@ export function partWithReserve(part, options = {}) {
         reserve: {
             applied: outerRes.applied > 0,
             reason: outerRes.reason,
-            pierceMarginMm: Number(pierceMarginMm),
+            pierceRadiusMm: pierce.radius,
+            pierceFallback: pierce.fallback,
             kerf: Number(kerf),
             starts: starts.length,
             unmatched: unmatched.length,
-            strayPierces: stray.size,
+            ignoredPaths: unmatched.length,
             holes: holeReports,
             holesDropped: holeReports.filter((h) => h.dropped).length,
         },

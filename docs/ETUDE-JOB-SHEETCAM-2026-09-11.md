@@ -2011,3 +2011,143 @@ et les fichiers `RECETTE-*` (même bloc copié). Règle pour le code : un point
 `moved = false` du binaire est une INDICATION, jamais une garantie ; seul un
 point écrit avec `moved = true` engage SheetCam (L-2, L-3 : respectés à
 l'octet).
+
+#### 9.52 Lot J4-ter — rapport de l'implémenteur (13/09, nuit)
+
+Trois choses dans ce lot : le retrait du « perçage errant » (reste de
+J4-bis-4), les marges du §9.51, et l'écriture du point de départ.
+
+**1. « Perçage errant » retiré.** Le G-code du propriétaire a tranché : six
+descentes de torche pour six contours, aucune au centre du trou. Un chemin du
+cache qui n'atterrit sur aucun contour est désormais **ignoré et compté**
+(`ignoredPaths`) ; il ne retire plus le trou. Le TROU revient au nesting —
+les éventails, eux, n'y rentrent toujours pas, et c'est l'espacement qui
+l'explique, pas la réserve : voir le point 5, mesuré.
+
+**2. Les marges dérivent du kerf (§9.51).** `DEFAULT_PIERCE_MARGIN_MM` a
+disparu. À la place :
+
+| | avant | maintenant |
+|---|---|---|
+| disque de perçage | 3 mm, constante | **2 × kerf** |
+| bande autour des trajets | kerf/2 | **± kerf** (largeur 2 × kerf) |
+| bouche de la morsure | rayon du disque | **au moins 4 × kerf** |
+
+Le kerf de la recette (1,5) redonne exactement 3 mm : ce n'est pas une
+coïncidence, c'est d'où venait la constante. Un kerf de 4 donne 8 mm.
+
+**Un kerf nul, absent ou illisible ne rend JAMAIS une marge nulle** : repli à
+3 mm, et le constat le dit (`pierceFallback`). Conséquence : l'ancien refus
+`nothingToReserve` est devenu inatteignable — la torche perce toujours. Je l'ai
+**retiré du code et des deux dictionnaires** plutôt que de le laisser traîner :
+une raison morte dans un dictionnaire est une promesse qu'on ne tient plus.
+
+Prix mesuré, mêmes fixtures qu'au §9.43 : le trou de la recette (cercle r 35,
+amorce 5, sortie 10, kerf 1,5) passe de **2,74 % à 3,06 %** de son aire, bouche
+de 9,38 à **10,19 mm** ; le trou rectangulaire de `Pièce L` de 3,6 à **4,06 %**,
+bouche **9,52 mm** ; le contour extérieur gagne **0,67 %**. Les verrous de
+mesure du §9.43 sont rejoués avec ces marges et restent verts : les 36 points
+de trajet réels du G-code hors zone utile, et le cercle de perçage réel
+(rayon 2 × kerf = 3) entièrement hors zone libre, 0 sur 64.
+
+**3. L'écriture du point de départ, et c'est le cœur du lot.**
+
+Le §9.50 a montré qu'un point `moved = false` est un **cache** que SheetCam
+recalcule à l'ouverture. Réserver la place au point lu pendant que SheetCam en
+choisit un autre, c'est le défaut de la recette sous une autre forme — et il
+est invisible depuis chez nous.
+
+`writeJobStartPoints` (`shared/sheetcamJob.js`) réécrit donc, pour chaque
+contour où la réserve a été posée, le point retenu **et lève le drapeau
+« déplacé à la main »**. Les points déplacés, eux, sont respectés à l'octet
+(L-2 et L-3 de la série) : c'est le seul état qui engage SheetCam.
+
+L'écriture est chirurgicale : `jobPathRecords` rend maintenant les OFFSETS de
+chaque charge utile (`at: { x, y, moved }`), et l'écrivain pose deux doubles et
+un octet par contour. **Rien n'est réencodé** — le cache de géométrie de
+SheetCam reste le sien, et le harnais le vérifie.
+
+**On n'écrit QUE pour les chemins qui tombent sur un contour du dessin.** Un
+chemin sans contour chez nous — l'entité POINT, par exemple — n'a pas été
+réservé : figer un point qu'on ne modélise pas serait un pari. Mesuré sur la
+fixture : l'hôte a trois chemins et deux contours, deux drapeaux se lèvent ;
+l'éventail a deux chemins et un contour, un seul se lève.
+
+**4. `allowOverlappingLeads`.** L'échappatoire d'atelier : allumée, aucune
+réserve n'est appliquée — les pièces se serrent et les amorces peuvent se
+croiser. C'est un choix (tôle chère, chutes sans valeur), jamais un défaut par
+défaut. Et surtout **il ne se fait pas en silence** : le constat porte sa
+raison (`leadsAllowedToOverlap`, libellé EN et FR), et le verrou compare la
+géométrie produite à celle d'un projet sans `.job` — strictement identique.
+
+**Verrous, et la preuve qu'ils mordent.** Quatre tests neufs sur l'écriture :
+le point écrit est celui où la réserve a été posée, drapeau levé ; le reste du
+cache ne bouge pas d'un octet ; un appelant qui ne fournit pas les points
+recopie le cache tel quel (le comportement d'avant, toujours atteignable) ; un
+chemin sans contour n'est jamais figé. J'ai désactivé l'écriture un instant
+pour vérifier : **trois échecs**, `expected [] to have a length of 2`. Remise :
+verts.
+
+Le harnais change aussi de verrou sur un point important : **`D6` n'exige plus
+l'identité à l'octet** du bloc binaire — il exige que rien ne bouge EN DEHORS
+des champs de point de départ, et un `D6b` neuf exige qu'au moins un drapeau
+soit levé (sans lui, J4-ter ne ferait rien et `D6` passerait au vert).
+
+**Ce que ce lot NE fait pas, et qu'il faut savoir.** NestorCut écrit le point
+qu'il a LU, pas un point qu'il aurait choisi pour éviter les pièces nichées.
+C'est ce qui rend la réserve et le G-code cohérents — l'objet du lot — mais
+si le point lu tombe du côté où nous nichons, la réserve mange la place et le
+nesting en tient compte, au lieu de déplacer l'amorce ailleurs. Choisir un
+MEILLEUR point (le plus loin des pièces nichées) est un chantier distinct, et
+il n'est pas nécessaire pour que la recette soit juste.
+
+**5. LE NICHAGE NE REVIENT PAS DANS LA RECETTE, ET CE N'EST PAS LA RÉSERVE.**
+
+Le trou est bien rendu au nesting (`applied: true`, aucun trou retiré), et
+pourtant les quatre éventails se posent à côté de l'hôte au lieu d'y être
+nichés. Plutôt que de supposer, j'ai mesuré, toutes choses égales par ailleurs
+— même fichier, même image, seul l'espacement puis la réserve changent :
+
+| espacement | réserve | éventails nichés |
+|---|---|---|
+| 4 mm (`2 × 1,5 + 1`, le pré-remplissage) | oui | **non** |
+| 3,25 mm (sécurité 0,25) | oui | **non** |
+| 3 mm (sécurité 0, le plancher de la règle) | oui | **non** |
+| 3 mm | **non** (`allowOverlappingLeads`) | **non** |
+
+La dernière ligne tranche : **sans aucune réserve, au plancher de la règle, ils
+ne nichent toujours pas**. Ce n'est donc pas la morsure d'amorce qui coûte le
+nichage, c'est l'espacement. Le §9.40 l'avait annoncé (« les quatre éventails
+ne tiennent plus ensemble dans le trou — c'est un choix de qualité de coupe,
+assumé ») ; le §9.19 plaçait la limite à 3,5 mm, la mesure la place SOUS 3.
+
+Conséquence à dire clairement au propriétaire : avec la règle `2 × kerf +
+sécurité` et un kerf de 1,5, **aucun réglage ne fait renter les quatre
+éventails dans ce trou** — le plancher de la règle (3 mm, sécurité nulle) est
+déjà trop large. La recette machine montrera donc cinq pièces posées et un
+`.job` juste, pas un moulinet. Si le propriétaire veut revoir le nichage, c'est
+la règle d'espacement qu'il faut rediscuter, pas la réserve.
+
+**Pour mesurer cela, le harnais a gagné deux leviers** : `QA_SAFETY` force la
+sécurité du formulaire avant de nester, `QA_ALLOW_OVERLAP` pose
+`allowOverlappingLeads` sur les fiches (l'option n'a pas encore de commande
+dans l'interface). Avec le second, `F1`/`F3`/`F4` n'ont plus de sens et sont
+remplacés par `F0` : aucune réserve, ET la raison nommée.
+
+**Un faux pas de mesure, dit parce qu'il est instructif** : mon premier essai
+rechargeait la page après avoir écrit dans IndexedDB. La page repartait des
+params d'usine, le kerf pré-rempli par le `.job` était perdu, et la « mesure à
+3 mm » se faisait en réalité à 0. Le rechargement est inutile — la fiche est
+relue au moment du nesting.
+
+**Mesures du lot, toutes rejouées sur ce poste, image reconstruite :**
+
+| banc | résultat |
+|---|---|
+| `npx vitest run` | **740** passés, 64 fichiers |
+| `npx nuxt build` | vert |
+| `docker compose build app` | vert |
+| harnais, `Piece_Trou+Fill_x4_ordre_TEST.job` | tous verts, 5 / 5 |
+| harnais, `Piece_Trou+Fill_x4_OK.job` | tous verts, 5 / 5 — trou **rendu au nesting**, 3 drapeaux « déplacé » levés, 3 octets changés dans le cache et tous dans les champs de départ |
+| harnais, `Piece_Trou+Fill.job` | tous verts, 2 / 2 |
+| harnais, `Piece_Trou.job` | tous verts, 1 / 1 |

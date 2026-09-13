@@ -30,8 +30,12 @@
  *    complet — on le dit, au lieu de livrer un fichier amputé en silence.
  */
 
-import { SheetCamJobError, jobDrawingName, parseSheetCamJob } from '~~/shared/sheetcamJob.js'
+import {
+    SheetCamJobError, jobDrawingName, jobPathRecords, parseSheetCamJob,
+    writeJobStartPoints,
+} from '~~/shared/sheetcamJob.js'
 import { nestedJobsPerSheet } from '~~/shared/sheetcamNest.js'
+import { nearestOnRing, START_MATCH_TOL_MM } from '~~/shared/sheetcamReserve.js'
 
 /**
  * Les tôles d'une alternative, dans la forme qu'attend `buildNestedJobs`.
@@ -112,6 +116,7 @@ export function buildNestedJobs(job, {
     sheets,
     ringsByFileSlug,
     fileNamesBySlug,
+    startsByFileSlug = null,
     baseName = 'nestorcut',
     maskPaths = true,
 } = {}) {
@@ -149,7 +154,28 @@ export function buildNestedJobs(job, {
         if (slug && ringsByFileSlug[slug]) rings[rank] = ringsByFileSlug[slug]
     }
 
-    return nestedJobsPerSheet(job, { sheets: j2Sheets, rings, maskPaths })
+    // LOT J4-ter — ON ÉCRIT LE POINT DE DÉPART, ET ON LÈVE LE DRAPEAU.
+    //
+    // Un point `moved = false` du cache binaire est une INDICATION, pas une
+    // garantie : SheetCam le RECALCULE à l'ouverture (§9.50, vérifié en
+    // rouvrant et re-sauvegardant le fichier du propriétaire — le point du
+    // trou passe d'un bout du cercle à l'autre). Réserver la place au point lu
+    // et laisser SheetCam en choisir un autre, c'est le défaut de la recette
+    // sous une autre forme.
+    //
+    // On réécrit donc, pour chaque contour où la réserve a été posée, le point
+    // que NestorCut a retenu, avec le drapeau « déplacé à la main ». SheetCam
+    // ne le recalcule plus, et le G-code amorce là où la place est gardée —
+    // c'est ce que la recette machine vérifie.
+    //
+    // On n'écrit QUE pour les chemins qui tombent sur un contour du dessin : un
+    // chemin sans contour chez nous (une entité POINT, par exemple) n'a pas été
+    // réservé, et figer un point qu'on ne modélise pas serait un pari.
+    const withStarts = startsByFileSlug
+        ? applyChosenStarts(job, { startsByFileSlug, fileNamesBySlug, ringsByFileSlug })
+        : job
+
+    return nestedJobsPerSheet(withStarts, { sheets: j2Sheets, rings, maskPaths })
         .map((file) => ({
             ...file,
             fileName: `${baseName}_tole${file.sheet}.job`,
@@ -161,3 +187,42 @@ export function buildNestedJobs(job, {
 // bundle serveur (Rollup resout depuis l'emplacement du chunk). Passer par ce
 // module, qui l'importe STATIQUEMENT, est la voie sure.
 export { parseSheetCamJob }
+
+
+/**
+ * Réécrit dans le cache binaire les points de départ que NestorCut a retenus,
+ * drapeau « déplacé à la main » levé (lot J4-ter).
+ *
+ * Rend un `job` dont seul `binary` change — deux doubles et un octet par
+ * contour réservé, le reste du cache intact (c'est ce que le harnais vérifie).
+ */
+export function applyChosenStarts(job, { startsByFileSlug, fileNamesBySlug, ringsByFileSlug }) {
+    const blocks = jobPathRecords(job.binary)
+    if (!blocks) return job
+    const edits = []
+    for (const [slug, entry] of Object.entries(startsByFileSlug || {})) {
+        const block = blocks[entry?.blockIndex]
+        if (!block || !Array.isArray(entry?.starts)) continue
+        const rings = ringsByFileSlug?.[slug] || []
+        if (!rings.length) continue
+        for (const start of entry.starts) {
+            const path = block.paths?.[start?.pathIndex]
+            if (!path || !Array.isArray(start?.offset)) continue
+            const point = [
+                Number(block.origin[0]) + Number(start.offset[0]),
+                Number(block.origin[1]) + Number(start.offset[1]),
+            ]
+            if (!Number.isFinite(point[0]) || !Number.isFinite(point[1])) continue
+            let best = Infinity
+            for (const ring of rings) {
+                if (!Array.isArray(ring) || ring.length < 2) continue
+                const d = nearestOnRing(point, ring).d
+                if (d < best) best = d
+            }
+            if (best > START_MATCH_TOL_MM) continue
+            edits.push({ at: path.at, point: start.offset })
+        }
+    }
+    if (!edits.length) return job
+    return { ...job, binary: writeJobStartPoints(job.binary, edits) }
+}

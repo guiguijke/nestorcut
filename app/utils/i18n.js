@@ -338,13 +338,12 @@ const dict = {
         // Raisons d'une reserve d'amorce refusee (lot J3), affichees telles
         // quelles dans jobImport.reserveRefused / jobImport.holeDropped.
         'sheetcamReserve.ringTooSmall': 'the outline has too few points',
-        'sheetcamReserve.nothingToReserve': 'the job file declares neither lead-in nor pierce',
         'sheetcamReserve.flatEnvelope': 'the reserved area would be flat at that point',
         'sheetcamReserve.reserveCrossesContour': 'the reserved area would cross the outline',
         'sheetcamReserve.holeTooSmall': 'the cutout is smaller than the lead-in and its pierce',
         'sheetcamReserve.mouthInsideEnvelope': 'the lead-in reaches further along the outline than the cutout allows',
         'sheetcamReserve.startNotRead': 'the job file does not say where this contour starts',
-        'sheetcamReserve.strayPierce': 'the job file pierces inside this cutout, away from any outline',
+        'sheetcamReserve.leadsAllowedToOverlap': 'lead-in space was not reserved: overlapping leads are allowed on this drawing',
         'sheetcamReserve.countMismatch': 'the job file caches a different number of drawings than it lists',
         'sheetcamReserve.noPointPlaced': 'none of the start points of this job file lands on a drawing',
         'sheetcamReserve.tie': 'two drawings of this job file look alike: which start points belong to which cannot be told',
@@ -1159,13 +1158,12 @@ const dict = {
         // Raisons d'une reserve d'amorce refusee (lot J3), affichees telles
         // quelles dans jobImport.reserveRefused / jobImport.holeDropped.
         'sheetcamReserve.ringTooSmall': "le contour a trop peu de points",
-        'sheetcamReserve.nothingToReserve': "le fichier .job ne déclare ni amorce ni perçage",
         'sheetcamReserve.flatEnvelope': "la zone réservée serait plate à cet endroit",
         'sheetcamReserve.reserveCrossesContour': "la zone réservée traverserait le contour",
         'sheetcamReserve.holeTooSmall': "la découpe est plus petite que l'amorce et son perçage",
         'sheetcamReserve.mouthInsideEnvelope': "l'amorce court plus loin le long du contour que la découpe ne le permet",
         'sheetcamReserve.startNotRead': "le fichier .job ne dit pas où ce contour commence",
-        'sheetcamReserve.strayPierce': "le fichier .job perce à l'intérieur de cette découpe, hors de tout contour",
+        'sheetcamReserve.leadsAllowedToOverlap': "la place des amorces n'a pas été réservée : les amorces croisées sont autorisées sur ce dessin",
         'sheetcamReserve.countMismatch': "le fichier .job met en cache un nombre de dessins différent de celui qu'il déclare",
         'sheetcamReserve.noPointPlaced': "aucun point de départ de ce fichier .job ne tombe sur un dessin",
         'sheetcamReserve.tie': "deux dessins de ce fichier .job se ressemblent : impossible de dire quels points de départ vont à l'un ou à l'autre",

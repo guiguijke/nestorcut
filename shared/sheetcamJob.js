@@ -626,6 +626,10 @@ export function jobPathRecords(binary) {
                     start: null,
                     order: null,
                     moved: false,
+                    // Les OFFSETS de la charge utile, pour pouvoir RÉÉCRIRE le
+                    // point de départ sans re-décoder le flux (lot J4-ter).
+                    // Relatifs au tableau `binary`.
+                    at: { x: null, y: null, moved: null },
                 }
                 drawing.paths.push(path)
                 break
@@ -633,16 +637,25 @@ export function jobPathRecords(binary) {
                 if (len === 8 && path) path.leadOut = view.getFloat64(at, true)
                 break
             case 0x0018:
-                if (len === 8 && path) path.start = [view.getFloat64(at, true), 0]
+                if (len === 8 && path) {
+                    path.start = [view.getFloat64(at, true), 0]
+                    path.at.x = at
+                }
                 break
             case 0x0019:
-                if (len === 8 && path?.start) path.start[1] = view.getFloat64(at, true)
+                if (len === 8 && path?.start) {
+                    path.start[1] = view.getFloat64(at, true)
+                    path.at.y = at
+                }
                 break
             case 0x001a:
                 if (len === 4 && path) path.order = view.getInt32(at, true)
                 break
             case 0x001d:
-                if (len === 1 && path) path.moved = binary[at] === 1
+                if (len === 1 && path) {
+                    path.moved = binary[at] === 1
+                    path.at.moved = at
+                }
                 break
             case 0x000b:
                 drawing = null
@@ -663,4 +676,58 @@ export function jobPathRecords(binary) {
         }
     }
     return drawings
+}
+
+/**
+ * Réécrit des points de départ dans le bloc binaire — lot J4-ter.
+ *
+ * ---------------------------------------------------------------------------
+ * POURQUOI IL FAUT ÉCRIRE, ET PAS SEULEMENT LIRE.
+ *
+ * Le lot J4-bis-2 réservait la place de l'amorce AU POINT LU dans le cache
+ * binaire. Le G-code du propriétaire a montré que ce n'est sûr que pour un
+ * point DÉPLACÉ À LA MAIN (§9.50) : un point automatique (`moved = false`)
+ * est un CACHE que SheetCam RECALCULE à l'ouverture. Mesuré sur
+ * `Piece_Trou+Fill_x4_OK.job`, rouvert et re-sauvegardé sans rien toucher :
+ * le point du trou passe de (24,7 ; −24,7) à (24,7 ; 24,7) — l'autre bout du
+ * cercle. Réserver au point lu revient alors à réserver au mauvais endroit,
+ * et l'amorce coupe une pièce nichée : c'est le défaut de la recette du
+ * 13/09, sous une autre forme.
+ *
+ * Les points marqués déplacés, eux, sont respectés à l'octet (L-2 et L-3 de
+ * la série). Donc : NestorCut écrit le point où il a réservé et LÈVE le
+ * drapeau. SheetCam ne le recalcule plus, et le G-code amorce là où la place
+ * a été gardée. C'est vérifiable sur machine, et c'est la recette du lot.
+ *
+ * ---------------------------------------------------------------------------
+ * `edits` : `[{ at: { x, y, moved }, point: [x, y] }]` — les offsets viennent
+ * de `jobPathRecords`, le point est en coordonnées LOCALES du dessin (les
+ * mêmes que celles qu'on a lues).
+ *
+ * Rend un NOUVEAU tableau, identique à l'octet près partout ailleurs : rien
+ * n'est réencodé, on écrit deux doubles et un octet par chemin. C'est ce qui
+ * permet au harnais de vérifier que le reste du cache n'a pas bougé.
+ */
+export function writeJobStartPoints(binary, edits) {
+    if (!(binary instanceof Uint8Array)) throw new SheetCamJobError('sheetcamJob.notBytes')
+    const out = new Uint8Array(binary)
+    if (!Array.isArray(edits) || !edits.length) return out
+    const view = new DataView(out.buffer, out.byteOffset, out.byteLength)
+    for (const edit of edits) {
+        const at = edit?.at
+        if (!at) continue
+        const p = edit.point
+        if (Array.isArray(p) && Number.isFinite(Number(p[0])) && Number.isFinite(Number(p[1]))
+            && Number.isInteger(at.x) && Number.isInteger(at.y)
+            && at.x >= 0 && at.x + 8 <= out.length && at.y >= 0 && at.y + 8 <= out.length) {
+            view.setFloat64(at.x, Number(p[0]), true)
+            view.setFloat64(at.y, Number(p[1]), true)
+        }
+        // Le drapeau « déplacé à la main » : sans lui, tout le reste est un
+        // cache que SheetCam jettera.
+        if (Number.isInteger(at.moved) && at.moved >= 0 && at.moved < out.length) {
+            out[at.moved] = 1
+        }
+    }
+    return out
 }

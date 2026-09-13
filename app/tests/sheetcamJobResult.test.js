@@ -20,7 +20,7 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { parseSheetCamJob } from '../../shared/sheetcamJob'
+import { jobPathRecords, parseSheetCamJob } from '../../shared/sheetcamJob'
 import { buildNestedJobs, jobCoversPlacedFiles, jobRanksByDrawing } from '../composables/sheetcamJobResult'
 import { partWithReserve } from '../../shared/sheetcamReserve'
 
@@ -271,5 +271,106 @@ describe('J4 — refuser plutôt que livrer un fichier amputé', () => {
         expect(() => buildNestedJobs(SOURCE, {
             sheets: [sheet], ringsByFileSlug: RINGS, fileNamesBySlug: NAMES,
         })).toThrow(/nestingCycle/)
+    })
+})
+
+describe('J4-ter — NestorCut ÉCRIT le point de départ, et lève le drapeau', () => {
+    /** Les points du cache, par dessin, dans la forme que porte la fiche. */
+    const startsFromJob = (job) => {
+        const blocks = jobPathRecords(job.binary)
+        const bySlug = {}
+        const names = ['Piece_Trou.DXF', 'Piece_Fillx4.DXF']
+        names.forEach((name, blockIndex) => {
+            const slug = Object.keys(NAMES).find((s) => NAMES[s] === name)
+            bySlug[slug] = {
+                blockIndex,
+                starts: blocks[blockIndex].paths.map((p, pathIndex) => ({
+                    pathIndex, offset: p.start,
+                })),
+            }
+        })
+        return bySlug
+    }
+
+    it('le point écrit est celui où la réserve a été posée, `moved` levé', () => {
+        // POURQUOI CE LOT EXISTE (§9.50). Un point `moved = false` du cache
+        // est une INDICATION, pas une garantie : SheetCam le RECALCULE à
+        // l'ouverture — mesuré en rouvrant et re-sauvegardant le fichier du
+        // propriétaire, le point du trou passe d'un bout du cercle à l'autre.
+        // Réserver au point lu et laisser SheetCam en choisir un autre, c'est
+        // le défaut de la recette sous une autre forme.
+        const before = jobPathRecords(SOURCE.binary)
+        expect(before[0].paths.every((p) => p.moved)).toBe(false)
+
+        const [file] = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+            startsByFileSlug: startsFromJob(SOURCE),
+        })
+        const out = parseSheetCamJob(file.bytes)
+        const after = jobPathRecords(out.binary)
+
+        // L'hôte a deux contours chez nous (carré + trou) et TROIS chemins
+        // dans le cache : le troisième est l'entité POINT de son DXF, qui ne
+        // tombe sur aucun contour. On n'écrit QUE pour les deux premiers —
+        // figer un point qu'on ne modélise pas serait un pari.
+        const host = after[0].paths
+        const written = host.filter((p) => p.moved)
+        expect(written).toHaveLength(2)
+        // Et les points écrits sont INCHANGÉS : c'est bien là qu'on a réservé.
+        host.forEach((p, k) => {
+            expect(p.start[0]).toBeCloseTo(before[0].paths[k].start[0], 12)
+            expect(p.start[1]).toBeCloseTo(before[0].paths[k].start[1], 12)
+        })
+    })
+
+    it('le reste du cache binaire ne bouge PAS d’un octet', () => {
+        const [file] = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+            startsByFileSlug: startsFromJob(SOURCE),
+        })
+        const out = parseSheetCamJob(file.bytes)
+        expect(out.binary.length).toBe(SOURCE.binary.length)
+
+        // Les seuls octets qui changent sont les drapeaux « déplacé ». On a
+        // réécrit les MÊMES coordonnées, donc les doubles sont identiques ;
+        // ce verrou dit que rien d'autre n'a été touché — le cache de
+        // géométrie de SheetCam reste le sien.
+        const bougés = []
+        for (let i = 0; i < out.binary.length; i++) {
+            if (out.binary[i] !== SOURCE.binary[i]) bougés.push(i)
+        }
+        const drapeaux = jobPathRecords(SOURCE.binary)
+            .flatMap((d) => d.paths.map((p) => p.at.moved))
+        expect(bougés.every((i) => drapeaux.includes(i))).toBe(true)
+        expect(bougés.length).toBeGreaterThan(0)
+    })
+
+    it('CONTRÔLE NÉGATIF : sans les points, le binaire est intact', () => {
+        // C'est le comportement d'avant le lot, et il doit rester atteignable :
+        // un appelant qui ne fournit pas les points recopie le cache tel quel.
+        const [file] = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+        })
+        const out = parseSheetCamJob(file.bytes)
+        expect(Array.from(out.binary)).toEqual(Array.from(SOURCE.binary))
+    })
+
+    it('un chemin sans contour chez nous n’est JAMAIS figé', () => {
+        // L'éventail a UN contour et DEUX chemins dans le cache (le second est
+        // son entité POINT, sous la pièce). Un seul drapeau doit se lever.
+        const [file] = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+            startsByFileSlug: startsFromJob(SOURCE),
+        })
+        const after = jobPathRecords(parseSheetCamJob(file.bytes).binary)
+        expect(after[1].paths.filter((p) => p.moved)).toHaveLength(1)
     })
 })

@@ -386,6 +386,7 @@ async function buildClientPayload(meta) {
 function jobContextFromRecords(records) {
     const ringsByFileSlug = {}
     const fileNamesBySlug = {}
+    const startsByFileSlug = {}
     let jobBytes = null
     let baseName = null
     for (const rec of records) {
@@ -395,12 +396,20 @@ function jobContextFromRecords(records) {
             baseName = rec.sheetcam.jobName || null
         }
         fileNamesBySlug[rec.slug] = rec.sheetcam.drawingName || rec.name
+        // Lot J4-ter : les points de départ APPARIÉS de ce dessin, avec le
+        // rang de son bloc — c'est ce que l'écrivain réécrit dans le cache.
+        if (Array.isArray(rec.sheetcam.starts) && rec.sheetcam.starts.length) {
+            startsByFileSlug[rec.slug] = {
+                blockIndex: rec.sheetcam.blockIndex ?? null,
+                starts: rec.sheetcam.starts,
+            }
+        }
         ringsByFileSlug[rec.slug] = (rec.parts || [])
             .flatMap((p) => [p.coordinates, ...(p.holes || [])])
             .filter((ring) => Array.isArray(ring) && ring.length >= 3)
     }
     if (!jobBytes) return null
-    return { jobBytes, ringsByFileSlug, fileNamesBySlug, baseName }
+    return { jobBytes, ringsByFileSlug, fileNamesBySlug, startsByFileSlug, baseName }
 }
 
 
@@ -736,6 +745,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                     sheets,
                     ringsByFileSlug: sheetcamContext.ringsByFileSlug,
                     fileNamesBySlug: sheetcamContext.fileNamesBySlug,
+                    startsByFileSlug: sheetcamContext.startsByFileSlug,
                     baseName: base,
                 })
                 alternatives[k] = {

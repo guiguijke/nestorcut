@@ -132,8 +132,10 @@ describe('J4 — la réserve d’amorce arrive jusqu’au payload moteur', () =>
         // quatre coins candidats pariés sur une table qui n'existe pas
         // (§9.42). Elle couvre l'amorce d'entrée, celle de sortie ET le
         // perçage, kerf compris. Mesuré sur ce trou (cercle r 35, amorce 5,
-        // sortie 10, kerf 1,5, perçage 3) : 2,74 % de l'aire du trou, bouche
-        // de 9,38 mm. La couronne intérieure complète aurait coûté 40 %.
+        // sortie 10, kerf 1,5 ⇒ perçage 3) : 3,06 % de l'aire du trou, bouche
+        // de 10,19 mm — contre 2,74 % et 9,38 mm avec l'ancienne bande d'un
+        // demi-kerf (§9.51 : la bande passe à ± kerf). La couronne intérieure
+        // complète, elle, aurait coûté 40 %.
         expect(perte).toBeGreaterThan(0.02)
         expect(perte).toBeLessThan(0.04)
 
@@ -169,6 +171,31 @@ describe('J4 — la réserve d’amorce arrive jusqu’au payload moteur', () =>
         const avec = await build(filesFor(true))
         expect(avec.seed).not.toBe(sans.seed)
         expect(typeof avec.seed).toBe('string')   // 63 bits, piège #16b
+    })
+})
+
+describe('J4-ter — « amorces croisées autorisées » (`allowOverlappingLeads`)', () => {
+    it('n’applique AUCUNE réserve, et le dit', async () => {
+        // L'échappatoire d'atelier : la tôle est chère, les chutes ne valent
+        // rien, l'opérateur assume que les amorces se croisent. Ce qui serait
+        // fautif, c'est de ne rien réserver EN SILENCE — le constat porte sa
+        // raison, avec son libellé EN et FR.
+        const libre = filesFor(true).map((f) => ({
+            ...f,
+            sheetcam: { ...f.sheetcam, allowOverlappingLeads: true },
+        }))
+        const sans = await build(filesFor(false))
+        const avec = await build(libre)
+
+        const hostSans = sans.payload.parts.find((p) => p.file_slug === SLUG_HOST)
+        const hostAvec = avec.payload.parts.find((p) => p.file_slug === SLUG_HOST)
+        // Géométrie STRICTEMENT identique à celle d'un projet sans `.job`.
+        expect(area(hostAvec.coords)).toBeCloseTo(area(hostSans.coords), 9)
+        expect(area(hostAvec.holes[0])).toBeCloseTo(area(hostSans.holes[0]), 9)
+        // Et le constat existe, avec sa raison.
+        expect(avec.payload.leadInReserve).toHaveLength(2)
+        expect(avec.payload.leadInReserve.every((n) => n.applied === false)).toBe(true)
+        expect(avec.payload.leadInReserve[0].reason).toBe('leadsAllowedToOverlap')
     })
 })
 
