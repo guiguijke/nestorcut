@@ -86,6 +86,37 @@
 
 import { partWithReserve, DEFAULT_PIERCE_MARGIN_MM } from '~~/shared/sheetcamReserve.js'
 
+/**
+ * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
+ *
+ * C'est l'origine des points de départ du `.job` (bloc binaire, lot J4-bis-2)
+ * ET celle de la pose (`XPos, YPos`, règle 3) : la même, mesurée une seule
+ * fois. Sur la géométrie BRUTE — la simplification Douglas-Peucker ne déplace
+ * pas la boîte de plus de 0,05 mm, mais le dessin dont parle SheetCam est le
+ * dessin, pas notre version simplifiée.
+ */
+function fileBoxCentre(file) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const part of file.parts || []) {
+        for (const ring of [part.coordinates ?? part.coords ?? [], ...(part.holes || [])]) {
+            for (const p of ring || []) {
+                const x = Number(p[0])
+                const y = Number(p[1])
+                if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+                if (x < minX) minX = x
+                if (x > maxX) maxX = x
+                if (y < minY) minY = y
+                if (y > maxY) maxY = y
+            }
+        }
+    }
+    if (!Number.isFinite(minX)) return [0, 0]
+    return [(minX + maxX) / 2, (minY + maxY) / 2]
+}
+
 // ---------------------------------------------------------------------------
 // Constantes (miroirs Python)
 // ---------------------------------------------------------------------------
@@ -585,12 +616,22 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             //
             // Un fichier sans `.job` n'a pas de `sheetcam` : rien ne se passe,
             // et le chemin de nesting ordinaire est inchangé.
+            //
+            // LOT J4-bis-2 : la réserve est posée AU POINT DE DÉPART LU dans le
+            // `.job`, plus à un coin prédit. Les points y sont stockés relatifs
+            // au CENTRE DE LA BOÎTE ENGLOBANTE DU DESSIN — la même origine que
+            // celle de la pose (`XPos, YPos`, règle 3). On la mesure ici, sur
+            // TOUTES les pièces du fichier, et une seule fois.
             const sc = file.sheetcam
-            if (sc && (Number(sc.leadIn) > 0 || Number(sc.pierceMarginMm) > 0)) {
+            if (sc && Array.isArray(sc.starts)) {
+                const c0 = fileBoxCentre(file)
+                const starts = sc.starts.map((s) => ({
+                    ...s,
+                    point: [c0[0] + Number(s.offset?.[0]), c0[1] + Number(s.offset?.[1])],
+                }))
                 const reserved = partWithReserve({ coordinates: coords, holes }, {
-                    leadIn: Number(sc.leadIn) || 0,
-                    startPosition: sc.startPosition ?? null,
-                    startPositionConfirmed: sc.startPositionConfirmed === true,
+                    starts,
+                    kerf: Number(sc.kerfWidth) || 0,
                     pierceMarginMm: Number(sc.pierceMarginMm ?? DEFAULT_PIERCE_MARGIN_MM),
                 })
                 coords = reserved.coordinates
@@ -602,6 +643,20 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     reason: reserved.reserve.reason,
                     holesDropped: reserved.reserve.holesDropped,
                     holes: reserved.reserve.holes,
+                    starts: reserved.reserve.starts,
+                    unmatched: reserved.reserve.unmatched,
+                    // Écart entre le centre de boîte que NOUS mesurons et celui
+                    // que SheetCam a mémorisé. Il doit être nul ; s'il ne l'est
+                    // pas, les points de départ tombent à côté et les trous
+                    // sortent du nesting — autant que le constat le nomme.
+                    ...(Array.isArray(sc.origin)
+                        ? {
+                            originGapMm: Math.hypot(
+                                c0[0] - Number(sc.origin[0]),
+                                c0[1] - Number(sc.origin[1]),
+                            ),
+                        }
+                        : {}),
                 })
             }
             inputItems.push({

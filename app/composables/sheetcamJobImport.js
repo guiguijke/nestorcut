@@ -99,15 +99,18 @@ export function prefillFromJob(read, { safetyMm = DEFAULT_KERF_SAFETY_MM } = {})
     if (sheet?.width > 0 && sheet?.height > 0) {
         out.sheet = { width: sheet.width, height: sheet.height, count: 1 }
     }
-    // LA SÉCURITÉ PRÉ-REMPLIE EST CELLE DE LA RÈGLE, PAS CELLE DU PROJET.
-    // Un projet neuf porte la sécurité d'usine (1 mm), qui donnerait 3,5 mm
-    // pour un kerf de 1,5 — alors que l'atelier coupe ce job à 2 mm
-    // (kerf + 2 × 0,25, la règle 3.10 déjà en production, §9.11 de l'étude).
-    // Et l'écart n'est pas cosmétique : mesuré au harnais, à 3,5 mm les
-    // quatre éventails de la recette ne tiennent plus dans le trou de l'hôte
-    // et sortent posés à côté ; à 2 mm ils s'y nichent. On pré-remplit donc
-    // avec ce que le `.job` IMPLIQUE, et l'utilisateur reste libre de changer
-    // les deux champs.
+    // L'ESPACEMENT D'UN `.job` EST `2 x KERF + SECURITE` (§9.40, décision du
+    // propriétaire du 13/09). La bande de kerf est centrée sur le chemin
+    // d'outil, lui-même à kerf/2 du contour : elle s'étend donc jusqu'à UN
+    // KERF ENTIER hors de chaque pièce, et deux pièces à moins de 2 x kerf ont
+    // des bandes qui se recouvrent — la seconde coupe traverse de l'air déjà
+    // coupé (perte d'arc, bord rongé). La règle 3.10 (`kerf + 2 x 0,25`) est
+    // REMPLACÉE ; la sécurité est LE paramètre, 1 mm par défaut.
+    //
+    // Conséquence assumée sur la recette (kerf 1,5) : 4 mm au lieu de 2, et
+    // les quatre éventails ne tiennent plus dans le trou de l'hôte (mesuré dès
+    // 3,5 mm au §9.19). C'est un choix de QUALITÉ DE COUPE, pas un réglage de
+    // densité — et l'utilisateur reste libre de changer les deux champs.
     const space = spacingFromKerf(read.kerfWidth, Number(safetyMm))
     if (space != null) {
         out.kerf = String(read.kerfWidth)
@@ -120,16 +123,24 @@ export function prefillFromJob(read, { safetyMm = DEFAULT_KERF_SAFETY_MM } = {})
 /**
  * Les réglages de COUPE d'un dessin, tels que le nesting les consommera.
  *
- * `startPositionConfirmed` reste FAUX tant que le propriétaire n'a pas
- * vérifié sur sa machine la correspondance `Start position` → coin (question
- * ouverte §9 de l'étude). Tant qu'il est faux, la réserve d'amorce d'un trou
- * couvre les QUATRE coins candidats : juste quelle que soit la table, pour
- * environ 4,6 % de l'aire du trou au lieu de 40 % qu'aurait coûté une
- * couronne intérieure complète.
+ * `starts` : les points de départ LUS dans le bloc binaire du `.job`, chacun
+ * relatif au centre de la boîte englobante du dessin (`offset`). C'est
+ * `buildLocalPayload` qui les ramène en coordonnées du dessin, une fois la
+ * géométrie importée — lui seul connaît cette boîte.
+ *
+ * LE LOT J4-bis-2 A RETIRÉ `startPosition` DE CE CHEMIN. La série complète
+ * (§9.42) a montré que ce réglage désigne le coin d'où part la SÉQUENCE de
+ * coupe, pas le départ d'un contour : entre « centre », « haut gauche » et
+ * « haut droit », les points de départ du G-code sont identiques. La table de
+ * coins des lots J3 et J4 n'existait pas, et la réserve aux quatre coins ne
+ * couvrait pas le vrai départ d'un trou rectangulaire (milieu d'arête). Le
+ * champ reste LU (`drawing.startPosition`) pour l'affichage et l'étude, il ne
+ * gouverne plus rien.
  */
 export function cutSettingsFor(drawing, {
     pierceMarginMm = DEFAULT_PIERCE_MARGIN_MM,
     jobName = null,
+    kerfWidth = null,
 } = {}) {
     return {
         drawingName: drawing.name,
@@ -137,8 +148,25 @@ export function cutSettingsFor(drawing, {
         // (`<nom>_tole1.job`), pour que l'utilisateur retrouve son job.
         ...(jobName ? { jobName } : {}),
         leadIn: Number(drawing.leadIn) || 0,
+        leadInType: Number(drawing.leadInType) || 0,
+        leadOut: Number(drawing.leadOut) || 0,
+        leadOutType: Number(drawing.leadOutType) || 0,
         startPosition: drawing.startPosition ?? null,
-        startPositionConfirmed: false,
+        kerfWidth: Number.isFinite(Number(kerfWidth)) ? Number(kerfWidth) : null,
         pierceMarginMm: Number(pierceMarginMm),
+        starts: (drawing.starts || []).map((s) => ({
+            offset: s.offset,
+            leadIn: Number(s.leadIn) || 0,
+            leadInType: Number(s.leadInType ?? drawing.leadInType) || 0,
+            leadOut: Number(s.leadOut ?? drawing.leadOut) || 0,
+            leadOutType: Number(s.leadOutType ?? drawing.leadOutType) || 0,
+            order: s.order ?? null,
+            moved: Boolean(s.moved),
+        })),
+        // Le centre de boîte que SheetCam a mémorisé pour ce dessin. Sert de
+        // CONTRÔLE : s'il s'écarte de celui que notre import mesure, les
+        // points de départ tomberont à côté des contours et le constat le
+        // dira, au lieu de réserver la place au mauvais endroit en silence.
+        origin: drawing.origin ?? null,
     }
 }

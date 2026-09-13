@@ -41,8 +41,33 @@ const area = (ring) => Math.abs(signedArea(ring))
 const SLUG_HOST = 'host-j4.dxf'
 const SLUG_FAN = 'fan-j4.dxf'
 
-/** Les réglages de coupe que le `.job` nous apprend, par dessin. */
-const CUT = { leadIn: 5, startPosition: 0, pierceMarginMm: 3 }
+/**
+ * Les réglages de coupe que le `.job` nous apprend, par dessin — forme du lot
+ * J4-bis-2 : les POINTS DE DÉPART lus dans le bloc binaire, relatifs au centre
+ * de la boîte englobante du dessin, plus le kerf de l'outil.
+ *
+ * `Piece_Trou` : boîte −50…50 sur les deux axes, donc centre (0 ; 0) ; le
+ * contour extérieur part du milieu de son arête gauche, le trou (cercle r 35)
+ * de son point à 3 heures.
+ * `Piece_Fillx4` : boîte 2,8284…30,8284 en y, donc centre (0 ; 16,8284) ; son
+ * contour part du milieu de l'arête gauche.
+ */
+const LEAD = { leadIn: 5, leadInType: 1, leadOut: 10, leadOutType: 1 }
+const CUT_HOST = {
+    kerfWidth: 1.5,
+    pierceMarginMm: 3,
+    origin: [0, 0],
+    starts: [
+        { offset: [-50, 0], ...LEAD },
+        { offset: [35, 0], ...LEAD },
+    ],
+}
+const CUT_FAN = {
+    kerfWidth: 1.5,
+    pierceMarginMm: 3,
+    origin: [0, 16.8284],
+    starts: [{ offset: [-19.799, 0], ...LEAD }],
+}
 
 const filesFor = (withJob) => [
     {
@@ -51,7 +76,7 @@ const filesFor = (withJob) => [
         count: 1,
         rotations: [0, 90, 180, 270],
         parts: [{ coordinates: HOST, holes: [HOST_HOLE], width: 100, height: 100, handles: ['H1'], color: '#7C3AED' }],
-        ...(withJob ? { sheetcam: CUT } : {}),
+        ...(withJob ? { sheetcam: CUT_HOST } : {}),
     },
     {
         slug: SLUG_FAN,
@@ -59,7 +84,7 @@ const filesFor = (withJob) => [
         count: 4,
         rotations: [0, 90, 180, 270],
         parts: [{ coordinates: FAN, holes: [], width: 39.598, height: 28, handles: [], color: '#059669' }],
-        ...(withJob ? { sheetcam: CUT } : {}),
+        ...(withJob ? { sheetcam: CUT_FAN } : {}),
     },
 ]
 
@@ -103,11 +128,14 @@ describe('J4 — la réserve d’amorce arrive jusqu’au payload moteur', () =>
         const trouAvec = area(hostAvec.holes[0])
         expect(trouAvec).toBeLessThan(trouSans)
         const perte = 1 - trouAvec / trouSans
-        // Quatre morsures (la table `Start position` → coin n'est pas
-        // confirmée : on réserve les quatre coins candidats). Le prix reste
-        // sous 6 % — la couronne intérieure complète aurait coûté 40 %.
+        // UNE morsure, au point de départ LU (lot J4-bis-2) — et non plus
+        // quatre coins candidats pariés sur une table qui n'existe pas
+        // (§9.42). Elle couvre l'amorce d'entrée, celle de sortie ET le
+        // perçage, kerf compris. Mesuré sur ce trou (cercle r 35, amorce 5,
+        // sortie 10, kerf 1,5, perçage 3) : 2,74 % de l'aire du trou, bouche
+        // de 9,38 mm. La couronne intérieure complète aurait coûté 40 %.
         expect(perte).toBeGreaterThan(0.02)
-        expect(perte).toBeLessThan(0.06)
+        expect(perte).toBeLessThan(0.04)
 
         // Et la pièce sans trou reçoit elle aussi son appendice.
         const fanSans = sans.payload.parts.find((p) => p.file_slug === SLUG_FAN)
@@ -149,7 +177,7 @@ describe('J4 — du `.job` déposé au `.job` rendu', () => {
         // Point 2 de la consigne : espacement depuis le kerf de l'outil,
         // tôle depuis `[Work]`. Aucune valeur inventée.
         expect(SOURCE.kerfWidth).toBe(1.5)
-        expect(spacingFromKerf(SOURCE.kerfWidth)).toBe(2)   // kerf + 2 × 0,25
+        expect(spacingFromKerf(SOURCE.kerfWidth)).toBe(4)   // 2 × kerf + 1 (§9.40)
         expect(jobSheet(SOURCE)).toEqual({ width: 1000, height: 1250 })
     })
 

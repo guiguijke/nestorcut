@@ -1,577 +1,535 @@
 /**
- * Verrous du lot J3 — réserve d'amorce, disque de perçage, espacement
- * pré-rempli (`docs/ETUDE-JOB-SHEETCAM-2026-09-11.md` §8, chantier 3.5 du
- * masterplan).
+ * Verrous de la réserve d'amorce — lots J3, J4 puis **J4-bis-2**
+ * (`docs/ETUDE-JOB-SHEETCAM-2026-09-11.md` §8 puis §9.42).
  *
- * Ce qui est mesuré, et pas seulement affirmé :
- *   - la réserve SORT de la pièce (le disque de perçage est dehors, entier) ;
- *   - elle est LOCALE : l'aire ajoutée est celle de l'appendice, pas celle
- *     d'un anneau d'inflation (qui tuerait la densité — masterplan §3.5) ;
- *   - l'anneau rendu reste SIMPLE (aucune arête neuve ne croise le contour),
- *     et quand il ne peut pas l'être, la réserve est refusée avec sa raison
- *     plutôt que livrée auto-intersectante (piège #2c) ;
- *   - avec la réserve, la distance entre deux pièces voisines placées à
- *     l'espacement est MESURÉE : l'amorce ne perce plus dans la voisine.
+ * ---------------------------------------------------------------------------
+ * CE QUE CE FICHIER MET À L'ÉPREUVE, ET POURQUOI IL A CHANGÉ DE FOND EN COMBLE.
+ *
+ * Les lots J3 et J4 PRÉDISAIENT le point de départ d'un contour à partir de la
+ * clé `Start position` et d'une table de coins supposée. Leurs verrous étaient
+ * verts et la prémisse était fausse : `Start position` est le coin d'où part
+ * la SÉQUENCE de coupe, et le point de départ d'un contour est écrit dans le
+ * bloc binaire du `.job`.
+ *
+ * Le verrou central est donc désormais une MESURE, pas une construction : on
+ * prend les fixtures de la série `retro-eng-job` — le DXF `Pièce L`, deux
+ * `.job` et les deux `.nc` que SheetCam en a tirés —, on échantillonne les
+ * TRAJETS D'AMORCE RÉELS du G-code, et on exige qu'aucun de ces points ne
+ * reste dans la zone où NestorCut accepterait de poser une pièce.
+ *
+ * Quatre types d'amorce sont couverts (None, Arc, Tangent, Perpendicular) par
+ * le jeu de longueurs et de types que porte la série ; les deux fixtures
+ * commises dans le dépôt portent « None » et « Arc ».
  */
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { parseSheetCamJob } from '../../shared/sheetcamJob'
+import { parseSheetCamJob, jobPathRecords } from '../../shared/sheetcamJob'
 import {
+    ARC_RADIUS_FACTOR,
     DEFAULT_KERF_SAFETY_MM,
     DEFAULT_PIERCE_MARGIN_MM,
-    START_CORNERS,
+    LEAD_ARC,
+    LEAD_NONE,
+    LEAD_PERPENDICULAR,
+    LEAD_TANGENT,
+    START_MATCH_TOL_MM,
+    biteAtStart,
     convexHull,
-    cornerStartIndices,
-    holeWithLeadInReserve,
-    inwardAt,
-    outwardAt,
+    leadPathLocal,
+    matchStartsToRings,
+    nearestOnRing,
     partWithReserve,
     pierceDisc,
     pointInRing,
-    predictedStartIndex,
     signedArea,
     spacingFromKerf,
-    withLeadInReserve,
 } from '../../shared/sheetcamReserve'
 
-const SQUARE = [[0, 0], [100, 0], [100, 100], [0, 100]]
-// Un L concave, pour éprouver la bissectrice sur un sommet réflexe.
-const L_SHAPE = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]]
+const FIX = path.resolve(__dirname, 'fixtures/sheetcam')
 
-const ringArea = (ring) => Math.abs(signedArea(ring))
-const minDistanceBetween = (a, b) => {
-    // Distance arête↔arête, exacte (AGENTS #55 : sommet→arête ne suffit pas).
-    const segDist = (p1, p2, q1, q2) => {
-        const pointSeg = (p, a, c) => {
-            const vx = c[0] - a[0]
-            const vy = c[1] - a[1]
-            const l2 = vx * vx + vy * vy
-            if (l2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1])
-            let t = ((p[0] - a[0]) * vx + (p[1] - a[1]) * vy) / l2
-            t = Math.max(0, Math.min(1, t))
-            return Math.hypot(p[0] - (a[0] + t * vx), p[1] - (a[1] + t * vy))
+// Le dessin de la série, relu sur le G-code : le chemin d'outil est le
+// contour décalé de kerf/2 = 0,75, donc le contour extérieur va de (0 ; 0) à
+// (180 ; 200) en L, et le trou rectangulaire de (10 ; 90) à (40 ; 190).
+const L_OUTER = [[0, 0], [180, 0], [180, 50], [50, 50], [50, 200], [0, 200], [0, 0]]
+const L_HOLE = [[10, 90], [40, 90], [40, 190], [10, 190], [10, 90]]
+// Le point de départ du trou et celui du contour extérieur, tels que le bloc
+// binaire les donne (relatifs au centre de boîte (90 ; 100)).
+const HOLE_START = [25, 90]
+const OUTER_START = [0, 0]
+const KERF = 1.5
+
+const splitLines = (text) => String(text).split('\n').map((line) => line.replace(/\r$/, ''))
+
+/**
+ * Les trajets d'amorce d'un `.nc`, échantillonnés.
+ *
+ * Un trajet commence par `G0X..Y..` (le perçage) + `G0Z3.8` + le plongeon
+ * `G1…Z1.5`. On garde le perçage, l'entrée (premier mouvement de coupe) et la
+ * sortie (dernier mouvement du trajet), les arcs `G2`/`G3` étant redéveloppés
+ * depuis leur centre `I`/`J` — un arc échantillonné par sa corde seulement
+ * serait un test plus faible que la réalité.
+ */
+function ncLeadSamples(text, { hasLead = true } = {}) {
+    const lines = splitLines(text).map((line) => line.trim())
+    const paths = []
+    let cur = null
+    for (let i = 0; i < lines.length; i++) {
+        const g0 = /^G0X(-?[\d.]+)Y(-?[\d.]+)$/.exec(lines[i])
+        if (g0 && lines[i + 1] === 'G0Z3.8') {
+            cur = { pierce: [Number(g0[1]), Number(g0[2])], moves: [] }
+            paths.push(cur)
+            continue
         }
-        return Math.min(
-            pointSeg(p1, q1, q2), pointSeg(p2, q1, q2),
-            pointSeg(q1, p1, p2), pointSeg(q2, p1, p2),
-        )
-    }
-    let best = Infinity
-    for (let i = 0; i < a.length; i++) {
-        for (let j = 0; j < b.length; j++) {
-            const d = segDist(a[i], a[(i + 1) % a.length], b[j], b[(j + 1) % b.length])
-            if (d < best) best = d
+        if (!cur) continue
+        if (/^G0Z10/.test(lines[i])) { cur = null; continue }
+        const mv = /^G([0123])X(-?[\d.]+)Y(-?[\d.]+)(?:I(-?[\d.]+)J(-?[\d.]+))?/.exec(lines[i])
+        if (mv) {
+            cur.moves.push({
+                to: [Number(mv[2]), Number(mv[3])],
+                ij: mv[4] === undefined ? null : [Number(mv[4]), Number(mv[5])],
+                cw: mv[1] === '2',
+            })
         }
     }
-    return best
+    const arc = (from, move) => {
+        const c = [from[0] + move.ij[0], from[1] + move.ij[1]]
+        const r = Math.hypot(from[0] - c[0], from[1] - c[1])
+        const a0 = Math.atan2(from[1] - c[1], from[0] - c[0])
+        const a1 = Math.atan2(move.to[1] - c[1], move.to[0] - c[0])
+        let da = a1 - a0
+        if (move.cw) { while (da > 0) da -= 2 * Math.PI } else { while (da < 0) da += 2 * Math.PI }
+        const out = []
+        for (let k = 0; k <= 6; k++) {
+            const a = a0 + (da * k) / 6
+            out.push([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a)])
+        }
+        return out
+    }
+    return paths.map((p) => {
+        const pts = [p.pierce]
+        // TYPE « NONE » : il n'y a NI amorce d'entrée NI amorce de sortie — la
+        // torche perce sur le contour et le quitte sur le contour. Les
+        // mouvements voisins sont donc du CONTOUR, pas de l'amorce, et les
+        // échantillonner ferait échouer le verrou sur des points que la
+        // réserve n'a aucune raison d'exclure.
+        if (!hasLead) return pts
+        // Le premier mouvement est le plongeon (même XY) ; le deuxième est
+        // l'amorce d'entrée.
+        const first = p.moves[1]
+        if (first) pts.push(...(first.ij ? arc(p.pierce, first) : [first.to]))
+        const last = p.moves[p.moves.length - 1]
+        const prev = p.moves[p.moves.length - 2]
+        if (last && prev) pts.push(...(last.ij ? arc(prev.to, last) : [last.to]))
+        return pts
+    })
 }
 
-describe('J3 — espacement pré-rempli depuis le kerf', () => {
-    it('kerf + 2 × sécurité, la règle 3.10 déjà en production', () => {
-        expect(spacingFromKerf(1.5)).toBeCloseTo(1.5 + 2 * DEFAULT_KERF_SAFETY_MM, 12)
-        expect(spacingFromKerf(1.5, 0.5)).toBe(2.5)
+describe('J4-bis-2 — la règle d’espacement d’un `.job`', () => {
+    it('2 × kerf + sécurité, la règle du 13/09 (§9.40)', () => {
+        // La bande de kerf est centrée sur le chemin d'outil, lui-même à
+        // kerf/2 du contour : elle déborde d'un KERF ENTIER hors de la pièce.
+        expect(DEFAULT_KERF_SAFETY_MM).toBe(1)
+        expect(spacingFromKerf(1.5)).toBe(4)
+        expect(spacingFromKerf(1.5, 0.5)).toBe(3.5)
         expect(spacingFromKerf(0, 0)).toBe(0)
     })
 
-    it('lit le kerf du .job du propriétaire', () => {
-        const job = parseSheetCamJob(new Uint8Array(fs.readFileSync(
-            path.resolve(__dirname, 'fixtures/sheetcam/source.job'))))
+    it('lit le kerf du `.job` de la série', () => {
+        const job = parseSheetCamJob(new Uint8Array(
+            fs.readFileSync(path.join(FIX, 'piece-l-none-default.job')),
+        ))
         expect(job.kerfWidth).toBe(1.5)
-        expect(spacingFromKerf(job.kerfWidth, 0.25)).toBe(2)
+        expect(spacingFromKerf(job.kerfWidth)).toBe(4)
     })
 
-    it('ne remplit RIEN quand le .job ne porte pas de kerf exploitable', () => {
-        for (const bad of [null, undefined, '', 'abc', -1, NaN]) {
+    it('ne remplit RIEN quand le `.job` ne porte pas de kerf exploitable', () => {
+        for (const bad of [null, undefined, '', 'abc', NaN, -1]) {
             expect(spacingFromKerf(bad)).toBeNull()
         }
         expect(spacingFromKerf(1.5, -1)).toBeNull()
     })
 })
 
-describe('J3 — le point de départ prédit', () => {
-    it('suit le coin désigné par Start position', () => {
-        // 0 = bas gauche, 2 = haut droite (table à confirmer en SheetCam).
-        expect(START_CORNERS[0]).toBe('bottom-left')
-        expect(predictedStartIndex(SQUARE, 0)).toBe(0)   // (0,0)
-        expect(predictedStartIndex(SQUARE, 1)).toBe(1)   // (100,0)
-        expect(predictedStartIndex(SQUARE, 2)).toBe(2)   // (100,100)
-        expect(predictedStartIndex(SQUARE, 3)).toBe(3)   // (0,100)
+describe('J4-bis-2 — la géométrie des amorces, contre le G-code', () => {
+    it('les quatre formes sont celles mesurées sur les `.nc`', () => {
+        // Repère local (t = sens de coupe, n = vers la chute), longueur 5.
+        expect(leadPathLocal(LEAD_NONE, 5, -1).far).toEqual([0, 0])
+        expect(leadPathLocal(LEAD_PERPENDICULAR, 5, -1).far).toEqual([0, 5])
+        // Arc : quart de cercle de rayon 0,64 × L, du perçage (−r ; r).
+        const r = ARC_RADIUS_FACTOR * 5
+        const arcIn = leadPathLocal(LEAD_ARC, 5, -1).far
+        expect(arcIn[0]).toBeCloseTo(-r, 9)
+        expect(arcIn[1]).toBeCloseTo(r, 9)
+        const arcOut = leadPathLocal(LEAD_ARC, 10, +1).far
+        expect(arcOut[0]).toBeCloseTo(ARC_RADIUS_FACTOR * 10, 9)
+        // Tangente : l'ÉVENTAIL complet, de 0° à 22,5° vers la chute — la
+        // règle qui choisit l'angle n'est pas mesurée (0° sur un coin, 22,5°
+        // à l'entrée au milieu d'une arête, 11,25° à la sortie), on réserve
+        // donc les deux extrêmes plutôt que de parier.
+        const tan = leadPathLocal(LEAD_TANGENT, 5, -1)
+        expect(tan.points).toHaveLength(3)
+        expect(tan.points[1]).toEqual([-5, 0])
+        expect(tan.points[2][0]).toBeCloseTo(-5 * Math.cos(Math.PI / 8), 9)
+        expect(tan.points[2][1]).toBeCloseTo(5 * Math.sin(Math.PI / 8), 9)
     })
 
-    it('retombe sur la plus longue arête droite quand le coin est inconnu', () => {
-        // Règle par DÉFAUT du masterplan §3.5 — elle ne dépend d'aucune
-        // convention SheetCam, donc elle est sûre.
-        const ring = [[0, 0], [10, 0], [10, 5], [0, 5]]
-        expect(predictedStartIndex(ring, null)).toBe(0) // arête 0→1, 10 mm
-        expect(predictedStartIndex([[0, 0], [3, 0], [3, 50], [0, 50]], 99)).toBe(1)
-    })
-
-    it('le repli est DISCRIMINANT : un coin absent ne vaut pas le coin 0', () => {
-        // Le verrou ci-dessus passait par coïncidence : sur un rectangle
-        // 10 × 5, le coin bas gauche ET le début de la plus longue arête
-        // donnent tous deux l'index 0, donc il ne distinguait pas les deux
-        // règles — et `Number(null) === 0` faisait bel et bien prendre le
-        // coin 0. Sur un rectangle 3 × 50 les deux règles DIVERGENT : coin
-        // bas gauche = 0, plus longue arête (1→2, 50 mm) = 1.
-        const tall = [[0, 0], [3, 0], [3, 50], [0, 50]]
-        expect(predictedStartIndex(tall, 0)).toBe(0)          // coin demandé
-        expect(predictedStartIndex(tall, null)).toBe(1)       // coin absent ⇒ repli
-        expect(predictedStartIndex(tall, undefined)).toBe(1)  // idem
-    })
-
-    it('sort du polygone, même sur un sommet réflexe', () => {
-        for (const [ring, index] of [[SQUARE, 0], [L_SHAPE, 3]]) {
-            const dir = outwardAt(ring, index)
-            const p = ring[index]
-            const out = [p[0] + dir[0] * 0.5, p[1] + dir[1] * 0.5]
-            expect(pointInRing(out, ring)).toBe(false)
-        }
-        // Le sommet 3 du L EST le sommet réflexe : la bissectrice naïve y
-        // pointerait vers l'intérieur.
-        expect(pointInRing([40.5, 40.5], L_SHAPE)).toBe(false)
-    })
-})
-
-describe('J3 — le disque de perçage', () => {
-    it('est CIRCONSCRIT : jamais moins que le rayon demandé', () => {
-        const disc = pierceDisc([0, 0], 3)
-        const radii = disc.map((p) => Math.hypot(p[0], p[1]))
-        expect(Math.min(...radii)).toBeGreaterThanOrEqual(3)
-        expect(Math.max(...radii)).toBeLessThan(3 * 1.01)
-        expect(disc).toHaveLength(32)
-    })
-
-    it('a le défaut de 3 mm, à confirmer sur la machine', () => {
-        expect(DEFAULT_PIERCE_MARGIN_MM).toBe(3)
-    })
-})
-
-describe('J3 — la réserve est locale, dehors, et simple', () => {
-    const res = withLeadInReserve(SQUARE, { startPosition: 0, leadIn: 5, pierceMarginMm: 3 })
-
-    it('s’applique et garde le contour d’origine autour', () => {
+    it('reproduit le perçage du G-code au micron (trou, amorce en arc)', () => {
+        // `Pièce L`, trou rectangulaire, kerf 1,5, amorce en arc de 5 :
+        // SheetCam perce en (28,200 ; 93,950). C'est le chiffre du `.nc`.
+        const res = biteAtStart(L_HOLE, {
+            start: HOLE_START,
+            scrapInside: true,
+            leadIn: 5,
+            leadInType: LEAD_ARC,
+            leadOut: 10,
+            leadOutType: LEAD_ARC,
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
         expect(res.applied).toBe(true)
-        expect(res.startIndex).toBe(0)
-        // Les trois autres sommets du carré sont intacts.
-        for (const p of [[100, 0], [100, 100], [0, 100]]) {
-            expect(res.ring.some((q) => q[0] === p[0] && q[1] === p[1])).toBe(true)
-        }
+        expect(res.pierceAt[0]).toBeCloseTo(28.2, 6)
+        expect(res.pierceAt[1]).toBeCloseTo(93.95, 6)
     })
 
-    it('met le disque de perçage DEHORS, entier', () => {
-        // Le perçage est au début de l'amorce : à 5 mm du contour.
-        const d = Math.hypot(res.pierceAt[0] - 0, res.pierceAt[1] - 0)
-        expect(d).toBeCloseTo(5, 9)
-        expect(pointInRing(res.pierceAt, SQUARE)).toBe(false)
-        // Et la MARGE PROMISE (3 mm) est entièrement couverte par l'anneau
-        // rendu. On l'échantillonne un cheveu en dedans : les sommets du
-        // polygone CIRCONSCRIT, eux, sont SUR le bord, et « dedans » n'a pas
-        // de sens sur un bord (lancer de rayon).
-        for (const p of pierceDisc(res.pierceAt, 3 * (1 - 1e-9))) {
-            expect(pointInRing(p, res.ring)).toBe(true)
-        }
+    it('reproduit le perçage du G-code au micron (extérieur, perpendiculaire)', () => {
+        // Départ au COIN (0 ; 0), coupe vers +x, chute vers −y : le perçage
+        // du `.nc` est en (0 ; −5,75) = −(5 + kerf/2) sur y.
+        const res = biteAtStart(L_OUTER, {
+            start: OUTER_START,
+            scrapInside: false,
+            leadIn: 5,
+            leadInType: LEAD_PERPENDICULAR,
+            leadOut: 10,
+            leadOutType: LEAD_PERPENDICULAR,
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(res.applied).toBe(true)
+        expect(res.pierceAt[0]).toBeCloseTo(0, 6)
+        expect(res.pierceAt[1]).toBeCloseTo(-5.75, 6)
+    })
+})
+
+describe('J4-bis-2 — LE verrou : le trajet réel ne traverse plus la zone utile', () => {
+    // Les deux fixtures commises, avec le type d'amorce que chacune déclare.
+    const CASES = [
+        ['piece-l-none-default', LEAD_NONE],
+        ['piece-l-45deg', LEAD_ARC],
+    ]
+
+    for (const [name, type] of CASES) {
+        it(`${name} : chaque point du trajet d’amorce est réservé`, () => {
+            const job = parseSheetCamJob(new Uint8Array(
+                fs.readFileSync(path.join(FIX, `${name}.job`)),
+            ))
+            const op = job.parts[0].operations[0]
+            expect(op.leadInType).toBe(type)
+
+            // Le `.nc` est en coordonnées MONDE. Pour le fichier « + 45deg »
+            // la pièce y est TOURNÉE : on ramène chaque point dans le repère
+            // du dessin par l'inverse de la pose (`XPos, YPos, Angle`, la
+            // formule du lot J2 vérifiée dans `sheetcamNest.test.js`). Le
+            // fichier droit n'a rien à ramener.
+            const p0 = job.parts[0]
+            const c0 = [90, 100]
+            const toDrawing = (w) => {
+                const a = p0.angle // SheetCam tourne le dessin de −Angle
+                const dx = w[0] - p0.xPos
+                const dy = w[1] - p0.yPos
+                return [
+                    c0[0] + dx * Math.cos(a) - dy * Math.sin(a),
+                    c0[1] + dx * Math.sin(a) + dy * Math.cos(a),
+                ]
+            }
+            const samples = ncLeadSamples(
+                fs.readFileSync(path.join(FIX, `${name}.nc`), 'latin1'),
+                { hasLead: type !== LEAD_NONE },
+            ).map((pts) => pts.map(toDrawing))
+
+            const common = {
+                leadIn: op.leadIn,
+                leadInType: op.leadInType,
+                leadOut: op.leadOut,
+                leadOutType: op.leadOutType,
+                kerf: job.kerfWidth,
+                pierceMarginMm: DEFAULT_PIERCE_MARGIN_MM,
+            }
+            const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
+            const outer = biteAtStart(L_OUTER, { start: OUTER_START, scrapInside: false, ...common })
+            expect(hole.applied).toBe(true)
+            expect(outer.applied).toBe(true)
+
+            // Le `.nc` sort dans l'ORDRE DE COUPE : trou rectangulaire,
+            // fuseau, puis contour extérieur (`order` = 0, 1, 2).
+            let checked = 0
+            for (const p of samples[0]) {
+                expect(pointInRing(p, hole.ring)).toBe(false)
+                checked += 1
+            }
+            for (const p of samples[2]) {
+                expect(pointInRing(p, outer.ring)).toBe(true)
+                checked += 1
+            }
+            expect(checked).toBeGreaterThanOrEqual(type === LEAD_NONE ? 2 : 18)
+        })
+    }
+
+    it('CONTRÔLE NÉGATIF : sans réserve, le trajet EST dans la zone utile', () => {
+        // Sans ce contrôle, le verrou ci-dessus pourrait passer sur une
+        // réserve qui n'exclut rien — c'est exactement le défaut « amorce 0 »
+        // du lot J4-bis (l'aire MONTAIT de 2,1 % et 32 sommets du disque de
+        // perçage restaient libres).
+        const samples = ncLeadSamples(
+            fs.readFileSync(path.join(FIX, 'piece-l-none-default.nc'), 'latin1'),
+            { hasLead: false },
+        )
+        const dedans = samples[0].filter((p) => pointInRing(p, L_HOLE)).length
+        expect(dedans).toBeGreaterThan(0)
     })
 
-    it('est LOCALE : l’aire ajoutée est celle d’un appendice, pas d’un anneau', () => {
-        const before = ringArea(SQUARE)
-        const after = ringArea(res.ring)
-        const added = after - before
-        // Un anneau d'inflation de 5+3 mm sur un carré de 100 ajouterait
-        // ~4 × 100 × 8 = 3 200 mm². L'appendice en ajoute 238 (MESURÉ), soit
-        // 13 fois moins et 2,4 % de la pièce — c'est tout l'enjeu du
-        // masterplan §3.5 (« pas d'anneau complet, qui tuerait la densité »).
-        expect(added).toBeGreaterThan(0)
-        expect(added).toBeCloseTo(238.2, 0)
-        expect(added).toBeLessThan(0.03 * before)
-        expect(added).toBeLessThan(3200 / 10)
+    it('et l’aire de la zone libre BAISSE, celle de la pièce MONTE', () => {
+        const common = {
+            leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC,
+            kerf: KERF, pierceMarginMm: 3,
+        }
+        const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
+        const outer = biteAtStart(L_OUTER, { start: OUTER_START, scrapInside: false, ...common })
+        const a = (r) => Math.abs(signedArea(r))
+        // Le prix mesuré : 3,6 % du trou, 0,6 % de la pièce. À comparer aux
+        // 40 % qu'aurait coûté une couronne intérieure complète de largeur
+        // `amorce + perçage` (§9 de l'étude).
+        expect(a(hole.ring)).toBeLessThan(a(L_HOLE))
+        expect((a(L_HOLE) - a(hole.ring)) / a(L_HOLE)).toBeLessThan(0.08)
+        expect(a(outer.ring)).toBeGreaterThan(a(L_OUTER))
+        expect((a(outer.ring) - a(L_OUTER)) / a(L_OUTER)).toBeLessThan(0.03)
     })
 
-    it('rend un anneau SIMPLE (aucune arête neuve ne croise le contour)', () => {
-        const r = res.ring
-        const crosses = (a1, a2, b1, b2) => {
-            const s = (p, q, o) => Math.sign((q[0] - p[0]) * (o[1] - p[1])
-                - (q[1] - p[1]) * (o[0] - p[0]))
-            return s(a1, a2, b1) * s(a1, a2, b2) < 0 && s(b1, b2, a1) * s(b1, b2, a2) < 0
+    it('rend un anneau SIMPLE, dans la MÊME convention de fermeture', () => {
+        // Piège AGENTS #5c : un anneau ouvert fait mentir `nest-report`, qui
+        // déclare alors des chevauchements qui n'existent pas — la recette du
+        // 13/09 est partie en refus pour cela.
+        const closed = (r) => r.length > 1
+            && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1]
+        const common = {
+            leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC,
+            kerf: KERF, pierceMarginMm: 3,
         }
-        let bad = 0
+        const hole = biteAtStart(L_HOLE, { start: HOLE_START, scrapInside: true, ...common })
+        expect(closed(L_HOLE)).toBe(true)
+        expect(closed(hole.ring)).toBe(true)
+
+        const openHole = L_HOLE.slice(0, -1)
+        const openRes = biteAtStart(openHole, { start: HOLE_START, scrapInside: true, ...common })
+        expect(closed(openRes.ring)).toBe(false)
+
+        // Simple : aucune arête ne croise une autre.
+        const r = hole.ring.slice(0, -1)
+        const cross = (a1, a2, b1, b2) => {
+            const c = (u, v) => u[0] * v[1] - u[1] * v[0]
+            const s = (u, v) => [u[0] - v[0], u[1] - v[1]]
+            const d1 = c(s(a2, a1), s(b1, a1))
+            const d2 = c(s(a2, a1), s(b2, a1))
+            const d3 = c(s(b2, b1), s(a1, b1))
+            const d4 = c(s(b2, b1), s(a2, b1))
+            return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
+                && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+        }
         for (let i = 0; i < r.length; i++) {
             for (let j = i + 2; j < r.length; j++) {
                 if (i === 0 && j === r.length - 1) continue
-                if (crosses(r[i], r[(i + 1) % r.length], r[j], r[(j + 1) % r.length])) bad++
+                expect(cross(r[i], r[(i + 1) % r.length], r[j], r[(j + 1) % r.length])).toBe(false)
             }
         }
-        expect(bad).toBe(0)
-    })
-
-    it('marche aussi sur une pièce concave', () => {
-        const l = withLeadInReserve(L_SHAPE, { startPosition: 1, leadIn: 4, pierceMarginMm: 3 })
-        expect(l.applied).toBe(true)
-        expect(pointInRing(l.pierceAt, L_SHAPE)).toBe(false)
-        expect(ringArea(l.ring) - ringArea(L_SHAPE)).toBeLessThan(120)
     })
 })
 
-describe('J3 — la réserve refuse plutôt que de livrer une géométrie fausse', () => {
-    it('refuse quand le sommet est avalé par le disque', () => {
-        // Amorce plus courte que la marge de perçage : il n'y a plus de
-        // sommet à épingler proprement.
-        const r = withLeadInReserve(SQUARE, { leadIn: 1, pierceMarginMm: 5 })
-        expect(r.applied).toBe(false)
-        expect(r.reason).toBe('vertexInsideDisc')
-        expect(r.ring).toBe(SQUARE) // l'anneau d'origine, INTACT
+describe('J4-bis-2 — l’appariement point de départ ↔ contour', () => {
+    it('apparie chaque point au contour qui le porte', () => {
+        const rings = [
+            { ring: L_OUTER, scrapInside: false },
+            { ring: L_HOLE, scrapInside: true },
+        ]
+        const { perRing, unmatched } = matchStartsToRings([
+            { point: HOLE_START }, { point: OUTER_START },
+        ], rings)
+        expect(unmatched).toHaveLength(0)
+        expect(perRing[0]).toHaveLength(1)
+        expect(perRing[1]).toHaveLength(1)
+        expect(perRing[1][0].point).toEqual(HOLE_START)
     })
 
-    it('refuse quand la réserve traverserait le contour', () => {
-        // Un C ouvert à droite. Épinglée sur le sommet RÉFLEXE du fond de la
-        // gorge, une amorce assez longue ressort à travers le bras d'en face.
-        // (`startIndex` permet d'épingler : un appelant qui SAIT où part
-        // l'amorce n'a pas à passer par la prédiction.)
-        const C = [[0, 0], [100, 0], [100, 30], [30, 30], [30, 70],
-            [100, 70], [100, 100], [0, 100]]
-        const ok = withLeadInReserve(C, { startIndex: 3, leadIn: 10, pierceMarginMm: 5 })
-        expect(ok.applied).toBe(true) // 10 mm : encore dans la gorge
-        const r = withLeadInReserve(C, { startIndex: 3, leadIn: 60, pierceMarginMm: 20 })
-        expect(r.applied).toBe(false)
-        expect(r.reason).toBe('reserveCrossesContour')
-        expect(r.ring).toBe(C)
+    it('nomme ce qui ne tombe sur AUCUN contour plutôt que de le forcer', () => {
+        const rings = [{ ring: L_OUTER, scrapInside: false }]
+        const { perRing, unmatched } = matchStartsToRings([{ point: [1000, 1000] }], rings)
+        expect(perRing[0]).toHaveLength(0)
+        expect(unmatched).toHaveLength(1)
+        expect(unmatched[0].distanceMm).toBeGreaterThan(START_MATCH_TOL_MM)
     })
 
-    it('ne fait rien quand il n’y a rien à réserver', () => {
-        const r = withLeadInReserve(SQUARE, { leadIn: 0, pierceMarginMm: 0 })
-        expect(r.applied).toBe(false)
-        expect(r.reason).toBe('nothingToReserve')
-        expect(withLeadInReserve([[0, 0], [1, 1]], { leadIn: 5 }).reason).toBe('ringTooSmall')
+    it('la tolérance laisse passer la simplification du pipeline', () => {
+        // `NEST_SIMPLIFY_MM` vaut 0,05 : un point lu à 0,01 de son contour
+        // d'origine reste apparié après simplification, avec dix fois la marge.
+        expect(START_MATCH_TOL_MM).toBe(0.5)
+        expect(nearestOnRing([25, 90.04], L_HOLE).d).toBeCloseTo(0.04, 9)
     })
-})
 
-describe('J3 — l’amorce ne perce plus dans la voisine', () => {
-    it('deux carrés à 2 mm : sans réserve le perçage tombe DANS la voisine', () => {
-        // Le cas du masterplan §3.5, mesuré. L'amorce part du MILIEU du bord
-        // droit (un sommet y est présent : nos anneaux importés en ont
-        // partout), donc elle sort à l'horizontale — droit sur la voisine.
-        const SPACE = 2
-        const a = [[0, 0], [100, 0], [100, 50], [100, 100], [0, 100]]
-        const reserved = withLeadInReserve(a, {
-            startIndex: 2, leadIn: 5, pierceMarginMm: 3,
-        })
-        expect(reserved.applied).toBe(true)
-        // Le perçage est à 5 mm du bord, à l'horizontale.
-        expect(reserved.pierceAt[0]).toBeCloseTo(105, 9)
-        expect(reserved.pierceAt[1]).toBeCloseTo(50, 9)
-
-        // 1) AVANT : la voisine est posée à l'espacement du CONTOUR RÉEL.
-        const before = a.map((p) => [p[0] + 100 + SPACE, p[1]])
-        expect(minDistanceBetween(a, before)).toBeCloseTo(SPACE, 9)
-        // Le perçage prédit est DANS la voisine — le défaut, chiffré : il
-        // mord de 3,5 mm dans la matière d'à côté.
-        expect(pointInRing(reserved.pierceAt, before)).toBe(true)
-        expect(105 + 3 - (100 + SPACE)).toBeCloseTo(6, 9)
-
-        // 2) APRÈS : la voisine est posée à l'espacement de la pièce
-        //    RÉSERVÉE — c'est elle que le nesting voit.
-        const maxX = Math.max(...reserved.ring.map((p) => p[0]))
-        const after = a.map((p) => [p[0] + maxX + SPACE, p[1]])
-        expect(minDistanceBetween(reserved.ring, after)).toBeGreaterThanOrEqual(SPACE - 1e-9)
-        // Et le disque de perçage garde l'espacement lui aussi : il est
-        // INCLUS dans la pièce réservée, donc protégé par construction.
-        expect(minDistanceBetween(pierceDisc(reserved.pierceAt, 3), after))
-            .toBeGreaterThanOrEqual(SPACE - 1e-9)
-        expect(pointInRing(reserved.pierceAt, after)).toBe(false)
-
-        // Le prix payé : la voisine s'écarte de l'amorce + le perçage, pas
-        // plus (l'appendice est local).
-        const cost = maxX - 100
-        expect(cost).toBeGreaterThanOrEqual(5 + 3)
-        expect(cost).toBeLessThan(5 + 3 + 0.1)
+    it('les points de la série tombent SUR leurs contours', () => {
+        // Deux des trois contours du dessin sont ici (le fuseau est une
+        // ellipse, hors de ce fichier) ; les deux points lus doivent tomber
+        // sur eux à la tolérance près.
+        const job = parseSheetCamJob(new Uint8Array(
+            fs.readFileSync(path.join(FIX, 'piece-l-none-default.job')),
+        ))
+        const c0 = [90, 100]
+        const starts = jobPathRecords(job.binary)[0].paths
+            .map((p) => [c0[0] + p.start[0], c0[1] + p.start[1]])
+        expect(nearestOnRing(starts[0], L_HOLE).d).toBeLessThan(0.01)
+        expect(nearestOnRing(starts[1], L_OUTER).d).toBeLessThan(0.01)
     })
 })
 
-describe('J3 — la pièce entière', () => {
-    it('réserve le contour, laisse les trous, et dit ce qu’elle a fait', () => {
-        const part = {
-            coordinates: SQUARE,
-            holes: [[[40, 40], [60, 40], [60, 60], [40, 60]]],
-            width: 100,
-            height: 100,
-        }
-        const out = partWithReserve(part, { startPosition: 0, leadIn: 5, pierceMarginMm: 3 })
+describe('J4-bis-2 — la pièce entière, et ce qu’elle refuse', () => {
+    const part = { coordinates: L_OUTER, holes: [L_HOLE] }
+    const starts = [
+        { point: OUTER_START, leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC },
+        { point: HOLE_START, leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC },
+    ]
+
+    it('réserve le contour ET le trou, et dit ce qu’elle a fait', () => {
+        const out = partWithReserve(part, { starts, kerf: KERF, pierceMarginMm: 3 })
         expect(out.reserve.applied).toBe(true)
-        expect(out.reserve.pierceMarginMm).toBe(3)
-        expect(out.reserve.leadIn).toBe(5)
-        expect(out.width).toBe(100)           // champs additifs préservés
-        expect(out.coordinates.length).toBeGreaterThan(SQUARE.length)
-        // CE VERROU A CHANGÉ AU LOT J4, et il faut dire pourquoi. Il exigeait
-        // `out.holes === part.holes` (« les trous ne bougent pas »), au motif
-        // que la place dans un trou était prise par la matière de la pièce.
-        // La recette ouverte dans SheetCam le 13/09 a montré le contraire :
-        // l'amorce du contour du trou part VERS L'INTÉRIEUR du trou et coupe
-        // les pièces qu'on y a nichées. Le trou est donc mordu, lui aussi.
-        expect(out.holes).not.toEqual(part.holes)
-        expect(out.reserve.holes[0].applied).toBe(true)
-        expect(out.reserve.holesDropped).toBe(0)
-    })
-
-    it('laisse la pièce intacte quand la réserve est refusée', () => {
-        const part = { coordinates: SQUARE, holes: [] }
-        const out = partWithReserve(part, { leadIn: 0, pierceMarginMm: 0 })
-        expect(out.reserve.applied).toBe(false)
-        expect(out.coordinates).toBe(SQUARE)
-    })
-})
-
-// ---------------------------------------------------------------------------
-// Lot J4 — la réserve d'amorce d'un TROU.
-//
-// Le lot J3 affirmait qu'un trou n'en avait pas besoin. La recette ouverte
-// dans SheetCam le 13/09 l'a démenti : l'amorce du contour du trou part vers
-// l'intérieur du trou, du côté chute, et coupe les pièces qu'on y a nichées.
-// Ce qui est MESURÉ ici, et pas seulement affirmé :
-//   - le disque de perçage et tout le couloir d'amorce sortent de la zone
-//     libre — c'est la promesse, et elle est vérifiée point par point ;
-//   - la morsure coûte 1 % de l'aire du trou, pas 40 % (contrôle chiffré
-//     contre la couronne intérieure complète, la solution paresseuse) ;
-//   - l'anneau rendu reste SIMPLE, et quand il ne peut pas l'être la réserve
-//     est refusée, le trou retiré du nesting, la raison dite ;
-//   - la géométrie du trou de la RECETTE (cercle r = 35) sert de cas réel.
-// ---------------------------------------------------------------------------
-
-/** Cercle discrétisé — la forme du trou de `Piece_Trou.DXF` (r = 35, centré). */
-const circleRing = (r, n = 64, cx = 0, cy = 0) => Array.from({ length: n }, (_, i) => {
-    const a = (2 * Math.PI * i) / n
-    return [cx + r * Math.cos(a), cy + r * Math.sin(a)]
-})
-const RECIPE_HOLE = circleRing(35)
-
-/** Nombre de croisements PROPRES entre arêtes non adjacentes. */
-const selfCrossings = (ring) => {
-    const n = ring.length
-    const d = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
-    const crosses = (p1, p2, p3, p4) => {
-        const d1 = d(p3, p4, p1); const d2 = d(p3, p4, p2)
-        const d3 = d(p1, p2, p3); const d4 = d(p1, p2, p4)
-        return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
-            && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
-    }
-    let bad = 0
-    for (let i = 0; i < n; i++) {
-        for (let j = i + 2; j < n; j++) {
-            if (i === 0 && j === n - 1) continue
-            if (crosses(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n])) bad++
-        }
-    }
-    return bad
-}
-
-describe('J4 — la réserve d’amorce d’un TROU', () => {
-    const leadIn = 5
-    const margin = 3
-
-    it('sort le perçage ET tout le couloir d’amorce de la zone libre', () => {
-        const out = holeWithLeadInReserve(RECIPE_HOLE, { leadIn, pierceMarginMm: margin })
-        expect(out.applied).toBe(true)
-        expect(out.bites).toBe(4)
-
-        for (const centre of out.pierceAt) {
-            // Le disque est CIRCONSCRIT : on le teste juste en deçà de son
-            // rayon pour ne pas mesurer la tangence, qui est le cas normal.
-            const disc = pierceDisc(centre, margin - 1e-6)
-            const inside = disc.filter((p) => pointInRing(p, out.ring)).length
-            expect(inside).toBe(0)
-
-            // Et le couloir : du bord du trou jusqu'au centre de perçage.
-            const edge = [centre[0] * 35 / Math.hypot(...centre), centre[1] * 35 / Math.hypot(...centre)]
-            for (let t = 0; t <= 1; t += 0.02) {
-                const p = [edge[0] + (centre[0] - edge[0]) * t, edge[1] + (centre[1] - edge[1]) * t]
-                expect(pointInRing(p, out.ring)).toBe(false)
-            }
-        }
-    })
-
-    it('coûte 1 % du trou, pas 40 % : la morsure contre la couronne', () => {
-        // Le contrôle qui justifie la FORME. Une couronne intérieure de
-        // largeur `amorce + perçage` serait sûre elle aussi, et dix fois plus
-        // chère — c'est le repli qu'on a refusé.
-        const before = ringArea(RECIPE_HOLE)
-        const one = holeWithLeadInReserve(RECIPE_HOLE, {
-            leadIn, pierceMarginMm: margin, startPosition: 0, startPositionConfirmed: true,
-        })
-        const four = holeWithLeadInReserve(RECIPE_HOLE, { leadIn, pierceMarginMm: margin })
-        const costOne = 1 - ringArea(one.ring) / before
-        const costFour = 1 - ringArea(four.ring) / before
-        const couronne = 1 - (Math.PI * (35 - leadIn - margin) ** 2) / before
-
-        expect(one.bites).toBe(1)
-        expect(costOne).toBeLessThan(0.02)      // ≈ 1,1 %
-        expect(costFour).toBeLessThan(0.06)     // ≈ 4,6 %
-        expect(couronne).toBeGreaterThan(0.35)  // ≈ 40 %
-        expect(costFour).toBeLessThan(couronne / 5)
-    })
-
-    it('rend un anneau SIMPLE, et l’aire BAISSE', () => {
-        // Contrôle négatif du défaut de conception écarté : retourner
-        // simplement la direction de l'appendice J3 faisait MONTER l'aire
-        // (3 842 → 3 868 mm²), preuve que le tour ré-enfermait la zone.
-        const out = holeWithLeadInReserve(RECIPE_HOLE, { leadIn, pierceMarginMm: margin })
-        expect(selfCrossings(out.ring)).toBe(0)
-        expect(ringArea(out.ring)).toBeLessThan(ringArea(RECIPE_HOLE))
-    })
-
-    it('les quatre candidats ne dépendent d’aucune table non confirmée', () => {
-        // La correspondance `Start position` → coin n'est pas mesurée sur la
-        // machine : on réserve les quatre coins, donc la réserve est juste
-        // quelle que soit la table.
-        const corners = cornerStartIndices(RECIPE_HOLE)
-        expect(corners).toHaveLength(4)
-        expect(new Set(corners).size).toBe(4)
-        for (const k of [0, 1, 2, 3]) {
-            expect(corners).toContain(predictedStartIndex(RECIPE_HOLE, k))
-        }
-    })
-
-    it('tient pour TOUTE longueur d’amorce, zéro compris (lot J4-bis)', () => {
-        // Mes verrous d'origine n'essayaient QUE `amorce = 5`. À `amorce = 0`
-        // — une opération sans amorce, `Lead in type = 0`, cas réel — la
-        // morsure était doublement fausse : elle refusait d'abord
-        // (`mouthInsideDisc`, les deux lèvres de la bouche tombant dans le
-        // disque centré sur le bord), et le trou entier sortait du nesting ;
-        // et quand on élargissait la bouche, elle s'appliquait en
-        // n'excluant RIEN — l'aire du trou MONTAIT de 2,1 % et les 32 sommets
-        // du disque restaient dans la zone libre. S'appliquer sans exclure
-        // est pire qu'un refus.
-        //
-        // Ce que le balayage mesure, pour chaque longueur : l'aire BAISSE,
-        // l'anneau reste simple, et la moitié INTÉRIEURE du disque réel de la
-        // torche — celui centré à `amorce` du bord, pas celui qu'on dessine —
-        // est entièrement hors de la zone libre.
-        const before = ringArea(RECIPE_HOLE)
-        for (const lead of [0, 0.5, 1, 2, 3, 5, 8]) {
-            const out = holeWithLeadInReserve(RECIPE_HOLE, { leadIn: lead, pierceMarginMm: margin })
-            expect(out.applied, `amorce ${lead}`).toBe(true)
-            expect(ringArea(out.ring), `amorce ${lead} : l'aire doit BAISSER`)
-                .toBeLessThan(before)
-            expect(selfCrossings(out.ring), `amorce ${lead}`).toBe(0)
-            for (const centre of out.pierceAt) {
-                // Le disque RÉEL : centré à `lead` du bord, sur le rayon qui
-                // porte la morsure.
-                const d = Math.hypot(...centre)
-                const edge = [centre[0] * 35 / d, centre[1] * 35 / d]
-                const real = [edge[0] * (1 - lead / 35), edge[1] * (1 - lead / 35)]
-                for (const p of pierceDisc(real, margin - 1e-6)) {
-                    // Seule la moitié intérieure au trou nous concerne :
-                    // l'autre est dans la matière de l'hôte.
-                    if (Math.hypot(...p) >= 35) continue
-                    expect(pointInRing(p, out.ring), `amorce ${lead}`).toBe(false)
-                }
-            }
-        }
-    })
-
-    it('refuse plutôt que d’inventer : trou trop petit, anneau intact', () => {
-        const tiny = circleRing(3, 24)
-        const out = holeWithLeadInReserve(tiny, { leadIn, pierceMarginMm: margin })
-        expect(out.applied).toBe(false)
-        expect(out.reason).toBeTruthy()
-        expect(out.ring).toBe(tiny)        // l'anneau d'ENTRÉE, pas une copie
-        expect(out.bites).toBe(0)
-    })
-
-    it('sans amorce ni perçage déclarés, le trou reste entier', () => {
-        const out = holeWithLeadInReserve(RECIPE_HOLE, { leadIn: 0, pierceMarginMm: 0 })
-        expect(out.applied).toBe(false)
-        expect(out.reason).toBe('nothingToReserve')
-        expect(out.ring).toBe(RECIPE_HOLE)
-    })
-
-    it('un trou dont la réserve est refusée est RETIRÉ du nesting', () => {
-        // La dégradation sûre : plutôt que de nicher dans un trou dont on ne
-        // sait pas où passe l'amorce, on n'y niche pas du tout — et on le dit.
-        const part = {
-            coordinates: [[-50, -50], [50, -50], [50, 50], [-50, 50]],
-            holes: [RECIPE_HOLE, circleRing(3, 24)],
-        }
-        const out = partWithReserve(part, { startPosition: 0, leadIn, pierceMarginMm: margin })
+        expect(out.reserve.unmatched).toBe(0)
         expect(out.holes).toHaveLength(1)
+        expect(out.reserve.holes[0]).toMatchObject({ applied: true, dropped: false, bites: 1 })
+        expect(out.reserve.holesDropped).toBe(0)
+        expect(Math.abs(signedArea(out.holes[0]))).toBeLessThan(Math.abs(signedArea(L_HOLE)))
+    })
+
+    it('un trou dont le point n’est pas lu SORT du nesting, et c’est dit', () => {
+        // C'est la dégradation sûre : nicher dans un trou dont on ne sait pas
+        // où passe l'amorce, c'est livrer le défaut de la recette du 13/09.
+        const out = partWithReserve(part, {
+            starts: [starts[0]],
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(out.holes).toHaveLength(0)
         expect(out.reserve.holesDropped).toBe(1)
-        expect(out.reserve.holes[1].dropped).toBe(true)
-        expect(out.reserve.holes[1].reason).toBeTruthy()
-        // Le contour extérieur, lui, a bien reçu son appendice J3.
+        expect(out.reserve.holes[0]).toMatchObject({ dropped: true, reason: 'startNotRead' })
+        // Le contour extérieur, lui, est bien réservé.
         expect(out.reserve.applied).toBe(true)
     })
 
-    it('la réserve rend l’anneau dans la MÊME convention de fermeture', () => {
-        // LE VERROU LE PLUS CHER DU LOT, et il ne ressemble à rien.
-        //
-        // Le calcul interne travaille sur des anneaux OUVERTS ; tout le reste
-        // du pipeline les attend FERMÉS (point de fermeture dupliqué). La
-        // validation physique du rapport wasm balaie ses arêtes par
-        // `for i in 0..ring.len() - 1` : sur un anneau ouvert l'arête de
-        // fermeture n'existe pas pour elle, et son test d'appartenance
-        // devient FAUX — elle déclare des contenances qui n'existent pas,
-        // donc des chevauchements qui n'existent pas.
-        //
-        // Mesuré le 13/09 dans le navigateur : le lot rendait des anneaux
-        // ouverts et le job 1 hôte + 4 éventails partait en « toutes les
-        // options rejetées par la validation physique », alors que la mesure
-        // arête↔arête des mêmes poses donnait 3,501 mm pour 3,500 exigés.
-        // A/B : `Lead in=0` ⇒ aboutit ; réserve sur l'hôte seul ⇒ aboutit ;
-        // réserve sur les quatre éventails ⇒ refusé. Le défaut dormait depuis
-        // le lot J3, qui n'avait aucun appelant.
-        const closed = (r) => r.length > 1
-            && r[0][0] === r[r.length - 1][0] && r[0][1] === r[r.length - 1][1]
-        const SQ_CLOSED = [...SQUARE, [SQUARE[0][0], SQUARE[0][1]]]
-        const HOLE_CLOSED = [...RECIPE_HOLE, [RECIPE_HOLE[0][0], RECIPE_HOLE[0][1]]]
-        const opts = { startPosition: 0, leadIn, pierceMarginMm: margin }
-
-        // Entrée FERMÉE ⇒ sortie FERMÉE, contour comme trou.
-        const outer = withLeadInReserve(SQ_CLOSED, opts)
-        expect(outer.applied).toBe(true)
-        expect(closed(outer.ring)).toBe(true)
-        const hole = holeWithLeadInReserve(HOLE_CLOSED, opts)
-        expect(hole.applied).toBe(true)
-        expect(closed(hole.ring)).toBe(true)
-
-        // Et la pièce entière, qui est ce que le nesting consomme.
-        const part = partWithReserve(
-            { coordinates: SQ_CLOSED, holes: [HOLE_CLOSED] }, opts,
-        )
-        expect(closed(part.coordinates)).toBe(true)
-        expect(closed(part.holes[0])).toBe(true)
-
-        // Entrée OUVERTE ⇒ sortie OUVERTE : on ne CHOISIT pas une convention,
-        // on rend celle qu'on a reçue.
-        expect(closed(withLeadInReserve(SQUARE, opts).ring)).toBe(false)
-        expect(closed(holeWithLeadInReserve(RECIPE_HOLE, opts).ring)).toBe(false)
-
-        // Le point de fermeture ne doit pas être compté comme un sommet de
-        // plus par la géométrie : l'aire ne bouge pas.
-        expect(ringArea(outer.ring)).toBeCloseTo(ringArea(withLeadInReserve(SQUARE, opts).ring), 9)
+    it('sans AUCUN point lu, rien n’est réservé et rien n’est inventé', () => {
+        const out = partWithReserve(part, { starts: [], kerf: KERF, pierceMarginMm: 3 })
+        expect(out.reserve.applied).toBe(false)
+        expect(out.reserve.reason).toBe('startNotRead')
+        expect(out.coordinates).toBe(L_OUTER)
+        expect(out.holes).toHaveLength(0)
     })
 
-    it('la direction entrante est bien l’opposée de la sortante', () => {
-        for (const [ring, index] of [[SQUARE, 0], [L_SHAPE, 3]]) {
-            const out = outwardAt(ring, index)
-            const inw = inwardAt(ring, index)
-            expect(inw[0]).toBeCloseTo(-out[0], 12)
-            expect(inw[1]).toBeCloseTo(-out[1], 12)
+    it('un point hors de tout contour est COMPTÉ, pas avalé', () => {
+        const out = partWithReserve(part, {
+            starts: [...starts, { point: [900, 900], leadIn: 5, leadInType: LEAD_ARC }],
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(out.reserve.unmatched).toBe(1)
+        expect(out.reserve.starts).toBe(3)
+    })
+
+    it('refuse plutôt que d’inventer : trou plus petit que l’amorce', () => {
+        const small = [[0, 0], [4, 0], [4, 4], [0, 4], [0, 0]]
+        const res = biteAtStart(small, {
+            start: [2, 0],
+            scrapInside: true,
+            leadIn: 5,
+            leadInType: LEAD_ARC,
+            leadOut: 10,
+            leadOutType: LEAD_ARC,
+            kerf: KERF,
+            pierceMarginMm: 3,
+        })
+        expect(res.applied).toBe(false)
+        expect(res.ring).toBe(small)
+        expect(['holeTooSmall', 'mouthInsideEnvelope', 'reserveCrossesContour'])
+            .toContain(res.reason)
+    })
+
+    it('ne réserve rien quand il n’y a rien à réserver', () => {
+        const res = biteAtStart(L_HOLE, {
+            start: HOLE_START, scrapInside: true,
+            leadIn: 0, leadInType: LEAD_NONE, leadOut: 0, leadOutType: LEAD_NONE,
+            kerf: 0, pierceMarginMm: 0,
+        })
+        expect(res.applied).toBe(false)
+        expect(res.reason).toBe('nothingToReserve')
+    })
+
+    it('amorce 0 avec perçage 3 : la morsure s’applique (défaut du lot J4-bis)', () => {
+        // Une opération sans amorce (`Lead in type = 0`) perce SUR le contour.
+        // Le lot J4 refusait alors la morsure et le trou sortait entièrement
+        // du nesting, pour une raison purement géométrique et sans rien
+        // afficher. Ici elle s'applique, et elle exclut vraiment.
+        const res = biteAtStart(L_HOLE, {
+            start: HOLE_START, scrapInside: true,
+            leadIn: 0, leadInType: LEAD_NONE, leadOut: 0, leadOutType: LEAD_NONE,
+            kerf: KERF, pierceMarginMm: 3,
+        })
+        expect(res.applied).toBe(true)
+        expect(Math.abs(signedArea(res.ring))).toBeLessThan(Math.abs(signedArea(L_HOLE)))
+        // Le disque de perçage RÉEL (rayon 3 pile autour du point de perçage,
+        // côté chute) ne doit plus toucher la zone libre. On l'échantillonne
+        // sur le vrai cercle, pas avec `pierceDisc` : celui-ci rend le 32-gone
+        // CIRCONSCRIT, dont les sommets sont exactement ceux qui ont servi à
+        // bâtir l'enveloppe — ils tombent SUR le bord de l'anneau mordu, où un
+        // lancer de rayon ne tranche pas.
+        // Rayon 2,999 et non 3 : le 32-gone est CIRCONSCRIT, donc le cercle de
+        // rayon 3 lui est tangent en 32 points — des points exactement SUR le
+        // bord de l'anneau mordu, où un lancer de rayon ne tranche pas. Ce
+        // qu'on vérifie est donc l'intérieur du disque promis, strictement.
+        const circle = []
+        for (let k = 0; k < 64; k++) {
+            const a = (2 * Math.PI * k) / 64
+            circle.push([25 + 2.999 * Math.cos(a), 90.75 + 2.999 * Math.sin(a)])
         }
+        expect(circle.filter((p) => pointInRing(p, res.ring))).toHaveLength(0)
+        // CONTRÔLE : sur l'anneau d'ORIGINE, la moitié du cercle est libre.
+        expect(circle.filter((p) => pointInRing(p, L_HOLE)).length).toBeGreaterThan(20)
     })
 })
 
-describe('J3 — briques', () => {
+describe('briques géométriques', () => {
+    it('le disque de perçage est CIRCONSCRIT : jamais moins que le rayon', () => {
+        const disc = pierceDisc([0, 0], 3)
+        expect(disc).toHaveLength(32)
+        for (const p of disc) expect(Math.hypot(p[0], p[1])).toBeGreaterThanOrEqual(3)
+        // Le milieu de chaque arête touche le cercle demandé, pas moins.
+        for (let i = 0; i < disc.length; i++) {
+            const q = disc[(i + 1) % disc.length]
+            const mid = [(disc[i][0] + q[0]) / 2, (disc[i][1] + q[1]) / 2]
+            expect(Math.hypot(mid[0], mid[1])).toBeCloseTo(3, 9)
+        }
+    })
+
+    it('le rayon de perçage par défaut reste 3 mm, à confirmer sur la machine', () => {
+        expect(DEFAULT_PIERCE_MARGIN_MM).toBe(3)
+    })
+
     it('convexHull est déterministe et rend un tour convexe', () => {
-        const hull = convexHull([[0, 0], [2, 0], [2, 2], [0, 2], [1, 1]])
-        expect(hull).toHaveLength(4)
-        expect(signedArea(hull)).toBeGreaterThan(0)
-        expect(convexHull([[0, 0], [1, 1]])).toHaveLength(2)
+        const pts = [[0, 0], [2, 0], [2, 2], [0, 2], [1, 1]]
+        const a = convexHull(pts)
+        const b = convexHull(pts.slice().reverse())
+        expect(a).toEqual(b)
+        expect(a).toHaveLength(4)
     })
 
     it('signedArea et pointInRing disent le sens et le dedans', () => {
-        expect(signedArea(SQUARE)).toBe(10000)
-        expect(signedArea(SQUARE.slice().reverse())).toBe(-10000)
-        expect(pointInRing([50, 50], SQUARE)).toBe(true)
-        expect(pointInRing([150, 50], SQUARE)).toBe(false)
-        // Fermeture dupliquée tolérée (nos anneaux en portent une).
-        expect(signedArea([...SQUARE, [0, 0]])).toBe(10000)
+        const ccw = [[0, 0], [10, 0], [10, 10], [0, 10]]
+        expect(signedArea(ccw)).toBeGreaterThan(0)
+        expect(signedArea(ccw.slice().reverse())).toBeLessThan(0)
+        expect(pointInRing([5, 5], ccw)).toBe(true)
+        expect(pointInRing([15, 5], ccw)).toBe(false)
     })
 })

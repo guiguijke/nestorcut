@@ -139,8 +139,10 @@ export function buildNestedJobs(job, {
         return { part: rank, pose: item.pose, op: item.op ?? 0, nestedIn: nested ?? null }
     }))
 
-    // Les anneaux, indexés par RANG de dessin — c'est ce que J2 attend, et
-    // c'est la voie EXACTE quelle que soit la rotation (`placedBoxCentre`).
+    // Les anneaux, indexés par RANG de dessin : `nestedJobsPerSheet` en tire
+    // le centre de boîte du dessin NON tourné, seule entrée de la formule de
+    // pose du lot J2 (§9.42 — le lot J4 avait mesuré la boîte TOURNÉE, faux
+    // de 45 mm dès qu'une rotation n'est pas un quart de tour).
     const rings = {}
     for (const [name, rank] of ranks) {
         const slug = Object.keys(fileNamesBySlug).find((s) => fileNamesBySlug[s] === name)

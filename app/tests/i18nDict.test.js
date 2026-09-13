@@ -82,8 +82,8 @@ describe('dictionnaire i18n (C06)', () => {
     it('LOCALES intégré et fallback visible', () => {
         expect(LOCALES).toEqual(['en', 'fr'])
         expect(translate('settings.kerf', 'fr')).toContain('Kerf')
-        expect(translate('settings.spacingRule', 'en')).toContain('kerf + 2 × safety')
-        expect(translate('settings.spacingRule', 'fr')).toContain('kerf + 2 × sécurité')
+        expect(translate('settings.spacingRule', 'en')).toContain('2 × kerf + safety')
+        expect(translate('settings.spacingRule', 'fr')).toContain('2 × kerf + sécurité')
     })
 
     // Glossaire FR (C06/C21) : « tôle » jamais « plaque », vouvoiement.

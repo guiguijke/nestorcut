@@ -102,20 +102,20 @@ describe('J4 — les réglages pré-remplis viennent du fichier', () => {
         const p = prefillFromJob(read)
         expect(p.sheet).toEqual({ width: 1000, height: 1250, count: 1 })
         expect(p.kerf).toBe('1.5')
-        expect(p.safety).toBe('0.25')
-        expect(p.space).toBe(2)          // 1,5 + 2 × 0,25, règle 3.10
+        expect(p.safety).toBe('1')
+        expect(p.space).toBe(4)          // 2 × 1,5 + 1, règle du 13/09 (§9.40)
     })
 
-    it('la sécurité pré-remplie est celle de la RÈGLE, pas celle du projet', () => {
-        // Un projet neuf porte la sécurité d'usine (1 mm), qui donnerait
-        // 3,5 mm pour ce kerf — alors que l'atelier coupe ce job à 2 mm.
-        // L'écart n'est pas cosmétique : mesuré au harnais navigateur, à
-        // 3,5 mm les quatre éventails de la recette ne tiennent plus dans le
-        // trou de l'hôte et sortent posés à côté ; à 2 mm ils s'y nichent.
-        expect(prefillFromJob(read).space).toBe(2)
+    it('la sécurité pré-remplie est celle de la RÈGLE (1 mm), et reste une entrée', () => {
+        // §9.40, décision du propriétaire : la bande de kerf déborde d'un
+        // kerf ENTIER hors de chaque pièce, donc deux pièces à moins de
+        // 2 × kerf se rongent le bord. Sur ce fichier (kerf 1,5) : 4 mm.
+        // Conséquence ASSUMÉE : les quatre éventails de la recette ne
+        // tiennent plus dans le trou de l'hôte (mesuré dès 3,5 mm au §9.19).
+        expect(prefillFromJob(read).space).toBe(4)
         // La valeur reste une ENTRÉE : un appelant qui sait ce qu'il fait
         // peut en imposer une autre.
-        expect(prefillFromJob(read, { safetyMm: 1 }).space).toBe(3.5)
+        expect(prefillFromJob(read, { safetyMm: 0.25 }).space).toBe(3.25)
     })
 
     it('sans kerf exploitable, l’espacement n’est PAS pré-rempli', () => {
@@ -141,14 +141,26 @@ describe('J4 — les réglages de coupe transmis au nesting', () => {
         expect(cut.jobName).toBe('mon-job.job')
     })
 
-    it('`startPositionConfirmed` est FAUX tant que la machine n’a pas parlé', () => {
-        // C'est ce faux qui fait réserver les QUATRE coins candidats au lieu
-        // du seul coin prédit : juste quelle que soit la table
-        // `Start position` → coin, qui n'est pas confirmée (question ouverte
-        // §9 de l'étude). Le jour où le propriétaire répond, ce drapeau
-        // passe à vrai et la réserve tombe de ~4,6 % à ~1,1 % de l'aire du
-        // trou. Ce verrou existe pour que ce passage soit un CHOIX, pas un
-        // oubli.
-        expect(cutSettingsFor(read.drawings[0]).startPositionConfirmed).toBe(false)
+    it('les points de départ LUS voyagent avec les réglages (lot J4-bis-2)', () => {
+        // `Start position` ne gouverne plus rien : la série (§9.42) a montré
+        // que c'est le coin d'où part la SÉQUENCE de coupe, pas le départ
+        // d'un contour. Ce qui compte maintenant, ce sont les points lus dans
+        // le bloc binaire — ils sont relatifs au centre de la boîte du
+        // dessin, `buildLocalPayload` les y ramène.
+        const cut = cutSettingsFor(read.drawings[0], { kerfWidth: 1.5 })
+        expect(cut.startPositionConfirmed).toBeUndefined()
+        expect(cut.kerfWidth).toBe(1.5)
+        expect(Array.isArray(cut.starts)).toBe(true)
+        expect(cut.starts.length).toBeGreaterThan(0)
+        for (const s of cut.starts) {
+            expect(s.offset).toHaveLength(2)
+            expect(Number.isFinite(s.offset[0])).toBe(true)
+            expect(Number.isFinite(s.leadIn)).toBe(true)
+        }
+    })
+
+    it('le centre de boîte mémorisé par SheetCam voyage aussi, comme CONTRÔLE', () => {
+        const cut = cutSettingsFor(read.drawings[0])
+        expect(cut.origin).toHaveLength(2)
     })
 })

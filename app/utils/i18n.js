@@ -182,11 +182,12 @@ const dict = {
         'settings.units': 'units',
         'settings.spacing': 'Spacing',
         'settings.spacingKerf': 'Spacing below 0.05 mm: thinner than a laser kerf — parts may touch or micro-overlap at cutting.',
-        // B.4 / masterplan 3.10 : kerf et sécurité explicites — l'espacement
-        // effective envoyée au moteur vaut toujours kerf + 2 × sécurité.
+        // B.4, puis étude SheetCam §9.40 (13/09) : l'espacement effectif
+        // envoyé au moteur vaut 2 × kerf + sécurité — la bande de kerf déborde
+        // d'un kerf entier hors de chaque pièce.
         'settings.kerf': 'Kerf (cut width)',
         'settings.safety': 'Safety (margin per part)',
-        'settings.spacingRule': 'Part-to-part spacing = kerf + 2 × safety = {v} {unit}',
+        'settings.spacingRule': 'Part-to-part spacing = 2 × kerf + safety = {v} {unit}',
         'settings.spacingHolesDisabled': 'Above 2.4 mm spacing, nesting inside cutouts is disabled (engine limit).',
         'settings.sheetPreset.hint': 'Standard sheet size',
         'units.label': 'Measurement units',
@@ -307,7 +308,7 @@ const dict = {
         'jobImport.drawingQuantity': '{n} copies in the job file',
         'jobImport.sheetFromJob': 'Sheet read from the job file: {w} × {h} {unit}',
         'jobImport.kerfFromJob': 'Kerf read from the job file: {v} {unit}',
-        'jobImport.spacingFromJob': 'Spacing prefilled from the kerf: {v} {unit} (kerf + 2 × safety)',
+        'jobImport.spacingFromJob': 'Spacing prefilled from the kerf: {v} {unit} (2 × kerf + safety)',
         'jobImport.prefilled': 'Sheet and spacing come from the job file. Nothing is imposed: every value stays editable.',
         'jobImport.leadInLength': 'Lead-in read from the job file: {v} {unit}',
         'jobImport.pierceMargin': 'Pierce room kept around each lead-in: {v} {unit}',
@@ -338,11 +339,12 @@ const dict = {
         // quelles dans jobImport.reserveRefused / jobImport.holeDropped.
         'sheetcamReserve.ringTooSmall': 'the outline has too few points',
         'sheetcamReserve.nothingToReserve': 'the job file declares neither lead-in nor pierce',
-        'sheetcamReserve.flatAppendix': 'the reserved area would be flat at that point',
-        'sheetcamReserve.vertexInsideDisc': 'the pierce circle would swallow a nearby point of the outline',
+        'sheetcamReserve.flatEnvelope': 'the reserved area would be flat at that point',
         'sheetcamReserve.reserveCrossesContour': 'the reserved area would cross the outline',
         'sheetcamReserve.holeTooSmall': 'the cutout is smaller than the lead-in and its pierce',
-        'sheetcamReserve.mouthInsideDisc': 'the pierce circle reaches past the edge of the cutout',
+        'sheetcamReserve.mouthInsideEnvelope': 'the lead-in reaches further along the outline than the cutout allows',
+        'sheetcamReserve.startNotRead': 'the job file does not say where this contour starts',
+        'sheetcamReserve.degenerateEdge': 'the outline has no usable direction at the start point',
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': 'Delete',
         'project.deleteConfirmTitle': 'Delete {name}?',
@@ -990,11 +992,12 @@ const dict = {
         'settings.units': 'unités',
         'settings.spacing': 'Espacement',
         'settings.spacingKerf': 'Espacement < 0,05 mm : plus fin qu’un kerf laser — des pièces peuvent se toucher ou micro-chevaucher à la découpe.',
-        // B.4 / masterplan 3.10 : kerf et sécurité explicites — l'espacement
-        // effectif envoyé au moteur vaut toujours kerf + 2 × sécurité.
+        // B.4, puis étude SheetCam §9.40 (13/09) : l'espacement effectif
+        // envoyé au moteur vaut 2 × kerf + sécurité — la bande de kerf déborde
+        // d'un kerf entier hors de chaque pièce.
         'settings.kerf': 'Kerf (largeur de coupe)',
         'settings.safety': 'Sécurité (marge par pièce)',
-        'settings.spacingRule': 'Espacement entre pièces = kerf + 2 × sécurité = {v} {unit}',
+        'settings.spacingRule': 'Espacement entre pièces = 2 × kerf + sécurité = {v} {unit}',
         'settings.spacingHolesDisabled': 'Au-delà de 2,4 mm d’espacement, l’imbrication dans les trous est désactivée (limite moteur).',
         'settings.sheetPreset.hint': 'Format de tôle standard',
         'units.label': 'Unités de mesure',
@@ -1111,7 +1114,7 @@ const dict = {
         'jobImport.drawingQuantity': "{n} exemplaires dans le fichier .job",
         'jobImport.sheetFromJob': "Tôle lue dans le fichier .job : {w} × {h} {unit}",
         'jobImport.kerfFromJob': "Kerf lu dans le fichier .job : {v} {unit}",
-        'jobImport.spacingFromJob': "Espacement pré-rempli depuis le kerf : {v} {unit} (kerf + 2 × sécurité)",
+        'jobImport.spacingFromJob': "Espacement pré-rempli depuis le kerf : {v} {unit} (2 × kerf + sécurité)",
         'jobImport.prefilled': "La tôle et l'espacement viennent du fichier .job. Rien n'est imposé : toutes les valeurs restent modifiables.",
         'jobImport.leadInLength': "Amorce lue dans le fichier .job : {v} {unit}",
         'jobImport.pierceMargin': "Place de perçage réservée autour de chaque amorce : {v} {unit}",
@@ -1142,11 +1145,12 @@ const dict = {
         // quelles dans jobImport.reserveRefused / jobImport.holeDropped.
         'sheetcamReserve.ringTooSmall': "le contour a trop peu de points",
         'sheetcamReserve.nothingToReserve': "le fichier .job ne déclare ni amorce ni perçage",
-        'sheetcamReserve.flatAppendix': "la zone réservée serait plate à cet endroit",
-        'sheetcamReserve.vertexInsideDisc': "le cercle de perçage avalerait un point voisin du contour",
+        'sheetcamReserve.flatEnvelope': "la zone réservée serait plate à cet endroit",
         'sheetcamReserve.reserveCrossesContour': "la zone réservée traverserait le contour",
         'sheetcamReserve.holeTooSmall': "la découpe est plus petite que l'amorce et son perçage",
-        'sheetcamReserve.mouthInsideDisc': "le cercle de perçage dépasse le bord de la découpe",
+        'sheetcamReserve.mouthInsideEnvelope': "l'amorce court plus loin le long du contour que la découpe ne le permet",
+        'sheetcamReserve.startNotRead': "le fichier .job ne dit pas où ce contour commence",
+        'sheetcamReserve.degenerateEdge': "le contour n'a pas de direction exploitable au point de départ",
         // Suppression de projet (J-095) — confirmation + états.
         'project.delete': "Supprimer",
         'project.deleteConfirmTitle': "Supprimer {name} ?",

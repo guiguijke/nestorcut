@@ -11,16 +11,14 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { parseSheetCamJob } from '../../shared/sheetcamJob'
+import { jobPathRecords, parseSheetCamJob } from '../../shared/sheetcamJob'
 import {
     cutOrder,
     drawingBoxCentre,
     jobPlacement,
-    jobPlacementFromRings,
     nestedJobsPerSheet,
     nestingDepths,
     normalizeJobAngle,
-    placedBoxCentre,
     writtenRanks,
 } from '../../shared/sheetcamNest'
 
@@ -47,6 +45,47 @@ const FAN_POSES = [0, 1, 2, 3].map((k) => ({ x: 50, y: 50, angle: k * Math.PI / 
 // notre calcul — c'est dit au rapport §9.
 const REF_TOL_MM = 0.0005
 
+const add = (a, b) => [Number(a[0]) + Number(b[0]), Number(a[1]) + Number(b[1])]
+
+/** Lignes d'un fichier texte, quelle que soit sa fin de ligne (les fixtures
+ *  SheetCam sont en CRLF). */
+const splitLines = (text) => String(text).split('\n').map((line) => line.replace(/\r$/, ''))
+
+/** `$EXTMIN` / `$EXTMAX` de l'en-tête d'un DXF — les extensions que le
+ *  dessin DÉCLARE, sans passer par notre importeur. */
+function dxfExtents(text) {
+    const lines = splitLines(text).map((line) => line.trim())
+    const at = (name) => {
+        const i = lines.indexOf(name)
+        return [Number(lines[i + 2]), Number(lines[i + 4])]
+    }
+    return [at('$EXTMIN'), at('$EXTMAX')]
+}
+
+/**
+ * Les points de départ des contours d'un `.nc`.
+ *
+ * Un trajet commence par un `G0X..Y..` (le perçage) suivi de la descente
+ * `G0Z3.8` puis du plongeon `G1…Z1.5`. `leadMoves` mouvements plus loin, la
+ * torche est SUR le contour : c'est le point de départ. Les fichiers de la
+ * série portent une amorce d'entrée d'un seul mouvement (arc, tangente ou
+ * perpendiculaire) ; `leadMoves = 0` pour le type « None », qui perce
+ * directement sur le contour.
+ */
+function ncStarts(text, leadMoves = 1) {
+    const lines = splitLines(text).map((line) => line.trim())
+    const out = []
+    for (let i = 0; i < lines.length - 2; i++) {
+        if (!/^G0X(-?[\d.]+)Y(-?[\d.]+)$/.test(lines[i])) continue
+        if (lines[i + 1] !== 'G0Z3.8') continue
+        const at = i + 2 + leadMoves
+        const m = /^G[0123]X(-?[\d.]+)Y(-?[\d.]+)/.exec(lines[at] || '')
+        if (m) out.push([Number(m[1]), Number(m[2])])
+    }
+    return out
+}
+
+
 describe('J2 — la règle 3, contre le fichier du 11/09', () => {
     const refParts = parseSheetCamJob(X4).parts
 
@@ -70,53 +109,133 @@ describe('J2 — la règle 3, contre le fichier du 11/09', () => {
         expect(g.angle).toBe(-0)
     })
 
-    it('le centre de boîte se mesure sur la pièce TOURNÉE (défaut J2, trouvé en J4)', () => {
-        // La règle 3 dit « centre de boîte de la pièce POSÉE », donc tournée.
-        // Le lot J2 l'a implémentée par `t + R(θ)·c`, avec c mesuré sur le
-        // dessin DROIT, et l'a validée contre la référence. Cette validation
-        // ne POUVAIT PAS voir le défaut : la référence ne porte que des
-        // quarts de tour, et R(θ) envoie alors la boîte sur la boîte.
-        const L = [[0, 0], [100, 0], [100, 40], [40, 40], [40, 100], [0, 100]]
-        const centre = drawingBoxCentre([{ coordinates: L, holes: [] }])
-        const ecart = (deg) => {
-            const theta = (deg * Math.PI) / 180
-            const a = jobPlacement({ x: 0, y: 0, angle: theta }, centre)
-            const b = jobPlacementFromRings({ x: 0, y: 0, angle: theta }, [L])
-            return Math.hypot(a.xPos - b.xPos, a.yPos - b.yPos)
+    it('la pose du fichier « + 45deg », reconstruite à 1 mm près (lot J4-bis-2)', () => {
+        // LE VERROU QUI MANQUAIT AU LOT J4, ET QUI DIT POURQUOI IL A ÉCHOUÉ.
+        //
+        // Tout ce que ce test lit vient des fixtures : les extensions du
+        // dessin (en-tête `$EXTMIN`/`$EXTMAX` du DXF), la pose (`XPos`,
+        // `YPos`, `Angle` du `.job`), les points de départ des trois contours
+        // (bloc binaire du même `.job`) et les trois perçages du G-code que
+        // SheetCam a produit pour CE fichier. Rien n'est écrit à la main.
+        //
+        // Un point du dessin, exprimé par son écart `offset` au centre de la
+        // boîte englobante, atterrit dans le monde en
+        //     (XPos, YPos) + R(−Angle) · offset
+        // — SheetCam tourne le dessin AUTOUR de (XPos, YPos), sens horaire
+        // pour un `Angle` positif. C'est la formule du lot J2.
+        const jobBytes = read(path.join(FIX, 'piece-l-45deg.job'))
+        const job = parseSheetCamJob(jobBytes)
+        const part = job.parts[0]
+        expect(part.angle).toBeCloseTo(Math.PI / 4, 6)
+
+        const [[minX, minY], [maxX, maxY]] = dxfExtents(
+            fs.readFileSync(path.join(FIX, 'piece-l.dxf'), 'latin1'),
+        )
+        const c0 = [(minX + maxX) / 2, (minY + maxY) / 2]
+        expect(c0).toEqual([90, 100])
+
+        const theta = -part.angle
+        const rot = (p) => [
+            p[0] * Math.cos(theta) - p[1] * Math.sin(theta),
+            p[0] * Math.sin(theta) + p[1] * Math.cos(theta),
+        ]
+        const records = jobPathRecords(job.binary)
+        expect(records).toHaveLength(1)
+        // Les enregistrements sont dans l'ordre du DESSIN (rectangle,
+        // extérieur, fuseau) ; le G-code, lui, sort dans l'ORDRE DE COUPE, que
+        // porte le champ `order` (0, 2, 1 ici : les trous d'abord). On les
+        // remet dans le même ordre pour les comparer un à un.
+        const starts = records[0].paths
+            .slice()
+            .sort((a, b) => a.order - b.order)
+            .map((r) => r.start)
+        expect(starts).toHaveLength(3)
+
+        // La pose MOTEUR qui a produit ce fichier, retrouvée par l'inverse de
+        // `jobPlacement` : c'est bien elle qu'on met à l'épreuve.
+        const pose = {
+            x: part.xPos - rot(c0)[0],
+            y: part.yPos - rot(c0)[1],
+            angle: theta,
         }
-        // Aux quarts de tour, les deux formules sont le MÊME point — c'est
-        // pourquoi la référence du 11/09 ne pouvait rien signaler.
-        for (const deg of [0, 90, 180, 270]) expect(ecart(deg)).toBeCloseTo(0, 9)
-        // Ailleurs, elles divergent de plusieurs CENTIMÈTRES, et l'UI
-        // autorise `rotationCount` de 1 à 360 (piège AGENTS #61).
-        expect(ecart(17)).toBeGreaterThan(8)
-        expect(ecart(30)).toBeGreaterThan(14)
-        expect(ecart(45)).toBeGreaterThan(21)
+        const written = jobPlacement(pose, c0)
+        expect(written.xPos).toBeCloseTo(part.xPos, 9)
+        expect(written.yPos).toBeCloseTo(part.yPos, 9)
 
-        // Et la forme exacte est bien le centre de la boîte de la pièce
-        // tournée, vérifié à la main sur le L à 45°.
-        const theta = Math.PI / 4
-        const rot = L.map(([x, y]) => [
-            x * Math.cos(theta) - y * Math.sin(theta),
-            x * Math.sin(theta) + y * Math.cos(theta),
-        ])
-        const xs = rot.map((p) => p[0])
-        const ys = rot.map((p) => p[1])
-        const [cx, cy] = placedBoxCentre([L], theta)
-        expect(cx).toBeCloseTo((Math.min(...xs) + Math.max(...xs)) / 2, 9)
-        expect(cy).toBeCloseTo((Math.min(...ys) + Math.max(...ys)) / 2, 9)
+        // Le fichier porte une amorce en ARC (type 1) : un mouvement après le
+        // plongeon, la torche est sur le contour.
+        const gcode = ncStarts(fs.readFileSync(path.join(FIX, 'piece-l-45deg.nc'), 'latin1'), 1)
+        expect(gcode).toHaveLength(3)
 
-        // CONTRÔLE NÉGATIF : une pièce centralement symétrique ne révèle
-        // JAMAIS le défaut (son centre de boîte est son centre de symétrie).
-        // C'est pour cela que ce verrou utilise un L et pas un rectangle.
-        const rect = [[-20, 3], [20, 3], [20, 31], [-20, 31]]
-        const cRect = drawingBoxCentre([{ coordinates: rect, holes: [] }])
-        for (const deg of [17, 45]) {
+        // Le G-code coupe sur le chemin DÉCALÉ de kerf/2 (kerf 1,5) : l'écart
+        // attendu est 0,75 mm, pas zéro. La consigne demande ≤ 1 mm.
+        const ecarts = starts.map((offset, k) => {
+            const world = [
+                pose.x + rot(add(c0, offset))[0],
+                pose.y + rot(add(c0, offset))[1],
+            ]
+            return Math.hypot(world[0] - gcode[k][0], world[1] - gcode[k][1])
+        })
+        // La consigne demande ≤ 1 mm ; la mesure donne 0,750 pile sur les
+        // trois, c'est-à-dire kerf/2 exactement. On verrouille la mesure, pas
+        // la consigne.
+        for (const e of ecarts) expect(e).toBeCloseTo(0.75, 3)
+
+        // CONTRÔLE NÉGATIF — la formule du lot J4 (« centre de la boîte du
+        // dessin TOURNÉ »), reproduite ici pour MESURER son erreur. Elle est
+        // fausse de plus de 40 mm sur ce fichier ; c'est le NO-GO du §9.42.
+        // Elle n'existe plus dans `shared/` : ce bloc est la seule trace.
+        const placedBoxCentreJ4 = (rings, t) => {
+            const xs = []
+            const ys = []
+            for (const ring of rings) {
+                for (const p of ring) {
+                    xs.push(p[0] * Math.cos(t) - p[1] * Math.sin(t))
+                    ys.push(p[0] * Math.sin(t) + p[1] * Math.cos(t))
+                }
+            }
+            return [
+                (Math.min(...xs) + Math.max(...xs)) / 2,
+                (Math.min(...ys) + Math.max(...ys)) / 2,
+            ]
+        }
+        // Le contour extérieur du dessin de la fixture (un L), le seul anneau
+        // dont la boîte gouverne : ses six sommets se relisent sur le chemin
+        // du G-code, décalé de 0,75.
+        const L = [[0, 0], [180, 0], [180, 50], [50, 50], [50, 200], [0, 200]]
+        const poseJ4 = {
+            x: part.xPos - placedBoxCentreJ4([L], theta)[0],
+            y: part.yPos - placedBoxCentreJ4([L], theta)[1],
+        }
+        const ecartsJ4 = starts.map((offset, k) => {
+            const world = [
+                poseJ4.x + rot(add(c0, offset))[0],
+                poseJ4.y + rot(add(c0, offset))[1],
+            ]
+            return Math.hypot(world[0] - gcode[k][0], world[1] - gcode[k][1])
+        })
+        for (const e of ecartsJ4) expect(e).toBeGreaterThan(40)
+
+        // Et les deux formules COÏNCIDENT aux quarts de tour : c'est pour cela
+        // que la référence du 11/09, le harnais et tous les verrous du lot J4
+        // sont restés verts alors que la pose à 45° était fausse de 45 mm.
+        for (const deg of [0, 90, 180, 270]) {
             const t = (deg * Math.PI) / 180
-            const a = jobPlacement({ x: 0, y: 0, angle: t }, cRect)
-            const b = jobPlacementFromRings({ x: 0, y: 0, angle: t }, [rect])
-            expect(Math.hypot(a.xPos - b.xPos, a.yPos - b.yPos)).toBeCloseTo(0, 9)
+            const a = jobPlacement({ x: 0, y: 0, angle: t }, drawingBoxCentre([{ coordinates: L, holes: [] }]))
+            const c = placedBoxCentreJ4([L], t)
+            expect(Math.hypot(a.xPos - c[0], a.yPos - c[1])).toBeCloseTo(0, 9)
         }
+    })
+
+    it('le miroir du `.job` est `x’ = 2·XPos − x` (mesuré, jamais écrit par nous)', () => {
+        // `HRef = 1` : la série porte un fichier miroir dont le bloc binaire
+        // est INCHANGÉ — le point de départ est en coordonnées locales, la
+        // pose seule le reflète. On ne produit jamais de miroir ; ce verrou
+        // garde la règle lisible pour le jour où on lira un fichier entrant.
+        const job = parseSheetCamJob(read(path.join(FIX, 'piece-l-none-default.job')))
+        expect(job.parts[0].hRef).toBe(0)
+        const mirror = (xPos, x) => 2 * xPos - x
+        expect(mirror(90, 25)).toBe(155)
     })
 
     it('le centre de boîte n’est pas décoratif : sans lui, 33,7 mm d’erreur', () => {

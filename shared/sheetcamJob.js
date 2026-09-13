@@ -553,3 +553,114 @@ export function writeNestedSheetCamJob(job, { placements, order = null, maskPath
 
     return serializeSheetCamJob({ ...job, lines })
 }
+
+// --- le bloc binaire : les points de départ, lus (lot J4-bis-2) -------------
+
+/**
+ * LE BLOC BINAIRE N'EST PLUS OPAQUE, ET C'EST UNE MESURE.
+ *
+ * La règle 6 de l'étude disait : « on recopie le cache binaire sans jamais le
+ * décoder ». Elle tenait tant qu'on n'y cherchait rien. Le §9.42 a montré que
+ * le point de départ de CHAQUE contour y est écrit, à jour dans les dix-sept
+ * fichiers de la série `retro-eng-job` — y compris quand l'opérateur le
+ * déplace à la main. Comme `Start position` s'est révélé être le coin d'où
+ * part la SÉQUENCE de coupe (codes mesurés : centre 0, haut gauche 1, haut
+ * droit 2, bas droit 3, bas gauche 4) et non le départ d'un contour, le bloc
+ * binaire est la SEULE source juste — d'où ce lecteur.
+ *
+ * LA FORME, relevée octet à octet puis vérifiée en rejouant le flux jusqu'au
+ * dernier octet des dix-sept fichiers (aucun ne se désynchronise) :
+ *
+ *   enregistrement = tag u16 | type u16 | longueur u16 | charge utile
+ *
+ * Les tags qui nous intéressent, et rien d'autre :
+ *
+ *   0x0025  (16 o)  ouvre un DESSIN ; charge = deux doubles.
+ *   0x0012  ( 8 o)  longueur d'amorce d'entrée — ouvre un CONTOUR.
+ *   0x0013  ( 8 o)  longueur d'amorce de sortie.
+ *   0x0018  ( 8 o)  x du point de départ, RELATIF au centre de la boîte
+ *                   englobante du dessin.
+ *   0x0019  ( 8 o)  y du point de départ.
+ *   0x001a  ( 4 o)  rang du contour dans l'ORDRE DE COUPE (0 = coupé en
+ *                   premier). Les trous avant l'extérieur, mesuré.
+ *   0x001d  ( 1 o)  1 si le point a été déplacé à la main, 0 sinon.
+ *   0x000b  ( 0 o)  ferme le dessin.
+ *
+ * Le repère : `[x, y]` est relatif au CENTRE DE LA BOÎTE ENGLOBANTE du
+ * dessin — le même point que `XPos, YPos` place dans le monde (règle 3).
+ * Vérifié sur `Pièce L` : le trou rectangulaire (10…40 × 90…190 dans le DXF)
+ * porte `(−65, −10)`, et la boîte du dessin est 0…180 × 0…200, donc de centre
+ * (90, 100) : (90, 100) + (−65, −10) = (25, 90), le MILIEU de l'arête basse
+ * du trou — exactement le point de départ lu dans le G-code, à kerf/2 près
+ * (le chemin est décalé, le point du binaire est sur le contour).
+ *
+ * Rend `null` — et non une liste partielle — si le flux ne se relit pas
+ * jusqu'au bout : un cache d'une version inconnue ne doit pas produire des
+ * points inventés. L'appelant dégrade alors franchement (`partWithReserve`
+ * retire les trous du nesting et le dit).
+ */
+export function jobPathRecords(binary) {
+    if (!(binary instanceof Uint8Array)) return null
+    const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength)
+    let o = BINARY_MARKER.length
+    const drawings = []
+    let drawing = null
+    let path = null
+    while (o + 6 <= binary.length) {
+        const tag = view.getUint16(o, true)
+        const len = view.getUint16(o + 4, true)
+        const at = o + 6
+        if (at + len > binary.length) return null
+        switch (tag) {
+            case 0x0025:
+                if (len !== 16) return null
+                drawing = { origin: [view.getFloat64(at, true), view.getFloat64(at + 8, true)], paths: [] }
+                drawings.push(drawing)
+                path = null
+                break
+            case 0x0012:
+                if (len !== 8 || !drawing) break
+                path = {
+                    leadIn: view.getFloat64(at, true),
+                    leadOut: null,
+                    start: null,
+                    order: null,
+                    moved: false,
+                }
+                drawing.paths.push(path)
+                break
+            case 0x0013:
+                if (len === 8 && path) path.leadOut = view.getFloat64(at, true)
+                break
+            case 0x0018:
+                if (len === 8 && path) path.start = [view.getFloat64(at, true), 0]
+                break
+            case 0x0019:
+                if (len === 8 && path?.start) path.start[1] = view.getFloat64(at, true)
+                break
+            case 0x001a:
+                if (len === 4 && path) path.order = view.getInt32(at, true)
+                break
+            case 0x001d:
+                if (len === 1 && path) path.moved = binary[at] === 1
+                break
+            case 0x000b:
+                drawing = null
+                path = null
+                break
+            default:
+                break
+        }
+        o = at + len
+    }
+    // Le flux doit tomber EXACTEMENT sur la fin du fichier : un reste de
+    // quelques octets veut dire qu'on a mal lu une longueur quelque part, et
+    // qu'un des points rendus peut être du bruit.
+    if (o !== binary.length) return null
+    for (const d of drawings) {
+        for (const p of d.paths) {
+            if (!p.start || !Number.isFinite(p.start[0]) || !Number.isFinite(p.start[1])) return null
+        }
+    }
+    return drawings
+}

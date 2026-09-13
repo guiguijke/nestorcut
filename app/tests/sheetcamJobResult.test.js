@@ -190,12 +190,21 @@ describe('J4 — re-nester un `.job` DÉJÀ nesté', () => {
 
 describe('J4 — les poses se calculent sur les anneaux RÉELS', () => {
     it('la réserve d’amorce ne déplace AUCUNE pose', () => {
-        // La réserve du lot J3 ajoute au contour un appendice de
-        // `amorce + perçage` = 8 mm. S'il entrait dans le calcul du centre de
+        // La réserve ajoute au contour une bosse qui couvre l'amorce, sa
+        // sortie et le perçage. Si elle entrait dans le calcul du centre de
         // boîte, chaque pose se décalerait — ce contrôle chiffre de combien.
+        // Le point de départ est celui qu'un `.job` donnerait : le milieu de
+        // l'arête gauche de l'éventail.
         const reserved = partWithReserve(
             { coordinates: FAN, holes: [] },
-            { startPosition: 0, leadIn: 5, pierceMarginMm: 3 },
+            {
+                starts: [{
+                    point: [-19.799, 16.8284],
+                    leadIn: 5, leadInType: 1, leadOut: 10, leadOutType: 1,
+                }],
+                kerf: 1.5,
+                pierceMarginMm: 3,
+            },
         )
         expect(reserved.reserve.applied).toBe(true)
 

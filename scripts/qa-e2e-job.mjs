@@ -177,12 +177,22 @@ try {
             w: val('[data-testid="settings-sheets"] input'),
             all: [...document.querySelectorAll('[data-testid="settings-sheets"] input')].map((i) => i.value),
             kerf: val('[data-testid="settings-kerf"] input') ?? val('input[name="kerf"]'),
+            safety: val('[data-testid="settings-safety"] input'),
+            rule: document.querySelector('.size__rule')?.textContent?.trim() ?? null,
         }
     })
     log('formulaire :', JSON.stringify(form))
     check('B1 tôle pré-remplie depuis [Work]',
         form.all.includes(String(sheet.width)) && form.all.includes(String(sheet.height)),
         `attendu ${sheet.width} × ${sheet.height}, lu ${form.all.join(' / ')}`)
+    // Lot J4-bis-2 (§9.40) : l'espacement d'un `.job` vaut 2 × kerf +
+    // sécurité, sécurité à 1 mm. Sur la recette (kerf 1,5) : 4 mm, et non 2.
+    check('B1b kerf et sécurité pré-remplis depuis [Tool0]',
+        Number(form.kerf) === Number(source.kerfWidth) && Number(form.safety) === 1,
+        `kerf lu ${form.kerf} (attendu ${source.kerfWidth}), sécurité lue ${form.safety} (attendu 1)`)
+    check('B1c la règle affichée donne 2 × kerf + sécurité',
+        form.rule != null && form.rule.includes(String(space)),
+        `règle affichée « ${form.rule} », espacement attendu ${space} mm`)
     const qtyOk = await page.evaluate(() =>
         [...document.querySelectorAll('.file input[type="number"], [data-testid="file-count"] input')]
             .map((i) => Number(i.value)))

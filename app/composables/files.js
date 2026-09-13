@@ -20,10 +20,12 @@ function factoryParams() {
         // explicites — kerf (largeur de coupe de l'outil) et sécurité
         // (marge gardée autour de chaque pièce). `space` reste LA clé
         // envoyée à l'API/moteur (contrat inchangé, jobs en base
-        // intacts) et vaut toujours kerf + 2 × sécurité. Défault usine
-        // 2 mm (B.4 : 0,1 mm était irréaliste).
+        // intacts) et vaut 2 × kerf + sécurité depuis le 13/09 (étude
+        // SheetCam §9.40 : la bande de kerf déborde d'un kerf ENTIER hors de
+        // chaque pièce). Défaut usine 2 mm, INCHANGÉ (B.4 : 0,1 mm était
+        // irréaliste) — c'est la sécurité qui le porte désormais.
         kerf: '0',
-        safety: '1',
+        safety: '2',
         space: '2',
         addOutShape: false,
         // Allow nesting smaller parts inside the cutouts of holed parts
@@ -445,7 +447,7 @@ async function addSheetCamJobDrop(drop, slug) {
     for (const { drawing, file } of matched) {
         try {
             const records = await importLocalFiles(file, slug, {
-                sheetcam: cutSettingsFor(drawing, { jobName }),
+                sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
                 sheetcamJobBytes: drop.jobBytes,
             })
             imported += records?.length || 0

@@ -207,9 +207,9 @@ const NEW_KEYS = [
     'sheetcamNest.noSheets', 'sheetcamNest.emptySheet', 'sheetcamNest.missingCentre',
     'sheetcamNest.drawingNotInJob',
     'sheetcamReserve.ringTooSmall', 'sheetcamReserve.nothingToReserve',
-    'sheetcamReserve.flatAppendix', 'sheetcamReserve.vertexInsideDisc',
+    'sheetcamReserve.flatEnvelope', 'sheetcamReserve.startNotRead',
     'sheetcamReserve.reserveCrossesContour', 'sheetcamReserve.holeTooSmall',
-    'sheetcamReserve.mouthInsideDisc',
+    'sheetcamReserve.mouthInsideEnvelope', 'sheetcamReserve.degenerateEdge',
 ]
 
 describe('libellés du lot J4 : EN et FR', () => {

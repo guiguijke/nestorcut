@@ -15,7 +15,7 @@ import { drawingExtent, resolveScale } from './advancedImport'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import {
-    isSheetCamJob, jobDrawingName, jobSheet, parseSheetCamJob,
+    isSheetCamJob, jobDrawingName, jobPathRecords, jobSheet, parseSheetCamJob,
 } from '~~/shared/sheetcamJob.js'
 
 // Miroir EXACT de workers/common/worker_common/colors.py — ne pas diverger
@@ -178,7 +178,11 @@ export function readSheetCamJob(bytes) {
                 parts: [],
                 leadIn: null,
                 leadInType: null,
+                leadOut: null,
+                leadOutType: null,
                 startPosition: null,
+                starts: [],
+                origin: null,
                 operations: [],
             })
         }
@@ -194,13 +198,49 @@ export function readSheetCamJob(bytes) {
             const op = part.operations.find((o) => o.enabled) || part.operations[0]
             entry.leadIn = op.leadIn
             entry.leadInType = op.leadInType
+            entry.leadOut = op.leadOut
+            entry.leadOutType = op.leadOutType
             entry.startPosition = op.startPosition
         }
     }
+    // Les points de départ, LUS dans le bloc binaire (lot J4-bis-2, §9.42).
+    // Un bloc par NOM de dessin, dans le même ordre de première apparition que
+    // `byName` — vérifié sur les trente-neuf `.job` disponibles : le nombre de
+    // blocs égale toujours le nombre de noms de dessin distincts.
+    //
+    // Les LONGUEURS d'amorce viennent du binaire (elles y sont par contour),
+    // les TYPES de l'opération lue dans le texte (le binaire ne les porte
+    // pas : ses deux entiers voisins valent 2 aussi bien pour « None » que
+    // pour « Tangent » — mesuré). Un dessin à plusieurs opérations de types
+    // différents n'est donc pas distingué contour par contour : c'est la
+    // première opération active qui fait foi, comme pour le reste.
+    const records = jobPathRecords(job.binary)
+    const names = [...byName.keys()]
+    if (records && records.length === names.length) {
+        records.forEach((block, index) => {
+            const entry = byName.get(names[index])
+            entry.origin = block.origin
+            entry.starts = block.paths.map((p) => ({
+                // Relatif au centre de la boîte englobante du dessin.
+                offset: p.start,
+                leadIn: p.leadIn ?? entry.leadIn,
+                leadOut: p.leadOut ?? null,
+                leadInType: entry.leadInType,
+                leadOutType: entry.leadOutType,
+                order: p.order,
+                moved: p.moved,
+            }))
+        })
+    }
+
     return {
         job,
         sheet: jobSheet(job),
         kerfWidth: job.kerfWidth,
+        // Vrai quand AUCUN point de départ n'a pu être lu : l'appelant doit le
+        // dire, pas le taire — sans point, aucun trou n'est nesté (voir
+        // `partWithReserve`).
+        startsUnread: !records || records.length !== names.length,
         drawings: [...byName.values()],
     }
 }
