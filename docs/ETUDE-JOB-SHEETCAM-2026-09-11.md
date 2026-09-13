@@ -1675,3 +1675,74 @@ réserve d'amorce telle que la fiche la persiste). `F2` et `F4` sont des
 verrous de SÛRETÉ et non des verrous de « rien ne s'est passé » : ils exigent
 qu'aucun trou ne sorte du nesting sans raison nommée, et que tout perçage
 tombant dans une zone nichable ait bien fait sortir cette zone.
+
+### Lot J4-bis-2 — vérification (vérificateur, 13/09, nuit, `eabaee9d`) — GO sous deux conditions, dont une petite correction
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, harnais tel que livré
+sur trois `.job` (recette × 4, 2 pièces, et le fichier « ordre » où les
+dessins sont déclarés dans l'autre sens), lecteur du binaire rejoué sur les
+39 `.job` du poste, sorties hors dépôt (`~/qa-out/verif-j4bis2/`).
+
+#### 9.44 Ce qui est acquis
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **717 passed** |
+| pose | la formule J2 retrouve les trois points du fichier « + 45deg » à 0,750 mm (kerf/2) — déjà mesuré indépendamment au §9.42, le verrou du lot lit les fixtures et non des constantes : accepté |
+| espacement | règle « 2 × kerf + sécurité = 4 mm » lue à l'écran par le harnais (kerf 1,5 ; sécurité 1) ; migration des projets existants à espacement effectif constant, cinq cas verrouillés |
+| lecteur du binaire (`jobPathRecords`) | flux `tag / type / longueur / charge`, **39 / 39 fichiers relus jusqu'au dernier octet**, blocs = noms de dessin distincts ; sur `Piece_Trou`, points lus à 0,01 mm du cercle et à 0 du coin ; troisième chemin à (0 ; 0) = l'entité POINT, à 34,99 du cercle ; drapeau « déplacé à la main » lu sur L-1, L-2, L-3 et les deux fichiers « moved » |
+| deux origines | l'origine des points du binaire est le centre de la boîte de TOUTES les entités SheetCam, POINT compris ((0 ; 15,41) pour l'éventail, contre (0 ; 16,83) pour notre géométrie) — l'explication du 1,414 mm du rapport est juste |
+| harnais recette × 4 | 5 / 5, tous verts, **trou retiré pour « perçage errant »**, aucune pièce nichée (annoncé) |
+| harnais 2 pièces | 2 / 2, tous verts, même retrait |
+| morsure (rapport) | 36 / 36 points de trajet réels hors zone utile ; 2,74 % du trou — pas rejoué à part, la méthode est une mesure sur les `.nc`, acceptée |
+
+Les deux DXF de la recette portent bien un `POINT` à (0 ; 0), vérifié dans
+les fichiers (4 LINE + 1 CIRCLE + 1 POINT ; 2 LINE + 1 ARC + 1 POINT).
+
+#### 9.45 Un défaut : l'appariement bloc ↔ dessin se fait par RANG, et il casse
+
+Le rapport écrit « un bloc par nom de dessin, dans le même ordre de première
+apparition — vérifié sur les trente-neuf `.job` ». Ce qui a été vérifié, c'est
+le NOMBRE de blocs, pas la correspondance. Sur
+`Piece_Trou+Fill_x4_ordre_TEST.job` (les éventails déclarés AVANT l'hôte : `Part
+0` = éventail, `Part 4` = hôte), les blocs du binaire restent dans l'ordre
+hôte, éventail : l'appariement par rang inverse les deux dessins, **les cinq
+points tombent à côté (`originGapMm` 16,83), les deux dessins sortent en
+`startNotRead`, le trou est retiré**, et le harnais le voit — `F1` en échec sur
+ce fichier. En production : une dégradation sûre mais injuste, sur tout `.job`
+dont l'ordre des sections ne suit pas l'ordre de chargement des dessins.
+
+**Correction demandée (J4-bis-3, quelques heures, avant le déploiement)** :
+apparier chaque bloc au dessin par la GÉOMÉTRIE — pour chaque couple (bloc,
+dessin), compter les points de départ qui tombent sur un contour du dessin à
+0,5 mm (chemins de POINT exclus) et retenir l'affectation qui en place le
+plus, un dessin par bloc ; `originGapMm` publié pour le couple retenu ; à
+égalité ou zéro point placé, `startNotRead` comme aujourd'hui. Verrou : le
+fichier « ordre » (copie anonyme dans `app/tests/fixtures/sheetcam/`, ou la
+fixture `source.job` aux sections permutées) ⇒ 5 points sur 5 appariés,
+`F1` vert au harnais sur ce fichier.
+
+#### 9.46 Arbitrages et verdict
+
+1. **Espacement étendu à tout le formulaire** : le vérificateur confirme le
+   raisonnement (les deux fonctions nommées n'écrivaient que kerf et
+   sécurité ; sans le formulaire, l'écran aurait dit 4 et le moteur nesté à
+   3,5) et la physique vaut pour tout job plasma. L'extension est déclarée,
+   la migration préserve l'espacement effectif, la règle est affichée. **Avis
+   favorable ; c'est au propriétaire de dire oui**, parce que la définition
+   du champ « sécurité » change pour tous ses utilisateurs.
+2. **Trou retiré sur perçage errant** : bonne dégradation en l'absence de
+   réponse. La question au propriétaire reste ouverte — *SheetCam perce-t-il
+   sur une entité POINT ?* (post-traiter `Piece_Trou+Fill_x4_OK.job`, chercher
+   un `G0`/`G1` vers (0 ; 0) local de l'hôte, c'est-à-dire le centre du trou).
+   Si non, la ligne tombe et le nichage revient ; si oui, la règle reste et
+   les DXF sont à nettoyer.
+3. Comportement de l'implémenteur : conforme — périmètre élargi DIT et
+   justifié, arbitrage demandé, question posée avant de trancher. Une
+   sur-affirmation à noter : « vérifié sur 39 » couvrait le compte des
+   blocs, pas la correspondance (§9.45).
+
+**GO déploiement (app + worker nesting) sous deux conditions** : J4-bis-3
+livré et rejoué (harnais vert sur les trois fichiers, « ordre » compris), et
+réponse du propriétaire sur le POINT — la recette machine se fait sur le
+fichier produit après ces deux points, pour voir le nichage revenir ou non.
