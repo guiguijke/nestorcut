@@ -952,3 +952,105 @@ reste du lot est pris tel quel.
    les deux SANS double dépose ; puis vérification, puis recette du
    propriétaire sur le fichier × 4, puis déploiement (app seule pour J4 ;
    le miroir Python part avec J5, homelab compris).
+
+### Lot J4-bis — rapport de l'implémenteur (13/09)
+
+Correctif du NO-GO. Un commit, `ddaa7b0d`.
+
+#### 9.29 Le défaut, et ce qu'il n'était pas
+
+Le vérificateur a raison sur les deux points qui me sont imputables, et je
+les reprends à mon compte.
+
+**Ma mesure « la pré-passe est hors de cause » ne valait rien.** Je l'avais
+faite sur un cercle synthétique, en appelant `planHoleFills` directement, et
+non à travers `buildLocalPayload`. Elle ne mesurait donc pas le cas réel. La
+pré-passe est bien en cause, exactement comme le §9.25 le décrit.
+
+**Mon harnais avait trois trous**, et le premier est le plus grave : le cas C
+ne comparait JAMAIS `placed` à `requested`. Un verrou qui passe pendant que
+le produit perd une pièce est un verrou vide — c'est la règle de la maison, et
+je l'ai enfreinte.
+
+Le défaut, lui, est plus large que le `.job` : il est **latent en production
+dès aujourd'hui** pour tout trou non circulaire avec un seul fichier hôte et
+un seul fichier de remplissage. La réserve d'amorce n'a été que le premier
+révélateur.
+
+#### 9.30 Le correctif
+
+| Point | Ce qui est livré |
+|---|---|
+| forme compressée | `reduceForSolve` ne la prend que si elle PORTE le plan. Le critère se vérifie tout seul : on rejoue ce qu'`expandMeta` produirait (centroïde du trou, rotations dans l'ordre, budget `slots`) et on le compare aux poses réelles. Égalité ⇒ forme compressée, comportement d'hier, bit-identique ; sinon ⇒ forme `{packs}`, que `expandPacks` rejoue telle quelle. Couvre au passage `slots` > Σ rotations disponibles |
+| miroir Python | même critère dans `holefill.py` (`_meta_carries_plan`, `_meta_replay_poses`) |
+| garde anti-perte | des deux côtés : rattachées = promises, sinon l'alternative est ÉCARTÉE. **On ne compte que les hôtes RÉELLEMENT POSÉS** — subtilité vue côté Python et reportée en JS : le moteur peut n'en avoir placé qu'une partie, et les pièces destinées aux trous d'un hôte absent ne sont légitimement pas rattachées ; les compter ferait refuser une alternative saine |
+| morsure du trou | tient pour TOUTE longueur d'amorce, zéro compris (§9.31) |
+| constats de réserve | voyagent jusqu'à la fiche : un trou laissé vide ne disparaît plus en silence |
+| harnais | C2/C3, A4 retiré, D10 refait (§9.32) |
+
+#### 9.31 La morsure à amorce nulle : deux fois fausse
+
+Mes verrous d'origine n'essayaient QUE `amorce = 5`. À `amorce = 0` — une
+opération sans amorce, cas réel — la morsure était fausse deux fois :
+
+1. elle **refusait** (`mouthInsideDisc`, les deux lèvres de la bouche tombant
+   dans le disque centré sur le bord) et le trou entier sortait du nesting ;
+2. bouche élargie, elle **s'appliquait en n'excluant RIEN** : l'aire du trou
+   MONTAIT de 2,1 % et les 32 sommets du disque restaient dans la zone libre.
+   S'appliquer sans exclure est pire qu'un refus.
+
+Deux corrections : la bouche s'écarte de ce que le disque déborde quand
+`amorce < marge` ; et le centre du disque est poussé à la marge au minimum —
+le disque rendu couvre alors `0 … 2 × marge` vers l'intérieur, ce qui CONTIENT
+la moitié intérieure du disque réel. On réserve un peu plus que ce que la
+torche prend, jamais moins (la règle du 32-gone circonscrit du lot E0).
+
+Balayage `amorce ∈ {0 ; 0,5 ; 1 ; 2 ; 3 ; 5 ; 8}` à perçage 3, trou r = 35 :
+l'aire BAISSE toujours (2,1 % à 6,4 %), 0 croisement, et la moitié intérieure
+du disque RÉEL de la torche est hors zone libre dans tous les cas.
+
+#### 9.32 Le harnais, refait
+
+- **C2** : posées = demandées. **C3** : demandées = somme des quantités du
+  `.job`. Sans eux, le 4 sur 5 passait vert.
+- **A4 retiré** : il redéposait les dessins AVANT le nesting, si bien que le
+  projet nesté portait deux fichiers hôtes — précisément la forme qui
+  contourne le défaut. (Le point qu'il mesurait — un `.job` n'est pas
+  détourné par le panneau « Import avancé » — avait été vérifié vert avant
+  retrait ; à remettre APRÈS le nesting ou dans un second projet.)
+- **D10** n'est plus tautologique : il lit les paires `[nichée, hôte]`
+  établies par le post-pass et les compare à l'ordre de coupe ÉCRIT DANS LE
+  MÊME FICHIER. Un résultat porte plusieurs alternatives : comparer les paires
+  de l'une à l'ordre de l'autre ne mesurait rien.
+- Au passage, D10 a trouvé une confusion dans mon instrumentation :
+  `placements[i].part` est le rang du DESSIN d'origine (0 ou 1), pas celui de
+  la section écrite (0 à 4). `nestedJobsPerSheet` expose désormais `ranks`, et
+  un verrou fige la distinction.
+
+#### 9.33 Verrous
+
+| Verrou | Résultat |
+|---|---|
+| `npx vitest run` | **715** (708 avant le lot) |
+| `python -m pytest` worker nesting | **241 passés, 1 ignoré** (≈233 avant), lancés dans un conteneur — l'image runtime n'embarque ni pytest ni `tests/` |
+| `npx nuxt build` | vert |
+| `docker compose build app` | vert |
+| harnais, `.job` à 2 pièces, SANS double dépose | **2 sur 2** (c'était 1 sur 2), tous verrous verts |
+| harnais, `.job` × 4 (la recette), SANS double dépose | **5 sur 5** (c'était 4 sur 5), tous verrous verts |
+| les verrous du correctif ne sont pas vides | comportement d'avant remis temporairement : **trois tombent**, « expected +0 to be 1 » et « expected +0 to be 4 » — exactement la pièce qui disparaît |
+| contrôle négatif | trou circulaire ⇒ la forme compressée est TOUJOURS prise, sortie inchangée : le chemin de production d'aujourd'hui reste celui d'hier |
+
+#### 9.34 Non-faits
+
+1. **La recette machine n'a pas été rejouée par le propriétaire.** Les deux
+   `.job` du vérificateur (`.testparts/VERIF-J4_*`) l'attendent, et les
+   fichiers produits par le correctif sont désormais complets (5 sur 5) :
+   c'est sur ceux-là qu'il faut juger l'amorce du trou.
+2. **Le rayon de perçage (3 mm) et la table `Start position` → coin** restent
+   à confirmer sur la machine. Tant que la seconde ne l'est pas, la réserve
+   d'un trou coûte 4,6 % au lieu de 1,1 %.
+3. **Le cas A4 est à remettre** dans le harnais, après le nesting.
+4. **Les deux « 400 Bad request » à l'ouverture du modal** (§9.27 point 2) ne
+   sont pas identifiés.
+5. **Le miroir Python n'est pas déployé** : il part avec le lot J5, homelab
+   compris. Le correctif JS seul suffit au chemin navigateur.
