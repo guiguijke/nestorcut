@@ -76,7 +76,38 @@ entrée, promouvoir aurait forcé un alignement que personne n'a vérifié.
 Trois des quatre `:latest` désignaient donc autre chose que la production —
 et pour l'app, un contenu **sans GO**. C'est le défaut, chiffré.
 
-**Le verrou, en deux temps** : VERROU_D1
+**Le verrou, en deux temps** : **Le verrou, en deux temps** (les deux mesures ont été prises sur les
+poussées réelles du jour, pas sur un dépôt d'essai) :
+
+1. **Une poussée sur `main` ne déplace plus `:latest`.** La poussée
+   `8959612f` (juste AVANT le lot, donc encore l'ancien workflow) a bien
+   déplacé le `:latest` de l'app sur `70f5d07f…`. Les deux poussées
+   SUIVANTES, `c2a619e3` (le lot lui-même) et `a4712b93` (le lot J2), ont
+   publié leurs `:<sha>` et leur `:main` — et le `:latest` de l'app est resté
+   `70f5d07f…`, inchangé. C'est exactement ce qu'on voulait.
+2. **`promote-latest` le déplace, sur le digest exact du SHA.** Trois runs,
+   quatre images, chacune promue sur le SHA que la PRODUCTION exécute :
+
+   | image | `:latest` après promotion | = SHA |
+   |---|---|---|
+   | `nest2d-app` | `5a6b371a…` | `53f93d2c` |
+   | `nest2d-admin` | `ea48d5e3…` | `d890c923` |
+   | `nest2d-nesting-worker` | `6ee233c7…` | `d890c923` |
+   | `nest2d-user-file-processing-worker` | `62906ba7…` | `7622f46c` |
+
+3. **Et la preuve par la commande** : `docker compose pull && up -d` relancé
+   sur la production après les promotions **ne recrée AUCUN conteneur** (seul
+   `mongo-init`, qui est un one-shot, rejoue ; app, admin et les deux workers
+   gardent leur temps de fonctionnement). La commande qui, une heure plus
+   tôt, aurait livré J1 et le lot 2d sans GO est devenue sans effet.
+
+**Un défaut du workflow, trouvé par son premier lancement et corrigé
+(`eb0e3354`)** : l'étape de promotion finissait en `exit 255` **alors que le
+retag avait réussi** — `docker buildx imagetools inspect … | head -5` ferme
+le tuyau, `imagetools` reçoit SIGPIPE et `set -o pipefail` propage l'échec.
+Un run rouge sur une promotion réussie est le pire des deux mondes : on ne
+sait plus si le tag a bougé. Remplacé par un `grep -E '^(Name|Digest):' ||
+true`. Les deux promotions suivantes sont vertes.
 
 ### 3.3 Après le lot
 
