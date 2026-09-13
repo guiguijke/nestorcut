@@ -277,6 +277,8 @@ pub fn merge_sp_runs(
             sol_instance: serde_json::to_value(&best)
                 .expect("serializing ExtSPOutput never fails"),
             alternatives,
+            // Rempli par l'appelant (spp/bpp) : la fusion ne voit pas l'import.
+            thin_items: Vec::new(),
         },
     })
 }
@@ -384,6 +386,8 @@ pub fn merge_bp_runs(
             sol_instance: serde_json::to_value(&best)
                 .expect("serializing ExtBPOutput never fails"),
             alternatives,
+            // Rempli par l'appelant (bpp) : la fusion ne voit pas l'import.
+            thin_items: Vec::new(),
         },
     })
 }

@@ -203,6 +203,16 @@
                     @add-sheet="$emit('unfit-add-sheet')"
                     @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
                 />
+                <!-- Lot E2 : pièces plus fines que l'espacement demandé. Le
+                     moteur les a préparées autrement et le job est livré :
+                     une INFORMATION, jamais un badge rouge. -->
+                <p
+                    v-if="thinPartsLine"
+                    class="report__thin"
+                    data-testid="report-thin-parts"
+                >
+                    {{ thinPartsLine }}
+                </p>
                 <div class="report__badges" data-testid="report-badges">
                     <span
                         v-for="badge in reportBadges"
@@ -343,6 +353,7 @@ const freeAreaMm2 = computed(() => props.d.freeAreaMm2)
 const reportTotals = computed(() => props.d.reportTotals)
 const reportSheets = computed(() => props.d.reportSheets)
 const reportBadges = computed(() => props.d.reportBadges)
+const thinPartsLine = computed(() => props.d.thinPartsLine)
 const materialFormats = computed(() => props.d.materialFormats)
 const postPassLines = computed(() => props.d.postPassLines)
 const hasTechDetails = computed(() => props.d.hasTechDetails)
@@ -580,6 +591,11 @@ defineExpose({ reportEl })
         font-variant-numeric: tabular-nums;
     }
 
+    &__thin {
+        margin: 0 0 6px;
+        color: var(--label-secondary);
+        font-size: 13px;
+    }
     &__badges {
         display: flex;
         flex-wrap: wrap;

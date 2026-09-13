@@ -38,6 +38,31 @@ const CARD_CODES = new Set([
 
 const MAX_CARD_FRAGMENTS = 3
 
+/**
+ * Lot E2 — la ligne « pièces plus fines que l'espacement » du rapport de
+ * nesting. Les entrées viennent du job (`thinParts` : `{slug, part, name?}`),
+ * les noms de la liste de fichiers du projet quand elle est là.
+ *
+ * Forme : trois pièces nommées au plus, puis « et N autres » — la même règle
+ * que la ligne de carte du lot 2c (une ligne qu'on lit d'un coup d'œil, pas
+ * un journal). Rend `null` quand il n'y a rien à dire.
+ */
+export function composeThinPartsLine(thinParts, files, t) {
+    const list = Array.isArray(thinParts) ? thinParts.filter(Boolean) : []
+    if (!list.length) return null
+    const byName = new Map(
+        (Array.isArray(files) ? files : []).map((f) => [f?.slug, f?.name]),
+    )
+    const label = (e) => {
+        const name = e.name || byName.get(e.slug) || e.slug || '?'
+        return `${name} (${t('import.partRank', { n: (Number(e.part) || 0) + 1 })})`
+    }
+    const shown = list.slice(0, MAX_CARD_FRAGMENTS).map(label)
+    const rest = list.length - shown.length
+    const parts = rest > 0 ? [...shown, t('import.andMore', { n: rest })] : shown
+    return t('nest.thinParts', { n: list.length, list: parts.join(', ') })
+}
+
 /** Niveau le plus grave de la liste, ou null si elle est vide. */
 export function worstLevel(findings) {
     let worst = null

@@ -15,7 +15,7 @@ from core.nesting_input_builder import (
 )
 from core.engine import (EngineCancelled, EngineError,
                          item_geometry_message, parse_item_geometry,
-                         run_engine)
+                         run_engine, thin_parts)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
 from core.metrics import (
@@ -1186,8 +1186,18 @@ def _nesting_process_impl(doc):
     # ICI : report_live_layout doit exister (référence directe).
     _live_decorator = LiveDecorator(report_live_layout)
 
+    # Lot E2 : les items dont le gonflement d'import a pris le repli — des
+    # pieces dont des traits sont plus fins que l'espacement demande. Le job
+    # est livre (c'est tout le lot E0) ; l'utilisateur doit pouvoir le lire.
+    thin_items_seen = []
+
     def _on_engine_event(event):
         etype = event.get("type")
+        if etype == "import" and event.get("kind") == "thin_items":
+            for raw in (event.get("items") or []):
+                if raw not in thin_items_seen:
+                    thin_items_seen.append(raw)
+            return
         if etype == "layout":
             # P2 : jamais de travail lourd sur le thread lecteur de stdout —
             # dépôt coalescé, le décorateur s'en charge.
@@ -2157,6 +2167,28 @@ def _nesting_process_impl(doc):
                    "kept": len(alternatives)},
         )
 
+    # Lot E2 : constat « pieces plus fines que l'espacement », nomme. Ecrit
+    # sur le job en champ ADDITIF (les anciens jobs n'en ont pas).
+    thin = []
+    if thin_items_seen:
+        names = {}
+        # `fslug` et non `slug` : `slug` est celui du JOB, il ne doit pas
+        # être écrasé par la boucle (il sert juste après, au journal et à
+        # l'écriture finale).
+        for fslug in {
+            (part_index_by_id.get(int(i)) or {}).get("slug")
+            for i in thin_items_seen
+            if str(i).lstrip("-").isdigit()
+        }:
+            if not fslug:
+                continue
+            doc = db["user_dxf_files"].find_one({"slug": fslug}, {"name": 1}) or {}
+            if doc.get("name"):
+                names[fslug] = doc["name"]
+        thin = thin_parts(thin_items_seen, part_index_by_id, names)
+        logger.info("thin parts (inflation fallback)", extra={
+            "slug": slug, "count": len(thin)})
+
     if not alternatives:
         # V8 (vérif 2026-09-04) : distinguer « le moteur n'a pas tout
         # placé » (message historique, VRAI) de « le post-pass a rendu
@@ -2227,6 +2259,11 @@ def _nesting_process_impl(doc):
         "postPassTimingsMs": _pass_timings,
         "update_ts": datetime.now()
     }
+    # Lot E2 : champ ADDITIF — pieces dont le gonflement d'import a pris le
+    # repli (traits plus fins que l'espacement). Les anciens jobs n'en ont
+    # pas et s'affichent comme avant.
+    if thin:
+        final_set["thinParts"] = thin
     # Z3 (vérif 2026-09-05) : une solution partielle UTILE est livrée
     # (done, pas de refund — décision propriétaire) mais avec les leviers
     # structurés : l'utilisateur sait quoi faire des pièces non posées.

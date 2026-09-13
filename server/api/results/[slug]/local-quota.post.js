@@ -46,6 +46,19 @@ export default defineEventHandler(async (event) => {
     // navigateur pour un projet « cet appareil ». Scalaire borné, jamais de
     // géométrie — même catégorie que `placed`.
     const requested = num(body?.requested, 0, 10_000_000)
+    // Lot E2 : constat « pièces plus fines que l'espacement » (le gonflement
+    // d'import a pris le repli). Liste BORNÉE de scalaires — slug opaque et
+    // rang de pièce, aucune géométrie, même champ que le chemin serveur.
+    const thinParts = Array.isArray(body?.thinParts)
+        ? body.thinParts
+            .slice(0, 50)
+            .map((e) => ({
+                item: num(e?.item, 0, 10_000_000) ?? 0,
+                slug: e?.slug ? String(e.slug).slice(0, 128) : null,
+                part: num(e?.part, 0, 100_000) ?? 0,
+            }))
+            .filter((e) => e.slug)
+        : []
     const layoutCount = num(body?.layoutCount, 0, 10_000)
     const density = num(body?.density, 0, 1)
     // Z3 (vérif 2026-09-05) : leviers d'une solution partielle locale —
@@ -74,6 +87,7 @@ export default defineEventHandler(async (event) => {
                 // Comptabilité seule — la géométrie reste dans le navigateur.
                 placed: placed ?? job.requested ?? 0,
                 ...(requested != null ? { requested } : {}),
+                ...(thinParts.length ? { thinParts } : {}),
                 layoutCount: layoutCount ?? 0,
                 density: density ?? null,
                 localOnly: true,

@@ -91,3 +91,29 @@ class TestFindings:
     def test_dropped_parts_are_attention(self):
         out = build_findings({**empty_stats(), "droppedParts": 3})
         assert out == [{"code": "import.partsDropped", "level": LEVEL_ATTENTION, "count": 3}]
+
+    # --- Lot E2 : la mise à l'échelle demandée à la dépose -----------------
+
+    def test_scale_applied_is_info_with_the_factor_as_value(self):
+        out = build_findings({**empty_stats(), "scaleApplied": 2.5})
+        assert out == [{"code": "import.scaleApplied", "level": LEVEL_INFO,
+                        "count": 1, "value": "2.5"}]
+
+    def test_scale_applied_writes_the_value_like_javascript(self):
+        # Le navigateur écrit `String(Math.round(f*1e4)/1e4)` : un entier sort
+        # SANS « .0 ». Deux textes différents pour le même facteur seraient un
+        # écart visible à l'écran entre le chemin local et le chemin serveur.
+        assert build_findings({**empty_stats(), "scaleApplied": 5.0})[0]["value"] == "5"
+        assert build_findings({**empty_stats(), "scaleApplied": 0.25})[0]["value"] == "0.25"
+        # Arrondi à quatre décimales, comme au navigateur.
+        rounded = build_findings({**empty_stats(), "scaleApplied": 1 / 3})[0]["value"]
+        assert rounded == "0.3333"
+
+    def test_scale_of_one_says_nothing(self):
+        # Aucune mise à l'échelle demandée : pas de constat (et l'absence du
+        # champ sur un fichier d'avant le lot E2 ne doit rien casser).
+        assert build_findings(empty_stats()) == []
+        assert build_findings({**empty_stats(), "scaleApplied": 1.0}) == []
+        stats = empty_stats()
+        del stats["scaleApplied"]
+        assert build_findings(stats) == []

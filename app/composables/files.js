@@ -432,6 +432,21 @@ async function addFiles(files, slug) {
     const formData = new FormData()
     formData.append('projectName', state.projectName)
     files.forEach((file) => formData.append('dxf', file))
+    // Lot E2 : miroir serveur de l'« import avancé ». Les options voyagent
+    // avec la dépose et sont posées sur le DOCUMENT fichier ; c'est le worker
+    // qui les applique (échelle sur la copie canonique, éclatement par
+    // handles). Option éteinte ⇒ aucun champ ajouté, requête d'avant.
+    {
+        const { advancedImportOptions } = await import('./advancedImport')
+        const opts = advancedImportOptions()
+        if (opts.explode) formData.append('importExplode', '1')
+        if (opts.scaleTarget) {
+            formData.append('importScaleMode', String(opts.scaleTarget.mode))
+            formData.append('importScaleTargetMm', String(opts.scaleTarget.mm))
+        } else if (opts.scale !== 1) {
+            formData.append('importScale', String(opts.scale))
+        }
+    }
     try {
         await $fetch(API_ROUTES.ADDFILES(slug), {
             method: 'POST',

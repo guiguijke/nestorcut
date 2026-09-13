@@ -80,6 +80,24 @@ describe('enqueueNestingJob — voie locale (J-090)', () => {
         expect(slug).not.toMatch(/secret|client|bracket/i)
     })
 
+    // Lot E2 : l'éclatement du lot E1 produit dix-sept fiches d'une pièce ;
+    // le slug du job — donc le nom du DXF que l'utilisateur télécharge —
+    // concaténait les dix-sept jetons (380 caractères mesurés).
+    it('buildJobSlug borne le nom à trois fichiers puis compte le reste', () => {
+        const files = Array.from({ length: 17 }, (_, k) => ({
+            simpleName: `volute (${k + 1}/17)`,
+            count: 1,
+        }))
+        const slug = buildJobSlug(DOMAINS.bin, files)
+        expect(slug).toMatch(/^nested-volute-117_1-volute-217_1-volute-317_1-and14more-[a-f0-9]+$/)
+        expect(slug.length).toBeLessThan(80)
+        // Trois fichiers ou moins : rien ne change (aucun « and0more »).
+        const three = buildJobSlug(DOMAINS.bin, files.slice(0, 3))
+        expect(three).not.toContain('more')
+        const one = buildJobSlug(DOMAINS.bin, [{ simpleName: 'plaque', count: 2 }])
+        expect(one).toMatch(/^nested-plaque_2-[a-f0-9]+$/)
+    })
+
     it('keeps the legacy shape for cloud jobs (pending, no localConfig, vault gate on)', async () => {
         await enqueueNestingJob(DOMAINS.bin, { ...base })
         const inserted = state.db.collection('nesting_jobs').calls.insertOne

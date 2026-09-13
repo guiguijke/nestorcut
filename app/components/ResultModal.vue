@@ -37,6 +37,8 @@
 </template>
 
 <script setup>
+import { composeThinPartsLine } from '~/composables/importFindings'
+import { filesStore } from '~/composables/files'
 import { altDensityPctOf, whyFirstKind } from '~/utils/resultQuality'
 import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
@@ -436,6 +438,15 @@ const exportCsv = () => {
     setTimeout(() => URL.revokeObjectURL(url), 1000)
     trackEvent('report_csv_exported', { altId: unref(activeAlt) })
 }
+// Lot E2 : constat de nesting « pièces plus fines que l'espacement ». Le
+// moteur les a préparées autrement (repli du lot E0) et le job est livré :
+// c'est une information, pas une erreur.
+const thinPartsLine = computed(() => {
+    const list = unref(resultModalData)?.thinParts
+    if (!Array.isArray(list) || !list.length) return null
+    return composeThinPartsLine(list, filesStore.getters.projectFiles, t)
+})
+
 const reportBadges = computed(() => {
     const r = unref(activeReport)
     if (!r) return []
@@ -685,6 +696,9 @@ const bundle = computed(() => ({
     reportTotals: unref(reportTotals),
     reportSheets: unref(reportSheets),
     reportBadges: unref(reportBadges),
+    // Lot E2 : « pièces plus fines que l'espacement » — le job les nomme
+    // (champ additif `thinParts`), la ligne est composée ici.
+    thinPartsLine: unref(thinPartsLine),
     materialFormats: unref(materialFormats),
     postPassLines: unref(postPassLines),
     hasTechDetails: unref(hasTechDetails),

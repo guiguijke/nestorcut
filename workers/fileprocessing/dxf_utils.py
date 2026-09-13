@@ -1,3 +1,4 @@
+import io
 import os
 import tempfile
 import uuid
@@ -16,6 +17,70 @@ from ezdxf.entities import DXFGraphic
 from worker_common.geometry.dxf_bounds import assert_insert_depth, decompose_bounded
 
 logger = setup_logger("dxf_utils")
+
+def scale_drawing(drawing: Drawing, factor: float) -> int:
+    """Mise a l'echelle UNIFORME d'un document DEJA canonique (lot E2).
+
+    Miroir du `canonical_dxf_scaled` du navigateur : le document est deja
+    decompose (les INSERT sont resolus par `read_dxf`), on multiplie donc
+    les entites de modelspace — jamais des definitions de blocs (piege
+    AGENTS #26).
+
+    Rend le nombre d'entites que ezdxf a REFUSE de transformer : un silence
+    ici ferait une piece a moitie mise a l'echelle.
+    """
+    if not factor or float(factor) == 1.0:
+        return 0
+    matrix = Matrix44.scale(float(factor), float(factor), 1.0)
+    refused = 0
+    for entity in drawing.modelspace():
+        if not isinstance(entity, DXFGraphic):
+            continue
+        try:
+            entity.transform(matrix)
+        except Exception as exc:  # noqa: BLE001 - une entite exotique
+            refused += 1
+            logger.warning("scale_drawing: entity refused the transform", extra={
+                "type": entity.dxftype(), "error": str(exc)[:120]})
+    return refused
+
+
+def subset_drawing_bytes(drawing: Drawing, handles) -> bytes:
+    """Octets DXF d'un SOUS-ENSEMBLE d'entites, designe par handles (lot E2).
+
+    Miroir du `canonical_dxf_bytes_subset` du navigateur : les entites
+    retenues sont recopiees dans un document neuf, qui leur reattribue la
+    sequence de handles canonique (`entity.copy()` jette le handle source et
+    `EntityDB.add` renumerote — piege AGENTS #33b). Le document sort donc
+    comme n'importe quel DXF depose : c'est l'import ORDINAIRE qui le relira.
+
+    Rend b"" quand aucune entite ne correspond : un document vide n'est pas
+    une piece, et l'appelant doit pouvoir le voir.
+    """
+    wanted = {str(h) for h in (handles or [])}
+    if not wanted:
+        return b""
+    new_doc = ezdxf.new()
+    new_msp = new_doc.modelspace()
+    kept = 0
+    for entity in drawing.modelspace():
+        if not isinstance(entity, DXFGraphic):
+            continue
+        if str(entity.dxf.handle) in wanted:
+            new_msp.add_entity(entity.copy())
+            kept += 1
+    if kept == 0:
+        return b""
+    # Millimetres canoniques, dit explicitement : `ezdxf.new()` declare des
+    # METRES (piege AGENTS #27) et la copie repasse par l'import ordinaire.
+    new_doc.header["$INSUNITS"] = 4
+    new_doc.header["$MEASUREMENT"] = 1
+    stream = io.StringIO()
+    new_doc.write(stream)
+    out = stream.getvalue().encode("utf-8")
+    stream.close()
+    return out
+
 
 def read_dxf(dxf_stream: GridOut, normalize_units: bool = True) -> Drawing:
     """

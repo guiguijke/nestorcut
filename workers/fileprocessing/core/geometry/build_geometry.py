@@ -404,11 +404,33 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
             for idx, (body, _silhouette) in enumerate(silhouettes)
             if body.buffer(probe_tol).intersects(ink)
         ]
-        hits = [(idx, measure) for idx, measure in hits if measure > 0]
-        if hits:
+        positive = [(idx, measure) for idx, measure in hits if measure > 0]
+        if positive:
             # The part the entity contributes most to (a long line crossing
             # two parts attaches to the part it mostly draws).
-            best_idx = max(hits, key=lambda entry: entry[1])[0]
+            best_idx = max(positive, key=lambda entry: entry[1])[0]
+        elif hits:
+            # Lot E2 — l'encre TOUCHE un corps sans le traverser : mesurée par
+            # `intersection`, elle vaut 0 (un contact rend un Point, de
+            # longueur et d'aire nulles), et le centre de l'entité tombe hors
+            # de toute silhouette puisqu'elle est SUR le bord. Ce cas laissait
+            # l'entité attachée à RIEN — donc ABSENTE du DXF de coupe, que
+            # l'export construit handle par handle (`core/main.py`), et
+            # absente du sous-ensemble d'un éclatement.
+            #
+            # Mesuré sur le logo d'atelier : une SPLINE de 3,66 mm à
+            # 0,000005 mm de sa pièce, qui fermait son contour extérieur — la
+            # pièce éclatée perdait son anneau et rendait ses deux trous comme
+            # deux pièces (46 858 mm² devenus 20 277). Le chemin navigateur,
+            # lui, l'attachait déjà : c'est cet écart que le lot E2 referme.
+            #
+            # Le candidat est DÉJÀ borné par `probe_tol` (le filtre
+            # `buffer(probe_tol).intersects` ci-dessus) : une entité vraiment
+            # égarée reste non attachée et le constat de couverture le dit.
+            best_idx = min(
+                (idx for idx, _measure in hits),
+                key=lambda idx: silhouettes[idx][0].distance(ink),
+            )
         else:
             # In a void: smallest containing silhouette wins.
             centre = geom if geom.geom_type == "Point" else geom.centroid

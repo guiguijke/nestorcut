@@ -64,7 +64,15 @@ def empty_stats() -> dict:
         "droppedParts": 0,      # corps écartés à l'émission
         "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
         "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
+        "scaleApplied": 1.0,    # facteur d'échelle appliqué à l'import (E2)
     }
+
+
+def _jsnum(value) -> str:
+    """`String(x)` de JavaScript pour les magnitudes raisonnables : un entier
+    s'écrit sans « .0 » (miroir de `String(Math.round(f*1e4)/1e4)`)."""
+    f = float(value)
+    return str(int(f)) if f.is_integer() else repr(f)
 
 
 def _finding(code, level, count, types=None, value=None) -> dict:
@@ -130,4 +138,11 @@ def build_findings(stats: dict) -> list:
         out.append(_finding("import.microVoidsFilled", LEVEL_INFO, stats["microVoids"]))
     if stats["spursRemoved"] > 0:
         out.append(_finding("import.spursRemoved", LEVEL_INFO, stats["spursRemoved"]))
+    # Lot E2 : mise à l'échelle demandée à la dépose. La valeur s'écrit comme
+    # côté navigateur (entier sans « .0 ») — deux textes différents pour le
+    # même facteur seraient un écart visible à l'écran.
+    factor = float(stats.get("scaleApplied") or 1.0)
+    if factor != 1.0:
+        out.append(_finding("import.scaleApplied", LEVEL_INFO, 1,
+                            value=_jsnum(round(factor, 4))))
     return out

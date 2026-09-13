@@ -37,6 +37,30 @@ export function itemGeometryTarget(message, itemMap) {
 }
 
 /**
+ * Lot E2 : items « plus fins que l'espacement » (le gonflement d'import a
+ * pris le repli du lot E0) → liste [{item, slug, part}], triée et bornée.
+ * Le moteur les livre quand même : c'est un CONSTAT, pas une erreur.
+ */
+export const MAX_THIN_PARTS = 50
+
+export function thinPartsFromItems(items, itemMap) {
+    const map = Array.isArray(itemMap) ? itemMap : []
+    const out = []
+    for (const raw of (Array.isArray(items) ? items : []).slice(0, MAX_THIN_PARTS)) {
+        const id = Number(raw)
+        if (!Number.isFinite(id)) continue
+        const hit = map.find((e) => Number(e?.id) === id)
+        out.push({
+            item: id,
+            slug: hit?.slug ? String(hit.slug) : null,
+            part: Number.isFinite(Number(hit?.part)) ? Number(hit.part) : 0,
+        })
+    }
+    out.sort((a, b) => String(a.slug || '').localeCompare(String(b.slug || '')) || a.part - b.part)
+    return out
+}
+
+/**
  * Paramètres du message affiché : nom de fichier (résolu depuis la liste de
  * fichiers du projet, slug en repli) et RANG de la pièce, 1-based — un
  * utilisateur compte ses pièces à partir de 1.

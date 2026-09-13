@@ -253,6 +253,11 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
     return alternatives
 
 
+# Borne du constat « pieces plus fines que l'espacement » (lot E2) : au-dela,
+# le nombre parle mieux que la liste.
+MAX_THIN_PARTS = 50
+
+
 # --- Lot E0 : echec d'import moteur DESIGNE PAR ITEM -----------------------
 # Le moteur rend `item_geometry:<id>: <raison>` (nest-engine/import_error.rs).
 # Ces deux fonctions sont PURES : c'est elles que le verrou pytest mesure,
@@ -262,6 +267,34 @@ def parse_item_geometry(detail):
     """Id de l'item refuse dans un message d'echec moteur, sinon None."""
     m = re.search(r"item_geometry:(\d+)", str(detail or ""))
     return int(m.group(1)) if m else None
+
+
+def thin_parts(items, part_index_by_id, names_by_slug=None):
+    """Lot E2 : items « plus fins que l'espacement » -> fichier + rang.
+
+    `items` = ids rendus par le moteur (evenement
+    {"type":"import","kind":"thin_items"}), `part_index_by_id` = l'itemMap du
+    job. Rend une liste [{item, slug, part, name?}] TRIEE et bornee : c'est
+    un constat, pas un journal.
+    """
+    out = []
+    for raw in (items or [])[:MAX_THIN_PARTS]:
+        try:
+            item_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        target = (part_index_by_id or {}).get(item_id) or {}
+        entry = {
+            "item": item_id,
+            "slug": target.get("slug"),
+            "part": int(target.get("part") or 0),
+        }
+        name = (names_by_slug or {}).get(entry["slug"])
+        if name:
+            entry["name"] = name
+        out.append(entry)
+    out.sort(key=lambda e: (str(e["slug"] or ""), e["part"]))
+    return out
 
 
 def item_geometry_message(item_id, target, file_name=None):

@@ -25,6 +25,12 @@ use sparrow::util::io::ExtSPOutput;
 pub struct EngineOutput {
     pub sol_instance: serde_json::Value,
     pub alternatives: Vec<serde_json::Value>,
+    /// Lot E2 : items dont le gonflement d'import a pris le REPLI (des
+    /// pièces dont des traits sont plus fins que l'espacement demandé). Le
+    /// job est livré ; l'utilisateur doit pouvoir le lire. Vide d'ordinaire.
+    /// Le CLI ne l'écrit pas dans un fichier — il l'a déjà émis en
+    /// évènement ; c'est le navigateur qui lit ce champ.
+    pub thin_items: Vec<u64>,
 }
 
 /// Runs the engine on JSON strings, returns JSON values. No filesystem.

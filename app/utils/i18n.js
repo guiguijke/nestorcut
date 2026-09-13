@@ -282,6 +282,11 @@ const dict = {
         // Lot E1 : ce que le nettoyage géométrique a retiré (information).
         'import.microVoidsFilled': '{n} micro-cutouts ignored (too small to cut) — the material stays in place.',
         'import.spursRemoved': '{n} zero-width back-and-forths cleaned up.',
+        'import.scaleApplied': 'Drawing scaled by ×{value} on import.',
+        'import.partRank': 'part {n}',
+        // Lot E2 : constat de nesting — le moteur a préparé ces pièces
+        // autrement (repli du gonflement), le résultat est livré.
+        'nest.thinParts': '{n} part(s) have lines thinner than the requested spacing ({list}) — the engine prepared them differently; check them before cutting.',
         'import.blocksFlattened': '{n} blocks flattened.',
         'import.andMore': 'and {n} more',
         'import.findingsTitle': 'Import report',
@@ -1036,6 +1041,9 @@ const dict = {
         'import.splinesSampled': "{n} splines échantillonnées.",
         'import.microVoidsFilled': "{n} micro-découpes ignorées (trop petites pour être découpées) — la matière reste en place.",
         'import.spursRemoved': "{n} aller-retours de largeur nulle nettoyés.",
+        'import.scaleApplied': "Dessin mis à l'échelle ×{value} à l'import.",
+        'import.partRank': 'pièce {n}',
+        'nest.thinParts': "{n} pièce(s) ont des traits plus fins que l'espacement demandé ({list}) — le moteur les a préparées autrement ; vérifiez-les avant de découper.",
         'import.blocksFlattened': "{n} blocs aplatis.",
         'import.andMore': "et {n} autres",
         'import.findingsTitle': "Rapport d'import",

@@ -148,6 +148,26 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    (faux badges overlap/gap 0). `_placed_polygon` inclut les trous.
 5. **Géométrie libre du trou ≠ géométrie collision** : le trou n'existe que
    côté Python (`item['holes']`), jamais côté moteur.
+5b. **Une entité attachée à AUCUNE pièce n'est exportée nulle part.** Le DXF
+   de coupe est construit handle par handle
+   (`workers/nesting/core/main.py` : `entities_by_handle`), donc un handle
+   absent de `part['handles']` est de l'encre perdue EN SILENCE. Le piège :
+   l'attachement mesure l'encre par `body.intersection(ink)` et une entité
+   qui TOUCHE le corps sans le traverser rend un Point — longueur et aire
+   nulles, donc « pas de hit » ; et son centre tombe hors de la silhouette
+   puisqu'elle est SUR le bord. Mesuré sur un logo d'atelier : une SPLINE de
+   3,66 mm à 0,000005 mm de sa pièce, qui FERMAIT son contour extérieur, était
+   orpheline — la pièce éclatée rendait 2 corps et 20 277 mm² au lieu de
+   46 858, et son fichier de découpe sortait incomplet. Règle : quand aucun
+   corps n'a de mesure positive mais qu'un corps est candidat (déjà borné par
+   `probe_tol`), attacher au corps dont le contour est le plus PROCHE ; jamais
+   de repli sans borne (une entité vraiment égarée ne doit pas être aspirée
+   dans son voisin, elle ajouterait de l'encre étrangère au fichier de coupe).
+   Verrous : `test_advanced_import.py` (encre tangente attachée + entité
+   égarée laissée) ; A/B corpus : 143/148 fichiers identiques, les 5 autres
+   changent SEULEMENT en handles. Lot E2. **Reste 704 entités orphelines sur
+   9 fichiers du corpus** (au-delà de `probe_tol`) : non dit à l'utilisateur,
+   à traiter avec la couture des contours.
 
 ### Moteur (Rust / sparrow)
 6. **sparrow n'a PAS de borne dure** : une solution « feasible »

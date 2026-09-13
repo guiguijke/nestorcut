@@ -678,6 +678,11 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     }
 
     // Comptabilité seule — scalaires bornés côté serveur, zéro géométrie.
+    // Lot E2 : le moteur rend les items dont le gonflement d'import a pris
+    // le repli (pièces plus fines que l'espacement) — on les traduit en
+    // fichier + rang de pièce avec le même mapping que le lot E0.
+    const { thinPartsFromItems } = await import('./localGeomError')
+    const thinParts = thinPartsFromItems(result?.thin_items, itemMap || payload?.itemMap)
     const best = alternatives[0] || {}
     await $fetch(`/api/results/${jobSlug}/local-quota`, {
         method: 'POST',
@@ -690,6 +695,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             // le badge « toutes les pièces posées » sortait en rouge sur un
             // résultat complet.
             requested,
+            // Lot E2 : pièces plus fines que l'espacement (le gonflement
+            // d'import a pris le repli). Même champ que le chemin serveur.
+            ...(thinParts.length ? { thinParts } : {}),
             layoutCount: best.layoutCount ?? 0,
             density: best.density ?? null,
             ...(partialUnfit ? { unfit: partialUnfit } : {}),

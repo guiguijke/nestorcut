@@ -213,6 +213,12 @@ export async function getProjectFiles(domain, userId, slug) {
         .find({
           [domain.projectSlugField]: slug,
           ownerId: isDemo ? DEMO_OWNER_ID : userId,
+          // Lot E2 : un dessin ECLATE n'est pas une fiche — ses pièces en
+          // sont. Le document d'origine reste en base (provenance, purge
+          // 24 h) mais quitte la liste, comme côté navigateur où le dessin
+          // complet n'a jamais de carte. Champ additif : les fichiers
+          // d'avant ne le portent pas et restent visibles.
+          explodedInto: { $exists: false },
         })
         .sort({ uploadAt: 1 })
         .toArray();
@@ -285,7 +291,7 @@ const FILE_MAPPERS = {
 
 /**
  * Jobs of a domain for a user (optionally scoped to a project), newest
- * first. Backs the results endpoints of both domains.
+ * first. Backs the results endpoints.
  */
 export async function listJobs(domain, userId, projectSlug) {
   const db = await connectDB();
@@ -299,20 +305,35 @@ export async function listJobs(domain, userId, projectSlug) {
     .toArray();
 }
 
+/**
+ * Nombre de fichiers NOMMÉS dans le slug d'un job (lot E2).
+ *
+ * L'éclatement du lot E1 peut produire dix-sept fiches d'une pièce : le slug
+ * — donc le nom du DXF résultat que l'utilisateur télécharge — concaténait
+ * les dix-sept jetons et devenait illisible (mesuré : 380 caractères). On en
+ * garde trois et on compte le reste. L'unicité ne repose pas sur les noms
+ * mais sur le suffixe aléatoire.
+ */
+export const JOB_SLUG_MAX_FILES = 3;
+
 export function buildJobSlug(domain, fileMetadata) {
-  return `${domain.jobSlugPrefix}${fileMetadata
-    .map((file) => {
-      const token = file.simpleName
-        ? standardSlugify(file.simpleName, { keepCase: false })
-        : String(file.slug || "f").replace(/\.[^.]+$/, "");
-      return token + "_" + file.count;
-    })
-    .join("-")}-${generateRandomString(6)}`;
+  const tokens = fileMetadata.map((file) => {
+    const token = file.simpleName
+      ? standardSlugify(file.simpleName, { keepCase: false })
+      : String(file.slug || "f").replace(/\.[^.]+$/, "");
+    return token + "_" + file.count;
+  });
+  const shown = tokens.slice(0, JOB_SLUG_MAX_FILES);
+  // « … » ne va pas dans un nom de fichier ni dans une URL : le reste est
+  // compté en clair (`and14more`), lisible et sûr partout.
+  const rest = tokens.length - shown.length;
+  const parts = rest > 0 ? [...shown, `and${rest}more`] : shown;
+  return `${domain.jobSlugPrefix}${parts.join("-")}-${generateRandomString(6)}`;
 }
 
 /**
  * Subscription / free-quota gate + vault gate + job insertion, shared by the
- * nest routes of both domains. The route validates the domain-specific
+ * nest routes. The route validates the domain-specific
  * params and builds fileMetadata beforehand; `extraFields` carries
  * domain-only job fields (e.g. { priority } for bin). A route that already
  * gated the user itself (bin needs the charge to pick the compute tier)

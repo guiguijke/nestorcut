@@ -120,6 +120,8 @@ pub fn run_bpp_mem(
         sparrow_config.min_item_separation,
         sparrow_config.narrow_concavity_cutoff_ratio,
     );
+    // Lot E2 : canal vidé avant l'import (worker daemon = processus réutilisé).
+    let _ = jagua_rs::geometry::shape_modification::take_fallback_items();
     // Lot E0 : idem SPP — l'échec d'import désigne l'item fautif.
     let instance = match jagua_rs::probs::bpp::io::import_instance(&importer, &ext_instance) {
         Ok(i) => i,
@@ -134,6 +136,15 @@ pub fn run_bpp_mem(
             ));
         }
     };
+
+    // Lot E2 : pièces plus fines que l'espacement (gonflement en repli).
+    let thin_items = jagua_rs::geometry::shape_modification::take_fallback_items();
+    if !thin_items.is_empty() {
+        sink(&format!(
+            "{{\"type\":\"import\",\"kind\":\"thin_items\",\"items\":{}}}",
+            serde_json::to_string(&thin_items).unwrap_or_else(|_| "[]".into())
+        ));
+    }
 
     let n_workers = config.n_workers();
     sink(&format!(
@@ -292,7 +303,9 @@ pub fn run_bpp_mem(
                 started.elapsed().as_secs(),
                 mouth.as_json()
             ));
-            Ok(merged.output)
+            let mut out = merged.output;
+            out.thin_items = thin_items.clone();
+            Ok(out)
         }
         Err(BpMergeError::Infeasible { best_unplaced }) => {
             sink(&format!(

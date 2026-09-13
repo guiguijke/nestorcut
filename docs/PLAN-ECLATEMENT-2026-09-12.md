@@ -757,3 +757,192 @@ worker dans ce lot).
 | app vivante | `GET /` **200** |
 | artefacts servis = dépôt | `geometry/nest_geometry_bg.wasm`, `engine/nest_wasm_bg.wasm`, `workers/geometry.worker.js` : **identiques** (inchangés par ce lot, vérifiés quand même) |
 | **l'aperçu est bien dans le bundle SERVI** | le fragment i18n du dépôt (`_nuxt/OSnjQeS_2.js`, même nom donc même contenu) répond **200** en production et porte « Preview on a sheet » et « Utiliser cette tôle pour le projet » — les deux langues du lot |
+
+### Lot E2 — miroir serveur et constats (implémenteur, 13/09)
+
+Le chemin « Nos serveurs » applique les MÊMES options que le navigateur, avec
+la même arithmétique et la même chaîne : le DXF canonique est mis à l'échelle,
+relu par l'import ordinaire, puis éclaté en un DXF par pièce — relu par
+l'import ordinaire lui aussi. Le panneau « Import avancé » est désormais offert
+sur les projets serveur comme sur les projets locaux.
+
+#### 5.1 Ce qui est livré
+
+**a) Le constat « pièces plus fines que l'espacement » (moteur → rapport).**
+Le repli de gonflement du lot E0 sait maintenant DIRE sur quels items il est
+passé : `FALLBACK_ITEMS` (`shape_modification.rs`) + `CURRENT_ITEM` posé par
+`Importer::import_item`, drainés par nest-engine après l'import, émis en
+`{"type":"import","kind":"thin_items","items":[…]}` et rendus dans
+`EngineOutput.thin_items` / le JSON wasm. Le worker et le navigateur les
+traduisent en fichier + rang (`thin_parts` / `thinPartsFromItems`, bornés à
+50), et le rapport porte une ligne d'INFORMATION — le moteur livre ces jobs,
+ce n'est pas une erreur : « 4 pièces plus fines que l'espacement : ecrin.dxf
+(pièce 1), ecrin.dxf (pièce 2), ecrin.dxf (pièce 3) et 1 autres ».
+
+**b) L'échelle, côté serveur.** `resolve_import_scale` (miroir exact de
+`resolveScale`) lit `importScale` ou `importScaleTarget {mode, mm}` sur le
+DOCUMENT fichier ; le facteur d'une cible en millimètres se calcule sur
+l'étendue MESURÉE du dessin complet — donc après une première lecture, comme
+au navigateur. `_rewrite_scaled_copy` met la copie canonique à l'échelle
+(`scale_drawing`, `Matrix44.scale` sur le modelspace d'un document DÉJÀ
+décomposé — piège #26), la réécrit dans `validDxf`, vide le cache de lecture
+et relit : l'aval ne voit qu'un dessin comme un autre. Un facteur déjà
+appliqué ne se rejoue pas (`importScaleApplied`), sinon une reprise de file
+doublerait la taille du dessin.
+
+**c) L'éclatement, côté serveur.** `subset_drawing_bytes` (`dxf_utils`) écrit
+les octets d'un sous-ensemble d'entités désigné par handles, dans un document
+neuf qui leur réattribue la séquence canonique (piège #33b) et déclare les
+millimètres (piège #27). `_explode_into_parts` dépose ces octets comme des
+fichiers déposés et laisse la boucle du worker les traiter : **aucune branche
+de polygonisation parallèle**. Les fiches filles sont des fiches normales
+(quantité, rotations, couleur, aperçu, suppression, export par handle),
+nommées « nom (k/N).dxf » comme au navigateur, horodatées à la milliseconde
+pour que la liste suive l'ordre des pièces. Le dessin d'origine reste en base,
+marqué `explodedInto`, et quitte la liste du projet (un champ additif dans la
+requête de `service.js`) — il n'a jamais eu de carte côté navigateur non plus.
+
+**d) Les micro-vides.** Déjà des deux côtés depuis le lot E1 (le miroir
+Python `worker_common/geometry/cleanup.py`, seuils lus dans le fichier Rust par
+un test) : rien à ajouter, mesuré ci-dessous.
+
+**e) Le nom du DXF résultat est borné** (`JOB_SLUG_MAX_FILES = 3`) : trois noms
+puis `and14more`. « … » n'a pas sa place dans un nom de fichier ni dans une
+URL, le reste est donc compté en clair.
+
+**f) Un défaut de production trouvé et corrigé au passage (voir 5.3).**
+
+#### 5.2 Mesures — le serveur rend la même chose que le navigateur
+
+Harnais `scripts/qa-e2e-advanced-import.mjs`, deux cas ajoutés (**G** et
+**H**), tous deux sur un projet « Nos serveurs » réel, mesurés sur la réponse
+de `/api/project/<slug>` et non sur l'écran. Fichier d'entrée : une copie
+anonyme du logo d'atelier (17 pièces, étendue 2 834,34 mm).
+
+| Mesure | Navigateur | Serveur |
+|---|---|---|
+| fiches produites par l'éclatement | **17** | **17** |
+| pièces par fiche, et encombrement de chaque pièce | référence | **0 écart** sur les 17 (tolérance 0,1 mm = l'arrondi de l'API) |
+| le dessin d'origine est une fiche ? | non | **non** (18 fiches en base = 1 dépose sans option + 17, le parent marqué et masqué) |
+| échelle ×0,5 : plus grande pièce | 806,31 mm | **806,3 mm** |
+| largeur cible 1000 mm : facteur | 0,353 | **0,352816** (= 1000 / 2834,34) |
+| largeur cible 1000 mm : plus grande pièce | — | **568,95 mm** (= 1612,61 × 0,352816) |
+| constat rendu | `import.scaleApplied` « 0.5 » / « 0.3528 » | **identique** (même écriture du nombre : `_jsnum` rend « 0.5 », pas « 0.5000 ») |
+
+**Jeux de fichiers nettoyés, les deux importeurs sur le même corpus**
+(`specs/import-corpus`, 148 fichiers lus par le serveur, 137 par les deux) :
+
+| | fichiers |
+|---|---|
+| nettoyés des DEUX côtés | **5** |
+| nettoyés navigateur seul | **2** |
+| nettoyés serveur seul | **0** |
+| aucun nettoyage | 130 |
+
+Les deux écarts sont NOMMÉS et mesurés :
+
+1. **Deux fichiers où le navigateur retire 168 et 114 ergots, le serveur 0** —
+   avec le MÊME nombre de pièces (1) et de trous (8 et 2) des deux côtés. La
+   géométrie de sortie est donc la même ; ce qui manque côté serveur est le
+   COMPTE : sa grille de précision shapely (`set_precision(1e-4)` puis
+   `unary_union(grid_size=1e-4)`) absorbe les aller-retours de largeur nulle
+   AVANT que l'anneau n'arrive à `strip_spurs`, qui n'a donc rien à retirer.
+   Ce n'est pas un écart de règle (seuils identiques, verrouillés par un test
+   Python qui lit les constantes dans le fichier Rust) : c'est un écart de
+   MESURABILITÉ, et il ne peut pas se refermer sans reconstruire les anneaux
+   serveur depuis les entités source — c'est la couture (priorité 5).
+2. **Deux fichiers nettoyés des deux côtés avec des comptes différents**
+   (2 vs 3 micro-vides ; 53 vs 35) : là, les pièces et les trous diffèrent
+   AUSSI (7 vs 10 pièces, 6 vs 4 trous ; 151 vs 141 pièces, 70 vs 4 trous).
+   C'est la divergence des polygoniseurs, préexistante et documentée au lot 2c
+   — hors de portée d'E2, et le même chantier de couture.
+
+Le rapprochement RÉEL obtenu par ce lot est ailleurs, et il est chiffré : la
+géométrie des 17 pièces éclatées passe de **1 pièce divergente à 0** (voir
+5.3).
+
+#### 5.3 Le défaut trouvé : des entités que le DXF de coupe ne contenait pas
+
+En vérifiant que chaque sous-ensemble d'éclatement referme bien sa pièce, une
+pièce du logo sur 17 rendait **2 corps au lieu d'1 et 20 277 mm² au lieu de
+46 858** : son anneau extérieur ne se refermait plus, ses deux trous
+devenaient deux pièces. Cause mesurée : **une SPLINE de 3,66 mm, à
+0,000005 mm de la pièce, n'était attachée à AUCUNE pièce** — son encre touche
+le corps sans le traverser, donc `intersection(...)` rend un Point de longueur
+et d'aire nulles, et son centre tombe hors de la silhouette puisqu'elle est
+SUR le bord. Les deux mesures d'attachement rendaient 0.
+
+Ce n'est pas seulement un problème d'éclatement : **l'export du DXF de coupe
+copie les entités handle par handle** (`workers/nesting/core/main.py`). Une
+entité attachée à rien n'est donc exportée nulle part — le fichier de découpe
+de cette pièce sortait sans ce morceau de son contour, en silence.
+
+Correctif (`build_geometry.py`) : quand aucun corps n'a de mesure d'encre
+positive mais qu'un corps est DÉJÀ candidat (filtre `buffer(probe_tol)
+.intersects` existant), l'entité va au corps dont le contour est le plus
+proche. Le repli est borné par `probe_tol` : une entité vraiment égarée reste
+non attachée, et le constat de couverture continue de le dire.
+
+**A/B sur le corpus (148 fichiers, serveur, avant/après le correctif)** :
+
+| | avant | après |
+|---|---|---|
+| entités attachées à aucune pièce | **720** | **704** |
+| fichiers concernés | 11 | **9** |
+| fichiers identiques sur TOUS les champs mesurés (pièces, pièces émises, handles, aire, trous, constats) | — | **143 / 148** |
+| fichiers changés | — | **5, et uniquement sur `handles`/`orphans`** — aucun changement de pièces, d'aire, de trous ni de constats |
+| sous-ensembles du logo qui referment leur pièce | 16 / 17 | **17 / 17**, aire exacte |
+
+Verrous : `test_l_encre_tangente_est_attachee_au_corps_qu_elle_touche`
+(couverture complète) et `test_une_entite_vraiment_egaree_reste_non_attachee`
+(le repli reste borné). **Contrôle négatif** : le premier test ÉCHOUE sur le
+code d'avant (rejoué en montant l'ancien `build_geometry.py` dans l'image),
+le second passe des deux côtés.
+
+**Non-fait, à arbitrer par le propriétaire** : il reste **704 entités
+attachées à aucune pièce sur 9 fichiers du corpus** (au pire 506 sur 1 841),
+donc absentes des DXF de coupe, et les constats n'en rendent compte
+qu'indirectement (85 `import.contoursDropped` au total sur ces 9 fichiers).
+Une partie est légitime (tracés ouverts qui ne referment aucune pièce), une
+partie est probablement de la matière perdue. Le dire à l'utilisateur demande
+un constat de plus (« N entités non attachées à une pièce ») des DEUX côtés,
+donc un rebuild du wasm géométrie et une régénération des goldens : je ne l'ai
+pas fait dans E2 (la consigne fixe les trois constats à enrichir, et ils le
+sont). À ranger avec la couture des contours (priorité 5).
+
+#### 5.4 Verrous rejoués
+
+| Verrou | Résultat |
+|---|---|
+| `npx vitest run` | **55 fichiers, 591 tests verts** |
+| `cargo test --release -p nest-engine` | **106 passés, 0 échec, 2 ignorés** |
+| pytest `workers/nesting` (image docker) | **236 passés, 2 ignorés** |
+| pytest `workers/fileprocessing` (image docker) | **57 passés** (+15 au lot : échelle, sous-ensemble, éclatement, attachement) |
+| pytest `workers/common` (image docker) | **86 passés** (+4 : le constat d'échelle et son écriture « à la JavaScript ») |
+| `determinism_lock.py` | **2 fixtures bit-identiques natif ≡ wasm, tolerance 0** — SHA `a1bd8810…` (b_demo) et `4ff43700…` (e0_volute), inchangés depuis le lot E0 |
+| wasm moteur reconstruit (piège #33b) | `public/engine/nest_wasm_bg.wasm` **1 620 566 octets** (avant : 1 615 822 — **+4 744**, le canal `thin_items`) |
+| wasm géométrie | **inchangé** : le correctif d'attachement est côté Python, il rapproche le serveur du comportement que le navigateur avait DÉJÀ |
+| harnais « import avancé » | cas **G** et **H** verts (ci-dessus) ; les cas A–F du lot E1/E1-bis restent le chemin navigateur |
+
+#### 5.5 Arbitrages et corrections de forme
+
+1. **Le panneau « Import avancé » est ouvert aux projets serveur**
+   (`:advanced="local"` → `advanced`). Sans cela, le miroir serveur livré
+   n'aurait aucun moyen d'être demandé. L'**aperçu sur une tôle** (lot E1-bis)
+   reste, lui, réservé aux projets locaux : il exige de lire le fichier dans
+   le navigateur, ce que le chemin serveur ne fait pas — et il n'en a pas
+   besoin, puisqu'il résout la largeur cible sur l'étendue qu'il MESURE.
+   À arbitrer si le propriétaire veut aussi l'aperçu sur le chemin serveur
+   (il faudrait accepter une lecture navigateur de plus).
+2. **Le harnais ne doit recevoir qu'une COPIE ANONYME** du fichier d'atelier :
+   en le lançant d'abord sur l'original, son nom réel s'est retrouvé dans le
+   `resultats.json` du dossier de sortie. Dossier détruit, relancé sur une
+   copie nommée `logo.dxf` ; l'en-tête du harnais le disait déjà, je ne l'ai
+   pas respecté du premier coup.
+3. **Trois déposes successives dans un seul projet se sont révélées instables
+   au harnais** (la troisième ne partait pas ; la même dépose passe sur un
+   projet neuf, POST 200 mesuré à la sonde). Le cas H utilise donc un projet
+   neuf par mesure. Ce n'est pas un défaut produit constaté — c'est une
+   fragilité du harnais que je n'ai pas élucidée, et je la déclare.
+4. Deux commentaires périmés du lot S (« both domains ») nettoyés dans
+   `server/core/project/service.js`, au passage.

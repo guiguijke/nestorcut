@@ -33,6 +33,35 @@ export async function saveFiles(domain, event, projectSlug, userId) {
   const fields = await readMultipartFormData(event);
   const dxfFileFields = (fields || []).filter((field) => field.name === "dxf");
 
+  // Lot E2 — options de l'« import avancé », portées par la dépose et
+  // appliquées par le worker (échelle sur la copie canonique, éclatement par
+  // handles). Bornées ici : un facteur absurde ne doit jamais atteindre une
+  // matrice de transformation.
+  const textField = (name) => {
+    const hit = (fields || []).find((f) => f.name === name && !f.filename);
+    return hit ? String(hit.data || "").slice(0, 32) : null;
+  };
+  const importOptions = {};
+  {
+    const scale = Number(textField("importScale"));
+    if (Number.isFinite(scale) && scale > 0 && scale <= 1000) {
+      importOptions.importScale = scale;
+    }
+    const mode = textField("importScaleMode");
+    const target = Number(textField("importScaleTargetMm"));
+    if (
+      (mode === "width" || mode === "height") &&
+      Number.isFinite(target) &&
+      target > 0 &&
+      target <= 1e6
+    ) {
+      importOptions.importScaleTarget = { mode, mm: target };
+    }
+    if (textField("importExplode") === "1") {
+      importOptions.explodeRequested = true;
+    }
+  }
+
   if (dxfFileFields.length === 0) {
     throw createError({
       statusCode: 400,
@@ -85,6 +114,9 @@ export async function saveFiles(domain, event, projectSlug, userId) {
     await uploadToBucket(dxfUserBucket, file_slug, fileBuffer, { ownerId: userId, dek });
 
     const file_record = {
+      // Lot E2 : champs ADDITIFS de l'« import avancé » (absents quand
+      // l'option est éteinte — les fichiers d'avant n'en ont pas).
+      ...importOptions,
       slug: file_slug,
       name: userFileName,
       processingStatus: "pending",

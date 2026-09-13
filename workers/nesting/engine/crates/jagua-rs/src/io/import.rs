@@ -44,6 +44,10 @@ impl Importer {
 
     pub fn import_item(&self, ext_item: &ExtItem) -> Result<Item> {
         debug!("[IMPORT] starting item {:?}", ext_item.id);
+        // Lot E2 (patch vendorisé §4) : le gonflement qui prend le repli est
+        // attribué à CET item — c'est le seul endroit qui connaît son id.
+        crate::geometry::shape_modification::set_current_item(Some(ext_item.id));
+        let _guard = CurrentItemGuard;
 
         let original_shape = {
             let shape = match &ext_item.shape {
@@ -206,6 +210,16 @@ pub fn import_simple_polygon(sp: &ExtSPolygon) -> Result<SPolygon> {
         bail!("Simple polygon has non-consecutive duplicate vertices");
     }
     SPolygon::new(points)
+}
+
+/// Remet à zéro l'item courant à la sortie d'`import_item`, même en cas
+/// d'erreur (lot E2).
+struct CurrentItemGuard;
+
+impl Drop for CurrentItemGuard {
+    fn drop(&mut self) {
+        crate::geometry::shape_modification::set_current_item(None);
+    }
 }
 
 /// Returns a transformation that translates the shape's centroid to the origin.

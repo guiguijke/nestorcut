@@ -377,6 +377,7 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
         // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
         Err(first) => match mode {
             ShapeModifyMode::Inflate => {
+                note_fallback();
                 let ring = robust_inflate_ring(&sp.vertices, distance).map_err(|e| {
                     anyhow::anyhow!("offset fallback failed: {e} (geo_buffer: {first})")
                 })?;
@@ -390,6 +391,51 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
             // (rectangle de tôle), qui n'a jamais mis `geo_buffer` en défaut.
             ShapeModifyMode::Deflate => Err(first),
         },
+    }
+}
+
+/// Items dont le gonflement a pris le REPLI (lot E2, patch vendorisé §4).
+///
+/// Pourquoi un état global : `offset_shape` est appelé au fond de
+/// `Item::new`, qui ne rend rien d'autre que la forme. Sans ce canal, le
+/// moteur ne peut pas dire QUELLE pièce a des traits plus fins que
+/// l'espacement — et c'est exactement ce que l'utilisateur doit lire. Le
+/// canal est écrit par `Importer::import_item` (l'endroit qui connaît l'id)
+/// et vidé par l'appelant après l'import.
+///
+/// Déterminisme : l'import peut être parallèle (`maybe_par_iter`), donc
+/// l'ORDRE d'arrivée n'est pas stable — `take_fallback_items` trie et
+/// dédoublonne avant de rendre.
+static FALLBACK_ITEMS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+std::thread_local! {
+    static CURRENT_ITEM: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
+}
+
+/// Déclare l'item en cours d'import (ou `None` à la sortie).
+pub fn set_current_item(id: Option<u64>) {
+    CURRENT_ITEM.with(|c| c.set(id));
+}
+
+/// Vide la liste des items dont le gonflement a pris le repli, triée et
+/// dédoublonnée.
+pub fn take_fallback_items() -> Vec<u64> {
+    let mut guard = match FALLBACK_ITEMS.lock() {
+        Ok(g) => g,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let mut out = std::mem::take(&mut *guard);
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+fn note_fallback() {
+    let id = CURRENT_ITEM.with(|c| c.get());
+    if let Some(id) = id {
+        if let Ok(mut guard) = FALLBACK_ITEMS.lock() {
+            guard.push(id);
+        }
     }
 }
 

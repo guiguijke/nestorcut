@@ -13,6 +13,16 @@
 //      sur les pièces IMPORTÉES (lues dans IndexedDB, pas déduites) ;
 //   D. largeur cible : facteur déduit, largeur obtenue = la cible.
 //
+// Lot E2 — les MÊMES options sur un projet SERVEUR (« nuage ») : les mêmes
+// réglages du même panneau, appliqués par le worker Python et non par le
+// navigateur. Mesuré sur la réponse de `/api/project/<slug>` (l'API, pas le
+// DOM) :
+//
+//   G. éclatement serveur : une fiche par pièce, nommée « (k/N) », le dessin
+//      d'origine ABSENT de la liste, la géométrie de chaque fiche = une pièce ;
+//   H. échelle serveur : facteur ×0,5 et largeur cible, étendue mesurée sur
+//      les pièces renvoyées + le constat `import.scaleApplied` présent.
+//
 // Le fichier d'entrée est passé par QA_FILE (copie anonyme d'un fichier
 // d'atelier : aucun nom réel ne sort d'ici).
 //
@@ -28,6 +38,10 @@ const OUT = process.env.QA_OUT || path.resolve('.qa-pw/e1')
 const FILE = process.env.QA_FILE || path.join(OUT, 'volute.dxf')
 const CASES = (process.env.QA_CASES || 'A,B,C,D').split(',').map((s) => s.trim())
 const [SHEET_W, SHEET_H] = (process.env.QA_SHEET || '1000x2000').split('x').map(Number)
+// Etendue du dessin complet, en mm : le facteur d'une « largeur cible » s'en
+// deduit (cible / etendue). Mesuree sur le fichier d'entree, jamais devinee :
+// QA_DRAWING_W la fixe pour un autre fichier que le logo d'atelier.
+const DRAWING_WIDTH_MM = Number(process.env.QA_DRAWING_W || 2834.34)
 fs.mkdirSync(OUT, { recursive: true })
 
 const logs = []
@@ -130,6 +144,70 @@ async function newProject() {
     if (await devCard.count()) await devCard.click().catch(() => {})
 }
 
+/** Nouveau projet SERVEUR (« nuage ») vide — le chemin d'avant J-090, celui
+ *  dont le lot E2 fait le miroir. Le choix par défaut n'est pas garanti :
+ *  on clique explicitement la carte « nuage ». */
+async function newCloudProject() {
+    await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+    // Les cartes sont des `role=radio` (PrivacyModePicker) — pas des boutons :
+    // viser le bouton ferait tomber le clic sur « Activer le coffre ».
+    const cloudCard = page
+        .locator('.create__privacy [role="radio"]')
+        .filter({ hasText: /(Our servers|Nos serveurs)/i })
+        .first()
+    await cloudCard.waitFor({ timeout: 30000 })
+    await cloudCard.click()
+    if ((await cloudCard.getAttribute('aria-checked')) !== 'true') {
+        throw new Error('le projet serveur n’est pas selectionne (aria-checked)')
+    }
+}
+
+/** Fiches du projet SERVEUR, lues dans la réponse de l'API (jamais déduites
+ *  de l'écran) : nom, nombre de pièces, étendue et constats d'import. */
+const measureServer = (slug) => page.evaluate(async (s) => {
+    const data = await $fetch(`/api/project/${s}`)
+    return (data.files || []).map((f) => {
+        const ws = (f.parts || []).map((p) => p.width)
+        const hs = (f.parts || []).map((p) => p.height)
+        return {
+            name: f.name,
+            status: f.processingStatus,
+            parts: (f.parts || []).length,
+            // L'API rend la bbox de CHAQUE pièce (arrondie au dixième) : pour
+            // une fiche éclatée il n'y en a qu'une, c'est la mesure voulue.
+            maxWidth: ws.length ? Math.max(...ws) : null,
+            maxHeight: hs.length ? Math.max(...hs) : null,
+            findings: (f.findings || []).map((x) => `${x.code}:${x.value ?? x.count}`),
+        }
+    })
+}, slug)
+
+/** Attend que TOUTES les fiches du projet serveur soient traitées.
+ *
+ *  Boucle cote Node, PAS `waitForFunction` : un predicat `async` y rend une
+ *  Promesse, que le polling injecte juge VRAIE tout de suite — l'attente
+ *  reussit alors sans rien attendre (mesure : 1 fiche « in-progress »
+ *  acceptee pour 18 attendues). */
+async function waitServerDone(slug, expected, timeoutMs = 300000) {
+    const t0 = Date.now()
+    let last = null
+    while (Date.now() - t0 < timeoutMs) {
+        last = await page.evaluate((s) => $fetch(`/api/project/${s}`), slug)
+        const files = last.files || []
+        const done = files.filter((f) => f.processingStatus === 'done').length
+        if (files.length >= expected && done === files.length) return files
+        if (files.some((f) => f.processingStatus === 'error')) {
+            throw new Error(`fiche en erreur cote serveur (${done}/${files.length} pretes)`)
+        }
+        await page.waitForTimeout(2000)
+    }
+    const files = last?.files || []
+    throw new Error(
+        `attente serveur epuisee : ${files.length} fiche(s), `
+        + `${files.filter((f) => f.processingStatus === 'done').length} pretes, ${expected} attendues`)
+}
+
 /** Règle le panneau « Import avancé » de la page projet. */
 async function setAdvanced({ explode = false, mode = null, value = null }) {
     const toggle = page.locator('[data-testid="advanced-import-toggle"]')
@@ -143,6 +221,50 @@ async function setAdvanced({ explode = false, mode = null, value = null }) {
         await field.fill(String(value))
         await field.dispatchEvent('change')
     }
+}
+
+/** Eclate le fichier par le chemin NAVIGATEUR et rend les fiches mesurees.
+ *
+ *  Meme sequence que le cas B : le panneau vit sur la page projet, donc une
+ *  premiere depose cree le projet, on regle, on redepose. Depuis le lot
+ *  E1-bis, panneau OUVERT = la depose passe par l'apercu : on valide. */
+async function localExplode() {
+    await newProject()
+    await page.setInputFiles('input[name="dxf"]', [FILE])
+    await page.waitForURL('**/project/**', { timeout: 60000 })
+    // L'etat du panneau est PARTAGE par la session : s'il etait reste ouvert
+    // (cas precedent), la premiere depose part dans l'apercu et aucune fiche
+    // n'est creee. On l'annule pour repartir d'un etat connu.
+    const cancel = page.locator('[data-testid="import-preview-cancel"]')
+    try {
+        await cancel.waitFor({ timeout: 8000 })
+        await cancel.click()
+    } catch { /* pas d'apercu : la depose a suivi le chemin direct */ }
+    await setAdvanced({ explode: true })
+    const before = await page.locator('.files__item').count()
+    await page.setInputFiles('input[name="dxf"]', [FILE])
+    const confirm = page
+        .locator('[data-testid="import-preview-confirm"] button, [data-testid="import-preview-confirm"]')
+        .first()
+    try {
+        await confirm.waitFor({ timeout: 20000 })
+        await confirm.click()
+    } catch {
+        // Pas d'apercu (panneau ferme, ou chemin direct) : rien a valider.
+    }
+    await page.waitForFunction(
+        (n) => document.querySelectorAll('.files__item input.counter__value').length > n,
+        before, { timeout: 300000 },
+    )
+    let stable = 0
+    let last = -1
+    while (stable < 3) {
+        const n = await page.locator('.files__item').count()
+        if (n === last) stable++
+        else { stable = 0; last = n }
+        await page.waitForTimeout(1000)
+    }
+    return (await measureStore()).filter((r) => r.explodedFrom)
 }
 
 let failed = null
@@ -489,6 +611,141 @@ try {
         log('F — tôle du projet :', sheetNow.join(' × '))
         if (Number(sheetNow[0]) !== 1000 || Number(sheetNow[1]) !== 2000) {
             throw new Error(`F : tôle du projet ${sheetNow.join('×')} au lieu de 1000×2000`)
+        }
+    }
+
+    // ---------------- G. éclatement SERVEUR ----------------
+    if (CASES.includes('G')) {
+        await newCloudProject()
+        await page.setInputFiles('input[name="dxf"]', [FILE])
+        await page.waitForURL('**/project/**', { timeout: 60000 })
+        const slug = page.url().split('/project/')[1].split(/[?#]/)[0]
+        // La première dépose crée le projet : l'option n'était pas encore
+        // réglée. On règle le panneau, puis on dépose de nouveau — c'est la
+        // séquence de l'utilisateur (le panneau vit sur la page projet).
+        await setAdvanced({ explode: true })
+        await page.setInputFiles('input[name="dxf"]', [FILE])
+        await waitServerDone(slug, 18)
+        const files = await measureServer(slug)
+        const exploded = files.filter((f) => /\(\d+\/\d+\)/.test(f.name))
+        results.G = { slug, total: files.length, eclatees: exploded.length, fiches: files }
+        log('G — éclatement serveur :', JSON.stringify({
+            total: files.length, eclatees: exploded.length,
+            premiers: exploded.slice(0, 3).map((f) => `${f.name} [${f.parts}p]`),
+        }))
+        await shot('10-G-eclatement-serveur.png')
+        if (exploded.length !== 17) {
+            throw new Error(`G : ${exploded.length} fiches éclatées au lieu de 17`)
+        }
+        // Le dessin d'origine ne doit PLUS être une fiche (il l'était le temps
+        // de sa polygonisation) : 1 fiche de la première dépose + 17.
+        if (files.length !== 18) {
+            throw new Error(`G : ${files.length} fiches dans la liste au lieu de 18 (1 + 17)`)
+        }
+        // Chaque fiche éclatée porte UNE pièce, et le rang est unique.
+        const ranks = exploded.map((f) => Number(f.name.match(/\((\d+)\/(\d+)\)/)[1]))
+        if (new Set(ranks).size !== 17 || Math.min(...ranks) !== 1 || Math.max(...ranks) !== 17) {
+            throw new Error(`G : rangs ${ranks.join(',')} au lieu de 1..17`)
+        }
+
+        // --- PARITÉ avec le navigateur, sur le MÊME fichier -------------
+        // Le miroir serveur n'a de sens que s'il rend la MÊME chose : on
+        // éclate le même dessin par le chemin navigateur et on compare rang
+        // par rang (nombre de pièces, puis bbox de la plus grande).
+        // Les deux polygoniseurs n'ordonnent pas les pièces de la même
+        // façon (rien ne l'exige) : on compare les JEUX, triés par
+        // encombrement, et non rang à rang.
+        const byBox = (a, b) => (b.w - a.w) || (b.h - a.h)
+        const local = (await localExplode())
+            .map((r) => ({ w: r.width ?? 0, h: r.height ?? 0, parts: r.parts, nom: r.name }))
+            .sort(byBox)
+        const srv = exploded
+            .map((r) => ({ w: r.maxWidth ?? 0, h: r.maxHeight ?? 0, parts: r.parts, nom: r.name }))
+            .sort(byBox)
+        const diff = []
+        for (let k = 0; k < Math.max(local.length, srv.length); k++) {
+            const l = local[k]
+            const r = srv[k]
+            if (!l || !r) { diff.push({ i: k + 1, manque: !l ? 'navigateur' : 'serveur' }); continue }
+            // L'API serveur arrondit au dixième de mm : la tolérance couvre
+            // l'arrondi, pas un écart de géométrie.
+            if (l.parts !== r.parts || Math.abs(l.w - r.w) > 0.1 || Math.abs(l.h - r.h) > 0.1) {
+                diff.push({
+                    i: k + 1, navigateur: [l.parts, l.w, l.h],
+                    serveur: [r.parts, r.w, r.h],
+                })
+            }
+        }
+        results.G.parite = { navigateur: local.length, serveur: srv.length, ecarts: diff }
+        log('G — parité navigateur/serveur :', JSON.stringify({
+            fiches: [local.length, srv.length], ecarts: diff.length, detail: diff,
+        }))
+        await shot('10b-G-parite-navigateur.png')
+        if (local.length !== srv.length) {
+            throw new Error(`G : ${local.length} fiches navigateur contre ${srv.length} serveur`)
+        }
+        if (diff.length) {
+            throw new Error(`G : ${diff.length} piece(s) divergente(s) — ${JSON.stringify(diff)}`)
+        }
+    }
+
+    // ---------------- H. échelle SERVEUR ----------------
+    if (CASES.includes('H')) {
+        // Un projet NEUF par mesure : le même dessin est déposé deux fois,
+        // sans échelle puis avec, et le rapport se lit entre les deux fiches
+        // du même projet. (Trois déposes dans un seul projet se sont révélées
+        // instables au harnais — la troisième ne partait pas.)
+        const scaleRun = async (mode, value) => {
+            await newCloudProject()
+            await page.setInputFiles('input[name="dxf"]', [FILE])
+            await page.waitForURL('**/project/**', { timeout: 60000 })
+            const slug = page.url().split('/project/')[1].split(/[?#]/)[0]
+            await waitServerDone(slug, 1)
+            await setAdvanced({ explode: false, mode, value })
+            await page.setInputFiles('input[name="dxf"]', [FILE])
+            await waitServerDone(slug, 2)
+            const files = await measureServer(slug)
+            return { slug, base: files[0], scaled: files[1] }
+        }
+
+        // H1 — facteur ×0,5 : l'étendue de la plus grande pièce est divisée
+        // par deux, et le constat porte le facteur.
+        const h1 = await scaleRun('factor', 0.5)
+        // H2 — largeur cible 1000 mm sur le DESSIN COMPLET.
+        const h2 = await scaleRun('width', 1000)
+        results.H = { h1, h2 }
+        log('H — échelle serveur :', JSON.stringify({
+            facteur: {
+                base: [h1.base.maxWidth, h1.base.maxHeight],
+                mise: [h1.scaled.maxWidth, h1.scaled.maxHeight, h1.scaled.findings],
+            },
+            cible: {
+                base: [h2.base.maxWidth, h2.base.maxHeight],
+                mise: [h2.scaled.maxWidth, h2.scaled.maxHeight, h2.scaled.findings],
+            },
+        }))
+        await shot('11-H-echelle-serveur.png')
+
+        const ratio = h1.scaled.maxWidth / h1.base.maxWidth
+        if (Math.abs(ratio - 0.5) > 0.005) {
+            throw new Error(`H1 : rapport de largeur ${ratio.toFixed(4)} au lieu de 0,5`)
+        }
+        if (!h1.scaled.findings.includes('import.scaleApplied:0.5')) {
+            throw new Error(`H1 : le constat ne porte pas « 0.5 » (${h1.scaled.findings})`)
+        }
+        // La cible porte sur le DESSIN COMPLET : le facteur est
+        // 1000 / étendue, et la plus grande pièce suit ce facteur.
+        const factor = 1000 / DRAWING_WIDTH_MM
+        const expected = h2.base.maxWidth * factor
+        if (Math.abs(h2.scaled.maxWidth - expected) > 0.2) {
+            throw new Error(
+                `H2 : plus grande pièce ${h2.scaled.maxWidth} au lieu de ${expected.toFixed(2)}`)
+        }
+        const shown = h2.scaled.findings.find((f) => f.startsWith('import.scaleApplied'))
+        if (!shown) throw new Error(`H2 : constat import.scaleApplied absent (${h2.scaled.findings})`)
+        const shownValue = Number(shown.split(':')[1])
+        if (Math.abs(shownValue - factor) > 0.0002) {
+            throw new Error(`H2 : facteur affiché ${shownValue} au lieu de ${factor.toFixed(4)}`)
         }
     }
 

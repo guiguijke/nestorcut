@@ -73,6 +73,10 @@ pub fn run_nesting(
         "problem": problem,
         "sol_instance": out.sol_instance,
         "alternatives": out.alternatives,
+        // Lot E2 : items dont le gonflement d'import a pris le repli (des
+        // pièces plus fines que l'espacement). Vide d'ordinaire ; le
+        // navigateur en tire un constat qui nomme fichier et pièce.
+        "thin_items": out.thin_items,
     }))
     .map_err(|e| JsError::new(&format!("serializing output: {e}")))
 }
@@ -169,6 +173,10 @@ pub fn run_nesting_live(
         "problem": problem,
         "sol_instance": out.sol_instance,
         "alternatives": out.alternatives,
+        // Lot E2 : items dont le gonflement d'import a pris le repli (des
+        // pièces plus fines que l'espacement). Vide d'ordinaire ; le
+        // navigateur en tire un constat qui nomme fichier et pièce.
+        "thin_items": out.thin_items,
     }))
     .map_err(|e| JsError::new(&format!("serializing output: {e}")))
 }

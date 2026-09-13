@@ -4,7 +4,7 @@
             v-if="!readonly"
             compact
             :extensions="uploadExtensions"
-            :advanced="local"
+            advanced
             class="files__upload"
             @files="addFiles"
             @rejected="onRejected"

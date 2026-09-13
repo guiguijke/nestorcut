@@ -68,3 +68,32 @@ def test_engine_error_porte_le_genre_et_l_item():
     # Les echecs ordinaires n'ont ni genre ni item (compatibilite).
     plain = EngineError("engine failed (rc=1)")
     assert plain.kind is None and plain.item is None
+
+
+# --- Lot E2 : constat « pieces plus fines que l'espacement » ---------------
+
+def test_thin_parts_nomme_fichier_et_rang():
+    from core.engine import thin_parts
+    item_map = {
+        0: {"slug": "plaque", "part": 0},
+        1: {"slug": "ecrin", "part": 0},
+        2: {"slug": "ecrin", "part": 1},
+    }
+    out = thin_parts([2, 1], item_map, {"ecrin": "ecrin.dxf"})
+    assert out == [
+        {"item": 1, "slug": "ecrin", "part": 0, "name": "ecrin.dxf"},
+        {"item": 2, "slug": "ecrin", "part": 1, "name": "ecrin.dxf"},
+    ]
+
+
+def test_thin_parts_sans_itemmap_n_invente_rien():
+    from core.engine import thin_parts
+    assert thin_parts([7], {}) == [{"item": 7, "slug": None, "part": 0}]
+    assert thin_parts([], {}) == []
+    assert thin_parts(None, None) == []
+
+
+def test_thin_parts_ignore_les_entrees_absurdes_et_borne_la_liste():
+    from core.engine import MAX_THIN_PARTS, thin_parts
+    assert thin_parts(["x", None], {}) == []
+    assert len(thin_parts(list(range(200)), {})) == MAX_THIN_PARTS

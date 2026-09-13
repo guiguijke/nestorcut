@@ -248,7 +248,21 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
             // Lot 2c : les constats d'import (perte de matière, unité
             // supposée, tracés ouverts) — c'est le maillon qui manquait
             // entre le wasm et la fiche fichier.
-            findings: imp.findings || [],
+            // Lot E2 : + la mise à l'échelle. Le crate ne peut pas la
+            // rapporter (elle est appliquée AVANT lui, sur le DXF) : elle
+            // est ajoutée ici, avec le même niveau et la même forme que les
+            // autres constats — un dessin n'est jamais multiplié en silence.
+            findings: [
+                ...(imp.findings || []),
+                ...(scale !== 1
+                    ? [{
+                        code: 'import.scaleApplied',
+                        level: 'info',
+                        count: 1,
+                        value: String(Math.round(scale * 10000) / 10000),
+                    }]
+                    : []),
+            ],
             previewSvg: buildPreviewSvg(parts),
             ...provenance,
             ...(extra || {}),

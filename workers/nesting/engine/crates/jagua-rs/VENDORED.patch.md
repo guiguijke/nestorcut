@@ -42,4 +42,19 @@
    compris) et la fixture de déterminisme `bench/fixtures/e0_volute`.
    Lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`.
 
+4. `src/geometry/shape_modification.rs` + `src/io/import.rs` : le repli du
+   point 3 **dit sur quelles pièces il est passé**. `CURRENT_ITEM`
+   (thread_local, posé par `Importer::import_item` avec un garde qui le
+   remet à None au Drop) donne l'id de la pièce en cours d'import ;
+   `FALLBACK_ITEMS` (`Mutex<Vec<u64>>`) collecte ces ids quand le repli
+   s'exécute ; `take_fallback_items()` les rend triés et dédupliqués.
+   nest-engine les draine après l'import et les publie
+   (`EngineOutput.thin_items`, évènement `thin_items`, JSON wasm).
+   Raison : un gonflement qui a pris le repli signale une pièce plus fine
+   que l'espacement demandé — le job est livré, mais l'utilisateur doit
+   pouvoir NOMMER la pièce concernée (sinon le constat est inexploitable).
+   Aucun effet sur la géométrie : ce sont deux canaux d'observation, et le
+   verrou de déterminisme reste bit-identique.
+   Lot E2 de `docs/PLAN-ECLATEMENT-2026-09-12.md`.
+
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).

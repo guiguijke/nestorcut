@@ -331,6 +331,9 @@ pub fn run_spp_mem(
         sparrow_config.min_item_separation,
         sparrow_config.narrow_concavity_cutoff_ratio,
     );
+    // Lot E2 : vider le canal AVANT l'import — un job précédent du même
+    // processus (worker daemon) a pu y laisser ses items.
+    let _ = jagua_rs::geometry::shape_modification::take_fallback_items();
     // Lot E0 : sur échec, l'erreur NOMME l'item (le worker et le navigateur
     // en tirent le fichier et la pièce). Aucun coût sur le chemin normal.
     let instance = match jagua_rs::probs::spp::io::import_instance(&importer, &ext_instance) {
@@ -346,6 +349,18 @@ pub fn run_spp_mem(
             ));
         }
     };
+
+    // Lot E2 : les items dont le gonflement a pris le repli — des pièces
+    // dont des traits sont plus fins que l'espacement demandé. Le moteur les
+    // livre quand même (c'est tout le lot E0) ; l'utilisateur doit pouvoir
+    // le lire, fichier et pièce nommés.
+    let thin_items = jagua_rs::geometry::shape_modification::take_fallback_items();
+    if !thin_items.is_empty() {
+        sink(&format!(
+            "{{\"type\":\"import\",\"kind\":\"thin_items\",\"items\":{}}}",
+            serde_json::to_string(&thin_items).unwrap_or_else(|_| "[]".into())
+        ));
+    }
 
     let n_workers = config.n_workers();
     // In deterministic work-bounded mode the wall budget must NOT leak
@@ -748,7 +763,9 @@ sink,
             serde_json::to_string(&violations).unwrap_or_else(|_| "[]".to_owned()),
             mouth.as_json()
         ));
-        return Ok(merged.output);
+        let mut out = merged.output;
+        out.thin_items = thin_items.clone();
+        return Ok(out);
     }
 
 
@@ -916,7 +933,9 @@ sink,
         started.elapsed().as_secs(),
         mouth.as_json()
     ));
-    Ok(merged.output)
+    let mut out = merged.output;
+    out.thin_items = thin_items;
+    Ok(out)
 }
 
 #[cfg(test)]
