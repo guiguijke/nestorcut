@@ -1002,6 +1002,13 @@ export function partWithReserve(part, options = {}) {
             ignoredPaths: unmatched.length,
             holes: holeReports,
             holesDropped: holeReports.filter((h) => h.dropped).length,
+            // §9.59 (règle 3) : le constat dit, par pièce, lequel des deux cas
+            // s'applique — les points APPARIÉS seulement (un point égaré ne
+            // décide de rien). `userPoints` : conservés tels quels, la réserve
+            // s'y est posée ; `nestorcutPoints` : automatiques, choisis par
+            // NestorCut et réécrits avec le drapeau.
+            userPoints: perRing.flat().filter((s) => s.moved === true).length,
+            nestorcutPoints: perRing.flat().filter((s) => s.moved !== true).length,
         },
     }
 }

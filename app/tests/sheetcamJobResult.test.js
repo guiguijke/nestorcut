@@ -20,7 +20,7 @@
 import { describe, expect, it } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { jobPathRecords, parseSheetCamJob } from '../../shared/sheetcamJob'
+import { jobPathRecords, parseSheetCamJob, writeJobStartPoints } from '../../shared/sheetcamJob'
 import { buildNestedJobs, jobCoversPlacedFiles, jobRanksByDrawing } from '../composables/sheetcamJobResult'
 import { partWithReserve } from '../../shared/sheetcamReserve'
 
@@ -372,5 +372,95 @@ describe('J4-ter — NestorCut ÉCRIT le point de départ, et lève le drapeau',
         })
         const after = jobPathRecords(parseSheetCamJob(file.bytes).binary)
         expect(after[1].paths.filter((p) => p.moved)).toHaveLength(1)
+    })
+})
+
+describe('§9.59 — un point de départ déplacé à la main est INTOUCHABLE', () => {
+    /** `startsFromJob` du describe J4-ter, avec un `moved` posé par chemin. */
+    const startsWithMoved = (job, movedByPath = {}) => {
+        const blocks = jobPathRecords(job.binary)
+        const bySlug = {}
+        const names = ['Piece_Trou.DXF', 'Piece_Fillx4.DXF']
+        names.forEach((name, blockIndex) => {
+            const slug = Object.keys(NAMES).find((s) => NAMES[s] === name)
+            bySlug[slug] = {
+                blockIndex,
+                starts: blocks[blockIndex].paths.map((p, pathIndex) => ({
+                    pathIndex,
+                    offset: p.start,
+                    moved: movedByPath[`${blockIndex}.${pathIndex}`] === true,
+                })),
+            }
+        })
+        return bySlug
+    }
+
+    it('le WRITER écarte un édit marqué déplacé — octets identiques', () => {
+        const path0 = jobPathRecords(SOURCE.binary)[0].paths[0]
+        const out = writeJobStartPoints(SOURCE.binary, [
+            { at: path0.at, point: [123.456, 789.012], moved: true },
+        ])
+        expect(Array.from(out)).toEqual(Array.from(SOURCE.binary))
+    })
+
+    it('défense en profondeur : le WRITER lit le drapeau COURANT du binaire', () => {
+        // Un appelant qui oublierait `moved` ne peut quand même pas réécrire un
+        // chemin déjà marqué déplacé : la garde lit l'octet du binaire.
+        const blocks = jobPathRecords(SOURCE.binary)
+        const path0 = blocks[0].paths[0]
+        const flagged = new Uint8Array(SOURCE.binary)
+        flagged[path0.at.moved] = 1
+        const out = writeJobStartPoints(flagged, [
+            { at: path0.at, point: [123.456, 789.012] },
+        ])
+        expect(Array.from(out)).toEqual(Array.from(flagged))
+    })
+
+    it('par le chemin complet : les 17 octets du chemin déplacé sortent IDENTIQUES', () => {
+        // L'hôte (bloc 0) : chemin 0 = contour automatique, chemin 1 = trou
+        // automatique, chemin 2 = entité POINT. On marque le TROU (chemin 1)
+        // comme déplacé à la main : ses 16 octets de point + son drapeau ne
+        // doivent PAS bouger, alors que les chemins automatiques, eux, sont
+        // figés (drapeau levé) par le même passage.
+        const starts = startsWithMoved(SOURCE, { '0.1': true })
+        const [file] = buildNestedJobs(SOURCE, {
+            sheets: [recipeSheet()],
+            ringsByFileSlug: RINGS,
+            fileNamesBySlug: NAMES,
+            startsByFileSlug: starts,
+        })
+        const out = parseSheetCamJob(file.bytes)
+        const before = jobPathRecords(SOURCE.binary)
+        const after = jobPathRecords(out.binary)
+
+        // Le chemin déplacé : valeur ET drapeau inchangés.
+        const at = before[0].paths[1].at
+        for (let i = 0; i < 8; i++) {
+            expect(out.binary[at.x + i]).toBe(SOURCE.binary[at.x + i])
+            expect(out.binary[at.y + i]).toBe(SOURCE.binary[at.y + i])
+        }
+        expect(out.binary[at.moved]).toBe(SOURCE.binary[at.moved])
+        expect(after[0].paths[1].start[0]).toBeCloseTo(before[0].paths[1].start[0], 12)
+
+        // CONTRÔLE NÉGATIF : les chemins automatiques du même fichier, eux,
+        // PEUVENT être réécrits — le contour de l'hôte est figé (drapeau levé).
+        expect(after[0].paths[0].moved).toBe(true)
+        expect(before[0].paths[0].moved).toBe(false)
+    })
+
+    it('le constat de réserve dit lequel des deux cas s’applique', () => {
+        // Règle 3 : le rapport compte les points APPARIÉS par cas. Deux points
+        // sur le contour extérieur de l'hôte : un déplacé à la main, un
+        // automatique.
+        const starts = [
+            { point: [-50, -50], moved: true, leadIn: 0, leadInType: 0 },
+            { point: [50, -50], moved: false, leadIn: 0, leadInType: 0 },
+        ]
+        const { reserve } = partWithReserve(
+            { coordinates: HOST, holes: [HOST_HOLE] },
+            { starts },
+        )
+        expect(reserve.userPoints).toBe(1)
+        expect(reserve.nestorcutPoints).toBe(1)
     })
 })

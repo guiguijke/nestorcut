@@ -154,7 +154,9 @@ export function buildNestedJobs(job, {
         if (slug && ringsByFileSlug[slug]) rings[rank] = ringsByFileSlug[slug]
     }
 
-    // LOT J4-ter — ON ÉCRIT LE POINT DE DÉPART, ET ON LÈVE LE DRAPEAU.
+    // LOT J4-ter — ON ÉCRIT LE POINT DE DÉPART DES CONTOURS AUTOMATIQUES,
+    // ET ON LÈVE LE DRAPEAU. §9.59 (14/09) : UN POINT DÉPLACÉ À LA MAIN EST
+    // INTOUCHABLE.
     //
     // Un point `moved = false` du cache binaire est une INDICATION, pas une
     // garantie : SheetCam le RECALCULE à l'ouverture (§9.50, vérifié en
@@ -163,10 +165,17 @@ export function buildNestedJobs(job, {
     // et laisser SheetCam en choisir un autre, c'est le défaut de la recette
     // sous une autre forme.
     //
-    // On réécrit donc, pour chaque contour où la réserve a été posée, le point
-    // que NestorCut a retenu, avec le drapeau « déplacé à la main ». SheetCam
-    // ne le recalcule plus, et le G-code amorce là où la place est gardée —
-    // c'est ce que la recette machine vérifie.
+    // On réécrit donc, pour chaque contour AUTOMATIQUE où la réserve a été
+    // posée, le point que NestorCut a retenu, avec le drapeau « déplacé à la
+    // main ». SheetCam ne le recalcule plus, et le G-code amorce là où la
+    // place est gardée — c'est ce que la recette machine vérifie.
+    //
+    // Le point DÉPLACÉ À LA MAIN de l'utilisateur, lui, ne reçoit AUCUN édit
+    // (§9.59, règle 1) : la réserve se pose sur SON point et les 17 octets de
+    // son chemin sortent identiques — le writer `writeJobStartPoints` l'écarte
+    // de toute façon par une garde propre, mais c'est ICI que la règle se
+    // décide. Le constat par contour vit au rapport de réserve
+    // (`partWithReserve` : userPoints / nestorcutPoints).
     //
     // On n'écrit QUE pour les chemins qui tombent sur un contour du dessin : un
     // chemin sans contour chez nous (une entité POINT, par exemple) n'a pas été
@@ -191,10 +200,14 @@ export { parseSheetCamJob }
 
 /**
  * Réécrit dans le cache binaire les points de départ que NestorCut a retenus,
- * drapeau « déplacé à la main » levé (lot J4-ter).
+ * drapeau « déplacé à la main » levé (lot J4-ter) — pour les contours
+ * AUTOMATIQUES seulement : un point déjà déplacé à la main est celui de
+ * l'utilisateur, il ne reçoit aucun édit (§9.59, règle 1) et ses 17 octets
+ * sortent identiques.
  *
  * Rend un `job` dont seul `binary` change — deux doubles et un octet par
- * contour réservé, le reste du cache intact (c'est ce que le harnais vérifie).
+ * contour automatique réservé, le reste du cache intact (c'est ce que le
+ * harnais vérifie).
  */
 export function applyChosenStarts(job, { startsByFileSlug, fileNamesBySlug, ringsByFileSlug }) {
     const blocks = jobPathRecords(job.binary)
@@ -208,6 +221,9 @@ export function applyChosenStarts(job, { startsByFileSlug, fileNamesBySlug, ring
         for (const start of entry.starts) {
             const path = block.paths?.[start?.pathIndex]
             if (!path || !Array.isArray(start?.offset)) continue
+            // §9.59 : le point DÉPLACÉ À LA MAIN n'est pas de NestorCut — la
+            // réserve s'y pose (partWithReserve), l'écriture le SAUTE.
+            if (start.moved === true || path.moved === true) continue
             const point = [
                 Number(block.origin[0]) + Number(start.offset[0]),
                 Number(block.origin[1]) + Number(start.offset[1]),
@@ -220,7 +236,7 @@ export function applyChosenStarts(job, { startsByFileSlug, fileNamesBySlug, ring
                 if (d < best) best = d
             }
             if (best > START_MATCH_TOL_MM) continue
-            edits.push({ at: path.at, point: start.offset })
+            edits.push({ at: path.at, point: start.offset, moved: false })
         }
     }
     if (!edits.length) return job

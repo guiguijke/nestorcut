@@ -91,6 +91,15 @@ describe('J1 — lecture', () => {
         expect(jobDrawingName('/home/u/dessins/a.dxf')).toBe('a.dxf')
         expect(jobDrawingName('a.dxf')).toBe('a.dxf')
         expect(jobDrawingName(null)).toBe('')
+        // Un chemin UTF-8 lu en latin1 (« PiÃ¨ce », code points c3 a8) est
+        // RÉPARÉ : le fichier sur le disque de l'utilisateur s'appelle
+        // « Pièce » — c'est la clé qui apparie le dessin déposé (mesuré sur
+        // la série réelle « Pièce L », 14/09 : sans réparation, la dépose
+        // du `.job` + de son dessin échoue en « dessins manquants »).
+        expect(jobDrawingName('C:\\jobs\\PiÃ¨ce L.DXF')).toBe('Pi\u00e8ce L.DXF')
+        // ASCII pur et UTF-8 invalide : rendus tels quels, jamais détruits.
+        expect(jobDrawingName('C:\\jobs\\Piece_Trou.DXF')).toBe('Piece_Trou.DXF')
+        expect(jobDrawingName('C:\\jobs\\Pi\u0080\u00c3z.DXF')).toBe('Pi\u0080\u00c3z.DXF')
     })
 
     it('garde le bloc binaire en octets, sans le décoder', () => {

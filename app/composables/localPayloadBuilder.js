@@ -722,6 +722,10 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     ignoredPaths: reserved.reserve.ignoredPaths,
                     pierceRadiusMm: reserved.reserve.pierceRadiusMm,
                     pierceFallback: reserved.reserve.pierceFallback,
+                    // §9.59 : points de l'utilisateur conservés vs points
+                    // automatiques choisis par NestorCut — additif.
+                    userPoints: reserved.reserve.userPoints,
+                    nestorcutPoints: reserved.reserve.nestorcutPoints,
                     // Écart entre les deux origines, publié parce qu'il est
                     // RÉEL et instructif : il vaut exactement la distance dont
                     // l'entité ignorée par notre import déplace la boîte du

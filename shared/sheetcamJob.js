@@ -228,12 +228,45 @@ export function isSheetCamJob(bytes, headBytes = 64 * 1024) {
     return text.includes('[Misc]') && /(^|\r\n)FileVersion=/.test(text)
 }
 
+/**
+ * Répare un texte UTF-8 lu en latin1 — les chemins accentués des `.job`.
+ *
+ * Le texte d'un `.job` est décodé OCTET PAR OCTET (latin1, pour que le bloc
+ * binaire fasse des allers-retours exacts). SheetCam écrit les chemins en
+ * UTF-8 : « Pièce » y est `50 69 c3 a8 63 65` et la lecture latin1 rend
+ * « PiÃ¨ce » — un nom qui n'apparie AUCUN fichier déposé. Cette réparation
+ * ne s'applique qu'aux noms DÉRIVÉS (appariement, affichage) : le texte
+ * canonique et le binaire ne passent JAMAIS ici, leurs octets ne bougent pas.
+ * Idempotent sur l'ASCII pur ; rend la chaîne telle quelle si les octets ne
+ * forment pas de l'UTF-8 valide (mieux vaut un nom approchant qu'un nom
+ * détruit).
+ */
+function repairUtf8Latin1(s) {
+    const str = String(s)
+    let needs = false
+    for (let i = 0; i < str.length; i++) {
+        const c = str.charCodeAt(i)
+        if (c >= 0x80) { needs = true; break }
+    }
+    if (!needs) return str
+    try {
+        const bytes = new Uint8Array(str.length)
+        for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff
+        return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    } catch {
+        return str
+    }
+}
+
 /** Nom de fichier seul, chemin Windows ou POSIX (règle 9 : un `.job` déposé
- *  chez nous porte le chemin absolu du disque de l'utilisateur). */
+ *  chez nous porte le chemin absolu du disque de l'utilisateur). Les accents
+ *  du chemin sont réparés (voir `repairUtf8Latin1`) : c'est LA clé qui
+ *  appariée le dessin déposé — le fichier sur le disque de l'utilisateur
+ *  s'appelle « Pièce », pas « PiÃ¨ce ». */
 export function jobDrawingName(drawingFile) {
     const s = String(drawingFile || '')
     const cut = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'))
-    return cut >= 0 ? s.slice(cut + 1) : s
+    return repairUtf8Latin1(cut >= 0 ? s.slice(cut + 1) : s)
 }
 
 /**
@@ -679,7 +712,8 @@ export function jobPathRecords(binary) {
 }
 
 /**
- * Réécrit des points de départ dans le bloc binaire — lot J4-ter.
+ * Réécrit des points de départ dans le bloc binaire — lot J4-ter, règle du
+ * propriétaire §9.59 (14/09).
  *
  * ---------------------------------------------------------------------------
  * POURQUOI IL FAUT ÉCRIRE, ET PAS SEULEMENT LIRE.
@@ -700,9 +734,21 @@ export function jobPathRecords(binary) {
  * a été gardée. C'est vérifiable sur machine, et c'est la recette du lot.
  *
  * ---------------------------------------------------------------------------
- * `edits` : `[{ at: { x, y, moved }, point: [x, y] }]` — les offsets viennent
- * de `jobPathRecords`, le point est en coordonnées LOCALES du dessin (les
- * mêmes que celles qu'on a lues).
+ * §9.59 — UN POINT DÉPLACÉ À LA MAIN EST INTOUCHABLE, ET C'EST UNE GARDE DU
+ * WRITER, PAS UN EFFET DE L'APPELANT.
+ *
+ * « Si j'ai mis un starting point custom sur mon .job, NestorCut le garde et
+ * ne le modifie pas. » Un chemin `moved = true` est celui de l'utilisateur :
+ * ni sa valeur ni son drapeau ne sont réécrits — les 16 octets du point et
+ * l'octet du drapeau sortent IDENTIQUES à l'entrée. Aucun lot ne peut le
+ * déplacer (J4-quater compris : sa recherche ne parcourt que les points
+ * automatiques). La garde lit le drapeau COURANT du binaire ET celui que
+ * l'appelant déclare : un édit marqué déplacé, ou visant un chemin dont le
+ * drapeau est déjà levé, est écarté ICI, structurellement.
+ *
+ * `edits` : `[{ at: { x, y, moved }, point: [x, y], moved }]` — les offsets
+ * viennent de `jobPathRecords`, le point est en coordonnées LOCALES du dessin
+ * (les mêmes que celles qu'on a lues).
  *
  * Rend un NOUVEAU tableau, identique à l'octet près partout ailleurs : rien
  * n'est réencodé, on écrit deux doubles et un octet par chemin. C'est ce qui
@@ -716,6 +762,14 @@ export function writeJobStartPoints(binary, edits) {
     for (const edit of edits) {
         const at = edit?.at
         if (!at) continue
+        // §9.59 : point de l'utilisateur — ni la valeur ni le drapeau ne
+        // bougent. Le drapeau courant est lu sur le BINAIRE (défense en
+        // profondeur : même un appelant qui oublierait `moved` ne peut pas
+        // réécrire un chemin déjà marqué déplacé).
+        const userMoved = edit.moved === true
+            || (Number.isInteger(at.moved) && at.moved >= 0 && at.moved < binary.length
+                && binary[at.moved] === 1)
+        if (userMoved) continue
         const p = edit.point
         if (Array.isArray(p) && Number.isFinite(Number(p[0])) && Number.isFinite(Number(p[1]))
             && Number.isInteger(at.x) && Number.isInteger(at.y)
