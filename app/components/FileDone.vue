@@ -42,6 +42,42 @@
                 <MainButton :size="sizeType.s" :icon="iconType.plus" :isLabelShow="false" :isDisable="file.count >= 999"
                     trackingTag="file_increment" @click="increment(fileIndex, $event)" label="increment" class="counter__btn" />
             </div>
+            <!-- Lot E4-b/E4-c : les actions d'import avancé vivent SUR LA
+                 FICHE — « Échelle » (et sa réinitialisation quand un facteur
+                 est appliqué), « Éclater » pour un dessin multi-pièces.
+                 z-index au-dessus de `file__area` (l'overlay qui ouvre le
+                 détail), comme le compteur. -->
+            <div v-if="canEdit" class="file__actions">
+                <MainButton
+                    :size="sizeType.s"
+                    :label="t('files.scaleAction')"
+                    :theme="themeType.secondary"
+                    trackingTag="file_scale"
+                    data-testid="file-scale"
+                    class="file__action"
+                    @click="$emit('scale')"
+                />
+                <MainButton
+                    v-if="file.importScaleApplied"
+                    :size="sizeType.s"
+                    :label="t('files.resetScaleAction')"
+                    :theme="themeType.secondary"
+                    trackingTag="file_scale_reset"
+                    data-testid="file-scale-reset"
+                    class="file__action"
+                    @click="$emit('resetScale')"
+                />
+                <MainButton
+                    v-if="(file.parts || []).length > 1"
+                    :size="sizeType.s"
+                    :label="t('files.explodeAction')"
+                    :theme="themeType.secondary"
+                    trackingTag="file_explode"
+                    data-testid="file-explode"
+                    class="file__action"
+                    @click="$emit('explode')"
+                />
+            </div>
             <div @click="openModal()" class="file__area" />
         </template>
     </div>
@@ -49,6 +85,7 @@
 <script setup>
 import { sizeType } from '~~/constants/size.constants'
 import { iconType } from '~~/constants/icon.constants'
+import { themeType } from '~~/constants/theme.constants'
 import { composeCardLine } from '~/composables/importFindings'
 
 const { t, fmtNumber } = useLocale()
@@ -61,6 +98,11 @@ const props = defineProps({
     fileIndex: {
         type: Number,
         required: true,
+    },
+    // Lot E4-b/E4-c : sans les actions (projet démo, lecture seule).
+    canEdit: {
+        type: Boolean,
+        default: true,
     },
 })
 
@@ -75,7 +117,7 @@ const findingLine = computed(() =>
     composeCardLine(props.file.findings, t, (v) => fmtNumber(v, 0)),
 )
 
-const emit = defineEmits(['openModal'])
+const emit = defineEmits(['openModal', 'scale', 'resetScale', 'explode'])
 
 const { actions } = filesStore
 const { increment, decrement, updateCount } = actions
@@ -173,6 +215,20 @@ const openModal = () => {
     &__counter {
         position: relative;
         z-index: 1;
+    }
+
+    &__actions {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 10px;
+    }
+
+    &__action {
+        padding: 2px 8px;
+        font-size: var(--fs-12);
     }
 
     @media (hover: hover) {

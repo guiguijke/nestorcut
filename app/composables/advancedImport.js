@@ -1,74 +1,45 @@
 /**
- * « Import avancé » — lots E1, E1-bis puis **E3**
- * (`docs/PLAN-ECLATEMENT-2026-09-12.md` §3 puis §6) : éclatement d'un dessin
- * multi-pièces et mise à l'échelle.
+ * « Échelle » d'une fiche — lots E1, E1-bis, E3 puis **E4**
+ * (`docs/PLAN-ECLATEMENT-2026-09-12.md` §8) : l'aperçu sur tôle du lot E1-bis,
+ * désormais ouvert DEPUIS UNE FICHE (action « Échelle »).
  *
  * ---------------------------------------------------------------------------
- * CE QUE LE LOT E3 CHANGE, ET POURQUOI (constat du propriétaire, 13/09 20 h).
+ * CE QUE LE LOT E4 CHANGE (consigne du 14/09, §8.2/§8.4).
  *
- * Ce qui était en production n'était pas ce qu'il avait demandé : il fallait
- * ouvrir un PANNEAU REPLIÉ sur la page projet AVANT de déposer, et l'import
- * ordinaire ne proposait jamais le choix. Sa demande :
+ * La fenêtre de choix au dépôt et l'interrupteur « Import avancé » du projet
+ * ont DISPARU : un dessin déposé se neste comme un bloc rigide (E4-a), et
+ * l'échelle/l'éclatement sont des actions SUR LA FICHE, après import. Ce
+ * composable ne porte donc plus ni interrupteur ni fenêtre : seulement
+ * l'aperçu sur tôle, ouvert sur la fiche choisie.
  *
- *   - un INTERRUPTEUR « Import avancé » à la création du projet et sur sa
- *     page, dont l'état est une propriété du PROJET (et non de la session :
- *     le panneau du lot E1 vivait dans `sessionStorage`, il mourait avec
- *     l'onglet et ne suivait pas le projet) ;
- *   - allumé, une FENÊTRE DE CHOIX à chaque dépôt : « import automatique »
- *     (le défaut, exactement l'import ordinaire) ou « éclater en pièces et
- *     mettre à l'échelle » (l'aperçu sur tôle du lot E1-bis) ;
- *   - éteint, RIEN : aucune fenêtre, aucune lecture de plus, la chaîne
- *     d'avant le lot E1.
+ * L'ÉCHELLE se donne de trois façons, toutes équivalentes : une largeur
+ * cible, une hauteur cible (rapport conservé : le panneau recalcule l'autre)
+ * ou un facteur. Cibles et facteur ne se mélangent pas : `state` garde le
+ * DERNIER mode édité et sa valeur — `resolveScale` fait le calcul sur
+ * l'étendue mesurée de la fiche.
  *
- * Le panneau replié disparaît : deux chemins pour le même réglage, c'était
- * précisément le reproche.
- *
- * ---------------------------------------------------------------------------
- * L'ÉCHELLE se donne de trois façons : un facteur, une largeur cible ou une
- * hauteur cible du dessin COMPLET. Les deux dernières ne peuvent être
- * résolues qu'après lecture du dessin (on ne connaît sa taille qu'importé) :
- * `resolveScale` fait ce calcul, la chaîne d'import l'appelle avec l'étendue
- * mesurée. C'est le sens de « l'un calcule l'autre ».
- *
- * L'APERÇU (E1-bis) montre les contours posés sur une tôle ; tirer la poignée
- * d'angle règle la LARGEUR CIBLE du dessin — c'est-à-dire le mode `width`,
- * pas une seconde façon de calculer une échelle. Rien n'est importé avant
- * validation.
- *
- * ---------------------------------------------------------------------------
- * UN `.job` SHEETCAM N'EST JAMAIS CONCERNÉ : il porte déjà sa tôle et ses
- * quantités, il n'y a rien à éclater ni à mettre à l'échelle. Il passe AVANT
- * la fenêtre, dans `files.js` (règle du lot J4).
+ * La POIGNÉE d'angle de l'aperçu tire la LARGEUR CIBLE du dessin — c'est le
+ * mode `width`, pas une seconde façon de calculer une échelle. Rien n'est
+ * appliqué avant « Appliquer » : ce composable ne touche ni au stockage ni
+ * au réseau ; l'application est à l'appelant (`files.js`).
  */
 import { reactive } from 'vue'
 
-export const SCALE_MODES = ['factor', 'width', 'height']
-
 function blank() {
     return {
-        // L'INTERRUPTEUR, porté par le PROJET (champ `advancedImport` du
-        // document projet, additif, absent = éteint). Il n'est pas persisté
-        // ici : la page le pose depuis le projet chargé, et le repose quand
-        // l'utilisateur le change.
-        enabled: false,
-        projectSlug: null,
-        // Réglages de la fenêtre de choix, quand l'utilisateur choisit
-        // « éclater et mettre à l'échelle ».
-        explode: false,
+        // Réglages du panneau, remis à NEUTRE à chaque ouverture : le choix
+        // vaut pour CETTE application, pas pour la précédente.
         mode: 'factor',
         value: 1,
     }
 }
 
-/** État de la FENÊTRE DE CHOIX (lot E3) — vidé après décision. */
-function blankChoice() {
-    return { open: false, projectSlug: null }
-}
-
-/** État de l'aperçu (lot E1-bis) — vidé après import ou annulation. */
+/** État de l'aperçu — vidé après application ou annulation. */
 function blankPreview() {
     return {
-        // Fichiers en attente de validation (File + géométrie lue une fois).
+        // La fiche en cours de mise à l'échelle : géométrie DÉJÀ connue
+        // (enregistrement local ou réponse de l'API géométrie — aucune
+        // lecture wasm ici). `ficheSlug` désigne la fiche à remplacer.
         pending: [],
         // Tôle de référence, en MILLIMÈTRES (la conversion d'affichage est
         // faite par le composant — frontière UI, AGENTS #25).
@@ -76,7 +47,7 @@ function blankPreview() {
         // « utiliser cette tôle pour le projet » : ne s'applique qu'à la
         // validation, et seulement sur la largeur/hauteur du premier format.
         useSheet: false,
-        // Lecture en cours (une dépose lourde prend quelques secondes).
+        // Lecture en cours (une fiche serveur demande sa géométrie à l'API).
         loading: false,
         error: null,
     }
@@ -84,46 +55,6 @@ function blankPreview() {
 
 const state = reactive(blank())
 const preview = reactive(blankPreview())
-const choice = reactive(blankChoice())
-
-/**
- * L'interrupteur du projet est-il allumé ? C'est le SEUL point de décision :
- * éteint, la dépose ne lit rien de plus et suit la chaîne d'avant le lot E1.
- */
-export function isAdvancedActive() {
-    return state.enabled === true
-}
-
-/**
- * La dépose doit-elle passer par la FENÊTRE DE CHOIX ? (lot E3)
- *
- * Vrai exactement quand l'interrupteur du projet est allumé. Le lot E1
- * regardait ici l'ouverture d'un panneau de session ; c'est ce que le
- * propriétaire a jugé non conforme.
- */
-export function needsChoice() {
-    return state.enabled === true
-}
-
-/**
- * Les options passées à la chaîne d'import. `scale` est un FACTEUR quand il
- * est connu d'avance ; en mode largeur/hauteur cible, `scaleTarget` porte la
- * cible en MILLIMÈTRES (la conversion d'unité est faite par l'appelant —
- * frontière UI, AGENTS #25) et la chaîne résout le facteur après lecture.
- */
-export function advancedImportOptions() {
-    // Interrupteur éteint ⇒ options NEUTRES, quoi que portent les autres
-    // champs : le contrôle négatif du lot E1 (« éteint ne change rien »)
-    // tient parce que la décision est ici et nulle part ailleurs.
-    if (!state.enabled) return { scale: 1, explode: false }
-    const explode = state.explode === true
-    const value = Number(state.value)
-    if (state.mode === 'factor') {
-        return { scale: Number.isFinite(value) && value > 0 ? value : 1, explode }
-    }
-    if (!Number.isFinite(value) || value <= 0) return { scale: 1, explode }
-    return { scale: 1, explode, scaleTarget: { mode: state.mode, mm: value } }
-}
 
 /**
  * Facteur d'échelle pour un dessin dont l'étendue mesurée est
@@ -173,98 +104,38 @@ export function fitsSheet(extent, scale, sheet) {
 export function useAdvancedImport() {
     return {
         state,
-        choice,
-
-        /**
-         * Pose l'interrupteur du PROJET (lot E3). La page le lit sur le
-         * document projet au chargement, et le repose quand l'utilisateur le
-         * change — c'est l'appelant qui écrit côté serveur (`PATCH
-         * /api/project/:slug/advanced-import`), pas ce module : la géométrie
-         * et le réseau ne se mélangent pas.
-         */
-        setEnabled(v, projectSlug = null) {
-            state.enabled = v === true
-            if (projectSlug) state.projectSlug = projectSlug
-            if (!state.enabled) {
-                Object.assign(choice, blankChoice())
-                Object.assign(preview, blankPreview())
-            }
-        },
-        setExplode(v) {
-            state.explode = v === true
-        },
-        setMode(m) {
-            if (!SCALE_MODES.includes(m)) return
-            state.mode = m
-            // Changer de mode change le sens du nombre : on repart d'une
-            // valeur neutre plutôt que d'interpréter « 1 » comme 1 mm.
-            state.value = m === 'factor' ? 1 : 0
-        },
-        setValue(v) {
-            const n = Number(v)
-            state.value = Number.isFinite(n) ? n : 0
-        },
-        reset() {
-            Object.assign(state, blank())
-            Object.assign(preview, blankPreview())
-            Object.assign(choice, blankChoice())
-        },
-
-        // ------------------------------------------- fenêtre de choix (E3)
-
-        /**
-         * Ouvre la fenêtre de choix sur une dépose, après avoir LU chaque
-         * fichier une fois — la fenêtre montre ce que l'import a lu (nombre
-         * de pièces, étendue), pas une promesse. Aucune fiche n'est créée.
-         *
-         * C'est la même lecture que celle de l'aperçu E1-bis : si
-         * l'utilisateur choisit « éclater », rien n'est relu.
-         */
-        async openChoice(files, { projectSlug = null, readFile = null } = {}) {
-            choice.projectSlug = projectSlug
-            choice.open = true
-            // Une dépose passe par la fenêtre avec des réglages NEUFS : le
-            // choix vaut pour le lot déposé, pas pour le précédent.
-            state.explode = false
-            state.mode = 'factor'
-            state.value = 1
-            await this.stage(files, { projectSlug, readFile })
-        },
-
-        /** « Annuler » : rien n'est créé, rien n'est gardé. */
-        cancelChoice() {
-            Object.assign(choice, blankChoice())
-            Object.assign(preview, blankPreview())
-        },
-
-        /**
-         * « Éclater en pièces et mettre à l'échelle » : la fenêtre se ferme
-         * et l'aperçu sur tôle prend la main, sur les fichiers DÉJÀ lus.
-         */
-        chooseExplode() {
-            state.explode = true
-            choice.open = false
-        },
-
-        /**
-         * « Import automatique » : la fenêtre se ferme, les réglages
-         * retombent à neutre et l'appelant importe comme d'ordinaire.
-         * Rend les fichiers à importer — l'appelant fait l'import, ce module
-         * ne touche pas au stockage.
-         */
-        chooseAuto() {
-            const files = preview.pending.map((p) => p.file)
-            const projectSlug = choice.projectSlug
-            state.explode = false
-            state.mode = 'factor'
-            state.value = 1
-            Object.assign(choice, blankChoice())
-            Object.assign(preview, blankPreview())
-            return { files, projectSlug }
-        },
-
-        // ------------------------------------------------ aperçu (E1-bis)
         preview,
+
+        // ------------------------------------------------ aperçu (E1-bis/E4-b)
+
+        /**
+         * Ouvre l'aperçu sur CETTE fiche (lot E4-b). La géométrie est celle
+         * de la fiche — enregistrement IndexedDB en local, réponse de
+         * `/api/files/project/geometry/:slug` côté serveur — aucune lecture
+         * wasm, aucune fiche créée. L'appelant pré-remplit la tôle de
+         * référence s'il le veut (`setSheet`).
+         */
+        openFicheScale({ slug, name, parts }) {
+            Object.assign(state, blank())
+            preview.error = null
+            preview.pending = [{
+                ficheSlug: slug,
+                file: null,
+                name: name || 'part.dxf',
+                parts: (parts || []).map((p) => ({
+                    coordinates: p.coordinates || [],
+                    holes: p.holes || [],
+                })),
+                extent: drawingExtent(parts),
+                refusal: null,
+            }]
+            return preview.pending[0]
+        },
+
+        /** Abandonne : la fiche n'est pas touchée. */
+        cancel() {
+            Object.assign(preview, blankPreview())
+        },
 
         /** Tôle de référence (mm) — pré-remplie par l'appelant. */
         setSheet(width, height) {
@@ -278,55 +149,41 @@ export function useAdvancedImport() {
             preview.useSheet = v === true
         },
 
-        /**
-         * Met les fichiers déposés en attente et lit leur géométrie UNE fois
-         * (`geoImportFile`, l'import ordinaire). Aucune fiche n'est créée.
-         * `readFile` est injectable pour les tests.
-         */
-        async stage(files, { projectSlug = null, readFile = null } = {}) {
-            preview.error = null
-            preview.loading = true
-            preview.pending = []
-            try {
-                const read = readFile || (async (file) => {
-                    const { geoImportFile } = await import('./geometryClient')
-                    const bytes = new Uint8Array(await file.arrayBuffer())
-                    return geoImportFile(bytes)
-                })
-                for (const file of files || []) {
-                    const imported = await read(file)
-                    const parts = Array.isArray(imported?.parts) ? imported.parts : []
-                    preview.pending.push({
-                        file,
-                        projectSlug,
-                        name: file.name || 'part.dxf',
-                        parts: parts.map((p) => ({
-                            coordinates: p.coordinates || [],
-                            holes: p.holes || [],
-                        })),
-                        extent: drawingExtent(parts),
-                        refusal: imported?.refusal || null,
-                    })
-                }
-            } catch (e) {
-                preview.error = e?.message || 'localImport.parseError'
-            } finally {
-                preview.loading = false
-            }
-            return preview.pending
-        },
-
-        /** Abandonne la dépose : aucune fiche, aucun octet gardé. */
-        cancel() {
-            Object.assign(preview, blankPreview())
-        },
-
-        /** Largeur cible tirée à la poignée : écrit le mode `width`. */
-        dragToWidth(targetWidthMm) {
-            const t = Number(targetWidthMm)
-            if (!Number.isFinite(t) || t <= 0) return
+        /** Largeur cible (mm) — saisie au clavier ou poignée tirée. */
+        setTargetWidth(mm) {
+            const n = Number(mm)
+            if (!Number.isFinite(n) || n <= 0) return
             state.mode = 'width'
-            state.value = t
+            state.value = n
+        },
+        /** Hauteur cible (mm) — le panneau recalcule la largeur (rapport conservé). */
+        setTargetHeight(mm) {
+            const n = Number(mm)
+            if (!Number.isFinite(n) || n <= 0) return
+            state.mode = 'height'
+            state.value = n
+        },
+        /** Facteur — la troisième façon de dire la même échelle. */
+        setFactor(f) {
+            const n = Number(f)
+            if (!Number.isFinite(n) || n <= 0) return
+            state.mode = 'factor'
+            state.value = n
+        },
+
+        /** Les options d'application, résolues par l'appelant sur l'étendue. */
+        targetOptions() {
+            const value = Number(state.value)
+            if (state.mode === 'factor') {
+                return { scale: Number.isFinite(value) && value > 0 ? value : 1 }
+            }
+            if (!Number.isFinite(value) || value <= 0) return { scale: 1 }
+            return { scale: 1, scaleTarget: { mode: state.mode, mm: value } }
+        },
+
+        reset() {
+            Object.assign(state, blank())
+            Object.assign(preview, blankPreview())
         },
     }
 }

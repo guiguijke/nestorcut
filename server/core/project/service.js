@@ -61,7 +61,7 @@ export async function createProjectWithFiles(domain, event, userId) {
  * navigateur et vivent dans IndexedDB ; la géométrie ne transite jamais.
  * Aucun fichier à la création (l'import arrive ensuite, côté client).
  */
-export async function createLocalProject(domain, userId, options = {}) {
+export async function createLocalProject(domain, userId) {
   const db = await connectDB();
   const projectName = generateEntityName();
   const projectSlug = `${standardSlugify(projectName, {
@@ -74,11 +74,9 @@ export async function createLocalProject(domain, userId, options = {}) {
     createdAt: new Date(),
     ownerId: userId,
     local: true,
-    // Lot E3 : « Import avancé » est une propriété du PROJET, posée à sa
-    // création et modifiable ensuite depuis sa page. Champ ADDITIF : un
-    // projet d'avant ne le porte pas, et `Boolean(undefined)` vaut faux —
-    // l'interrupteur est éteint, exactement comme avant le lot.
-    ...(options.advancedImport === true ? { advancedImport: true } : {}),
+    // Lot E4-d : le champ `advancedImport` n'est plus ÉCRIT — les projets
+    // qui le portent le gardent et la lecture reste tolérée (ci-dessous),
+    // mais l'interrupteur et la fenêtre de choix ont disparu.
   });
 
   return {
@@ -304,6 +302,11 @@ const mapBinFileToUi = async (userId, file) => {
       color: resolvePartColor(part, file.slug, index),
     })),
     ...(block ? { block } : {}),
+    // Lot E4-b/E4-c : drapeau d'échelle appliquée (montre « Réinitialiser
+    // l'échelle ») et parent d'éclatement (héritage de quantité côté UI).
+    // Champs additifs — absents sur les fichiers d'avant.
+    importScaleApplied: Boolean(file.importScaleApplied),
+    explodedFromSlug: file.explodedFromSlug ?? null,
     // Purge 24 h (D-PRV-10) : géométrie/blobs purgés → l'UI affiche
     // « expiré » et masque compteur/preview. Champs additifs.
     expired: Boolean(file.purgedAt),

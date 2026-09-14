@@ -278,14 +278,6 @@ async function getProject(path, fetchOpts = {}) {
         if (path !== lastProjectRequest) return
         state.projectLocal = Boolean(data.local)
         state.projectDemo = Boolean(data.isDemo)
-        // Lot E3 : l'interrupteur « Import avancé » est une propriété du
-        // PROJET. On le pose ici, au chargement, et nulle part ailleurs —
-        // c'est ce qui remplace l'état de session du panneau du lot E1, qui
-        // mourait avec l'onglet et ne suivait pas le projet.
-        {
-            const { useAdvancedImport } = await import('./advancedImport')
-            useAdvancedImport().setEnabled(Boolean(data.advancedImport), data.slug)
-        }
         if (data.local) {
             // J-090 : les fichiers d'un projet « 100 % privé » vivent dans
             // IndexedDB — le serveur ne sert que le nom/slug du projet.
@@ -375,57 +367,226 @@ function setProjectFiles(files, path) {
     }
     scheduleFilesRefresh(path)
 }
-async function importStagedFiles(files, slug, forcedOptions = null) {
-    // `state.projectSlug` porte le CHEMIN d'API, pas le slug : l'aperçu
-    // transmet celui qu'il a reçu à la dépose.
-    state.localImportError = ''
-    state.localImportErrorParams = {}
+/**
+ * Lot E4-b — ouvre l'aperçu d'échelle sur UNE FICHE.
+ *
+ * La géométrie vient de la fiche elle-même : enregistrement IndexedDB en
+ * local, `/api/files/project/geometry/:slug` côté serveur. Aucune lecture
+ * wasm, aucun changement avant « Appliquer ».
+ */
+async function openFicheScale(file) {
+    const { useAdvancedImport } = await import('./advancedImport')
+    const adv = useAdvancedImport()
     try {
-        const { importLocalFiles } = await import('./localImport')
-        const { advancedImportOptions } = await import('./advancedImport')
-        // Lot E3 : « Import automatique » impose les options NEUTRES, quoi
-        // que porte l'état — c'est ce qui rend ce chemin identique à l'import
-        // ordinaire, et le verrou du lot le compare fiche par fiche.
-        const options = forcedOptions || advancedImportOptions()
-        // Projet « nos serveurs » : les mêmes options, mais appliquées par le
-        // worker — la fenêtre de choix sert les deux modes (lot E3).
-        if (!state.projectLocal) {
-            await uploadToServer(files || [], slug, options)
-            return
+        let parts
+        if (state.projectLocal) {
+            const { getLocalFile } = await import('./localFilesStore')
+            const record = await getLocalFile(file.slug)
+            parts = record?.parts || []
+        } else {
+            const data = await $fetch(`/api/files/project/geometry/${file.slug}`)
+            parts = data?.parts || []
         }
-        for (const file of files || []) {
-            await importLocalFiles(file, slug, options)
+        if (!parts.length) throw new Error('localImport.noParts')
+        adv.openFicheScale({ slug: file.slug, name: file.name, parts })
+        if (!adv.preview.sheet) {
+            // Tôle de référence : celle du projet si elle est valide. Les
+            // params portent des valeurs d'AFFICHAGE : conversion ici, à la
+            // frontière (AGENTS #25).
+            const first = normalizedSheets(state.params)[0]
+            const u = getUnitState()
+            adv.setSheet(
+                displayToMm(Number(first?.width), u),
+                displayToMm(Number(first?.height), u),
+            )
         }
     } catch (err) {
         state.localImportError = err?.message || 'localImport.parseError'
         state.localImportErrorParams = err?.params || {}
     }
-    await getProject(API_ROUTES.PROJECT(slug))
 }
 
 /**
- * Lot E3 — pose l'interrupteur « Import avancé » DU PROJET et le persiste.
- *
- * L'écriture serveur est un champ ADDITIF sur le document projet : un projet
- * d'avant ce lot ne le porte pas, et son absence vaut éteint. Si le PATCH
- * échoue (hors ligne, session expirée), l'interrupteur REVIENT à sa valeur
- * précédente : un réglage qui s'affiche allumé alors qu'il n'est pas
- * enregistré mentirait au prochain dépôt.
+ * Attend que les fiches du projet serveur en cours de retraitement soient
+ * toutes traitées (échelle : la fiche redevient « done » ; éclatement : les
+ * filles naissent « in-progress » puis finissent). Boucle côté Node — un
+ * prédicat async dans `waitForFunction` est jugé vrai immédiatement (mesuré
+ * au lot E2). `projectPath` est le CHEMIN d'API (`state.projectSlug`), pas
+ * le slug nu.
  */
-async function setAdvancedImport(value) {
+async function awaitFilesDone(projectPath, timeoutMs = 300000) {
+    const t0 = Date.now()
+    while (Date.now() - t0 < timeoutMs) {
+        try {
+            const data = await $fetch(projectPath)
+            const files = data?.files || []
+            const inProgress = files.some((f) => f.processingStatus === 'in-progress')
+            if (files.length && !inProgress) {
+                if (files.some((f) => f.processingStatus === 'error')) {
+                    throw new Error('files.error')
+                }
+                return files
+            }
+        } catch (err) {
+            if (err?.message === 'files.error') throw err
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+    }
+    throw new Error('files.timeout')
+}
+
+/** Applique l'échelle réglée dans l'aperçu à la fiche ouverte (E4-b). */
+async function applyFicheScale(options) {
     const { useAdvancedImport } = await import('./advancedImport')
     const adv = useAdvancedImport()
-    const before = adv.state.enabled === true
-    const wanted = value === true
-    if (before === wanted) return
-    adv.setEnabled(wanted, state.projectSlug)
+    const slug = adv.preview.pending[0]?.ficheSlug
+    adv.cancel()
+    if (!slug) return
+    state.localImportError = ''
+    state.localImportErrorParams = {}
     try {
-        await $fetch(`/api/project/${state.projectSlug}/advanced-import`, {
-            method: 'PATCH',
-            body: { advancedImport: wanted },
+        if (state.projectLocal) {
+            const { getLocalFile } = await import('./localFilesStore')
+            const { scaleLocalFiche } = await import('./localImport')
+            const record = await getLocalFile(slug)
+            if (record) await scaleLocalFiche(record, options)
+        } else {
+            const body = options?.scaleTarget
+                ? { mode: options.scaleTarget.mode, mm: Number(options.scaleTarget.mm) }
+                : { mode: 'factor', value: Number(options?.scale) || 1 }
+            await $fetch(`/api/files/${slug}/scale`, { method: 'PATCH', body })
+            await awaitFilesDone(state.projectSlug)
+        }
+    } catch (err) {
+        state.localImportError = err?.message || 'localImport.parseError'
+        state.localImportErrorParams = err?.params || {}
+    }
+    // `state.projectSlug` porte déjà le CHEMIN d'API complet, pas le slug nu.
+    await getProject(state.projectSlug)
+}
+
+/** « Réinitialiser l'échelle » d'une fiche (E4-b) — retour bit-identique. */
+async function resetFicheScale(file) {
+    state.localImportError = ''
+    state.localImportErrorParams = {}
+    try {
+        if (state.projectLocal) {
+            const { getLocalFile } = await import('./localFilesStore')
+            const { resetLocalFicheScale } = await import('./localImport')
+            const record = await getLocalFile(file.slug)
+            if (record) await resetLocalFicheScale(record)
+        } else {
+            await $fetch(`/api/files/${file.slug}/scale`, {
+                method: 'PATCH',
+                body: { reset: true },
+            })
+            await awaitFilesDone(state.projectSlug)
+        }
+    } catch (err) {
+        state.localImportError = err?.message || 'localImport.parseError'
+        state.localImportErrorParams = err?.params || {}
+    }
+    // `state.projectSlug` porte déjà le CHEMIN d'API complet, pas le slug nu.
+    await getProject(state.projectSlug)
+}
+
+/**
+ * « Éclater en pièces » une fiche (E4-c) : la fiche devient N fiches, la
+ * quantité de la fiche est HÉRITÉE par chacune.
+ */
+async function explodeFiche(file) {
+    state.localImportError = ''
+    state.localImportErrorParams = {}
+    const parentCount = Number(file.count) || 1
+    const parentSlug = file.slug
+    try {
+        if (state.projectLocal) {
+            const { getLocalFile } = await import('./localFilesStore')
+            const { explodeLocalFiche } = await import('./localImport')
+            const record = await getLocalFile(parentSlug)
+            if (record) await explodeLocalFiche(record)
+        } else {
+            await $fetch(`/api/files/${parentSlug}/explode`, { method: 'POST' })
+            await awaitFilesDone(state.projectSlug, 600000)
+        }
+    } catch (err) {
+        state.localImportError = err?.message || 'localImport.parseError'
+        state.localImportErrorParams = err?.params || {}
+    }
+    // `state.projectSlug` porte déjà le CHEMIN d'API complet, pas le slug nu.
+    await getProject(state.projectSlug)
+    // Quantité héritée : les filles portent le parent (explodedFromSlug).
+    state.projectFiles.forEach((f, index) => {
+        if (f.explodedFromSlug === parentSlug && f.count !== parentCount) {
+            updateCount(String(parentCount), index)
+        }
+    })
+}
+
+async function addFiles(files, slug) {
+    if (state.projectLocal) {
+        // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
+        // byte ne transite par le serveur.
+        state.localImportError = ''
+        state.localImportErrorParams = {}
+        // Lot J4 — un `.job` SheetCam dans la dépose. Il passe AVANT tout :
+        // un `.job` porte déjà sa tôle, son espacement et ses quantités.
+        // Reconnu par SIGNATURE (piège #31) ; sans `.job` dans la dépose,
+        // `splitSheetCamDrop` rend `null` et rien ne change.
+        {
+            const { splitSheetCamDrop } = await import('./sheetcamJobImport')
+            const drop = await splitSheetCamDrop(files)
+            if (drop) {
+                const wanted = await addSheetCamJobDrop(drop, slug)
+                await getProject(API_ROUTES.PROJECT(slug))
+                // Les quantités du `.job`, une fois la liste rechargée.
+                if (wanted?.size) {
+                    state.projectFiles.forEach((f, index) => {
+                        const n = wanted.get(f.slug)
+                        if (n != null) updateCount(n, index)
+                    })
+                }
+                return
+            }
+        }
+        // Lot E4-d : le dépôt est TOUJOURS l'import ordinaire — la fenêtre
+        // de choix et l'interrupteur ont disparu, l'échelle et l'éclatement
+        // vivent sur la fiche (E4-b/E4-c).
+        try {
+            const { importLocalFiles } = await import('./localImport')
+            for (const file of files) {
+                await importLocalFiles(file, slug)
+            }
+        } catch (err) {
+            state.localImportError = err?.message || 'localImport.parseError'
+            // Lot 2a : les refus « trop lourd » portent leurs nombres
+            // (entités, budget) — le message les affiche.
+            state.localImportErrorParams = err?.params || {}
+        }
+        await getProject(API_ROUTES.PROJECT(slug))
+        return
+    }
+    await uploadToServer(files, slug)
+}
+
+/**
+ * Dépose SERVEUR (« nos serveurs ») : les octets partent, le worker importe.
+ * Lot E4-d : dépôt ordinaire, sans options — l'échelle et l'éclatement se
+ * demandent sur la fiche après import (E4-b/E4-c).
+ */
+async function uploadToServer(files, slug) {
+    const formData = new FormData()
+    formData.append('projectName', state.projectName)
+    files.forEach((file) => formData.append('dxf', file))
+    try {
+        await $fetch(API_ROUTES.ADDFILES(slug), {
+            method: 'POST',
+            body: formData
         })
-    } catch {
-        adv.setEnabled(before, state.projectSlug)
+
+        await getProject(API_ROUTES.PROJECT(slug))
+    } catch (error) {
+        console.error('Error while uploading files:', error)
     }
 }
 
@@ -579,129 +740,6 @@ async function addSheetCamJobDrop(drop, slug) {
     return wanted
 }
 
-async function addFiles(files, slug) {
-    if (state.projectLocal) {
-        // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
-        // byte ne transite par le serveur.
-        state.localImportError = ''
-        state.localImportErrorParams = {}
-        // Lot J4 — un `.job` SheetCam dans la dépose. Il passe AVANT le
-        // panneau « Import avancé » : un `.job` porte déjà sa tôle, son
-        // espacement et ses quantités, il n'y a rien à éclater ni à mettre à
-        // l'échelle. Reconnu par SIGNATURE (piège #31) ; sans `.job` dans la
-        // dépose, `splitSheetCamDrop` rend `null` et rien ne change.
-        {
-            const { splitSheetCamDrop } = await import('./sheetcamJobImport')
-            const drop = await splitSheetCamDrop(files)
-            if (drop) {
-                const wanted = await addSheetCamJobDrop(drop, slug)
-                await getProject(API_ROUTES.PROJECT(slug))
-                // Les quantités du `.job`, une fois la liste rechargée.
-                if (wanted?.size) {
-                    state.projectFiles.forEach((f, index) => {
-                        const n = wanted.get(f.slug)
-                        if (n != null) updateCount(n, index)
-                    })
-                }
-                return
-            }
-        }
-        // Lot E3 : INTERRUPTEUR « Import avancé » du projet ALLUMÉ ⇒ la
-        // dépose passe par la FENÊTRE DE CHOIX (les fichiers sont lus une
-        // fois, aucune fiche n'est créée) et l'import attend la décision.
-        // Éteint ⇒ chemin d'avant, sans lecture de plus — c'est le contrôle
-        // négatif du lot, et c'est ici qu'il se joue.
-        const { needsChoice, useAdvancedImport } = await import('./advancedImport')
-        if (needsChoice()) {
-            const adv = useAdvancedImport()
-            if (!adv.preview.sheet) {
-                // Tôle de référence : celle du projet si elle est valide.
-                // Les params portent des valeurs d'AFFICHAGE : conversion
-                // ici, à la frontière (AGENTS #25).
-                const first = normalizedSheets(state.params)[0]
-                const u = getUnitState()
-                adv.setSheet(
-                    displayToMm(Number(first?.width), u),
-                    displayToMm(Number(first?.height), u),
-                )
-            }
-            await adv.openChoice(files, { projectSlug: slug })
-            return
-        }
-        try {
-            const { importLocalFiles } = await import('./localImport')
-            const { advancedImportOptions } = await import('./advancedImport')
-            // Lot E1 : le réglage de l'« import avancé » vaut pour TOUTE la
-            // dépose (éteint par défaut : options neutres, chaîne inchangée).
-            const options = advancedImportOptions()
-            for (const file of files) {
-                await importLocalFiles(file, slug, options)
-            }
-        } catch (err) {
-            state.localImportError = err?.message || 'localImport.parseError'
-            // Lot 2a : les refus « trop lourd » portent leurs nombres
-            // (entités, budget) — le message les affiche.
-            state.localImportErrorParams = err?.params || {}
-        }
-        await getProject(API_ROUTES.PROJECT(slug))
-        return
-    }
-    // Lot E3 — LE CHEMIN SERVEUR PASSE PAR LA MÊME FENÊTRE. L'interrupteur
-    // vit entre les deux cartes de mode, donc il vaut pour les deux ; et sans
-    // cela le lot E2 (éclatement et échelle côté worker) n'aurait plus AUCUNE
-    // interface depuis que le panneau replié a disparu — une régression
-    // silencieuse pour les projets « nos serveurs ».
-    //
-    // La lecture de la fenêtre est locale (le même wasm que l'aperçu) et ne
-    // change rien à ce qui est envoyé : c'est le worker qui applique les
-    // options, comme au lot E2.
-    {
-        const { needsChoice, useAdvancedImport } = await import('./advancedImport')
-        if (needsChoice()) {
-            await useAdvancedImport().openChoice(files, { projectSlug: slug })
-            return
-        }
-    }
-    await uploadToServer(files, slug)
-}
-
-/**
- * Dépose SERVEUR (« nos serveurs ») : les octets partent, le worker importe.
- *
- * Extrait de `addFiles` au lot E3 pour que la fenêtre de choix puisse s'en
- * servir aussi — le chemin est le même, seul le moment change.
- *
- * Lot E2 : miroir serveur de l'« import avancé ». Les options voyagent avec la
- * dépose et sont posées sur le DOCUMENT fichier ; c'est le worker qui les
- * applique (échelle sur la copie canonique, éclatement par handles). Options
- * neutres ⇒ aucun champ ajouté, requête d'avant.
- */
-async function uploadToServer(files, slug, forcedOptions = null) {
-    const formData = new FormData()
-    formData.append('projectName', state.projectName)
-    files.forEach((file) => formData.append('dxf', file))
-    {
-        const { advancedImportOptions } = await import('./advancedImport')
-        const opts = forcedOptions || advancedImportOptions()
-        if (opts.explode) formData.append('importExplode', '1')
-        if (opts.scaleTarget) {
-            formData.append('importScaleMode', String(opts.scaleTarget.mode))
-            formData.append('importScaleTargetMm', String(opts.scaleTarget.mm))
-        } else if (opts.scale !== 1) {
-            formData.append('importScale', String(opts.scale))
-        }
-    }
-    try {
-        await $fetch(API_ROUTES.ADDFILES(slug), {
-            method: 'POST',
-            body: formData
-        })
-
-        await getProject(API_ROUTES.PROJECT(slug))
-    } catch (error) {
-        console.error('Error while uploading files:', error)
-    }
-}
 function isValidNumber(value) {
     return /^\d+([.,]\d+)?$/.test(value)
 }
@@ -1004,12 +1042,11 @@ export const filesStore = readonly({
         updateParams,
         updateKerfSafety,
         updateSheet,
-        // Lot E1-bis : import des fichiers gardés par l'aperçu, avec les
-        // réglages du panneau (l'aperçu a déjà lu la géométrie ; l'import
-        // ordinaire la relit — c'est le prix d'une seule chaîne de code, et
-        // il ne se paie QUE sur une dépose à panneau ouvert).
-        importStagedFiles,
-        setAdvancedImport,
+        // Lot E4-b/E4-c : actions « Échelle » et « Éclater » SUR LA FICHE.
+        openFicheScale,
+        applyFicheScale,
+        resetFicheScale,
+        explodeFiche,
         addSheet,
         removeSheet,
         syncParamsToUnit,

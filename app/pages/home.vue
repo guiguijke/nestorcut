@@ -35,19 +35,10 @@
                 v-model="privacyChoice"
                 class="create__privacy"
             />
-            <!-- Lot E3 : l'interrupteur « Import avancé », à la CRÉATION du
-                 projet, entre les cartes de mode et la zone de dépôt — à
-                 l'endroit demandé par le propriétaire. Éteint par défaut ; son
-                 état part avec la création et devient une propriété du projet.
-                 Il vaut pour les DEUX modes : côté « cet appareil » la fenêtre
-                 de choix s'ouvre à chaque dépôt, côté « nos serveurs » ce sont
-                 les mêmes options, appliquées par le worker (lot E2). -->
-            <AdvancedImportSwitch
-                v-model="advancedImport"
-                class="create__advanced"
-            />
+            <!-- Lot E4-d : l'interrupteur « Import avancé » a disparu — le
+                 dépôt est l'import ordinaire, l'échelle et l'éclatement se
+                 demandent sur la fiche après import. -->
             <DxfUpload
-                :class="{ 'create__drop--advanced': advancedImport }"
                 :extensions="uploadExtensions"
                 @files="handleSubmit"
                 @rejected="handleRejected"
@@ -131,9 +122,6 @@
     // Défaut = cet appareil dès que l'import navigateur est dispo (opt-out
     // cloud : DWG, multi-appareils).
     const privacyChoice = ref(localImportEnabled.value ? 'device' : 'cloud')
-    // Lot E3 : l'interrupteur de la création. Éteint par défaut ; il voyage
-    // dans le corps du POST et devient le champ `advancedImport` du projet.
-    const advancedImport = ref(false)
     const localProject = computed(() => privacyChoice.value === 'device')
     watch(privacyChoice, () => { error.value = '' })
     // La page d'accueil porte SA PROPRE liste : c'est elle qui filtre la
@@ -171,7 +159,7 @@
             try {
                 const data = await $fetch(API_ROUTES.PROJECT(), {
                     method: 'POST',
-                    body: { local: true, advancedImport: advancedImport.value },
+                    body: { local: true },
                 })
                 filesActions.setPendingLocalFiles(files)
                 await getProjects()
@@ -196,22 +184,6 @@
                 method: 'POST',
                 body: formData,
             })
-
-            // Lot E3 : l'interrupteur est une propriété du PROJET, quel que
-            // soit le mode. Sur ce chemin (« nos serveurs », création AVEC
-            // fichiers) il ne gouverne pas CETTE dépose — les octets partent
-            // avec la création, comme avant le lot — mais il gouverne les
-            // suivantes. On le pose donc APRÈS, par le même PATCH que la page
-            // projet, plutôt que d'aller lire un champ dans le multipart que
-            // l'enregistrement des fichiers est en train de consommer.
-            if (advancedImport.value) {
-                try {
-                    await $fetch(`/api/project/${data.slug}/advanced-import`, {
-                        method: 'PATCH',
-                        body: { advancedImport: true },
-                    })
-                } catch { /* le projet existe ; l'interrupteur se remet sur sa page */ }
-            }
 
             await Promise.all([getProjects(), getProject(API_ROUTES.PROJECT(data.slug))])
 
@@ -319,17 +291,6 @@
 
         &__privacy {
             margin-bottom: 16px;
-        }
-
-        /* Lot E3 : l'interrupteur, entre les cartes de mode et la zone de
-           dépôt. Allumé, il TEINTE la bordure de la zone de dépôt — le
-           propriétaire demande que l'état se voie franchement, pas une case
-           grise. */
-        &__advanced {
-            margin-bottom: 12px;
-        }
-        &__drop--advanced :deep(.upload__label) {
-            border-color: var(--accent-primary);
         }
 
         &__error {

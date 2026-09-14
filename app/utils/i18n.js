@@ -388,36 +388,26 @@ const dict = {
         // Lot E0 : the engine refused ONE part's geometry at import. Naming
         // the file and the part is the whole point — 'crashLocal' told the
         // user nothing they could act on.
-        // Lot E1 : « Import avancé » de la dépose (projets « cet appareil »).
-        'advancedImport.title': 'Advanced import',
-        'advancedImport.badgeExplode': 'split',
-        'advancedImport.explode': 'Split into single parts',
-        'advancedImport.explodeHint': 'One file card per closed contour, each with its own quantity. Cutouts stay with their part.',
-        'advancedImport.scale': 'Scale',
-        'advancedImport.mode.factor': 'Factor',
-        'advancedImport.mode.width': 'Target width',
-        'advancedImport.mode.height': 'Target height',
-        'advancedImport.scaleHint': 'Applies to the whole drawing, before splitting. A factor of 1 changes nothing.',
-        // Lot E3 : l'interrupteur porté par le PROJET, et la fenêtre de
-        // choix qu'il ouvre à chaque dépôt.
-        'advancedImport.switchOn': 'Each drop asks: automatic import, or split and scale',
-        'advancedImport.switchOff': 'Drops are imported as they are',
-        'importChoice.title': 'How should these files be imported?',
-        'importChoice.lead': 'Advanced import is on for this project, so the choice is yours for this drop.',
-        'importChoice.read': '{n} parts · {w} × {h} {unit}',
-        'importChoice.auto': 'Automatic import',
-        'importChoice.explode': 'Split into parts and scale',
-        'importChoice.cancel': 'Cancel',
-        'importChoice.hint': 'Automatic import creates one card per file, exactly as usual. Nothing is created until you choose.',
-        // Lot E1-bis : aperçu du dessin posé sur une tôle.
+        // Lot E4-b/E4-c : l'échelle et l'éclatement sont des actions SUR LA
+        // FICHE — l'interrupteur du projet et la fenêtre de choix au dépôt
+        // ont disparu avec le lot E4-d.
+        'files.scaleAction': 'Scale',
+        'files.resetScaleAction': 'Reset scale',
+        'files.explodeAction': 'Split into parts',
+        'files.explodeConfirmText': 'Split this card into {n} parts, one card each? This cannot be undone.',
+        'files.explodeConfirmOk': 'Split',
+        // Lot E1-bis/E4-b : aperçu du dessin posé sur une tôle, ouvert sur
+        // la fiche par « Échelle ».
         'importPreview.reading': 'Reading the drawing…',
-        'importPreview.title': 'Preview on a sheet',
-        'importPreview.batch': '{n} files in this drop',
+        'importPreview.title': 'Scale on a sheet',
+        'importPreview.targetWidth': 'Target width',
+        'importPreview.targetHeight': 'Target height',
+        'importPreview.factorLabel': 'Factor',
         'importPreview.outside': 'Larger than the sheet',
         'importPreview.factor': 'factor {v}',
         'importPreview.sheet': 'Sheet',
         'importPreview.useSheet': 'Use this sheet for the project',
-        'importPreview.confirm': 'Import',
+        'importPreview.apply': 'Apply',
         'importPreview.cancel': 'Cancel',
         'localMode.itemGeometry': 'The engine could not use part {part} of “{file}”: its outline is not a usable closed contour. The nesting was refunded — fix that part in your CAD, or set its quantity to 0.',
         'localMode.itemGeometryUnknown': 'The engine could not use one part of this job: its outline is not a usable closed contour. The nesting was refunded — check the parts of the files in this project.',
@@ -1208,34 +1198,26 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez avec une tâche plus petite.",
         'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
-        'advancedImport.title': 'Import avancé',
-        'advancedImport.badgeExplode': 'éclaté',
-        'advancedImport.explode': 'Éclater en pièces unitaires',
-        'advancedImport.explodeHint': "Une fiche par contour fermé, chacune avec sa quantité. Les découpes restent avec leur pièce.",
-        'advancedImport.scale': 'Échelle',
-        'advancedImport.mode.factor': 'Facteur',
-        'advancedImport.mode.width': 'Largeur cible',
-        'advancedImport.mode.height': 'Hauteur cible',
-        'advancedImport.scaleHint': "S'applique au dessin complet, avant l'éclatement. Un facteur de 1 ne change rien.",
-        // Lot E3 : l'interrupteur porté par le PROJET, et la fenêtre de
-        // choix qu'il ouvre à chaque dépôt.
-        'advancedImport.switchOn': "Chaque dépôt demande : import automatique, ou éclater et mettre à l'échelle",
-        'advancedImport.switchOff': 'Les dépôts sont importés tels quels',
-        'importChoice.title': 'Comment importer ces fichiers ?',
-        'importChoice.lead': "L'import avancé est allumé sur ce projet : le choix est à vous pour cette dépose.",
-        'importChoice.read': '{n} pièces · {w} × {h} {unit}',
-        'importChoice.auto': 'Import automatique',
-        'importChoice.explode': "Éclater en pièces et mettre à l'échelle",
-        'importChoice.cancel': 'Annuler',
-        'importChoice.hint': "L'import automatique crée une fiche par fichier, exactement comme d'habitude. Rien n'est créé avant votre choix.",
+        // Lot E4-b/E4-c : l'échelle et l'éclatement sont des actions SUR LA
+        // FICHE — l'interrupteur du projet et la fenêtre de choix au dépôt
+        // ont disparu avec le lot E4-d.
+        'files.scaleAction': 'Échelle',
+        'files.resetScaleAction': "Réinitialiser l'échelle",
+        'files.explodeAction': 'Éclater en pièces',
+        'files.explodeConfirmText': "Éclater cette fiche en {n} pièces, une fiche chacune ? C'est irréversible.",
+        'files.explodeConfirmOk': 'Éclater',
+        // Lot E1-bis/E4-b : aperçu du dessin posé sur une tôle, ouvert sur
+        // la fiche par « Échelle ».
         'importPreview.reading': 'Lecture du dessin…',
-        'importPreview.title': 'Aperçu sur une tôle',
-        'importPreview.batch': '{n} fichiers dans cette dépose',
+        'importPreview.title': 'Échelle sur une tôle',
+        'importPreview.targetWidth': 'Largeur cible',
+        'importPreview.targetHeight': 'Hauteur cible',
+        'importPreview.factorLabel': 'Facteur',
         'importPreview.outside': 'Plus grand que la tôle',
         'importPreview.factor': 'facteur {v}',
         'importPreview.sheet': 'Tôle',
         'importPreview.useSheet': 'Utiliser cette tôle pour le projet',
-        'importPreview.confirm': 'Importer',
+        'importPreview.apply': 'Appliquer',
         'importPreview.cancel': 'Annuler',
         'localMode.itemGeometry': "Le moteur n'a pas pu utiliser la pièce {part} de « {file} » : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — corrigez cette pièce dans votre CAO, ou mettez sa quantité à 0.",
         'localMode.itemGeometryUnknown': "Le moteur n'a pas pu utiliser une pièce de cette tâche : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — vérifiez les pièces des fichiers de ce projet.",

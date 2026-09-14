@@ -1,20 +1,13 @@
 <template>
     <div class="files">
-        <!-- Lot E3 : le même interrupteur qu'à la création, avec LE MÊME
-             ÉTAT — il est porté par le projet. Le panneau replié a disparu. -->
-        <AdvancedImportSwitch
-            v-if="!readonly"
-            :modelValue="advancedOn"
-            class="files__advanced"
-            @update:modelValue="onAdvanced"
-        />
+        <!-- Lot E4-d : l'interrupteur « Import avancé » et la fenêtre de
+             choix au dépôt ont DISPARU — le dépôt est l'import ordinaire,
+             l'échelle et l'éclatement sont des actions sur la fiche. -->
         <DxfUpload
             v-if="!readonly"
             compact
             :extensions="uploadExtensions"
-            advanced
             class="files__upload"
-            :class="{ 'files__upload--advanced': advancedOn }"
             @files="addFiles"
             @rejected="onRejected"
             @oversize="rejectError = 'upload.tooLarge'"
@@ -28,7 +21,11 @@
                 <FileDone
                     :file="file"
                     :fileIndex="fileIndex"
+                    :canEdit="!readonly && !file.expired"
                     @openModal="openModal(file)"
+                    @scale="onScale(file)"
+                    @resetScale="onResetScale(file)"
+                    @explode="explodeTarget = file"
                     v-if="fileIsDone(file.processingStatus)"
                     class="files__item file"
                 />
@@ -45,13 +42,45 @@
             </template>
         </div>
         <FileModal v-model:isModalOpen="fileDialog" />
+
+        <!-- Lot E4-b : l'aperçu sur tôle, ouvert sur la fiche choisie. -->
+        <AdvancedImportPreview @apply="onApplyScale" />
+
+        <!-- Lot E4-c : « Éclater » est irréversible — une confirmation en
+             une ligne, rien de plus. -->
+        <DialogWrapper
+            :isModalOpen="Boolean(explodeTarget)"
+            trackingTag="file_explode_confirm"
+            @update:isModalOpen="explodeTarget = null"
+        >
+            <div v-if="explodeTarget" class="explode" data-testid="explode-confirm">
+                <p class="explode__text">
+                    {{ t('files.explodeConfirmText', { n: explodeTarget.parts?.length || 0 }) }}
+                </p>
+                <div class="explode__actions">
+                    <MainButton
+                        :label="t('files.explodeConfirmOk')"
+                        :theme="themeType.primary"
+                        trackingTag="file_explode_confirm_ok"
+                        data-testid="explode-confirm-ok"
+                        @click="onExplode"
+                    />
+                    <MainButton
+                        :label="t('importPreview.cancel')"
+                        :theme="themeType.secondary"
+                        trackingTag="file_explode_confirm_cancel"
+                        data-testid="explode-confirm-cancel"
+                        @click="explodeTarget = null"
+                    />
+                </div>
+            </div>
+        </DialogWrapper>
     </div>
 </template>
 <script setup>
 import { processingType } from "~~/constants/files.constants";
+import { themeType } from '~~/constants/theme.constants'
 import FileError from "./FileError.vue";
-import { useAdvancedImport } from '~/composables/advancedImport'
-import { filesStore } from '~/composables/files'
 
 const props = defineProps({
     projectFiles: {
@@ -83,16 +112,24 @@ const emit = defineEmits(["addFiles"])
 const { t } = useLocale()
 const rejectError = ref('')
 
-// Lot E3 : l'interrupteur « Import avancé » du PROJET. Sa vérité vit dans le
-// document projet ; le composable en porte la copie courante, et le store
-// l'écrit (`setAdvancedImport`, qui revient en arrière si le PATCH échoue).
-const adv = useAdvancedImport()
-const advancedOn = computed(() => adv.state.enabled === true)
-const onAdvanced = (v) => filesStore.actions.setAdvancedImport(v)
+// Lot E4-b/E4-c : les actions de fiche passent par le store — lui seul sait
+// si la fiche est locale (IndexedDB) ou serveur (routes + worker).
+const { actions: filesActions } = filesStore
 
 const addFiles = (files) => {
     rejectError.value = ''
     emit("addFiles", files)
+}
+
+const onScale = (file) => filesActions.openFicheScale(file)
+const onApplyScale = (options) => filesActions.applyFicheScale(options)
+const onResetScale = (file) => filesActions.resetFicheScale(file)
+
+const explodeTarget = ref(null)
+const onExplode = () => {
+    const file = explodeTarget.value
+    explodeTarget.value = null
+    if (file) filesActions.explodeFiche(file)
 }
 
 const onRejected = (files) => {
@@ -123,16 +160,6 @@ const openModal = (file) => {
     display: flex;
     flex-direction: column;
     gap: 12px;
-
-    &__advanced {
-        width: 100%;
-    }
-
-    /* Lot E3 : allume, l'interrupteur TEINTE la bordure de la zone de
-       depot — l'etat doit se voir franchement. */
-    &__upload--advanced :deep(.upload__label) {
-        border-color: var(--accent-primary);
-    }
 
     &__upload {
         width: 100%;
@@ -208,6 +235,27 @@ const openModal = (file) => {
         margin-right: 8px;
         min-width: 24px;
         text-align: center;
+    }
+}
+.explode {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+    max-width: 440px;
+    padding: 4px 8px 8px;
+    text-align: left;
+
+    &__text {
+        margin: 0;
+        color: var(--label-primary);
+        font-size: 14px;
+    }
+
+    &__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
     }
 }
 </style>

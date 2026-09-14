@@ -1,12 +1,18 @@
 /**
- * Verrous du lot E1 — « Import avancé » : l'état du panneau, la résolution
- * de l'échelle, et la chaîne d'import (échelle → import → éclatement).
+ * Verrous des lots E1 → E4 — la chaîne d'import et les actions SUR LA FICHE.
  *
- * Ce qui est mesuré ici : l'option ÉTEINTE ne change rien (aucun appel wasm
- * de plus, une seule fiche, nom intact), et l'option allumée produit une
- * fiche NORMALE par pièce, nommée « (k/N) », avec la provenance en champs
- * additifs. Le wasm est mocké — la géométrie elle-même est verrouillée par
- * les tests Rust (nest-import/tests/advanced_import.rs).
+ * Ce qui est mesuré ici :
+ *
+ *   - le DÉPÔT est l'import ordinaire, sans aucun appel wasm de plus (le
+ *     contrôle négatif historique du lot E1, devenu la règle au lot E4-d) ;
+ *   - `scaleLocalFiche` (E4-b) remplace la fiche EN PLACE, garde les octets
+ *     d'origine à la PREMIÈRE application, et compose les facteurs ;
+ *   - `resetLocalFicheScale` (E4-b) rend les octets d'origine BIT-IDENTIQUES ;
+ *   - `explodeLocalFiche` (E4-c) fabrique des fiches NORMALES « (k/N) »,
+ *     ordonnées au rang du parent, et supprime la fiche d'origine.
+ *
+ * Le wasm est mocké — la géométrie elle-même est verrouillée par les tests
+ * Rust (nest-import/tests/advanced_import.rs).
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -18,6 +24,7 @@ const state = vi.hoisted(() => ({
     partImports: [],
     calls: [],
     saved: [],
+    deleted: [],
 }))
 
 vi.mock('../composables/geometryClient', () => ({
@@ -32,7 +39,7 @@ vi.mock('../composables/geometryClient', () => ({
         return state.canonical
     }),
     geoCanonicalDxfScaled: vi.fn(async (bytes, factor) => {
-        state.calls.push(['scaled', factor])
+        state.calls.push(['scaled', factor, bytes?.[0] ?? null])
         return state.scaled
     }),
     geoCanonicalDxfPart: vi.fn(async (bytes, handles) => {
@@ -50,16 +57,14 @@ vi.mock('../composables/localFilesStore', async (importOriginal) => {
         saveLocalFile: vi.fn(async (record) => {
             state.saved.push(record)
         }),
+        deleteLocalFile: vi.fn(async (slug) => {
+            state.deleted.push(slug)
+        }),
     }
 })
 
-import { importLocalFiles } from '../composables/localImport'
-import {
-    advancedImportOptions,
-    resolveScale,
-    useAdvancedImport,
-} from '../composables/advancedImport'
-import { translate } from '../utils/i18n'
+import { importLocalFiles, scaleLocalFiche, resetLocalFicheScale, explodeLocalFiche } from '../composables/localImport'
+import { resolveScale } from '../composables/advancedImport'
 
 const part = (id, w, h) => ({
     coordinates: [[0, 0], [w, 0], [w, h], [0, h], [0, 0]],
@@ -72,6 +77,19 @@ const part = (id, w, h) => ({
 function fakeFile(name, first = 1) {
     const bytes = new Uint8Array([first, 2, 3])
     return { name, size: 3, arrayBuffer: async () => bytes.buffer }
+}
+
+const FICHE = {
+    slug: 'f-deadbeef.dxf',
+    projectSlug: 'p1',
+    name: 'logo.dxf',
+    addedAt: new Date(Date.UTC(2026, 8, 14, 10, 0, 0)).toISOString(),
+    dxfBytes: new Uint8Array([1, 2, 3]).buffer,
+    parts: [part(1, 10, 20), part(2, 30, 40), part(3, 50, 60)],
+    sourceUnits: 4,
+    entityCount: 3,
+    warnings: [],
+    findings: [{ code: 'import.unitsAssumed', level: 'attention', count: 1 }],
 }
 
 beforeEach(() => {
@@ -88,56 +106,25 @@ beforeEach(() => {
     state.partImports = []
     state.calls = []
     state.saved = []
-    useAdvancedImport().reset()
+    state.deleted = []
 })
 
-describe('E1/E3 — état de l’« Import avancé »', () => {
-    it('éteint par défaut : options neutres', () => {
-        expect(advancedImportOptions()).toEqual({ scale: 1, explode: false })
-    })
-
-    it('interrupteur ÉTEINT = réglage inerte, même coché', () => {
-        const adv = useAdvancedImport()
-        adv.setExplode(true)
-        adv.setValue(0.5)
-        // L'interrupteur du PROJET est éteint : rien ne s'applique. C'est le
-        // contrôle négatif du lot E3, et il se joue ici, en un seul endroit.
-        expect(advancedImportOptions()).toEqual({ scale: 1, explode: false })
-    })
-
-    it('facteur et éclatement voyagent quand l’interrupteur est allumé', () => {
-        const adv = useAdvancedImport()
-        adv.setEnabled(true)
-        adv.setExplode(true)
-        adv.setValue(0.5)
-        expect(advancedImportOptions()).toEqual({ scale: 0.5, explode: true })
-    })
-
-    it('un facteur absurde ne multiplie rien', () => {
-        const adv = useAdvancedImport()
-        adv.setEnabled(true)
-        for (const bad of [0, -2, Number.NaN]) {
-            adv.setValue(bad)
-            expect(advancedImportOptions().scale).toBe(1)
-        }
-    })
-
-    it('changer de mode remet la valeur à neutre', () => {
-        const adv = useAdvancedImport()
-        adv.setEnabled(true)
-        adv.setValue(2)
-        adv.setMode('width')
-        expect(adv.state.value).toBe(0)
-        adv.setValue(1000)
-        expect(advancedImportOptions()).toEqual({
-            scale: 1, explode: false, scaleTarget: { mode: 'width', mm: 1000 },
-        })
+describe('E4-d — le dépôt est l’import ordinaire', () => {
+    it('une fiche, nom intact, AUCUN appel wasm de plus', async () => {
+        const out = await importLocalFiles(fakeFile('plaque.dxf'), 'p1')
+        expect(out).toHaveLength(1)
+        expect(out[0].name).toBe('plaque.dxf')
+        expect(out[0].parts).toHaveLength(3)
+        expect(out[0].importScale).toBeUndefined()
+        expect(out[0].explodedFrom).toBeUndefined()
+        // Exactement l'import + le canonique d'avant le lot E1 : ni mesure,
+        // ni mise à l'échelle, ni éclatement — le dépôt ne décide plus rien.
+        expect(state.calls).toEqual([['import', 1], ['canonical']])
     })
 })
 
 describe('E1 — résolution de l’échelle par cible', () => {
     it('largeur cible : facteur = cible / étendue mesurée', () => {
-        // Le logo du collègue : 1612,6 mm de large, cible 1000 mm.
         const f = resolveScale(
             { scaleTarget: { mode: 'width', mm: 1000 } },
             { width: 1612.6, height: 230.6 },
@@ -164,38 +151,69 @@ describe('E1 — résolution de l’échelle par cible', () => {
     })
 })
 
-describe('E1 — chaîne d’import', () => {
-    it('options éteintes : une fiche, nom intact, AUCUN appel de plus', async () => {
-        const out = await importLocalFiles(fakeFile('plaque.dxf'), 'p1')
-        expect(out).toHaveLength(1)
-        expect(out[0].name).toBe('plaque.dxf')
-        expect(out[0].parts).toHaveLength(3)
-        expect(out[0].importScale).toBeUndefined()
-        expect(out[0].explodedFrom).toBeUndefined()
-        // Exactement l'import + le canonique d'avant le lot E1.
-        expect(state.calls).toEqual([['import', 1], ['canonical']])
+describe('E4-b — scaleLocalFiche : la fiche remplacée EN PLACE', () => {
+    it('cible largeur : facteur déduit de l’étendue MESURÉE, fiche intacte par ailleurs', async () => {
+        // Étendue des trois pièces mockées : 50 × 60. Cible 25 ⇒ facteur 0,5.
+        const out = await scaleLocalFiche(FICHE, { scaleTarget: { mode: 'width', mm: 25 } })
+        // La chaîne : le canonique de la fiche mis à l'échelle, puis relu.
+        expect(state.calls).toEqual([['scaled', 0.5, 1], ['import', 8]])
+        expect(out.slug).toBe(FICHE.slug)
+        expect(out.name).toBe(FICHE.name)
+        expect(out.addedAt).toBe(FICHE.addedAt)
+        expect(out.importScaleApplied).toBe(true)
+        expect(out.importScale).toBe(0.5)
+        // Les octets DXF sont ceux du dessin MIS À L'ÉCHELLE.
+        expect(new Uint8Array(out.dxfBytes)[0]).toBe(8)
+        // Les constats sont ceux du RÉ-IMPORT (ils décrivent les nouveaux
+        // octets — les constats d'unité & co se régénèrent), PLUS le constat
+        // d'échelle : un dessin n'est jamais multiplié en silence.
+        const codes = (out.findings || []).map((f) => f.code)
+        expect(codes).toEqual(['import.scaleApplied'])
+        expect(state.saved).toHaveLength(1)
     })
 
-    it('échelle seule : le DXF mis à l’échelle est celui qu’on importe', async () => {
-        const out = await importLocalFiles(fakeFile('plaque.dxf'), 'p1', { scale: 0.5 })
-        expect(state.calls[0]).toEqual(['scaled', 0.5])
-        // L'import lit les octets MIS À L'ÉCHELLE (8), pas la source (1).
-        expect(state.calls[1]).toEqual(['import', 8])
-        expect(out).toHaveLength(1)
-        expect(out[0].importScale).toBe(0.5)
+    it('la PREMIÈRE application garde les octets d’origine — la deuxième ne les écrase pas', async () => {
+        const once = await scaleLocalFiche(FICHE, { scale: 0.5 })
+        expect(new Uint8Array(once.origDxfBytes)).toEqual(new Uint8Array(FICHE.dxfBytes))
+        const twice = await scaleLocalFiche(once, { scale: 0.5 })
+        // Facteur composé : 0,5 × 0,5 ; l'original reste L'ORIGINAL.
+        expect(twice.importScale).toBe(0.25)
+        expect(new Uint8Array(twice.origDxfBytes)).toEqual(new Uint8Array(FICHE.dxfBytes))
     })
 
-    it('cible : une lecture de mesure, puis le facteur déduit', async () => {
-        // Étendue des trois pièces mockées : 50 mm de large (pièce 3).
-        const out = await importLocalFiles(fakeFile('plaque.dxf'), 'p1', {
-            scaleTarget: { mode: 'width', mm: 25 },
-        })
-        expect(state.calls[0]).toEqual(['import', 1])      // mesure
-        expect(state.calls[1]).toEqual(['scaled', 0.5])    // 25 / 50
-        expect(out[0].importScale).toBe(0.5)
+    it('un facteur de 1 ne touche à rien', async () => {
+        const out = await scaleLocalFiche(FICHE, { scale: 1 })
+        expect(out).toBe(FICHE)
+        expect(state.calls).toEqual([])
+    })
+})
+
+describe('E4-b — resetLocalFicheScale : retour BIT-IDENTIQUE', () => {
+    it('re-importe les octets d’origine, TELS QUELS, et retire les drapeaux', async () => {
+        const scaled = await scaleLocalFiche(FICHE, { scale: 0.5 })
+        state.calls = []
+        state.saved = []
+        const back = await resetLocalFicheScale(scaled)
+        // AUCUNE remise à l'échelle : l'import ordinaire des octets d'origine.
+        expect(state.calls).toEqual([['import', 1]])
+        expect(new Uint8Array(back.dxfBytes)).toEqual(new Uint8Array(FICHE.dxfBytes))
+        expect(back.importScaleApplied).toBeUndefined()
+        expect(back.importScale).toBeUndefined()
+        expect(back.origDxfBytes).toBeUndefined()
+        expect((back.findings || []).map((f) => f.code)).not.toContain('import.scaleApplied')
+        expect(back.slug).toBe(FICHE.slug)
+        expect(back.addedAt).toBe(FICHE.addedAt)
     })
 
-    it('éclatement : une fiche NORMALE par pièce, nommée (k/N)', async () => {
+    it('une fiche jamais mise à l’échelle reste telle quelle', async () => {
+        const out = await resetLocalFicheScale(FICHE)
+        expect(out).toBe(FICHE)
+        expect(state.calls).toEqual([])
+    })
+})
+
+describe('E4-c — explodeLocalFiche : N fiches NORMALES, le parent disparaît', () => {
+    beforeEach(() => {
         state.partImports = [1, 2, 3].map((k) => ({
             parts: [part(k, 10 * k, 20 * k)],
             source_units: 4,
@@ -203,39 +221,52 @@ describe('E1 — chaîne d’import', () => {
             warnings: [],
             findings: [],
         }))
-        const out = await importLocalFiles(fakeFile('logo.dxf'), 'p1', { explode: true })
+    })
+
+    it('une fiche par pièce, « nom (k/N) », au RANG du parent, ordre des pièces', async () => {
+        const out = await explodeLocalFiche(FICHE)
         expect(out).toHaveLength(3)
         expect(out.map((r) => r.name)).toEqual([
             'logo (1/3).dxf', 'logo (2/3).dxf', 'logo (3/3).dxf',
         ])
-        // Chaque fiche porte UNE pièce, sa provenance, et des slugs distincts.
-        expect(out.map((r) => r.parts.length)).toEqual([1, 1, 1])
+        expect(out.every((r) => r.parts.length === 1)).toBe(true)
         expect(out.map((r) => r.explodedIndex)).toEqual([1, 2, 3])
-        expect(new Set(out.map((r) => r.explodedFrom))).toEqual(new Set(['logo.dxf']))
-        expect(new Set(out.map((r) => r.slug)).size).toBe(3)
-        // Les octets DXF de la fiche sont ceux de SA pièce.
+        expect(out.every((r) => r.explodedFrom === 'logo.dxf')).toBe(true)
+        expect(out.every((r) => r.explodedFromSlug === FICHE.slug)).toBe(true)
+        // Au rang du parent : la première fille porte SON addedAt, les
+        // suivantes une milliseconde de plus (miroir du serveur).
+        const times = out.map((r) => Date.parse(r.addedAt))
+        expect(times[0]).toBe(Date.parse(FICHE.addedAt))
+        expect(times).toEqual([...times].sort((a, b) => a - b))
+        // Les octets DXF d'une fille sont ceux de SA pièce.
         expect(new Uint8Array(out[0].dxfBytes)[0]).toBe(77)
-        // Et chaque fiche est stockée (fiche normale : quantité, aperçu…).
+        // Le parent est supprimé, chaque fille est stockée.
+        expect(state.deleted).toEqual([FICHE.slug])
         expect(state.saved).toHaveLength(3)
         expect(out.every((r) => typeof r.previewSvg === 'string')).toBe(true)
     })
 
-    it('éclatement d’un dessin à une seule pièce : rien à éclater', async () => {
-        state.imported = { ...state.imported, parts: [part(1, 10, 20)] }
-        const out = await importLocalFiles(fakeFile('seule.dxf'), 'p1', { explode: true })
-        expect(out).toHaveLength(1)
-        expect(out[0].name).toBe('seule.dxf')
-        expect(out[0].explodedIndex).toBeUndefined()
+    it('l’échelle déjà appliquée et la provenance .job sont héritées', async () => {
+        const scaled = await scaleLocalFiche(FICHE, { scale: 0.5 })
+        state.calls = []
+        const out = await explodeLocalFiche({
+            ...scaled,
+            sheetcam: { leadIn: 2 },
+            sheetcamJobBytes: new Uint8Array([5, 5]).buffer,
+        })
+        expect(out.every((r) => r.importScaleApplied === true)).toBe(true)
+        expect(out.every((r) => r.importScale === 0.5)).toBe(true)
+        expect(out.every((r) => r.sheetcam?.leadIn === 2)).toBe(true)
+        expect(out.every((r) => new Uint8Array(r.sheetcamJobBytes)[0] === 5)).toBe(true)
     })
 
     it('une pièce qui ne se referme pas seule n’est PAS perdue', async () => {
-        // Le sous-ensemble rend 0 pièce (deux pièces qui partagent une arête).
         state.partImports = [
             { parts: [], warnings: [], findings: [] },
             { parts: [part(2, 30, 40)], warnings: [], findings: [] },
             { parts: [part(3, 50, 60)], warnings: [], findings: [] },
         ]
-        const out = await importLocalFiles(fakeFile('logo.dxf'), 'p1', { explode: true })
+        const out = await explodeLocalFiche(FICHE)
         expect(out).toHaveLength(3)
         expect(out[0].explodeFallback).toBe(true)
         expect(out[0].parts).toHaveLength(1)
@@ -243,36 +274,10 @@ describe('E1 — chaîne d’import', () => {
         expect(out[1].explodeFallback).toBeUndefined()
     })
 
-    it('échelle ET éclatement se composent dans cet ordre', async () => {
-        state.partImports = [1, 2, 3].map((k) => ({
-            parts: [part(k, 5 * k, 6 * k)], warnings: [], findings: [],
-        }))
-        const out = await importLocalFiles(fakeFile('logo.dxf'), 'p1', {
-            scale: 0.5, explode: true,
-        })
-        expect(state.calls[0]).toEqual(['scaled', 0.5])
-        expect(state.calls[1]).toEqual(['import', 8])
-        expect(state.calls[2]).toEqual(['canonical'])
-        expect(out).toHaveLength(3)
-        expect(out.every((r) => r.importScale === 0.5)).toBe(true)
-    })
-})
-
-describe('E1 — libellés', () => {
-    it('les clés du panneau existent en FR et EN', () => {
-        const keys = [
-            'advancedImport.title', 'advancedImport.explode',
-            'advancedImport.explodeHint', 'advancedImport.scale',
-            'advancedImport.mode.factor', 'advancedImport.mode.width',
-            'advancedImport.mode.height', 'advancedImport.scaleHint',
-            'import.microVoidsFilled', 'import.spursRemoved',
-        ]
-        for (const locale of ['fr', 'en']) {
-            for (const k of keys) {
-                const v = translate(k, locale)
-                expect(v, `${k} (${locale})`).not.toBe(k)
-                expect(v.length).toBeGreaterThan(1)
-            }
-        }
+    it('une fiche à une seule pièce : rien à éclater, rien de supprimé', async () => {
+        const out = await explodeLocalFiche({ ...FICHE, parts: [part(1, 10, 20)] })
+        expect(out).toEqual([])
+        expect(state.deleted).toEqual([])
+        expect(state.saved).toEqual([])
     })
 })

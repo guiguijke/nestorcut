@@ -23,11 +23,10 @@ export default defineEventHandler(async (event) => {
       if (!enabled) {
         throw createError({ statusCode: 404, message: "Not found" });
       }
-      // Lot E3 : l'interrupteur « Import avancé » de la page d'accueil est
-      // posé sur le PROJET dès sa création. Champ additif, absent = éteint.
-      return await createLocalProject(DOMAINS.bin, userId, {
-        advancedImport: body?.advancedImport === true,
-      });
+      // Lot E4-d : plus d'interrupteur « Import avancé » — le dépôt est
+      // l'import ordinaire, l'échelle et l'éclatement se demandent sur la
+      // fiche après import (PATCH /api/files/:slug/scale, POST …/explode).
+      return await createLocalProject(DOMAINS.bin, userId);
     }
   }
 

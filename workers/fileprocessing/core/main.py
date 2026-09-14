@@ -258,7 +258,24 @@ def _rewrite_scaled_copy(doc, drawing, factor, logger):
     Miroir du navigateur : c'est le DXF canonique qui est mis a l'echelle,
     puis relu par l'import ordinaire — l'aval (polygonisation, apercu, export
     par handle) ne voit qu'un dessin comme un autre.
+
+    Lot E4-b : a la PREMIERE application d'echelle, les octets d'origine sont
+    gardes sous `<slug>.orig` — c'est ce que « Reinitialiser l'echelle »
+    restaure (bit-identique). Les applications suivantes ne le regardent
+    plus : l'original du dessin ne change pas, seule sa copie courante.
     """
+    if not doc.get("importScaleApplied"):
+        try:
+            dek_keep = get_dek(db, doc)
+            orig_bytes = read_gridfs(valid_dxf_bucket, doc["slug"], doc["ownerId"], dek_keep)
+            write_gridfs(
+                valid_dxf_bucket, f"{doc['slug']}.orig", orig_bytes, doc["ownerId"], dek_keep
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "scale: keeping original copy failed",
+                extra={"slug": doc["slug"], "error": str(exc)[:120]},
+            )
     refused = scale_drawing(drawing, factor)
     stream = io.StringIO()
     drawing.write(stream)
@@ -287,16 +304,53 @@ def _rewrite_scaled_copy(doc, drawing, factor, logger):
     return refused
 
 
+def _restore_original_copy(doc, logger):
+    """Lot E4-b : REPLACE la copie canonique par l'originale.
+
+    `<slug>.orig` a ete garde a la premiere application d'echelle
+    (`_rewrite_scaled_copy`) ; la restaurer rend au fichier les octets de son
+    import d'origine — le reste du passage est alors l'import ordinaire, et
+    le retour est bit-identique. La route PATCH /scale a deja retire les
+    champs d'echelle du document : aucun facteur ne se rejoue.
+    """
+    dek = get_dek(db, doc)
+    orig_bytes = read_gridfs(valid_dxf_bucket, f"{doc['slug']}.orig", doc["ownerId"], dek)
+    try:
+        valid_dxf_bucket.delete_by_name(filename=doc["slug"])
+    except Exception as exc:  # noqa: BLE001
+        logger.info("scale reset: delete failed", extra={"error": str(exc)[:120]})
+    write_gridfs(valid_dxf_bucket, doc["slug"], orig_bytes, doc["ownerId"], dek)
+    # La copie d'origine ne sert plus : la prochaine mise a l'echelle en
+    # gardera une neuve (identique — les octets restaures SONT l'original).
+    try:
+        valid_dxf_bucket.delete_by_name(filename=f"{doc['slug']}.orig")
+    except Exception as exc:  # noqa: BLE001
+        logger.info("scale reset: orig delete failed", extra={"error": str(exc)[:120]})
+    _drawing_cache.pop(doc["slug"], None)
+    db["user_dxf_files"].update_one(
+        {"_id": doc["_id"]},
+        {"$unset": {"importScaleReset": ""}},
+    )
+    doc.pop("importScaleReset", None)
+    logger.info("scale reset: original copy restored", extra={"slug": doc["slug"]})
+
+
 def _close_polygon_from_dxf(doc, logger_tag: str):
     logger = setup_logger(logger_tag)
-     
+
     if doc.get("polygonParts") or doc.get("encPolygonParts"):
         logger.info("polygon_parts_already_exist", extra={"slug": doc["slug"]})
-     
+
     tolerance = doc["flattening"]
- 
+
     start_time = time.time()
     drawing = _getting_drawing(doc)
+    # Lot E4-b : RETOUR A L'ECHELLE D'ORIGINE — replacer la copie canonique
+    # par l'originale AVANT tout travail de geometrie : le reste du passage
+    # est l'import ordinaire du dessin d'origine (bit-identique).
+    if doc.get("importScaleReset"):
+        _restore_original_copy(doc, logger)
+        drawing = _getting_drawing(doc)
     # Constats d'import (lot 2c) : ceux de la lecture (unités, entités
     # supprimées, blocs, splines — portés par le document reconstruit) plus
     # ceux de l'assemblage, remplis ci-dessous.
@@ -461,6 +515,9 @@ def _explode_into_parts(doc, drawing, parts, logger):
             # Provenance (champs ADDITIFS) : d'ou vient cette fiche.
             "explodedFrom": doc.get("name"),
             "explodedIndex": k + 1,
+            # Lot E4-c : le parent PAR SLUG — l'UI herite la quantite de la
+            # fiche eclatee vers ses filles (le nom n'est pas unique).
+            "explodedFromSlug": doc.get("slug"),
             # Le facteur est DEJA dans ses octets (le sous-ensemble sort du
             # dessin mis a l'echelle) : le marquer applique, sinon le worker
             # le rejouerait sur la fille.

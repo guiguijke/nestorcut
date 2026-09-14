@@ -1,17 +1,12 @@
 <template>
-    <div class="preview" data-testid="import-preview">
-        <div v-if="adv.preview.loading" class="preview__wait">
-            {{ t('importPreview.reading') }}
-        </div>
-
-        <template v-else-if="drawing">
+    <DialogWrapper
+        :isModalOpen="isOpen"
+        trackingTag="fiche_scale"
+        @update:isModalOpen="onClose"
+    >
+        <div v-if="drawing" class="preview" data-testid="import-preview">
             <div class="preview__head">
-                <span class="preview__title">
-                    {{ t('importPreview.title') }}
-                    <template v-if="adv.preview.pending.length > 1">
-                        · {{ t('importPreview.batch', { n: adv.preview.pending.length }) }}
-                    </template>
-                </span>
+                <span class="preview__title">{{ t('importPreview.title') }}</span>
                 <span
                     v-if="!fits"
                     class="preview__warn"
@@ -64,6 +59,50 @@
                     @pointerdown="startDrag"
                 />
             </svg>
+
+            <!-- Les trois façons de dire la même échelle : largeur cible,
+                 hauteur cible (le rapport se conserve — l'un calcule
+                 l'autre), facteur. La poignée écrit la largeur. -->
+            <div class="preview__targets">
+                <label class="preview__field">
+                    <span class="preview__label">{{ t('importPreview.targetWidth') }}</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="preview__num preview__num--wide"
+                        data-testid="import-preview-w"
+                        :value="widthDisplay"
+                        @change="onWidth"
+                    />
+                    <span class="preview__label">{{ unitLabel }}</span>
+                </label>
+                <label class="preview__field">
+                    <span class="preview__label">{{ t('importPreview.targetHeight') }}</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="preview__num preview__num--wide"
+                        data-testid="import-preview-h"
+                        :value="heightDisplay"
+                        @change="onHeight"
+                    />
+                    <span class="preview__label">{{ unitLabel }}</span>
+                </label>
+                <label class="preview__field">
+                    <span class="preview__label">{{ t('importPreview.factorLabel') }}</span>
+                    <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        class="preview__num preview__num--wide"
+                        data-testid="import-preview-factor-input"
+                        :value="factorInput"
+                        @change="onFactor"
+                    />
+                </label>
+            </div>
 
             <div class="preview__row">
                 <span class="preview__dims" data-testid="import-preview-dims">
@@ -124,39 +163,46 @@
 
             <div class="preview__actions">
                 <MainButton
-                    :label="t('importPreview.confirm')"
+                    :label="t('importPreview.apply')"
                     :theme="themeType.primary"
-                    trackingTag="advanced_import_confirm"
+                    trackingTag="fiche_scale_apply"
                     data-testid="import-preview-confirm"
-                    @click="confirm"
+                    @click="apply"
                 />
                 <MainButton
                     :label="t('importPreview.cancel')"
                     :theme="themeType.secondary"
-                    trackingTag="advanced_import_cancel"
+                    trackingTag="fiche_scale_cancel"
                     data-testid="import-preview-cancel"
-                    @click="adv.cancel()"
+                    @click="onClose(false)"
                 />
             </div>
-        </template>
-    </div>
+        </div>
+    </DialogWrapper>
 </template>
 
 <script setup>
 /**
- * Lot E1-bis — aperçu du dessin posé sur une tôle, avant import.
+ * Lot E4-b — l'aperçu sur tôle du lot E1-bis, ouvert SUR UNE FICHE par
+ * l'action « Échelle » (`docs/PLAN-ECLATEMENT-2026-09-12.md` §8.2).
  *
- * Ce que l'aperçu est : une RÉFÉRENCE d'échelle. Il montre les contours lus
- * (une seule lecture, celle de l'import ordinaire) sur un rectangle de tôle,
- * avec une poignée d'angle à rapport conservé qui règle la LARGEUR CIBLE du
- * dessin — donc le mode « largeur cible » du panneau, pas une seconde façon
- * de calculer une échelle. Rien n'est importé avant « Importer » : aucune
- * fiche, aucun octet dans IndexedDB.
+ * Ce que l'aperçu est : une RÉFÉRENCE d'échelle. Il montre les contours de
+ * la fiche sur un rectangle de tôle, avec trois façons de dire la même
+ * échelle — largeur cible, hauteur cible (rapport conservé : saisir l'un
+ * recalcule l'autre), facteur — plus la poignée d'angle, qui tire la largeur
+ * cible. Tout est dérivé du facteur : impossible de désynchroniser les trois
+ * champs. Rien n'est appliqué avant « Appliquer » : l'application est à
+ * l'appelant (`filesStore.applyFicheScale`), ce composant ne touche ni au
+ * stockage ni au réseau.
  */
 import { themeType } from '~~/constants/theme.constants'
 import { SHEET_PRESETS } from '~/utils/units'
-import { fitsSheet, resolveScale, useAdvancedImport } from '~/composables/advancedImport'
+import {
+    fitsSheet, resolveScale, useAdvancedImport,
+} from '~/composables/advancedImport'
 import { filesStore } from '~/composables/files'
+
+const emit = defineEmits(['apply'])
 
 const { t } = useLocale()
 const { unit, unitLabel, mmToDisplay, displayToMm, fmtLengthValue } = useUnit()
@@ -167,23 +213,20 @@ const pad = 8
 const boxW = 520
 const boxH = 240
 
-/** Le dessin de référence de la dépose : le premier fichier lu. */
+const isOpen = computed(() => adv.preview.pending.length > 0)
+
+/** La fiche en cours de mise à l'échelle. */
 const drawing = computed(() => adv.preview.pending[0] || null)
 
 const sheet = computed(() => adv.preview.sheet || { width: 1000, height: 2000 })
 const presets = computed(() => SHEET_PRESETS[unref(unit)] || SHEET_PRESETS.mm)
 const digits = computed(() => (unref(unitLabel) === '"' ? 3 : 1))
 
-/** Facteur effectif : celui du panneau (champs ou poignée). */
+/** Facteur effectif : celui du panneau (champs liés ou poignée). */
 const factor = computed(() => {
     const d = unref(drawing)
     if (!d) return 1
-    return resolveScale(
-        adv.state.mode === 'factor'
-            ? { scale: adv.state.value }
-            : { scaleTarget: { mode: adv.state.mode, mm: adv.state.value } },
-        d.extent,
-    )
+    return resolveScale(adv.targetOptions(), d.extent)
 })
 const factorLabel = computed(() => {
     const f = unref(factor)
@@ -198,6 +241,27 @@ const scaledExtent = computed(() => {
     }
 })
 const fits = computed(() => fitsSheet(unref(drawing)?.extent, unref(factor), unref(sheet)))
+
+// Les trois champs, tous dérivés du facteur : saisir l'un recalculé les
+// autres, sans état local qui dérive (display unit ↔ mm à la frontière,
+// AGENTS #25).
+const round2 = (v) => Math.round(v * 100) / 100
+const widthDisplay = computed(() => round2(mmToDisplay(unref(scaledExtent).width)))
+const heightDisplay = computed(() => round2(mmToDisplay(unref(scaledExtent).height)))
+const factorInput = computed(() => Math.round(unref(factor) * 1e6) / 1e6)
+
+const onWidth = (e) => {
+    const v = Number(String(e.target.value).replace(',', '.'))
+    if (Number.isFinite(v) && v > 0) adv.setTargetWidth(displayToMm(v))
+}
+const onHeight = (e) => {
+    const v = Number(String(e.target.value).replace(',', '.'))
+    if (Number.isFinite(v) && v > 0) adv.setTargetHeight(displayToMm(v))
+}
+const onFactor = (e) => {
+    const v = Number(String(e.target.value).replace(',', '.'))
+    if (Number.isFinite(v) && v > 0) adv.setFactor(v)
+}
 
 // Échelle d'affichage : la tôle remplit la boîte, le dessin suit.
 const view = computed(() => {
@@ -214,7 +278,7 @@ const drawPx = computed(() => ({
     h: unref(scaledExtent).height * unref(view),
 }))
 
-/** Contours du dessin, ramenés à l'origine puis mis à l'échelle d'affichage. */
+/** Contours de la fiche, ramenés à l'origine puis mis à l'échelle d'affichage. */
 const paths = computed(() => {
     const d = unref(drawing)
     if (!d) return []
@@ -248,9 +312,8 @@ const onMove = (e) => {
     // Position du pointeur en unités du viewBox, puis en millimètres.
     const px = ((e.clientX - box.left) / box.width) * boxW - pad
     const widthMm = px / unref(view)
-    const d = unref(drawing)
-    if (!d || widthMm <= 1) return
-    adv.dragToWidth(widthMm)
+    if (widthMm <= 1) return
+    adv.setTargetWidth(widthMm)
 }
 
 // -------------------------------------------------------------- tôle
@@ -276,11 +339,10 @@ const onSheet = (which, raw) => {
 }
 
 // ------------------------------------------------------------ validation
-const confirm = async () => {
-    const pending = [...adv.preview.pending]
+const apply = () => {
     const useSheet = adv.preview.useSheet === true
     const s = unref(sheet)
-    adv.cancel()
+    const options = adv.targetOptions()
     if (useSheet) {
         // Pré-remplit la largeur/hauteur du PREMIER format, rien d'autre.
         filesStore.actions.updateSheet(0, {
@@ -288,10 +350,10 @@ const confirm = async () => {
             height: String(Math.round(mmToDisplay(s.height) * 100) / 100),
         })
     }
-    await filesStore.actions.importStagedFiles(
-        pending.map((p) => p.file),
-        pending[0]?.projectSlug || null,
-    )
+    emit('apply', options)
+}
+const onClose = (v) => {
+    if (v !== true) adv.cancel()
 }
 </script>
 
@@ -299,51 +361,74 @@ const confirm = async () => {
 .preview {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
-    padding: 12px;
-    border: 1px solid var(--fill-tertiary);
-    border-radius: 4px;
+    gap: 10px;
+    width: 100%;
+    max-width: 560px;
+    padding: 4px 8px 8px;
     text-align: left;
 
-    &__wait {
-        color: var(--label-secondary);
-        font-size: 13px;
-    }
     &__head {
         display: flex;
+        justify-content: space-between;
         align-items: baseline;
-        gap: 8px;
+        gap: 12px;
     }
     &__title {
         color: var(--label-primary);
-        font-size: 14px;
+        font-size: 16px;
+        font-weight: 600;
     }
     &__warn {
-        color: var(--red-primary, #DC2626);
-        font-size: 12px;
+        color: var(--warning-text, #B45309);
+        font-size: 13px;
     }
+
     &__svg {
         width: 100%;
-        max-width: 520px;
         height: auto;
+        background-color: var(--fill-secondary);
+        border: 1px solid var(--fill-tertiary);
+        border-radius: 4px;
         touch-action: none;
     }
     &__sheet {
-        fill: none;
-        stroke: var(--accent-primary);
-        stroke-width: 1;
-        stroke-dasharray: 4 3;
+        fill: var(--background-primary, #fff);
+        stroke: var(--separator-primary);
     }
     &__part {
         fill: var(--accent-primary);
         fill-opacity: 0.18;
         stroke: var(--accent-primary);
-        stroke-width: 0.8;
+        stroke-width: 1;
     }
     &__handle {
         fill: var(--accent-primary);
-        cursor: nwse-resize;
+        stroke: var(--background-primary, #fff);
+        cursor: ew-resize;
+    }
+
+    &__targets {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+    }
+    &__field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    &__num {
+        width: 64px;
+        padding: 4px 6px;
+        border: 1px solid var(--separator-secondary);
+        border-radius: 4px;
+        background-color: transparent;
+        color: var(--label-primary);
+        font-family: $sf_mono;
+
+        &--wide {
+            width: 88px;
+        }
     }
     &__row {
         display: flex;
@@ -351,25 +436,27 @@ const confirm = async () => {
         flex-wrap: wrap;
         gap: 8px;
     }
-    &__dims {
-        color: var(--label-primary);
-        font-size: 14px;
-    }
-    &__factor,
     &__label {
         color: var(--label-secondary);
         font-size: 13px;
     }
-    &__preset,
-    &__num {
-        padding: 3px 8px;
-        border: 1px solid var(--fill-tertiary);
-        border-radius: 4px;
-        background: none;
-        color: var(--label-secondary);
+    &__dims {
+        color: var(--label-primary);
+        font-family: $sf_mono;
+        font-size: 13px;
+    }
+    &__factor {
+        color: var(--accent-primary);
+        font-family: $sf_mono;
         font-size: 13px;
     }
     &__preset {
+        padding: 3px 8px;
+        border: 1px solid var(--separator-secondary);
+        border-radius: 4px;
+        background: none;
+        color: var(--label-secondary);
+        font-size: 12px;
         cursor: pointer;
 
         &--on {
@@ -377,33 +464,27 @@ const confirm = async () => {
             color: var(--accent-primary);
         }
     }
-    &__num {
-        width: 84px;
-        color: var(--label-primary);
-    }
     &__custom {
-        display: inline-flex;
+        display: flex;
         align-items: center;
-        gap: 6px;
-        color: var(--label-secondary);
+        gap: 4px;
     }
     &__check {
         display: flex;
         align-items: center;
         gap: 8px;
-        color: var(--label-primary);
-        font-size: 14px;
-        cursor: pointer;
+        color: var(--label-secondary);
+        font-size: 13px;
     }
     &__error {
         margin: 0;
-        color: var(--red-primary, #DC2626);
+        color: var(--red);
         font-size: 13px;
     }
     &__actions {
         display: flex;
+        flex-wrap: wrap;
         gap: 8px;
-        margin-top: 4px;
     }
 }
 </style>

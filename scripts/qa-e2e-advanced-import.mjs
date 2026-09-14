@@ -1,55 +1,48 @@
-// QA E2E navigateur — lot E3 : l'interrupteur « Import avancé » porté par le
-// PROJET, et la fenêtre de choix au dépôt
-// (`docs/PLAN-ECLATEMENT-2026-09-12.md` §6.2).
+// QA E2E navigateur — lot E4 : le dessin comme un bloc, l'échelle et
+// l'éclatement SUR LA FICHE (`docs/PLAN-ECLATEMENT-2026-09-12.md` §8.5).
 //
-// Sept cas : les six de la consigne, plus le cas serveur G demandé par la
-// vérification du lot E3 (`docs/PLAN-ECLATEMENT-2026-09-12.md`, section
-// « Lot E3 — vérification »).
+// Sept cas :
 //
-//   A. interrupteur ÉTEINT, un DXF multi-pièces ⇒ UNE fiche, nom intact,
-//      AUCUNE fenêtre, et rien n'est mis en attente de lecture ;
-//   B. ALLUMÉ, le même fichier, « Import automatique » ⇒ UNE fiche, la même
-//      qu'au cas A (nom et nombre de pièces comparés) ;
-//   C. ALLUMÉ, « Éclater » ⇒ une fiche par pièce, l'aperçu prend la main et
-//      sa poignée règle l'échelle (la seule commande d'échelle depuis que le
-//      panneau replié a disparu) ;
-//   D. ALLUMÉ, dépôt de TROIS fichiers ⇒ UNE seule fenêtre, qui les liste
-//      tous les trois ;
-//   E. ALLUMÉ, un `.job` SheetCam + ses dessins ⇒ AUCUNE fenêtre (un `.job`
-//      porte déjà sa tôle et ses quantités — règle du lot J4) ;
-//   F. captures FR et EN de l'interrupteur allumé et de la fenêtre ;
-//   G. projet « NOS SERVEURS », interrupteur allumé, « Éclater » ⇒ les
-//      fiches sont produites PAR LE WORKER, une par pièce, et mesurées sur la
-//      réponse de `/api/project/<slug>` — jamais sur l'écran. C'est le pendant
-//      serveur du cas C, et l'équivalent du cas G du lot E2.
-//
-// CE QUE CE HARNAIS NE MESURE PAS, et qu'il faut savoir : le NOMBRE D'APPELS
-// WASM. Playwright ne voit pas les appels d'un module wasm chargé dans un
-// worker. Le cas A vérifie donc ce qui est observable — aucune fenêtre, une
-// fiche, rien en attente — et le compte d'appels est verrouillé là où il est
-// mesurable, dans `app/tests/advancedImportChoice.test.js`, où le wasm est
-// moqué et les appels comptés un à un.
+//   A. dépôt du dessin multi-pièces ⇒ UNE fiche « 1 bloc · N pièces »,
+//      AUCUNE fenêtre (l'interrupteur et la fenêtre de choix ont disparu,
+//      E4-d) ;
+//   B. nesting local ⇒ 1 bloc placé, DXF de résultat relu : les N pièces
+//      sont aux positions relatives d'origine (distances inter-centroïdes) ;
+//   C. « Échelle » sur la fiche : saisie 1000 ⇒ facteur 0,353 et hauteur
+//      243,1 affichés, application ⇒ étendue mesurée 1000 ± 0,5 mm, poignée
+//      cohérente avec la saisie, « Réinitialiser » ⇒ retour à l'original ;
+//   D. « Éclater » ⇒ N fiches « nom (k/N) », quantité héritée, nesting ⇒
+//      N pièces LIBRES (aucun bloc) ;
+//   E. projet « Nos serveurs » : les MÊMES B-C-D par les routes serveur
+//      (PATCH /api/files/:slug/scale, POST …/explode) et le worker —
+//      tout mesuré sur les réponses de l'API ;
+//   F. un `.job` SheetCam + ses dessins : inchangé (fiches avec réglages
+//      de coupe, aucune fenêtre) ;
+//   G. captures FR et EN de la fiche avec ses deux actions et de l'aperçu —
+//      RÉGLAGES SEULS : dessin SYNTHÉTIQUE, jamais un dessin d'atelier.
 //
 // Le fichier d'entrée est passé par QA_FILE (copie anonyme d'un fichier
-// d'atelier : aucun nom réel ne sort d'ici). Le nombre de pièces attendu au
-// cas C n'est JAMAIS écrit en dur : il est mesuré au cas A sur le même
-// fichier.
+// d'atelier : aucun nom réel ne sort d'ici). N n'est JAMAIS écrit en dur :
+// il est mesuré au cas A sur le même fichier.
+//
+// La limite anti-brute-force (429) tombe entre deux créations de projet :
+// COOLDOWN_MS (défaut 75 s) avant chaque création suivant la première.
 //
 // Usage :
 //   QA_FILE=<dxf multi-pièces> QA_OUT=<dir> [QA_LOCALE=fr|en]
-//   [QA_TARGET_MM=1000] [QA_JOB=<fichier.job> QA_DXF_DIR=<dossier>]
+//   [QA_JOB=<fichier.job> QA_DXF_DIR=<dossier>] [COOLDOWN_MS=75000]
 //   node scripts/qa-e2e-advanced-import.mjs
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
-const OUT = process.env.QA_OUT || path.resolve('.qa-pw/e3')
-const FILE = process.env.QA_FILE || path.resolve('.testparts/Piece_Trou.DXF')
-const LOCALE = process.env.QA_LOCALE || 'fr'
-const TARGET_MM = Number(process.env.QA_TARGET_MM || 1000)
+const OUT = process.env.QA_OUT || path.resolve('.qa-pw/e4bcd')
+const FILE = process.env.QA_FILE || path.resolve('.testparts/ecrin de valandry.dxf')
+const LOCALE = process.env.QA_LOCALE || 'en'
 const JOB = process.env.QA_JOB || path.resolve('app/tests/fixtures/sheetcam/source.job')
 const DXF_DIR = process.env.QA_DXF_DIR || path.resolve('.testparts')
+const COOLDOWN_MS = Number(process.env.COOLDOWN_MS || 75000)
 fs.mkdirSync(OUT, { recursive: true })
 
 const logs = []
@@ -58,6 +51,7 @@ const log = (...a) => {
     logs.push(s)
     console.log(s)
 }
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const results = {}
 let failures = 0
 const check = (name, ok, detail = '') => {
@@ -92,15 +86,7 @@ const shot = async (name) => {
     catch (e) { log('capture échouée (non fatale):', name, String(e).slice(0, 100)) }
 }
 
-/**
- * Les fiches DU PROJET, lues dans IndexedDB — jamais déduites de l'écran.
- *
- * LE FILTRE PAR PROJET N'EST PAS UN DÉTAIL : la base est partagée par tous
- * les projets de l'appareil, et sans lui les comptes de chaque cas
- * s'additionnent à ceux des cas précédents. Premier passage du harnais :
- * 19 fiches « pour 17 pièces », 2 fiches au cas B, « Annuler » accusé d'en
- * avoir créé 19. Cinq échecs, tous imaginaires.
- */
+/** Records IndexedDB du projet (store files), avec géométrie + drapeaux. */
 const cards = (slug) => page.evaluate(async (only) => {
     const db = await new Promise((res, rej) => {
         const r = indexedDB.open('nestorcut-local')
@@ -110,26 +96,99 @@ const cards = (slug) => page.evaluate(async (only) => {
         const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
         tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
     })
-    return recs.filter((r) => !only || r.projectSlug === only).map((r) => {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-        for (const p of r.parts || []) {
-            for (const [x, y] of p.coordinates || []) {
-                if (x < minX) minX = x
-                if (x > maxX) maxX = x
-                if (y < minY) minY = y
-                if (y > maxY) maxY = y
+    return recs.filter((r) => !only || r.projectSlug === only)
+        .sort((a, b) => (a.addedAt || '').localeCompare(b.addedAt || ''))
+        .map((r) => {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+            for (const p of r.parts || []) {
+                for (const [x, y] of p.coordinates || []) {
+                    if (x < minX) minX = x
+                    if (x > maxX) maxX = x
+                    if (y < minY) minY = y
+                    if (y > maxY) maxY = y
+                }
             }
-        }
-        return {
-            name: r.name,
-            parts: (r.parts || []).length,
-            width: Number.isFinite(minX) ? Math.round((maxX - minX) * 100) / 100 : null,
-            height: Number.isFinite(minY) ? Math.round((maxY - minY) * 100) / 100 : null,
-            explodedFrom: r.explodedFrom ?? null,
-            hasCut: Boolean(r.sheetcam),
-        }
-    })
+            return {
+                slug: r.slug,
+                name: r.name,
+                parts: (r.parts || []).length,
+                width: Number.isFinite(minX) ? Math.round((maxX - minX) * 100) / 100 : null,
+                height: Number.isFinite(minY) ? Math.round((maxY - minY) * 100) / 100 : null,
+                explodedFrom: r.explodedFrom ?? null,
+                explodedFromSlug: r.explodedFromSlug ?? null,
+                importScaleApplied: r.importScaleApplied === true,
+                hasCut: Boolean(r.sheetcam),
+            }
+        })
 }, slug)
+
+/** Record IndexedDB avec les coordonnées (signature de rigidité). */
+const cardsGeometry = (slug) => page.evaluate(async (only) => {
+    const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('nestorcut-local')
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+    })
+    const recs = await new Promise((res, rej) => {
+        const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
+        tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
+    })
+    return recs.filter((r) => !only || r.projectSlug === only).map((r) => ({
+        name: r.name,
+        parts: (r.parts || []).map((p) => ({ coordinates: p.coordinates, holes: p.holes || [] })),
+    }))
+}, slug)
+
+/** Result record (store results) le plus récent du projet. */
+const readResult = (projectSlug) => page.evaluate(async (slug) => {
+    const db = await new Promise((res, rej) => {
+        const r = indexedDB.open('nestorcut-local')
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+    })
+    const recs = await new Promise((res, rej) => {
+        const r = db.transaction('results', 'readonly').objectStore('results').getAll()
+        r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error)
+    })
+    const mine = recs.filter((x) => x.projectSlug === slug)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    return mine[0] || null
+}, projectSlug)
+
+/** Centroïdes shoelace + vecteur TRIÉ des distances inter-centroïdes
+ * (signature d'un dessin rigide : invariante par translation/rotation). */
+const pairwiseSignature = (parts) => {
+    const centroids = parts.map((p) => {
+        const ring = p.coordinates || []
+        let a = 0; let cx = 0; let cy = 0
+        for (let i = 0; i < ring.length; i++) {
+            const [x1, y1] = ring[i]
+            const [x2, y2] = ring[(i + 1) % ring.length]
+            const cross = x1 * y2 - x2 * y1
+            a += cross
+            cx += (x1 + x2) * cross
+            cy += (y1 + y2) * cross
+        }
+        a *= 0.5
+        if (Math.abs(a) < 1e-12) {
+            const sx = ring.reduce((s, p) => s + p[0], 0) / ring.length
+            const sy = ring.reduce((s, p) => s + p[1], 0) / ring.length
+            return [sx, sy]
+        }
+        return [cx / (6 * a), cy / (6 * a)]
+    })
+    const dists = []
+    for (let i = 0; i < centroids.length; i++) {
+        for (let j = i + 1; j < centroids.length; j++) {
+            dists.push(Math.hypot(centroids[i][0] - centroids[j][0], centroids[i][1] - centroids[j][1]))
+        }
+    }
+    return dists.sort((a, b) => a - b)
+}
+const compareSignatures = (before, after, tolMm) => {
+    if (before.length !== after.length) return `counts differ: ${before.length} vs ${after.length}`
+    let worst = 0
+    for (let i = 0; i < before.length; i++) worst = Math.max(worst, Math.abs(before[i] - after[i]))
+    return worst > tolMm ? `max pairwise delta ${worst.toFixed(4)} mm > ${tolMm} mm` : null
+}
 
 async function login() {
     await page.goto(BASE + '/auth/local', { waitUntil: 'domcontentloaded' })
@@ -143,16 +202,15 @@ async function login() {
     await page.waitForURL('**/home', { timeout: 30000 })
 }
 
-/**
- * Crée un projet avec l'interrupteur dans l'état demandé, en déposant `files`.
- * L'interrupteur est celui de la PAGE D'ACCUEIL : son état part avec la
- * création et devient une propriété du projet.
- *
- * `local: false` crée un projet « nos serveurs ». Les cartes de mode sont des
- * `role=radio` (PrivacyModePicker) : viser le bouton ferait tomber le clic sur
- * « Activer le coffre ».
- */
-async function createProject(files, { advanced = false, local = true } = {}) {
+let creations = 0
+/** Crée un projet (défaut : « cet appareil ») en déposant `files`, avec la
+ * retombée 429 entre deux créations. */
+async function createProject(files, { local = true } = {}) {
+    if (creations > 0) {
+        log(`retombée anti-brute-force (${COOLDOWN_MS} ms)…`)
+        await sleep(COOLDOWN_MS)
+    }
+    creations++
     await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
     const card = page
@@ -164,57 +222,112 @@ async function createProject(files, { advanced = false, local = true } = {}) {
     if (!local && (await card.getAttribute('aria-checked')) !== 'true') {
         throw new Error('le projet « nos serveurs » n’est pas sélectionné (aria-checked)')
     }
-
-    const sw = page.locator('[data-testid="advanced-import-switch-btn"]')
-    await sw.waitFor({ timeout: 30000 })
-    const on = (await sw.getAttribute('aria-checked')) === 'true'
-    if (on !== advanced) await sw.click()
-    if (((await sw.getAttribute('aria-checked')) === 'true') !== advanced) {
-        throw new Error('interrupteur non positionné')
-    }
-
     await page.setInputFiles('input[name="dxf"]', files)
     await page.waitForURL('**/project/**', { timeout: 90000 })
     return page.url().split('/project/')[1].split(/[?#]/)[0]
 }
 
-/**
- * La fenêtre de choix est-elle ouverte ET a-t-elle fini de LIRE ?
- *
- * La fenêtre s'affiche d'abord en « lecture du dessin… » : la liste des
- * fichiers n'existe qu'une fois la lecture finie. Attendre la fenêtre sans
- * attendre sa liste mesure un écran de chargement — le harnais a commencé par
- * faire cette erreur (0 ligne au cas B) et c'est le harnais qui était faux,
- * pas la fenêtre.
- */
-/**
- * Fiches d'un projet SERVEUR, lues dans la réponse de l'API — jamais déduites
- * de l'écran (cas G). Reprises du harnais du lot E2.
- */
-const serverCards = (slug) => page.evaluate(async (s) => {
-    const data = await $fetch(`/api/project/${s}`)
-    return (data.files || []).map((f) => {
-        const ws = (f.parts || []).map((p) => p.width)
-        const hs = (f.parts || []).map((p) => p.height)
-        return {
-            name: f.name,
-            status: f.processingStatus,
-            parts: (f.parts || []).length,
-            maxWidth: ws.length ? Math.max(...ws) : null,
-            maxHeight: hs.length ? Math.max(...hs) : null,
+async function waitCards(expected, timeout = 240000) {
+    await page.waitForFunction(
+        (n) => document.querySelectorAll('.files__item input.counter__value').length === n,
+        expected, { timeout },
+    ).catch(async () => log(`ATTENTION : ${expected} fiche(s) attendue(s), actuellement`,
+        await page.locator('.files__item').count()))
+}
+
+/** Attend que la fiche unique du projet satisfasse `want` (sonde IndexedDB,
+ * jamais l'écran) — le remplacement en place est asynchrone. */
+async function waitCardState(slug, want, timeout = 90000) {
+    const t0 = Date.now()
+    while (Date.now() - t0 < timeout) {
+        const cs = await cards(slug)
+        if (cs.length === 1 && want(cs[0])) return cs[0]
+        await sleep(1000)
+    }
+    return null
+}
+
+/** Pose les réglages 6000×1500, kerf 0, sécurité 1, et lance le nesting. */
+async function launchNest() {
+    const sheet = page.locator('.size__sheet').first()
+    const dims = sheet.locator('.size__line .input__value')
+    await dims.nth(0).fill('6000'); await dims.nth(0).blur()
+    await dims.nth(1).fill('1500'); await dims.nth(1).blur()
+    const kerfF = page.locator('label.input', { hasText: 'Kerf' }).locator('.input__value')
+    await kerfF.fill('0'); await kerfF.blur()
+    const safetyF = page.locator('label.input', { hasText: 'Safety' }).locator('.input__value')
+    await safetyF.fill('1'); await safetyF.blur()
+    await page.locator('.atelier__nest').click()
+}
+
+/** Nesting local complet (lancement + attente) : rend l'état du modal
+ * résultat. Repris du harnais E4-a. À n'utiliser que quand la liste des
+ * résultats est VIDE — sinon le premier item est un ANCIEN job. */
+async function nestLocal() {
+    await launchNest()
+    const t0 = Date.now()
+    let outcome = 'timeout'
+    while (Date.now() - t0 < 8 * 60 * 1000) {
+        const err = await page.locator('.content__error').allInnerTexts().catch(() => [])
+        const errTxt = err.map((s) => s.trim()).filter(Boolean).join(' | ')
+        if (errTxt) { outcome = 'page-error: ' + errTxt; break }
+        if (await page.locator('[data-testid="capacity-panel"]').count()) {
+            outcome = 'page-error: capacity panel'; break
         }
-    })
+        const stageRunning = await page.locator('.stage__status').count()
+        const item = page.locator('.results__item').first()
+        if (await item.count()) {
+            const running = await item.locator('.result__cancel').count()
+            const failedPh = await item.locator('.result__placeholder').count()
+            const doneBtn = await item.locator('.controls__report, .controls__download').count()
+            if (failedPh) { outcome = 'result-failed'; break }
+            if (!running && doneBtn && !stageRunning) { outcome = 'done'; break }
+        }
+        await sleep(2000)
+    }
+    if (outcome !== 'done') throw new Error('compute did not complete: ' + outcome)
+    await page.locator('[data-testid="result-area"]').first().click()
+    await page.waitForSelector('.modal', { timeout: 30000 })
+    await sleep(2000)
+    const stateTxt = (await page.locator('[data-testid="result-state"]').innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    return stateTxt
+}
+
+const closeModal = () => page.locator('.modal-body__close, .modal [class*="close"]').first().click().catch(() => {})
+
+/** Étendue d'un fiche SERVEUR via l'API géométrie (mm), jamais l'écran. */
+const serverExtent = (slug) => page.evaluate(async (s) => {
+    const data = await $fetch(`/api/files/project/geometry/${s}`)
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const p of data.parts || []) {
+        for (const [x, y] of p.coordinates || []) {
+            if (x < minX) minX = x
+            if (x > maxX) maxX = x
+            if (y < minY) minY = y
+            if (y > maxY) maxY = y
+        }
+    }
+    return {
+        parts: (data.parts || []).length,
+        width: Math.round((maxX - minX) * 100) / 100,
+        height: Math.round((maxY - minY) * 100) / 100,
+    }
 }, slug)
 
-/**
- * Attend que TOUTES les fiches du projet serveur soient traitées.
- *
- * Boucle côté Node, PAS `waitForFunction` : un prédicat `async` y rend une
- * Promesse, que le polling injecté juge VRAIE tout de suite — l'attente
- * réussit alors sans rien attendre (mesure du lot E2 : 1 fiche
- * « in-progress » acceptée pour 18 attendues).
- */
-async function waitServerDone(slug, expected, timeoutMs = 300000) {
+/** Fiches d'un projet SERVEUR, lues dans la réponse de l'API. */
+const serverCards = (slug) => page.evaluate(async (s) => {
+    const data = await $fetch(`/api/project/${s}`)
+    return (data.files || []).map((f) => ({
+        slug: f.slug,
+        name: f.name,
+        status: f.processingStatus,
+        parts: (f.parts || []).length,
+        importScaleApplied: f.importScaleApplied === true,
+        explodedFromSlug: f.explodedFromSlug ?? null,
+    }))
+}, slug)
+
+async function waitServerDone(slug, expected, timeoutMs = 600000) {
     const t0 = Date.now()
     let files = []
     while (Date.now() - t0 < timeoutMs) {
@@ -222,131 +335,283 @@ async function waitServerDone(slug, expected, timeoutMs = 300000) {
         const done = files.filter((f) => f.status === 'done').length
         if (files.length >= expected && done === files.length) return files
         if (files.some((f) => f.status === 'error')) {
-            throw new Error(`fiche en erreur côté serveur (${done}/${files.length} prêtes)`)
+            throw new Error(`fiche serveur en erreur (${done}/${files.length} prêtes)`)
         }
-        await page.waitForTimeout(2000)
+        await sleep(2000)
     }
     throw new Error(`attente serveur épuisée : ${files.length} fiche(s), `
         + `${files.filter((f) => f.status === 'done').length} prêtes, ${expected} attendues`)
 }
 
-async function choiceOpen(timeout = 8000, expectFiles = 0) {
-    try {
-        await page.locator('[data-testid="import-choice"]').waitFor({ timeout })
-    } catch { return false }
-    if (expectFiles > 0) {
-        await page.waitForFunction(
-            (n) => document.querySelectorAll('[data-testid="import-choice-list"] li').length >= n,
-            expectFiles,
-            { timeout: 120000 },
-        ).catch(() => {})
+/** DXF minimal à trois rectangles disjoints — pour les captures du cas G
+ * (RÉGLAGES SEULS : jamais un dessin d'atelier dans les captures). */
+function syntheticDxf() {
+    const rects = [[0, 0, 200, 100], [300, 0, 150, 150], [550, 0, 200, 80]]
+    let entities = ''
+    for (const [x, y, w, h] of rects) {
+        const pts = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]]
+        entities += '0\nLWPOLYLINE\n8\n0\n90\n4\n70\n1\n'
+        for (const [px, py] of pts) entities += `10\n${px}\n20\n${py}\n`
     }
-    return true
+    const dxf = '0\nSECTION\n2\nHEADER\n9\n$INSUNITS\n70\n4\n0\nENDSEC\n'
+        + '0\nSECTION\n2\nENTITIES\n' + entities + '0\nENDSEC\n0\nEOF\n'
+    const p = path.join(OUT, 'synthetic-capture.dxf')
+    fs.writeFileSync(p, dxf)
+    return p
 }
 
 try {
     await login()
 
-    // ---------- A. interrupteur ÉTEINT ----------
-    const slugA = await createProject([FILE], { advanced: false })
-    check('A1 aucune fenêtre quand l’interrupteur est éteint', !(await choiceOpen(6000)))
-    await page.waitForFunction(
-        () => document.querySelectorAll('[data-testid="file-card"], .file').length >= 1,
-        null, { timeout: 120000 },
-    ).catch(() => {})
+    // ---------- A. dépôt ⇒ 1 fiche bloc, AUCUNE fenêtre (E4-a + E4-d) -----
+    const slugA = await createProject([FILE])
+    // E4-d : l'interrupteur n'existe plus nulle part.
+    check('A0 l’interrupteur « Import avancé » a disparu',
+        (await page.locator('[data-testid="advanced-import-switch"]').count()) === 0)
+    await waitCards(1)
+    await sleep(800)
     const aCards = await cards(slugA)
     log('cas A, fiches :', JSON.stringify(aCards))
-    check('A2 une seule fiche, nom intact', aCards.length === 1
-        && aCards[0].name === path.basename(FILE),
-        `${aCards.length} fiche(s) : ${aCards.map((c) => c.name).join(', ')}`)
     const PARTS = aCards[0]?.parts || 0
     const WIDTH = aCards[0]?.width || 0
-    check('A3 le dessin multi-pièces est resté ENTIER', PARTS >= 1,
-        `${PARTS} pièces, ${WIDTH} mm de large`)
-    await shot('A-eteint.png')
+    const HEIGHT = aCards[0]?.height || 0
+    check('A1 une seule fiche, multi-pièces conservé',
+        aCards.length === 1 && aCards[0].name === path.basename(FILE) && PARTS >= 2,
+        `${aCards.length} fiche(s), ${PARTS} pièces, ${WIDTH} × ${HEIGHT} mm`)
+    const blockLine = (await page.locator('.file__parts').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    check('A2 la fiche dit « 1 bloc · N pièces »',
+        new RegExp(`1 (bloc|block) · ${PARTS} (pièces|parts)`, 'i').test(blockLine), blockLine)
+    check('A3 aucune fenêtre de choix n’est apparue',
+        (await page.locator('[data-testid="import-choice"]').count()) === 0
+        && (await page.locator('[data-testid="import-preview"]').count()) === 0)
+    check('A4 les actions « Échelle » et « Éclater » sont SUR la fiche',
+        (await page.locator('[data-testid="file-scale"]').count()) === 1
+        && (await page.locator('[data-testid="file-explode"]').count()) === 1)
+    check('A5 pas de « Réinitialiser » sans échelle appliquée',
+        (await page.locator('[data-testid="file-scale-reset"]').count()) === 0)
+    const aGeom = await cardsGeometry(slugA)
+    const sigBefore = pairwiseSignature(aGeom[0].parts)
+    await shot('A-fiche-bloc.png')
 
-    // ---------- B. ALLUMÉ + « Import automatique » ----------
-    const slugB = await createProject([FILE], { advanced: true })
-    check('B1 la fenêtre s’ouvre quand l’interrupteur est allumé', await choiceOpen(30000, 1))
-    const listed = await page.locator('[data-testid="import-choice-list"] li').count()
-    check('B2 la fenêtre liste le fichier déposé', listed === 1, `${listed} ligne(s)`)
-    await shot('B-fenetre.png')
-    await page.locator('[data-testid="import-choice-auto"]').click()
-    await page.waitForFunction(
-        () => document.querySelectorAll('[data-testid="file-card"], .file').length >= 1,
-        null, { timeout: 120000 },
-    ).catch(() => {})
-    const bCards = await cards(slugB)
-    log('cas B, fiches :', JSON.stringify(bCards))
-    check('B3 « Import automatique » rend LA MÊME fiche que le cas A',
-        bCards.length === 1 && bCards[0].name === aCards[0]?.name
-        && bCards[0].parts === PARTS && bCards[0].width === WIDTH,
-        `${bCards.length} fiche(s), ${bCards[0]?.parts} pièces, ${bCards[0]?.width} mm`)
+    // ---------- B. nesting local ⇒ 1 bloc placé, positions relatives ------
+    const stateB = await nestLocal()
+    log('cas B, état résultat :', stateB)
+    check('B1 le résultat dit « 1 bloc (N pièces) placé »',
+        /(bloc|block)/i.test(stateB) && new RegExp(`\\b${PARTS}\\b`).test(stateB), stateB)
+    await shot('B-resultat-bloc.png')
+    const record = await readResult(slugA)
+    const dxf = record?.alternatives?.[0]?.dxfs?.[0]
+    if (!dxf?.content) throw new Error('result record has no DXF content')
+    const nestedPath = path.join(OUT, 'nested-result.dxf')
+    fs.writeFileSync(nestedPath, dxf.content, 'utf-8')
+    await closeModal()
+    // Ré-import du DXF de résultat : la tôle devient pièce dominante avec
+    // les pièces pour trous (comportement d'import historique) — les
+    // positions relatives se lisent sur ces trous.
+    const slugB = await createProject([nestedPath])
+    await waitCards(1)
+    await sleep(800)
+    const bGeom = await cardsGeometry(slugB)
+    const ringArea = (ring) => {
+        let a = 0
+        for (let i = 0; i < ring.length; i++) {
+            const [x1, y1] = ring[i]
+            const [x2, y2] = ring[(i + 1) % ring.length]
+            a += x1 * y2 - x2 * y1
+        }
+        return Math.abs(a) / 2
+    }
+    const dominant = bGeom[0].parts.reduce((best, p) => (
+        ringArea(p.coordinates || []) > ringArea(best.coordinates || []) ? p : best
+    ), bGeom[0].parts[0])
+    const nestedParts = (dominant.holes || []).map((ring) => ({ coordinates: ring }))
+    log('cas B, DXF relu :', bGeom[0].parts.length, 'corps, dominante avec', nestedParts.length, 'trous')
+    const sigAfter = pairwiseSignature(nestedParts)
+    const verdict = nestedParts.length === PARTS ? compareSignatures(sigBefore, sigAfter, 0.01) : 'hole count mismatch'
+    check('B2 rigidité : N pièces aux positions relatives d’origine (≤ 0,01 mm)',
+        verdict === null, verdict || `${sigAfter.length} distances conservées`)
 
-    // ---------- C. ALLUMÉ + « Éclater » + largeur cible ----------
-    const slugC = await createProject([FILE], { advanced: true })
-    check('C1 la fenêtre s’ouvre', await choiceOpen(30000, 1))
-    await page.locator('[data-testid="import-choice-explode"]').click()
+    // ---------- C. « Échelle » sur la fiche : saisir, tirer, réinitialiser
+    await page.goto(BASE + '/project/' + slugA, { waitUntil: 'domcontentloaded' })
+    await waitCards(1)
+    await sleep(500)
+    await page.locator('[data-testid="file-scale"]').first().click()
     await page.locator('[data-testid="import-preview"]').waitFor({ timeout: 30000 })
     await shot('C-apercu.png')
-    // L'ÉCHELLE se règle à la poignée de l'aperçu : on la TIRE, et le facteur
-    // annoncé doit CHANGER. Exiger seulement qu'un facteur s'affiche serait un
-    // verrou creux — le premier passage de ce harnais est passé au vert sur
-    // « facteur 1 », c'est-à-dire sur une poignée qui n'avait pas bougé.
-    const avant = (await page.locator('[data-testid="import-preview-factor"]')
-        .innerText().catch(() => '')).trim()
+    // Saisie 1000 en largeur cible : facteur ET hauteur recalculés.
+    await page.locator('[data-testid="import-preview-w"]').fill(String(Math.round(WIDTH > 2000 ? 1000 : WIDTH / 2)))
+    await page.locator('[data-testid="import-preview-w"]').blur()
+    await sleep(300)
+    const targetW = WIDTH > 2000 ? 1000 : WIDTH / 2
+    const factorTxt = (await page.locator('[data-testid="import-preview-factor"]').innerText()).trim()
+    const hVal = Number(await page.locator('[data-testid="import-preview-h"]').inputValue())
+    const expectedFactor = Math.round((targetW / WIDTH) * 1000) / 1000
+    const expectedH = Math.round(HEIGHT * (targetW / WIDTH) * 10) / 10
+    log(`cas C : facteur affiché « ${factorTxt} », hauteur ${hVal} (attendus ${expectedFactor}, ${expectedH})`)
+    check('C1 saisir la largeur ⇒ facteur et hauteur recalculés (rapport conservé)',
+        factorTxt.includes(String(expectedFactor)) && Math.abs(hVal - expectedH) <= 0.2,
+        `facteur « ${factorTxt} », hauteur ${hVal}`)
+    await page.locator('[data-testid="import-preview-confirm"]').click()
+    const applied = await waitCardState(slugA, (c) => c.importScaleApplied === true)
+    log('cas C après application :', applied ? JSON.stringify(applied) : 'non retourné')
+    check('C2 application ⇒ étendue mesurée à la cible (± 0,5 mm) — fiche EN PLACE',
+        applied !== null && Math.abs(applied.width - targetW) <= 0.5,
+        applied ? `${applied.width} × ${applied.height}` : 'délai dépassé')
+    check('C3 « Réinitialiser l’échelle » apparaît',
+        (await page.locator('[data-testid="file-scale-reset"]').count()) === 1)
+    // La poignée dit la même échelle que la saisie : on rouvre, on tire, le
+    // facteur change et la largeur affichée est celle tirée.
+    await page.locator('[data-testid="file-scale"]').first().click()
+    await page.locator('[data-testid="import-preview"]').waitFor({ timeout: 30000 })
+    const avant = await page.locator('[data-testid="import-preview-factor"]').innerText()
     const handle = page.locator('[data-testid="import-preview-handle"]')
     await handle.scrollIntoViewIfNeeded().catch(() => {})
     const svgBox = await page.locator('[data-testid="import-preview-svg"]').boundingBox()
     const hBox = await handle.boundingBox()
+    let handleOk = false
     if (hBox && svgBox) {
         await page.mouse.move(hBox.x + hBox.width / 2, hBox.y + hBox.height / 2)
         await page.mouse.down()
-        // Un glissement FRANC et par pas, vers l'intérieur du cadre : la
-        // poignée suit les `pointermove`, un saut d'un seul mouvement ne la
-        // fait pas bouger.
-        const cible = svgBox.x + svgBox.width * 0.35
+        const cible = svgBox.x + svgBox.width * 0.4
         for (const t of [0.25, 0.5, 0.75, 1]) {
             const x = hBox.x + hBox.width / 2 + (cible - (hBox.x + hBox.width / 2)) * t
             await page.mouse.move(x, hBox.y + hBox.height / 2, { steps: 4 })
-            await page.waitForTimeout(80)
+            await sleep(80)
         }
         await page.mouse.up()
+        const apres = await page.locator('[data-testid="import-preview-factor"]').innerText()
+        const wDrag = Number(await page.locator('[data-testid="import-preview-w"]').inputValue())
+        const fDrag = Number(await page.locator('[data-testid="import-preview-factor-input"]').inputValue())
+        handleOk = apres !== avant && fDrag > 0
+            && Math.abs(wDrag - (applied?.width || targetW) * fDrag) <= Math.max(0.5, wDrag * 0.005)
+        log(`cas C poignée : facteur ${avant.trim()} → ${apres.trim()}, largeur ${wDrag}, cohérence ${handleOk}`)
     }
-    const apres = (await page.locator('[data-testid="import-preview-factor"]')
-        .innerText().catch(() => '')).trim()
-    log('facteur avant / après la poignée :', avant, '/', apres)
-    check('C4 la poignée CHANGE l’échelle, et l’aperçu l’annonce',
-        Boolean(hBox) && apres !== '' && apres !== avant,
-        `avant « ${avant} », après « ${apres} »`)
-    await page.locator('[data-testid="import-preview-confirm"]').click()
-    await page.waitForFunction(
-        (n) => document.querySelectorAll('[data-testid="file-card"], .file').length >= n,
-        PARTS, { timeout: 180000 },
-    ).catch(() => log('ATTENTION : le compte de fiches éclatées n’est pas atteint'))
-    const cCards = await cards(slugC)
-    log('cas C, fiches :', cCards.length, JSON.stringify(cCards.slice(0, 3)))
-    check('C2 une fiche par pièce', cCards.length === PARTS,
-        `${cCards.length} fiches pour ${PARTS} pièces`)
-    check('C3 chaque fiche vient du dessin éclaté et porte UNE pièce',
-        cCards.every((c) => c.explodedFrom === path.basename(FILE) && c.parts === 1),
-        JSON.stringify(cCards.map((c) => [c.explodedFrom, c.parts]).slice(0, 3)))
+    check('C4 la poignée règle la MÊME échelle que la saisie', handleOk)
+    await page.locator('[data-testid="import-preview-cancel"]').click()
+    await sleep(500)
+    // Réinitialisation : retour bit-identique à l'import d'origine.
+    await page.locator('[data-testid="file-scale-reset"]').first().click()
+    const reset = await waitCardState(slugA, (c) => c.importScaleApplied === false)
+    check('C5 réinitialisation ⇒ étendue d’origine, drapeaux retirés',
+        reset !== null && Math.abs(reset.width - WIDTH) <= 0.05 && Math.abs(reset.height - HEIGHT) <= 0.05,
+        reset ? `${reset.width} × ${reset.height}` : 'délai dépassé')
+    await shot('C-reset-ok.png')
 
-    // ---------- D. dépôt MULTIPLE ----------
-    const trio = [FILE, FILE, FILE]
-    const slugD = await createProject(trio, { advanced: true })
-    check('D1 UNE seule fenêtre pour le lot déposé', await choiceOpen(30000, 3))
-    const dialogs = await page.locator('[data-testid="import-choice"]').count()
-    const dListed = await page.locator('[data-testid="import-choice-list"] li').count()
-    check('D2 la fenêtre est unique et liste les trois fichiers',
-        dialogs === 1 && dListed === 3, `${dialogs} fenêtre(s), ${dListed} ligne(s)`)
-    await shot('D-depot-multiple.png')
-    await page.locator('[data-testid="import-choice-cancel"]').click()
-    const dAfter = await cards(slugD)
-    check('D3 « Annuler » ne crée aucune fiche', dAfter.length === 0,
-        `${dAfter.length} fiche(s)`)
+    // ---------- D. « Éclater » ⇒ N fiches, quantité héritée, libres ------
+    // Quantité du parent posée à 3 : les filles doivent l'hériter.
+    const countInput = page.locator('.files__item input.counter__value').first()
+    await countInput.fill('3')
+    await countInput.blur()
+    await sleep(300)
+    await page.locator('[data-testid="file-explode"]').first().click()
+    await page.locator('[data-testid="explode-confirm"]').waitFor({ timeout: 10000 })
+    const confirmTxt = (await page.locator('[data-testid="explode-confirm"]').innerText()).replace(/\s+/g, ' ').trim()
+    check('D1 la confirmation dit le nombre de pièces et l’irréversibilité',
+        confirmTxt.includes(String(PARTS)) && /(irréversible|undone|cannot be undone)/i.test(confirmTxt), confirmTxt)
+    await shot('D-confirmation.png')
+    await page.locator('[data-testid="explode-confirm-ok"]').click()
+    await waitCards(PARTS)
+    await sleep(1500)
+    const dCards = await cards(slugA)
+    log('cas D :', dCards.length, 'fiches')
+    const countInputs = await page.locator('.files__item input.counter__value').all()
+    const counts = []
+    for (const inp of countInputs) counts.push(await inp.inputValue())
+    check('D2 une fiche par pièce « nom (k/N) », ordre sans trou',
+        dCards.length === PARTS
+        && dCards.every((c) => new RegExp(`\\(\\d+/${PARTS}\\)`).test(c.name) && c.parts === 1)
+        && new Set(dCards.map((c) => Number(c.name.match(/\((\d+)\/\d+\)/)?.[1]))).size === PARTS,
+        `${dCards.length} fiches`)
+    check('D3 la quantité du parent est héritée par chaque fille',
+        counts.length === PARTS && counts.every((v) => v === '3'), counts.slice(0, 5).join(','))
+    check('D4 chaque fille porte son parent PAR SLUG',
+        dCards.every((c) => c.explodedFromSlug && dCards[0].explodedFrom === path.basename(FILE)),
+        dCards[0]?.explodedFrom || '')
+    // Nesting : N pièces LIBRES (aucun bloc). Les quantités repassent à 1
+    // pour garder le calcul léger. La liste des résultats contient DÉJÀ le
+    // job du cas B : l'état se lit sur le RECORD du NOUVEAU job (IndexedDB),
+    // pas sur le premier item de la liste.
+    for (const inp of await page.locator('.files__item input.counter__value').all()) {
+        await inp.fill('1'); await inp.blur()
+    }
+    const prevAt = (await readResult(slugA))?.createdAt || 0
+    await launchNest()
+    let recD = null
+    const t0 = Date.now()
+    while (Date.now() - t0 < 8 * 60 * 1000) {
+        const err = await page.locator('.content__error').allInnerTexts().catch(() => [])
+        if (err.map((s) => s.trim()).filter(Boolean).length) throw new Error('page error pendant le nesting D')
+        if (await page.locator('[data-testid="capacity-panel"]').count()) throw new Error('capacity panel pendant le nesting D')
+        recD = await readResult(slugA)
+        if (recD && (recD.createdAt || 0) > prevAt) break
+        await sleep(2000)
+    }
+    const repD = recD?.alternatives?.[0]?.report
+    log('cas D, rapport du nouveau job :', JSON.stringify({
+        hasBlocks: repD && 'blocks' in repD,
+        blocks: repD?.blocks ?? null,
+        unplaced: repD?.unplaced ?? null,
+    }))
+    // Un job sans bloc ne porte PAS la clé `blocks` (champ additif) et tout
+    // est placé : c'est la définition même de « pièces libres » au rapport.
+    check('D5 nesting ⇒ N pièces LIBRES (aucun bloc au rapport, tout placé)',
+        repD !== undefined && !('blocks' in repD) && repD.unplaced === 0,
+        `blocks=${JSON.stringify(repD?.blocks ?? null)}, unplaced=${repD?.unplaced}`)
+    await shot('D-pieces-libres.png')
 
-    // ---------- E. un `.job` SheetCam ne passe JAMAIS par la fenêtre ------
+    // ---------- E. « Nos serveurs » : les MÊMES B-C-D par le worker -------
+    const slugE = await createProject([FILE], { local: false })
+    log('cas E, projet serveur :', slugE)
+    const e0 = await waitServerDone(slugE, 1)
+    check('E1 dépôt serveur ⇒ 1 fiche, N pièces (bloc intact)',
+        e0.length === 1 && e0[0].parts === PARTS,
+        `${e0.length} fiche(s), ${e0[0]?.parts} pièces`)
+    const extent0 = await serverExtent(e0[0].slug)
+    log('cas E, étendue initiale :', JSON.stringify(extent0))
+    // E-C : échelle par la route (l'UI de la page serveur conduit au même
+    // PATCH ; on mesure la géométrie, jamais l'écran).
+    const targetE = 1000
+    await page.evaluate(async ({ s, target }) => {
+        await $fetch(`/api/files/${s}/scale`, {
+            method: 'PATCH',
+            body: { mode: 'width', mm: target },
+        })
+    }, { s: e0[0].slug, target: targetE })
+    await waitServerDone(slugE, 1)
+    const extentScaled = await serverExtent(e0[0].slug)
+    const eAfter = await serverCards(slugE)
+    log('cas E après échelle :', JSON.stringify(extentScaled))
+    check('E2 échelle serveur (PATCH) ⇒ étendue 1000 ± 0,5 mm, drapeau posé',
+        Math.abs(extentScaled.width - targetE) <= 0.5 && eAfter[0].importScaleApplied === true,
+        `${extentScaled.width} × ${extentScaled.height}`)
+    await page.evaluate(async (s) => {
+        await $fetch(`/api/files/${s}/scale`, { method: 'PATCH', body: { reset: true } })
+    }, e0[0].slug)
+    await waitServerDone(slugE, 1)
+    const extentReset = await serverExtent(e0[0].slug)
+    const eReset = await serverCards(slugE)
+    check('E3 réinitialisation serveur ⇒ étendue d’origine, drapeau retiré',
+        Math.abs(extentReset.width - extent0.width) <= 0.05
+        && Math.abs(extentReset.height - extent0.height) <= 0.05
+        && eReset[0].importScaleApplied === false,
+        `${extentReset.width} × ${extentReset.height}`)
+    // E-D : éclatement par la route.
+    await page.evaluate(async (s) => {
+        await $fetch(`/api/files/${s}/explode`, { method: 'POST' })
+    }, e0[0].slug)
+    const eExploded = await waitServerDone(slugE, PARTS)
+    const filles = eExploded.filter((f) => /\(\d+\/\d+\)/.test(f.name))
+    log('cas E éclatement :', eExploded.length, 'fiches dont', filles.length, 'éclatées')
+    check('E4 éclatement serveur (POST) ⇒ une fiche par pièce, par le worker',
+        filles.length === PARTS && filles.every((f) => f.parts === 1)
+        && new Set(filles.map((f) => Number(f.name.match(/\((\d+)\/\d+\)/)?.[1]))).size === PARTS,
+        `${filles.length}/${PARTS}`)
+    check('E5 le dessin éclaté n’est plus une fiche',
+        eExploded.length === PARTS, `${eExploded.length} fiches`)
+    check('E6 chaque fille serveur porte son parent PAR SLUG',
+        filles.every((f) => f.explodedFromSlug === e0[0].slug))
+
+    // ---------- F. un `.job` SheetCam : inchangé, aucune fenêtre ----------
     if (fs.existsSync(JOB)) {
         const { parseSheetCamJob, jobDrawingName } = await import('../shared/sheetcamJob.js')
         const job = parseSheetCamJob(new Uint8Array(fs.readFileSync(JOB)))
@@ -359,93 +624,59 @@ try {
             if (found) drawings.push(path.join(DXF_DIR, found))
         }
         if (drawings.length === names.length) {
-            const slugE = await createProject([JOB, ...drawings], { advanced: true })
-            check('E1 un `.job` ne déclenche AUCUNE fenêtre', !(await choiceOpen(8000)))
-            await page.waitForFunction(
-                (n) => document.querySelectorAll('[data-testid="file-card"], .file').length >= n,
-                names.length, { timeout: 120000 },
-            ).catch(() => {})
-            const eCards = await cards(slugE)
-            log('cas E, fiches :', JSON.stringify(eCards))
-            check('E2 les fiches du `.job` sont créées avec leurs réglages de coupe',
-                eCards.length === names.length && eCards.every((c) => c.hasCut),
-                `${eCards.length} fiche(s) pour ${names.length} dessin(s)`)
+            const slugF = await createProject([JOB, ...drawings])
+            await waitCards(names.length)
+            await sleep(800)
+            const fCards = await cards(slugF)
+            log('cas F, fiches :', JSON.stringify(fCards.map((c) => [c.name, c.parts, c.hasCut])))
+            check('F1 le `.job` ne déclenche AUCUNE fenêtre et ses fiches ont leurs réglages de coupe',
+                (await page.locator('[data-testid="import-choice"]').count()) === 0
+                && fCards.length === names.length && fCards.every((c) => c.hasCut),
+                `${fCards.length} fiche(s) pour ${names.length} dessin(s)`)
         } else {
-            log('cas E NON MESURÉ : dessins du `.job` absents de', DXF_DIR)
-            check('E1 un `.job` ne déclenche AUCUNE fenêtre', false,
-                `dessins introuvables : ${names.join(', ')}`)
+            log('cas F NON MESURÉ : dessins du `.job` absents de', DXF_DIR)
+            check('F1 `.job` inchangé', false, `dessins introuvables : ${names.join(', ')}`)
         }
     } else {
-        log('cas E NON MESURÉ : aucun `.job` fourni (QA_JOB)')
-        check('E1 un `.job` ne déclenche AUCUNE fenêtre', false, 'QA_JOB absent')
+        log('cas F NON MESURÉ : aucun `.job` fourni (QA_JOB)')
+        check('F1 `.job` inchangé', false, 'QA_JOB absent')
     }
 
-    // ---------- F. captures des RÉGLAGES, dans la langue demandée --------
-    // Jamais un dessin d'atelier dans `docs/` : ces captures ne montrent que
-    // l'interrupteur et la fenêtre, réglages seuls.
-    await createProject([FILE], { advanced: true })
-    await choiceOpen(30000, 1)
-    await shot(`F-fenetre-${LOCALE}.png`)
-    await page.locator('[data-testid="import-choice-cancel"]').click()
-    const swBox = page.locator('[data-testid="advanced-import-switch"]').first()
-    if (await swBox.count()) {
-        try {
-            await swBox.screenshot({ path: path.join(OUT, `F-interrupteur-${LOCALE}.png`) })
-            log('capture:', `F-interrupteur-${LOCALE}.png`)
-        } catch (e) { log('capture échouée (non fatale):', String(e).slice(0, 100)) }
+    // ---------- G. captures FR et EN — RÉGLAGES SEULS, dessin synthétique
+    const synth = syntheticDxf()
+    const slugG = await createProject([synth])
+    await waitCards(1)
+    await sleep(800)
+    const gLine = (await page.locator('.file__parts').first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    check('G1 le dessin synthétique est bien « 1 bloc · 3 pièces »',
+        /1 (bloc|block) · 3 (pièces|parts)/i.test(gLine), gLine)
+    const captureLocale = async (loc) => {
+        // Seul le cookie de LOCALE change : la session reste (clearCookies
+        // nu emportait l'authentification et la page repartait vers /auth).
+        await ctx.clearCookies({ name: 'locale' })
+        await ctx.addCookies([{ name: 'locale', value: loc, domain: new URL(BASE).hostname, path: '/' }])
+        await page.goto(BASE + '/project/' + slugG, { waitUntil: 'domcontentloaded' })
+        await waitCards(1)
+        await sleep(800)
+        await shot(`G-fiche-${loc}.png`)
+        await page.locator('[data-testid="file-scale"]').first().click()
+        await page.locator('[data-testid="import-preview"]').waitFor({ timeout: 30000 })
+        await sleep(500)
+        await shot(`G-apercu-${loc}.png`)
+        await page.locator('[data-testid="import-preview-cancel"]').click()
+        await sleep(400)
     }
-    check('F1 captures produites', fs.existsSync(path.join(OUT, `F-fenetre-${LOCALE}.png`)))
-
-    // ---------- G. projet « NOS SERVEURS » : la même fenêtre, l'éclatement
-    // fait par le WORKER -------------------------------------------------
-    //
-    // Pourquoi DEUX dépôts. Sur le chemin « nos serveurs », la création
-    // emporte les octets avec elle (`home.vue` : le multipart part avec le
-    // POST du projet). L'interrupteur ne gouverne donc PAS cette première
-    // dépose — il est posé juste après, par le même PATCH que la page projet,
-    // et il gouverne les suivantes. La séquence de l'utilisateur est celle-ci,
-    // et c'est elle qu'on mesure : une fiche ordinaire, puis une dépose qui
-    // passe par la fenêtre.
-    //
-    // Tout est mesuré sur la réponse de l'API, jamais sur l'écran.
-    const slugG = await createProject([FILE], { advanced: true, local: false })
-    log('cas G, projet serveur :', slugG)
-    const g0 = await waitServerDone(slugG, 1)
-    check('G1 la création « nos serveurs » donne la fiche ordinaire',
-        g0.length === 1 && g0[0].parts === PARTS,
-        `${g0.length} fiche(s), ${g0[0]?.parts} pièces`)
-
-    await page.setInputFiles('input[name="dxf"]', [FILE])
-    check('G2 la fenêtre s’ouvre AUSSI sur un projet « nos serveurs »',
-        await choiceOpen(30000, 1))
-    await page.locator('[data-testid="import-choice-explode"]').click()
-    await page.locator('[data-testid="import-preview"]').waitFor({ timeout: 30000 })
-    await shot('G-apercu-serveur.png')
-    await page.locator('[data-testid="import-preview-confirm"]').click()
-
-    // L'éclatement serveur redépose une fiche par pièce dans la boucle
-    // ordinaire du worker : 1 (première dépose) + PARTS. Le dessin éclaté,
-    // lui, est marqué et masqué — il ne compte pas.
-    const gFiles = await waitServerDone(slugG, 1 + PARTS, 600000)
-    const gExploded = gFiles.filter((f) => /\(\d+\/\d+\)/.test(f.name))
-    log('cas G, fiches serveur :', gFiles.length, 'dont éclatées', gExploded.length,
-        JSON.stringify(gExploded.slice(0, 3).map((f) => `${f.name} [${f.parts}p]`)))
-    check('G3 une fiche serveur par pièce, produite par le worker',
-        gExploded.length === PARTS,
-        `${gExploded.length} fiches éclatées pour ${PARTS} pièces`)
-    check('G4 chaque fiche éclatée porte UNE pièce, rangs 1..N sans trou',
-        gExploded.length === PARTS
-        && gExploded.every((f) => f.parts === 1)
-        && new Set(gExploded.map((f) => Number(f.name.match(/\((\d+)\/\d+\)/)?.[1]))).size === PARTS,
-        JSON.stringify(gExploded.map((f) => f.parts).slice(0, 5)))
-    check('G5 le dessin éclaté n’est plus une fiche (1 dépose ordinaire + N)',
-        gFiles.length === 1 + PARTS, `${gFiles.length} fiches pour ${1 + PARTS} attendues`)
-    await shot('G-eclatement-serveur.png')
+    await captureLocale('en')
+    await captureLocale('fr')
+    check('G2 captures produites (fiche + aperçu, FR et EN)',
+        ['en', 'fr'].every((loc) => fs.existsSync(path.join(OUT, `G-fiche-${loc}.png`))
+            && fs.existsSync(path.join(OUT, `G-apercu-${loc}.png`))))
 
     log(failures ? `${failures} VERROU(S) EN ÉCHEC` : 'TOUS LES VERROUS SONT VERTS')
 } catch (e) {
-    log('EXCEPTION', String(e).slice(0, 500))
+    log('EXCEPTION', String(e).slice(0, 600))
     failures++
+    await shot('99-error.png').catch(() => {})
 } finally {
     flush()
     await browser.close()

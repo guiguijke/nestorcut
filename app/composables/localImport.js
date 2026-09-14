@@ -303,17 +303,16 @@ export function assignJobStarts(read, ringsByName) {
 
 /**
  * Importe UN File (DXF/SVG) d'un projet local et rend la LISTE des fiches
- * stockées — une seule d'ordinaire, une par pièce quand l'« import
- * avancé » demande l'éclatement (lot E1).
+ * stockées — une seule : depuis le lot E4, le dépôt est TOUJOURS l'import
+ * ordinaire (un dessin multi-pièces devient un bloc rigide, E4-a).
+ * L'échelle et l'éclatement sont des actions SUR LA FICHE après import
+ * (`scaleLocalFiche`, `explodeLocalFiche` ci-dessous).
  *
- * La chaîne est unique : échelle du dessin complet (DXF canonique mis à
- * l'échelle) → import ordinaire → éclatement (un DXF canonique par pièce,
- * écrit depuis ses handles) → import ordinaire de chaque pièce. Chaque fiche
- * produite est une fiche NORMALE : quantité, rotations, couleur, aperçu,
- * suppression, export par handle.
+ * La chaîne reste unique : import ordinaire (parse wasm) → octets canoniques
+ * mm. Chaque fiche est une fiche NORMALE : quantité, rotations, couleur,
+ * aperçu, suppression, export par handle.
  *
- * `options` : `{ scale = 1, explode = false }`. Options par défaut = aucun
- * appel supplémentaire, aucun octet de plus, comportement d'avant le lot E1.
+ * `options` : `{ sheetcam, sheetcamJobBytes }` (provenance `.job`, lot J4).
  * Lève des Error à clé i18n (localImport.*) pour l'UI.
  */
 export async function importLocalFiles(file, projectSlug, options = {}) {
@@ -360,43 +359,10 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
             throw new Error('localImport.parseError')
         }
     }
-    // Lot E1 — 1) ÉCHELLE, sur le dessin complet et une seule fois. Un
-    // facteur de 1 ne touche rien (aucun appel wasm de plus).
-    //
-    // Mode « largeur/hauteur cible » : le facteur ne peut pas être connu
-    // d'avance — il faut la taille du dessin, donc une lecture. On lit une
-    // fois, on mesure l'étendue de TOUTES les pièces (le dessin complet,
-    // pas la plus grande pièce), on en déduit le facteur.
-    const explode = options.explode === true
-    let scale = resolveScale(options, null)
-    if (options.scaleTarget) {
-        let probe
-        try {
-            probe = await geoImportFile(source)
-        } catch {
-            throw new Error('localImport.parseError')
-        }
-        if (probe?.refusal) throw tooHeavyError(probe.refusal)
-        if (!probe || !Array.isArray(probe.parts) || probe.parts.length === 0) {
-            throw new Error('localImport.noParts')
-        }
-        scale = resolveScale(options, drawingExtent(probe.parts))
-    }
-    let bytes = source
-    if (scale !== 1) {
-        try {
-            bytes = await geoCanonicalDxfScaled(source, scale)
-        } catch {
-            throw new Error('localImport.parseError')
-        }
-        if (!(bytes instanceof Uint8Array)) {
-            throw new Error('localImport.parseError')
-        }
-    }
 
     let imported
     try {
-        imported = await geoImportFile(bytes)
+        imported = await geoImportFile(source)
     } catch {
         throw new Error('localImport.parseError')
     }
@@ -413,99 +379,239 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
     // Bytes canoniques mm (contrat d'export : entités copiées par handle).
     let canonical
     try {
-        canonical = await geoCanonicalDxf(bytes)
+        canonical = await geoCanonicalDxf(source)
     } catch {
         throw new Error('localImport.parseError')
     }
 
-    const { saveLocalFile } = await import('./localFilesStore')
+    return [await storeFiche(imported, canonical, name, projectSlug, options)]
+}
 
-    // Provenance (champs ADDITIFS) : ce que le lot E1 a fait au dessin.
-    // Lot J4 : + d'où vient ce dessin quand il a été appelé par un `.job`
-    // SheetCam — les réglages de COUPE de ce dessin (`sheetcam` : longueur
-    // d'amorce, coin de départ, marge de perçage), qui servent à réserver la
-    // place de l'amorce au nesting, et les octets du `.job` lui-même, pour
-    // pouvoir le réécrire à la fin du solve. Le fichier fait quelques
-    // kilo-octets et il est recopié sur chaque fiche du dépôt : chaque fiche
-    // reste ainsi AUTONOME (aucune dépendance entre enregistrements
-    // IndexedDB, aucune montée de version de la base).
-    const provenance = {
-        ...(scale !== 1 ? { importScale: scale } : {}),
+/**
+ * Compatibilité : un seul File, une seule fiche. Les appelants qui peuvent
+ * recevoir plusieurs fiches passent par `importLocalFiles`.
+ */
+export async function importLocalFile(file, projectSlug, options = {}) {
+    const records = await importLocalFiles(file, projectSlug, options)
+    return records[0]
+}
+
+/**
+ * Fabrique + stocke une fiche depuis un import et ses octets DXF — le seul
+ * endroit qui construit un enregistrement (dépôt, échelle, éclatement).
+ *
+ * `extra` : champs additifs (provenance, drapeaux d'échelle…) ; `addedAt`
+ * explicite pour remplacer une fiche EN PLACE (échelle : même rang) ou
+ * étager des filles (éclatement : ordre des pièces, miroir du serveur).
+ */
+async function storeFiche(imp, dxf, label, projectSlug, options = {}, extra = {}) {
+    const { saveLocalFile } = await import('./localFilesStore')
+    const scale = Number(extra.appliedScale) || 0
+    const colors = pickColors(imp.parts.length)
+    const parts = imp.parts.map((p, i) => ({
+        coordinates: p.coordinates,
+        holes: p.holes || [],
+        width: p.width,
+        height: p.height,
+        handles: p.handles || [],
+        color: colors[i],
+    }))
+    const record = {
+        slug: extra.slug || makeLocalFileSlug(label),
+        projectSlug,
+        name: label,
+        addedAt: extra.addedAt || new Date().toISOString(),
+        dxfBytes: dxf.slice().buffer,
+        parts,
+        sourceUnits: imp.source_units ?? 0,
+        entityCount: imp.entity_count ?? 0,
+        warnings: imp.warnings || [],
+        // Lot 2c : les constats d'import (perte de matière, unité supposée,
+        // tracés ouverts) — c'est le maillon qui manquait entre le wasm et la
+        // fiche fichier. Lot E2/E4-b : + la mise à l'échelle, avec le même
+        // niveau et la même forme que les autres constats — un dessin n'est
+        // jamais multiplié en silence.
+        findings: [
+            ...(imp.findings || []),
+            ...(scale && scale !== 1
+                ? [{
+                    code: 'import.scaleApplied',
+                    level: 'info',
+                    count: 1,
+                    value: String(Math.round(scale * 10000) / 10000),
+                }]
+                : []),
+        ],
+        previewSvg: buildPreviewSvg(parts),
+        // Provenance `.job` (lot J4) : réglages de coupe de CE dessin et
+        // octets du `.job`, pour le réécrire à la fin du solve. Recopiés sur
+        // chaque fiche : chacune reste AUTONOME (aucune dépendance entre
+        // enregistrements IndexedDB).
         ...(options.sheetcam ? { sheetcam: options.sheetcam } : {}),
         ...(options.sheetcamJobBytes
             ? { sheetcamJobBytes: options.sheetcamJobBytes.slice().buffer }
             : {}),
+        ...(extra.fields || {}),
+    }
+    await saveLocalFile(record)
+    return record
+}
+
+/**
+ * Lot E4-b — applique une échelle à une fiche locale, EN PLACE : même slug,
+ * même nom, même rang (`addedAt`), même provenance. La chaîne E1 : DXF
+ * canonique de la fiche mis à l'échelle → import ordinaire. La première
+ * application garde les octets d'origine (`origDxfBytes`) : la
+ * réinitialisation les restaure BIT-IDENTIQUE (`resetLocalFicheScale`).
+ *
+ * `options` : `{ scale }` ou `{ scaleTarget: { mode, mm } }` — le facteur se
+ * résout sur l'étendue MESURÉE de la fiche (ses pièces, aucune lecture wasm).
+ * Un facteur de 1 ne touche rien. Rend l'enregistrement remplacé.
+ */
+export async function scaleLocalFiche(record, options = {}) {
+    const extent = drawingExtent(record.parts || [])
+    const factor = resolveScale(options, extent)
+    if (factor === 1 || !(factor > 0)) return record
+
+    const source = new Uint8Array(record.dxfBytes || new ArrayBuffer(0))
+    let bytes
+    try {
+        bytes = await geoCanonicalDxfScaled(source, factor)
+    } catch {
+        throw new Error('localImport.parseError')
+    }
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+        throw new Error('localImport.parseError')
+    }
+    let imported
+    try {
+        imported = await geoImportFile(bytes)
+    } catch {
+        throw new Error('localImport.parseError')
+    }
+    if (imported?.refusal) throw tooHeavyError(imported.refusal)
+    if (!imported || !Array.isArray(imported.parts) || imported.parts.length === 0) {
+        throw new Error('localImport.parseError')
     }
 
-    // Lot E1 : les fiches sont triées par `addedAt` (localFilesStore) — sans
-    // horodatage distinct, dix-sept fiches écrites dans la même milliseconde
-    // s'affichent dans un ordre arbitraire. On avance d'une milliseconde par
-    // fiche : la liste suit l'ordre des pièces.
-    const t0 = Date.now()
-    let written = 0
+    const cumulative = Math.round(
+        (Number(record.importScale) || 1) * factor * 1e6,
+    ) / 1e6
+    return storeFiche(imported, bytes, record.name, record.projectSlug, {
+        ...(record.sheetcam ? { sheetcam: record.sheetcam } : {}),
+        ...(record.sheetcamJobBytes
+            ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
+            : {}),
+    }, {
+        slug: record.slug,
+        addedAt: record.addedAt,
+        appliedScale: factor,
+        fields: {
+            importScale: cumulative,
+            importScaleApplied: true,
+            // Les octets d'origine ne se gardent qu'UNE fois : à la première
+            // application (sinon la deuxième écraserait l'original par le
+            // déjà-mis-à-l'échelle, et la réinitialisation perdrait la
+            // bit-identicité). `dxfBytes` est un ArrayBuffer : slice(0)
+            // copie, sans `.buffer` (qui n'existe pas sur un ArrayBuffer).
+            origDxfBytes: (record.origDxfBytes || record.dxfBytes).slice(0),
+            ...(record.explodedFrom ? {
+                explodedFrom: record.explodedFrom,
+                explodedIndex: record.explodedIndex,
+                explodedFromSlug: record.explodedFromSlug,
+            } : {}),
+            ...(record.explodeFallback ? { explodeFallback: true } : {}),
+        },
+    })
+}
 
-    /** Fabrique + stocke une fiche depuis un import et ses octets DXF. */
-    const store = async (imp, dxf, label, extra) => {
-        const colors = pickColors(imp.parts.length)
-        const parts = imp.parts.map((p, i) => ({
-            coordinates: p.coordinates,
-            holes: p.holes || [],
-            width: p.width,
-            height: p.height,
-            handles: p.handles || [],
-            color: colors[i],
-        }))
-        const record = {
-            slug: makeLocalFileSlug(label),
-            projectSlug,
-            name: label,
-            addedAt: new Date(t0 + written++).toISOString(),
-            dxfBytes: dxf.slice().buffer,
-            parts,
-            sourceUnits: imp.source_units ?? 0,
-            entityCount: imp.entity_count ?? 0,
-            warnings: imp.warnings || [],
-            // Lot 2c : les constats d'import (perte de matière, unité
-            // supposée, tracés ouverts) — c'est le maillon qui manquait
-            // entre le wasm et la fiche fichier.
-            // Lot E2 : + la mise à l'échelle. Le crate ne peut pas la
-            // rapporter (elle est appliquée AVANT lui, sur le DXF) : elle
-            // est ajoutée ici, avec le même niveau et la même forme que les
-            // autres constats — un dessin n'est jamais multiplié en silence.
-            findings: [
-                ...(imp.findings || []),
-                ...(scale !== 1
-                    ? [{
-                        code: 'import.scaleApplied',
-                        level: 'info',
-                        count: 1,
-                        value: String(Math.round(scale * 10000) / 10000),
-                    }]
-                    : []),
-            ],
-            previewSvg: buildPreviewSvg(parts),
-            ...provenance,
-            ...(extra || {}),
-        }
-        await saveLocalFile(record)
-        return record
+/**
+ * Lot E4-b — réinitialise l'échelle d'une fiche : re-import des octets
+ * d'origine, TELS QUELS (aucune réécriture du canonique — bit-identique à
+ * l'import d'origine), drapeaux d'échelle retirés. Sans octets d'origine
+ * (fiche jamais mise à l'échelle), rend la fiche inchangée.
+ */
+export async function resetLocalFicheScale(record) {
+    if (!record.origDxfBytes || record.importScaleApplied !== true) return record
+    const orig = new Uint8Array(record.origDxfBytes)
+    let imported
+    try {
+        imported = await geoImportFile(orig)
+    } catch {
+        throw new Error('localImport.parseError')
     }
-
-    // Lot E1 — 2) ÉCLATEMENT : un DXF canonique par pièce, écrit depuis ses
-    // handles, repassé par l'import ORDINAIRE. Un seul contour ⇒ rien à
-    // éclater, on garde la fiche unique et son nom intact.
-    if (!explode || imported.parts.length < 2) {
-        return [await store(imported, canonical, name, {})]
+    if (imported?.refusal) throw tooHeavyError(imported.refusal)
+    if (!imported || !Array.isArray(imported.parts) || imported.parts.length === 0) {
+        throw new Error('localImport.parseError')
     }
+    return storeFiche(imported, orig, record.name, record.projectSlug, {
+        ...(record.sheetcam ? { sheetcam: record.sheetcam } : {}),
+        ...(record.sheetcamJobBytes
+            ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
+            : {}),
+    }, {
+        slug: record.slug,
+        addedAt: record.addedAt,
+        // Pas d'appliedScale : le constat d'échelle disparaît, comme avant
+        // la première application.
+        fields: {
+            ...(record.explodedFrom ? {
+                explodedFrom: record.explodedFrom,
+                explodedIndex: record.explodedIndex,
+                explodedFromSlug: record.explodedFromSlug,
+            } : {}),
+            ...(record.explodeFallback ? { explodeFallback: true } : {}),
+        },
+    })
+}
 
-    const total = imported.parts.length
+/**
+ * Lot E4-c — éclate une fiche locale en N fiches « nom (k/N) », une pièce
+ * chacune, à l'échelle DÉJÀ appliquée (les octets de la fiche sont ceux du
+ * dessin mis à l'échelle). Chaîne E1 : un DXF canonique par pièce, écrit
+ * depuis ses handles, repassé par l'import ORDINAIRE.
+ *
+ * La fiche d'origine est SUPPRIMÉE (miroir du serveur : le dessin éclaté
+ * n'est plus une fiche). Les filles sont insérées À SON RANG, ordre des
+ * pièces (une milliseconde d'écart, miroir du serveur). Une pièce dont le
+ * sous-ensemble ne se referme pas n'est PAS perdue (repli : géométrie de
+ * l'import complet + octets canoniques du dessin complet).
+ *
+ * Rend la liste des filles (vide si rien à éclater).
+ */
+export async function explodeLocalFiche(record) {
+    const parts = record.parts || []
+    if (parts.length < 2) return []
+
+    const name = record.name || 'part.dxf'
+    const dot = name.lastIndexOf('.')
     const base = dot >= 0 ? name.slice(0, dot) : name
     const suffix = dot >= 0 ? name.slice(dot) : ''
+    const total = parts.length
+    const canonical = new Uint8Array(record.dxfBytes || new ArrayBuffer(0))
+    const parentAt = Date.parse(record.addedAt || '') || Date.now()
+    const { deleteLocalFile } = await import('./localFilesStore')
+
+    const inherited = {
+        ...(record.importScaleApplied ? {
+            importScale: record.importScale,
+            importScaleApplied: true,
+        } : {}),
+        explodedFrom: name,
+        explodedIndex: 0,
+        explodedFromSlug: record.slug,
+    }
+    const options = {
+        ...(record.sheetcam ? { sheetcam: record.sheetcam } : {}),
+        ...(record.sheetcamJobBytes
+            ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
+            : {}),
+    }
+
     const out = []
     for (let k = 0; k < total; k++) {
-        const part = imported.parts[k]
+        const part = parts[k]
         const label = `${base} (${k + 1}/${total})${suffix}`
-        const extra = { explodedFrom: name, explodedIndex: k + 1 }
         let partBytes = null
         try {
             partBytes = await geoCanonicalDxfPart(canonical, part.handles || [])
@@ -520,33 +626,40 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
                 sub = null
             }
         }
+        const fields = { ...inherited, explodedIndex: k + 1 }
         if (sub && Array.isArray(sub.parts) && sub.parts.length >= 1) {
-            out.push(await store(sub, partBytes, label, extra))
+            out.push(await storeFiche(sub, partBytes, label, record.projectSlug, options, {
+                addedAt: new Date(parentAt + k).toISOString(),
+                fields,
+            }))
             continue
         }
         // Repli : le sous-ensemble ne referme rien tout seul (deux pièces qui
         // partagent une arête, par exemple). On NE PERD PAS la pièce : sa
-        // géométrie vient de l'import du dessin complet et ses octets du
-        // document canonique complet — l'export par handle reste exact.
-        out.push(await store(
-            { ...imported, parts: [part] },
+        // géométrie vient de la fiche d'origine et ses octets du canonique
+        // complet — l'export par handle reste exact.
+        out.push(await storeFiche(
+            {
+                source_units: record.sourceUnits,
+                entity_count: record.entityCount,
+                warnings: record.warnings || [],
+                findings: (record.findings || []).filter((f) => f.code !== 'import.scaleApplied'),
+                parts: [part],
+            },
             canonical,
             label,
-            { ...extra, explodeFallback: true },
+            record.projectSlug,
+            options,
+            {
+                addedAt: new Date(parentAt + k).toISOString(),
+                fields: { ...fields, explodeFallback: true },
+            },
         ))
     }
+    await deleteLocalFile(record.slug)
     return out
 }
 
-/**
- * Compatibilité : un seul File, une seule fiche (le chemin d'avant le lot
- * E1). Les appelants qui peuvent recevoir plusieurs fiches passent par
- * `importLocalFiles`.
- */
-export async function importLocalFile(file, projectSlug, options = {}) {
-    const records = await importLocalFiles(file, projectSlug, options)
-    return records[0]
-}
 
 /** E4-a : résumé de la fiche-bloc — « 1 bloc · N pièces · W × H ». Étendue
  * mesurée sur les coordonnées (l'UI ne garde que width/height par pièce,
@@ -603,5 +716,9 @@ export function localRecordToUiFile(record) {
         })),
         // E4-a : résumé bloc, ADDITIF (fiches à une pièce inchangées).
         ...(block ? { block } : {}),
+        // E4-b/E4-c : drapeau d'échelle (montre « Réinitialiser ») et
+        // parent d'éclatement (héritage de quantité) — additifs.
+        importScaleApplied: record.importScaleApplied === true,
+        explodedFromSlug: record.explodedFromSlug || null,
     }
 }

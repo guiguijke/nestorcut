@@ -33,30 +33,17 @@
             </span>
         </label>
 
-        <!-- Lot E3 : le panneau replié a DISPARU. L'interrupteur « Import
-             avancé » vit désormais sur la page (accueil et page projet), son
-             état est une propriété du PROJET, et c'est la FENÊTRE DE CHOIX
-             qui s'ouvre au dépôt. Deux chemins pour le même réglage, c'était
-             le reproche du propriétaire (§6 du plan d'éclatement).
-
-             Ne restent ici que les deux surfaces qui suivent une dépose :
-             la fenêtre de choix, puis l'aperçu sur tôle si l'utilisateur
-             choisit d'éclater. Hors projet « cet appareil », ni l'une ni
-             l'autre n'existent. -->
-        <template v-if="advanced">
-            <ImportChoiceDialog />
-            <AdvancedImportPreview v-if="adv.preview.pending.length && !adv.choice.open" />
-        </template>
+        <!-- Lot E4-d : plus NI fenêtre de choix NI aperçu ici — le dépôt est
+             l'import ordinaire, l'échelle et l'éclatement se demandent sur
+             la fiche après import (ProjectFiles porte l'aperçu). -->
     </div>
 </template>
 
 <script setup>
 import { themeType } from '~~/constants/theme.constants';
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
-import { useAdvancedImport } from '~/composables/advancedImport'
 
 const { t } = useLocale()
-const adv = useAdvancedImport()
 
 const props = defineProps({
     extensions: {
@@ -64,12 +51,6 @@ const props = defineProps({
         default: () => [".dxf", ".svg", ".dwg"],
     },
     compact: {
-        type: Boolean,
-        default: false,
-    },
-    // Lot E1 : le panneau « Import avancé » n'existe que là où la chaîne
-    // existe — les projets « cet appareil ».
-    advanced: {
         type: Boolean,
         default: false,
     },
