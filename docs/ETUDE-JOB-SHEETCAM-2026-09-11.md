@@ -2361,3 +2361,35 @@ d'avant-solve, elle la complète :
 
 Chantier J4-quater, un à deux jours, **avant J5**, parce qu'il change la
 forme du résultat que J5 devra refléter côté serveur.
+
+#### 9.59 Règle du propriétaire (14/09) : un point de départ posé à la main est INTOUCHABLE
+
+« Si j'ai mis un starting point custom sur mon `.job`, NestorCut le garde et
+ne le modifie pas. » La contrainte est portée par le fichier : chaque chemin
+du bloc binaire a un drapeau « déplacé à la main » (charge `0x1d`, lu par
+`jobPathRecords` sous `moved`, vrai dans L-2, L-3 et les deux fichiers
+« moved » de la série, faux pour les points automatiques recalculés par
+SheetCam).
+
+**Règle** :
+
+1. `moved = true` ⇒ le point est celui de l'utilisateur : NestorCut y pose
+   la réserve d'amorce et **ne réécrit ni la valeur ni le drapeau** (les 16
+   octets + 1 du chemin sortent identiques à l'entrée). Aucun lot ne peut le
+   déplacer, `allowOverlappingLeads` compris (l'option retire la réserve, pas
+   le respect du point).
+2. `moved = false` ⇒ point automatique, que SheetCam recalcule à sa guise :
+   NestorCut peut le choisir (J4-quater) et l'écrit alors avec le drapeau.
+3. Le constat de réserve dit lequel des deux cas s'applique par contour
+   (« point de l'utilisateur conservé » / « point choisi par NestorCut »).
+
+**Aujourd'hui (J4-ter)** : l'écriture recopie le point lu et lève le drapeau ;
+sur un point déjà déplacé c'est un no-op sur la valeur, mais la règle doit
+être EXPLICITE dans le code, pas une conséquence. **Verrou** : `.job` de la
+série « start rectangle moved » passé par le chemin complet ⇒ l'enregistrement
+du rectangle est octet-identique en sortie, la réserve est posée à
+(10 ; 138,9), et le G-code du propriétaire y amorce ; contrôle négatif : le
+fuseau (automatique) du même fichier peut, lui, être réécrit.
+
+**J4-quater** en hérite : la recherche du « meilleur point » ne parcourt que
+les contours à `moved = false`.

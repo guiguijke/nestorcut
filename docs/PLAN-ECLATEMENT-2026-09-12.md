@@ -1402,3 +1402,36 @@ reste traité avant tout.
 - Déploiement après GO : app + worker nesting + worker fileprocessing,
   homelab compris ; le wasm ne change que si l'export l'exige (piège #33b,
   à dire) ; moteur inchangé ⇒ pas de benchmarks.
+
+### Lot E4-a — vérification (vérificateur, 14/09, `c8fe187d`) — GO déploiement
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, vitest, pytest dans le
+conteneur worker, harnais du bloc, et un rejeu indépendant du constructeur de
+payload sur le dessin du collègue (sorties hors dépôt, `~/qa-out/verif-e4a/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest / pytest | **753** / **252 + 1 ignoré** |
+| périmètre | 24 fichiers, aucun sous `workers/geometry` ni `public/` : pas de wasm, pas de moteur, pas de benchmarks |
+| payload rejoué (17 pièces, tôle 3000 × 1500, espacement 2) | **1 item**, enveloppe **convexe** (109 sommets après simplification, 109 tours à gauche, 0 à droite), **0 trou**, `block {parts: 17}`, `blockParts` 17, **handles 944 = union des 17 pièces** |
+| aire | enveloppe 1 426 196 mm² contre **159 596 mm² d'aire vraie** (rapport 8,9) — le rapport doit bien compter l'aire vraie (§8.1.3), et c'est ce que le harnais affiche (densité 8 %) |
+| tôle trop petite | sur 1000 × 2000 le bloc (2834 × 689) est **refusé avec le message actionnable** existant, dans les quatre rotations : correct, un bloc ne se découpe pas |
+| contrôle négatif | fiche à une pièce ⇒ polygone exact (696 sommets), aucun champ `block` |
+| harnais `scripts/qa-e2e-block-nesting.mjs` | fiche « 1 block · 17 parts · 2834.3 × 688.8 mm », nesting 6 s, « All 17 parts placed (1 block) », DXF extrait ; l'étape de ré-import de contrôle a échoué chez moi sur la limite 429 (deux réponses 429 dans le journal, projets enchaînés) — **contrôle de rigidité refait hors navigateur** sur le DXF extrait : 17 pièces appariées par aire, 136 distances inter-centroïdes, **écart maximal 0,0000 mm** |
+
+**Arbitrages acceptés** : vérification physique et chute au niveau de
+l'enveloppe (conservateur, aucune fausse alarme sur les écarts internes d'un
+dessin rigide) ; arrondi d'affichage Python ≠ JS sur les demi-exacts,
+préexistant et documenté ; le ré-import d'un DXF de résultat qui décompose
+la tôle en pièce dominante + trous est le comportement d'import historique,
+c'est la couture qui le traitera.
+
+**À dire au propriétaire** : un dessin clairsemé (un logo sur 2,8 m) nesté en
+bloc occupe l'aire de son enveloppe, ici neuf fois son aire vraie — c'est le
+sens du bloc rigide ; l'enveloppe concave notée au §8.1 réduira ce prix, et
+« Éclater » reste le chemin dense.
+
+**GO déploiement E4-a** (app + worker nesting, homelab compris, pas de
+benchmarks) — avec E4-b/c/d dans la même promotion si ceux-ci arrivent vite,
+seul sinon : la fenêtre E3 encore en place offre l'éclatement et l'échelle en
+attendant.
