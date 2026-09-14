@@ -711,6 +711,277 @@ export function jobPathRecords(binary) {
     return drawings
 }
 
+// --- le bloc binaire : les CONTOURS en segments, décodés (lot J6) ----------
+
+/**
+ * LE `.job` PORTE LA GÉOMÉTRIE DE SES DESSINS (mesure du 14/09, étude §9.61).
+ *
+ * Au-delà des points de départ, chaque contour y est écrit SEGMENT PAR
+ * SEGMENT dans le même flux tag / type / longueur, relevé puis vérifié sur
+ * la fixture du dépôt et sur les dix-huit `.job` de la série et de la
+ * recette :
+ *
+ *   0x0003  ( 2 o)  ouvre un GROUPE DE SEGMENTS (un par contour).
+ *   0x002f  ( 4 o)  constante du groupe (−1 sur tous les fichiers mesurés).
+ *   0x0002  ( 0 o)  sépare deux segments (vidé de sens pour nous).
+ *   0x0004  ( 4 o)  type du segment : 1 = ligne, 2 = arc.
+ *   0x0005 / 0x0006 (16 o) point de départ / d'arrivée du segment.
+ *   0x0007 (16 o)  centre de l'arc.
+ *   0x0008 ( 8 o)  balayage signé. MESURÉ : négatif = sens trigonométrique
+ *                  (le cercle r = 35 du carré à trou est écrit en quatre
+ *                  quarts `sweep = −π/2` parcourus dans le sens positif),
+ *                  positif = sens horaire (l'arc de tête de l'éventail va de
+ *                  135° à 45°). La valeur interne de `0x0009` est l'angle de
+ *                  départ dans un repère TRANSPOSÉ (x↔y) : on ne l'utilise
+ *                  jamais, `a`, `b`, `c` suffisent.
+ *   0x000a ( 8 o)  rayon de l'arc.
+ *   0x0001  ( 0 o)  ferme le groupe de segments.
+ *
+ * Puis, APRÈS tous les groupes du dessin, viennent les ENREGISTREMENTS DE
+ * CHEMIN de `jobPathRecords` — un par groupe, DANS LE MÊME ORDRE (le k-ième
+ * enregistrement parle du k-ième groupe : vérifié par le point de départ qui
+ * tombe sur son contour, série et recette).
+ *
+ * Une LIGNE porte aussi les charges 0x0007-0x000a — avec les valeurs DE
+ * L'ARC PRÉCÉDENT (le carré du dépôt : rayon 35 sur ses quatre côtés). On
+ * les ignore pour une ligne ; un arc sans centre, rayon ou balayage est un
+ * refus. L'entité POINT du DXF source est une ligne DÉGÉNÉRÉE (a = b) : ce
+ * n'est pas un contour, le DXF canonique l'omet (notre import ne la retient
+ * pas non plus — le compte de pièces coïncide).
+ *
+ * Le repère : coordonnée du dessin = coordonnée du segment + origine `0x25`.
+ * Vérifié sur l'éventail : origine (0 ; 15,4142), apex local (0 ; −12,5858)
+ * ⇒ apex dessin (0 ; 2,8284), l'étendue mesurée du DXF (piège AGENTS #48).
+ *
+ * Rend `null` — comme `jobPathRecords` — si le flux ne se relit pas jusqu'au
+ * dernier octet : un cache d'une version inconnue ne doit produire aucune
+ * géométrie. Sinon, une entrée par bloc de dessin, DANS L'ORDRE DU CACHE :
+ *
+ *   {
+ *     origin,                    // [x, y] brut du 0x0025 (jamais appliqué ici)
+ *     paths: [{                  // le k-ième groupe de segments…
+ *       segments,                // …et SES segments, ORIGINE APPLIQUÉE :
+ *                                //   { kind:'line', a, b }
+ *                                //   { kind:'arc', a, b, c, r, ccw }
+ *       closed,                  // arrivée == départ à 1e-6 (fermeture
+ *                                // implicite du dernier segment, rendue
+ *                                // explicite par ce drapeau)
+ *       start,                   // point de départ ORIGINE APPLIQUÉE — au
+ *                                // contraire de jobPathRecords, qui rend le
+ *                                // point BRUT (l'origine y est ajoutée par
+ *                                // assignJobBlocks)
+ *       leadIn, leadOut, order, moved, at,
+ *     }],
+ *     error,                     // { code, params } — refus nommé du DESSIN :
+ *                                // segment de type inconnu, arc incohérent,
+ *                                // chaîne ou fermeture rompue, enregistrement
+ *       en trop ou en moins. Les paths restent remplis pour l'inspection,
+ *       mais l'appelant n'en fait AUCUNE fiche : jamais un contour deviné.
+ *   }
+ */
+export function jobDrawings(binary) {
+    if (!(binary instanceof Uint8Array)) return null
+    const view = new DataView(binary.buffer, binary.byteOffset, binary.byteLength)
+    let o = BINARY_MARKER.length
+
+    const CHAIN_TOL = 1e-6
+    const ARC_TOL_MM = 0.01
+    const dist = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1])
+
+    const drawings = []
+    let drawing = null
+    let group = null
+    let seg = null
+    let record = null
+    const closeSeg = () => {
+        if (!seg) return
+        if (group && drawing) group.push(seg)
+        seg = null
+    }
+
+    while (o + 6 <= binary.length) {
+        const tag = view.getUint16(o, true)
+        const len = view.getUint16(o + 4, true)
+        const at = o + 6
+        if (at + len > binary.length) return null
+        switch (tag) {
+            case 0x0025:
+                if (len !== 16) return null
+                closeSeg()
+                drawing = {
+                    origin: [view.getFloat64(at, true), view.getFloat64(at + 8, true)],
+                    groups: [],
+                    records: [],
+                    error: null,
+                }
+                drawings.push(drawing)
+                group = null
+                record = null
+                break
+            case 0x0003:
+                closeSeg()
+                group = []
+                if (drawing) drawing.groups.push(group)
+                record = null
+                break
+            case 0x0004:
+                closeSeg()
+                seg = { type: view.getInt32(at, true), a: null, b: null, c: null, sweep: null, r: null }
+                break
+            case 0x0005:
+                if (seg) seg.a = [view.getFloat64(at, true), view.getFloat64(at + 8, true)]
+                break
+            case 0x0006:
+                if (seg) seg.b = [view.getFloat64(at, true), view.getFloat64(at + 8, true)]
+                break
+            case 0x0007:
+                if (seg) seg.c = [view.getFloat64(at, true), view.getFloat64(at + 8, true)]
+                break
+            case 0x0008:
+                if (seg) seg.sweep = view.getFloat64(at, true)
+                break
+            case 0x000a:
+                if (seg) seg.r = view.getFloat64(at, true)
+                break
+            case 0x000b:
+                closeSeg()
+                drawing = null
+                group = null
+                record = null
+                break
+            // Les enregistrements de chemin (les mêmes que jobPathRecords).
+            case 0x0012:
+                closeSeg()
+                if (len === 8 && drawing) {
+                    record = {
+                        leadIn: view.getFloat64(at, true),
+                        leadOut: null,
+                        start: null,
+                        order: null,
+                        moved: false,
+                        at: { x: null, y: null, moved: null },
+                    }
+                    drawing.records.push(record)
+                }
+                break
+            case 0x0013:
+                if (len === 8 && record) record.leadOut = view.getFloat64(at, true)
+                break
+            case 0x0018:
+                if (len === 8 && record) {
+                    record.start = [view.getFloat64(at, true), 0]
+                    record.at.x = at
+                }
+                break
+            case 0x0019:
+                if (len === 8 && record?.start) {
+                    record.start[1] = view.getFloat64(at, true)
+                    record.at.y = at
+                }
+                break
+            case 0x001a:
+                if (len === 4 && record) record.order = view.getInt32(at, true)
+                break
+            case 0x001d:
+                if (len === 1 && record) {
+                    record.moved = binary[at] === 1
+                    record.at.moved = at
+                }
+                break
+            default:
+                break
+        }
+        o = at + len
+    }
+    // Le flux doit tomber EXACTEMENT sur la fin du fichier (même contrat que
+    // jobPathRecords) : un reste veut dire qu'une longueur a été mal lue, et
+    // qu'un des contours rendus peut être du bruit.
+    if (o !== binary.length) return null
+
+    // Assemblage : validation par groupe, puis appariement k-ième
+    // enregistrement ↔ k-ième groupe, dans le repère du dessin.
+    for (const d of drawings) {
+        const ox = Number(d.origin[0]) || 0
+        const oy = Number(d.origin[1]) || 0
+        const fail = (code, params = {}) => {
+            if (!d.error) d.error = { code, params }
+        }
+        if (d.groups.length !== d.records.length) {
+            fail('sheetcamJobDrawing.recordMismatch', {
+                groups: String(d.groups.length), records: String(d.records.length),
+            })
+        }
+        const paths = []
+        for (let k = 0; k < Math.max(d.groups.length, d.records.length); k++) {
+            const g = d.groups[k] || []
+            const rec = d.records[k] || null
+            const segments = []
+            for (const s of g) {
+                if (!s.a || !s.b) {
+                    fail('sheetcamJobDrawing.incompleteSegment', { k: String(k) })
+                    continue
+                }
+                if (s.type === 1) {
+                    segments.push({ kind: 'line', a: [s.a[0] + ox, s.a[1] + oy], b: [s.b[0] + ox, s.b[1] + oy] })
+                } else if (s.type === 2) {
+                    if (!s.c || !Number.isFinite(s.sweep) || !Number.isFinite(s.r)) {
+                        fail('sheetcamJobDrawing.incompleteSegment', { k: String(k) })
+                        continue
+                    }
+                    const r = Math.abs(s.r)
+                    const da = Math.abs(dist(s.a, s.c) - r)
+                    const db = Math.abs(dist(s.b, s.c) - r)
+                    if (da > ARC_TOL_MM || db > ARC_TOL_MM) {
+                        fail('sheetcamJobDrawing.badArc', { k: String(k), da: da.toFixed(3), db: db.toFixed(3) })
+                        continue
+                    }
+                    segments.push({
+                        kind: 'arc',
+                        a: [s.a[0] + ox, s.a[1] + oy],
+                        b: [s.b[0] + ox, s.b[1] + oy],
+                        c: [s.c[0] + ox, s.c[1] + oy],
+                        r,
+                        // Balayage négatif = trigonométrique (mesure §9.61).
+                        ccw: s.sweep < 0,
+                        sweep: Math.abs(s.sweep),
+                    })
+                } else {
+                    fail('sheetcamJobDrawing.unknownSegment', { k: String(k), type: String(s.type) })
+                }
+            }
+            // Chaîne et fermeture : la fermeture implicite du contour (le
+            // dernier segment revient au départ) est VÉRIFIÉE, pas supposée.
+            let closed = false
+            if (segments.length) {
+                const first = segments[0].a
+                const last = segments[segments.length - 1].b
+                closed = dist(first, last) <= CHAIN_TOL
+                if (!closed) fail('sheetcamJobDrawing.openPath', { k: String(k) })
+                for (let i = 0; i + 1 < segments.length; i++) {
+                    if (dist(segments[i].b, segments[i + 1].a) > CHAIN_TOL) {
+                        fail('sheetcamJobDrawing.openPath', { k: String(k) })
+                        break
+                    }
+                }
+            }
+            paths.push({
+                segments,
+                closed,
+                start: rec?.start ? [rec.start[0] + ox, rec.start[1] + oy] : null,
+                leadIn: rec?.leadIn ?? null,
+                leadOut: rec?.leadOut ?? null,
+                order: rec?.order ?? null,
+                moved: rec?.moved ?? false,
+                at: rec?.at ?? { x: null, y: null, moved: null },
+            })
+        }
+        d.paths = paths
+        delete d.groups
+        delete d.records
+    }
+    return drawings
+}
+
 /**
  * Réécrit des points de départ dans le bloc binaire — lot J4-ter, règle du
  * propriétaire §9.59 (14/09).

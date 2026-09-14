@@ -2494,3 +2494,113 @@ après le déploiement d'A1.
    SEUL ».
 
 Deux jours. Déploiement app seule après GO.
+
+#### 9.63 Lot J6 — rapport de l'implémenteur (14/09)
+
+Périmètre livré (app + `shared/` seuls, aucun diff sous `workers/` ni
+`public/` — le moteur et le wasm ne bougent pas, benchmarks publics sans
+objet) :
+
+1. **Décodage** — `jobDrawings(binary)` dans `shared/sheetcamJob.js`, à côté
+   de `jobPathRecords` (que rien ne change : ses verrous du lot J4-bis-2
+   restent verts). Le flux tag/longueur est le même ; les groupes de
+   segments (`0x03` ouvre, `0x2f` constante, `0x04…0x0a` le segment, `0x01`
+   ferme) précèdent les enregistrements de chemin, et le k-ième
+   enregistrement parle du k-ième groupe — vérifié par le point de départ
+   qui tombe sur son contour. Les coordonnées sortent ORIGINE APPLIQUÉE
+   (l'éventail : apex local (0 ; −12,5858) + origine (0 ; 15,4142) = (0 ;
+   2,8284), l'étendue du DXF). Le balayage d'arc est NÉGATIF pour le sens
+   trigonométrique (le cercle r = 35 est écrit en quatre quarts à −π/2
+   parcourus dans le sens positif) ; une ligne porte des charges d'arc
+   PÉRIMÉES (le carré traîne le rayon 35) — ignorées pour une ligne,
+   exigées pour un arc. La fermeture implicite du contour est VÉRIFIÉE
+   (arrivée ≠ départ à 1e-6 ⇒ refus), le chaînage inter-segments aussi, et
+   la cohérence d'arc (extrémités sur le cercle de rayon r, à 0,01 mm).
+   Tout écart est un REFUS NOMMÉ DU DESSIN (`sheetcamJobDrawing.*`), les
+   autres dessins vivent.
+2. **DXF canonique par dessin** — `drawingCanonicalDxf` dans
+   `shared/sheetcamJobDxf.js` : LINE et ARC seulement, `$INSUNITS = 4` et
+   `$MEASUREMENT = 1` posés (piège #27), handles frais depuis 2F, zéro
+   arrondi géométrique (piège #28), segments dégénérés (l'entité POINT)
+   omis. Un arc HORAIRE de a vers b s'écrit comme l'arc trigonométrique de
+   b vers a, l'étendue portée par |balayage| ; un tour complet se couperait
+   en deux demi-tours (aucun cas mesuré dans la série).
+3. **Import ordinaire** — `importLocalBytes` (`localImport.js`) : le DXF
+   canonique repasse PAR LE MÊME IMPORT que tout DXF déposé — fiches,
+   pièces, trous, aperçu, échelle, éclatement, export par handle. Aucune
+   chaîne parallèle.
+4. **Priorité des sources** — `resolveJobDrawingSources`
+   (`sheetcamJobImport.js`) : le DXF déposé gagne ; sinon la fiche du même
+   nom déjà dans le projet (réglages attachés, jamais de doublon — P4-9) ;
+   sinon le bloc binaire, et la fiche le DIT : champ additif
+   `source: 'job'` + constat d'information `sheetcam.jobGeometry`
+   (« géométrie lue dans le fichier de travail — le DXF d'origine n'a pas
+   été fourni »). Le message « dessin manquant, déposez-le » disparaît du
+   chemin local ; les refus (rares) nomment leurs dessins, raisons
+   traduites EN/FR par la page.
+5. **L'appariement bloc ↔ dessin est le RANG des originaux** (règle 6 de
+   l'étude, mesurée au lot J1 : « le bloc binaire est associé aux sections
+   par leur rang »). C'est le seul lien que le fichier porte — le binaire
+   ne connaît ni noms ni dates — et c'est LE MÊME que notre rendu
+   (`jobRanksByDrawing` écrit les poses au rang de chaque nom), si bien
+   que fiches et `.job` rendu restent cohérents entre eux. Les deux
+   fichiers « ordre » de la série (fabriqués en réordonnant les sections :
+   `Piece_Trou+Fill_x4_ordre_TEST`, `RECETTE-J4bis3_ordre`) lient donc
+   leurs blocs aux noms CROISÉS : déposés SEULS, leurs fiches suivent la
+   liaison par rang du fichier (celle de SheetCam lui-même) ; déposés AVEC
+   leurs DXF, la géométrie source gagne et tout redevient historique —
+   c'est le correcteur prévu au point 3 de la consigne. Mesuré : les 4
+   couples de ces deux fichiers coïncident exactement par la liaison
+   croisée (voir le verrou).
+6. **Serveur (point 5 de la consigne)** : sans objet avant J5. Le serveur
+   n'accepte que `.dxf/.svg/.dwg` à l'upload — un `.job` déposé sur un
+   projet serveur était FILTRÉ EN SILENCE ; la dépose dit désormais
+   « les fichiers de travail SheetCam se traitent en mode "Cet appareil" »
+   (`jobImport.serverUnsupported`, EN/FR), et les autres fichiers suivent
+   leur chemin.
+
+**Verrous rejoués et chiffres.** `sheetcamJobGeometry.test.js` (21 tests) :
+structure et refus nommés sur la fixture et sur des binaires corrompus SUR
+MESURE (type 9 dans un segment, sommet décalé d'un millimètre, rayon d'arc
+falsifié, enregistrement de chemin retiré octet par octet — chaque
+corruption ne refuse QUE son dessin) ; en-têtes et entités du canonique ;
+**coïncidence par l'import wasm ordinaire sur la pièce L du dépôt** (1
+pièce, 2 trous, étendue 0…180 identique au chiffre près) puis **sur les
+fichiers réels quand `.testparts` est là : 70 couples mesurés (45 `.job`
+réels × leurs dessins appariables), 66 coïncidences exactes** (pièces,
+trous, aire à 0,1 %, étendue à 0,01 mm) — les 4 autres sont exactement
+l'échange des deux dessins des deux fichiers « ordre », et la liaison
+croisée coïncide au même seuil sur les quatre. **Ellipse de la pièce L :
+0,106 mm au pire milieu d'arc, 0,056 aux sommets** — la consigne attendait
+0,05 ; la tessellation 18 arcs de SheetCam est un peu plus grossière que
+prévu, le verrou est posé à 0,12 avec le chiffre mesuré ici (à arbitrer).
+Suite entière : **vitest 767/767** (64 fichiers, dont les 743 de l'audit +
+le lot J6), `npx nuxt build` vert DEPUIS LA RACINE du dépôt (le lancer
+depuis `app/` casse les alias `~~/constants/…` — 30 fausses erreurs « os
+error 3 », l'invocation seule en cause). Harnais `qa-e2e-job.mjs` (image
+locale reconstruite depuis les sources), quatre passages, **tous verrous
+verts** :
+
+| passage | mode | résultat |
+|---|---|---|
+| fixture + DXF | normal | verrous A/B/C/D/E/F verts, dont le contrôle négatif J6-A : AUCUNE fiche ne vient du binaire quand les DXF sont déposés |
+| recette ×4 SEULE (`RECETTE-J4ter_x4.job`) | `QA_ALONE=1` | 2 fiches `source: 'job'` + constat, 5/5 pièces posées, réserve et points de départ appliqués (3+2 lus, orphelins = les POINT), `.job` rendu complet (Count=5, 3 copies, binaire intact hors drapeaux, OpOrder, angles) |
+| « ordre » SEUL (`RECETTE-J4bis3_ordre.job`) | `QA_ALONE=1` | idem, tous verrous verts — la liaison par rang fait ce qu'elle doit sur un fichier aux sections réordonnées |
+| `Piece_Trou+Fill_x4_ordre_TEST.job` SEUL | `QA_ALONE=1` | idem, tous verrous verts |
+
+**Non-faits, dits franchement.** J5 (miroir serveur) : pas livré, la dépose
+serveur dit maintenant ce qu'elle fait. Les points de départ, réserves et
+marges : AUCUN changement (mêmes blocs binaires, mêmes verrous F du
+harnais). L'écart d'ellipse mesuré ci-dessus. Et le lot suppose un
+`.job` dont les sections originales portent le lien de rang : un fichier
+dont les sections auraient été réordonnées SANS que son cache suive (nos
+deux fichiers « ordre » sont exactement ça) ne peut pas être réconcilié
+par le texte seul — déposé seul il suit la liaison du fichier, déposé
+avec ses DXF il redevient exact ; c'est écrit dans le code du resolver et
+verrouillé par le test « inversion croisée ».
+
+**À arbitrer** : (1) le seuil d'ellipse (0,05 attendu, 0,106 mesuré) ;
+(2) la sémantique « rang » sur un `.job` aux sections réordonnées — mon
+avis : c'est la seule lecture fidèle du format (règle 6 mesurée, et le
+`.job` rendu reste cohérent), le DXF déposé reste le correcteur ;
+(3) P4-10 attend toujours le `.job` réel d'atelier.

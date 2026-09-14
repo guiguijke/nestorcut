@@ -335,11 +335,11 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
     // wasm (il en ressortirait en « erreur d'analyse », un message faux pour
     // un fichier valide — voir le bloc `.job` plus haut).
     //
-    // Un `.job` ne crée aucune fiche : il n'a pas de géométrie. Ce que l'on
-    // peut dire à l'utilisateur, et qui est vrai, c'est QUELS dessins il doit
-    // déposer à côté — chacun nommé, avec sa quantité. Le panneau d'aperçu qui
-    // consommera `readSheetCamJob` est un autre chantier du lot J4 ; d'ici là
-    // le refus est explicite et actionnable, jamais silencieux.
+    // En temps normal ce fichier ne passe JAMAIS ici : la dépose d'un `.job`
+    // est interceptée par `addSheetCamJobDrop` (files.js, lot J4/J6) qui lit
+    // le job, importe ses dessins — DXF déposé prioritaire, sinon géométrie
+    // du bloc binaire — et pré-remplit les réglages. Ce refus est la défense
+    // du chemin ordinaire pour un `.job` qui lui échapperait.
     if (isSheetCamJob(source)) {
         // `parseSheetCamJob` lève un `SheetCamJobError` dont le `code` est
         // déjà une clé i18n et dont `message === code` : il traverse tel quel
@@ -352,6 +352,32 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
         }
         throw err
     }
+
+    return importLocalBytes(source, name, projectSlug, options)
+}
+
+/**
+ * Lot J6 — import d'octets DXF/SVG DÉJÀ EN MÉMOIRE, par le chemin ordinaire.
+ *
+ * C'est l'entrée du dépôt `.job` seul : la géométrie d'un dessin est décodée
+ * du bloc binaire (`jobDrawings`), écrite en DXF canonique
+ * (`drawingCanonicalDxf`), puis repasse PAR ICI — même importeur, mêmes
+ * fiches, mêmes constats qu'un DXF déposé. AUCUNE chaîne parallèle.
+ *
+ * Les gardes de `importLocalFiles` (extension, taille) ne se rejouent pas :
+ * elles sont celles du fichier DÉPOSÉ par l'utilisateur ; ici l'entrée est
+ * un document que NOUS venons d'écrire, dont nous connaissons le format et
+ * la taille (bornées par celles du `.job` lui-même).
+ *
+ * `options.sheetcamSource = 'job'` marque la fiche : champ additif
+ * `source: 'job'` + constat d'information « géométrie lue dans le fichier
+ * de travail » — la fiche le DIT, elle ne se fait pas passer pour un DXF
+ * (le DXF d'origine, s'il est déposé ou déjà dans le projet, gagne toujours).
+ */
+export async function importLocalBytes(source, label, projectSlug, options = {}) {
+    source = source instanceof Uint8Array ? source : new Uint8Array(source)
+    const ext = (label.lastIndexOf('.') >= 0
+        ? label.slice(label.lastIndexOf('.')).toLowerCase() : '')
 
     if (ext === '.svg') {
         const head = new TextDecoder('utf-8', { fatal: false }).decode(source.subarray(0, 65536))
@@ -384,7 +410,7 @@ export async function importLocalFiles(file, projectSlug, options = {}) {
         throw new Error('localImport.parseError')
     }
 
-    return [await storeFiche(imported, canonical, name, projectSlug, options)]
+    return [await storeFiche(imported, canonical, label, projectSlug, options)]
 }
 
 /**
@@ -441,6 +467,13 @@ async function storeFiche(imp, dxf, label, projectSlug, options = {}, extra = {}
                     value: String(Math.round(scale * 10000) / 10000),
                 }]
                 : []),
+            // Lot J6 — la fiche vient du BLOC BINAIRE du `.job`, pas d'un DXF
+            // déposé : elle le dit (§9.62 point 3). Le DXF d'origine, lui,
+            // gagne toujours quand il est là — cette fiche n'existe que
+            // parce qu'il n'est PAS là.
+            ...(options.sheetcamSource === 'job'
+                ? [{ code: 'sheetcam.jobGeometry', level: 'info', count: 1 }]
+                : []),
         ],
         previewSvg: buildPreviewSvg(parts),
         // Provenance `.job` (lot J4) : réglages de coupe de CE dessin et
@@ -451,6 +484,9 @@ async function storeFiche(imp, dxf, label, projectSlug, options = {}, extra = {}
         ...(options.sheetcamJobBytes
             ? { sheetcamJobBytes: options.sheetcamJobBytes.slice().buffer }
             : {}),
+        // Lot J6 — provenance GÉOMÉTRIQUE de la fiche : 'job' = décodée du
+        // bloc binaire (le DXF d'origine n'a pas été fourni) ; absent = DXF.
+        ...(options.sheetcamSource === 'job' ? { source: 'job' } : {}),
         ...(extra.fields || {}),
     }
     await saveLocalFile(record)
@@ -502,6 +538,8 @@ export async function scaleLocalFiche(record, options = {}) {
         ...(record.sheetcamJobBytes
             ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
             : {}),
+        // Lot J6 : la provenance 'job' survit à la ré-écriture de la fiche.
+        ...(record.source === 'job' ? { sheetcamSource: 'job' } : {}),
     }, {
         slug: record.slug,
         addedAt: record.addedAt,
@@ -549,6 +587,8 @@ export async function resetLocalFicheScale(record) {
         ...(record.sheetcamJobBytes
             ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
             : {}),
+        // Lot J6 : la provenance 'job' survit à la ré-écriture de la fiche.
+        ...(record.source === 'job' ? { sheetcamSource: 'job' } : {}),
     }, {
         slug: record.slug,
         addedAt: record.addedAt,
@@ -606,6 +646,8 @@ export async function explodeLocalFiche(record) {
         ...(record.sheetcamJobBytes
             ? { sheetcamJobBytes: new Uint8Array(record.sheetcamJobBytes) }
             : {}),
+        // Lot J6 : la provenance 'job' survit à la ré-écriture de la fiche.
+        ...(record.source === 'job' ? { sheetcamSource: 'job' } : {}),
     }
 
     const out = []

@@ -28,7 +28,7 @@
  * refus pour rien.
  */
 
-import { isSheetCamJob, jobSheet } from '~~/shared/sheetcamJob.js'
+import { isSheetCamJob, jobDrawings, jobSheet } from '~~/shared/sheetcamJob.js'
 import {
     DEFAULT_KERF_SAFETY_MM, spacingFromKerf,
 } from '~~/shared/sheetcamReserve.js'
@@ -82,6 +82,96 @@ export function matchDrawings(read, droppedFiles) {
         else missing.push(drawing)
     }
     return { matched, missing }
+}
+
+/**
+ * Lot J6 — d'où vient la GÉOMÉTRIE de chaque dessin d'un `.job` déposé.
+ *
+ * Trois sources, par ordre de priorité (§9.62 point 3) :
+ *
+ *  1. le DXF déposé DANS LE LOT : géométrie source exacte, il gagne ;
+ *  2. la fiche DU MÊME NOM déjà dans le projet : le DXF y a déjà été
+ *     importé — on la réutilise au lieu d'importer deux fois la même pièce
+ *     (P4-9 : redéposer un `.job` ne crée jamais de doublon) ;
+ *  3. le BLOC BINAIRE du `.job`, décodé par `jobDrawings` — la fiche vient
+ *     du `.job` et le DIT (`source: 'job'`).
+ *
+ * Tout le reste est un REFUS NOMMÉ par dessin : segment de type inconnu,
+ * contour ouvert, arc incohérent — jamais un contour deviné ni avalé.
+ *
+ * LE LIEN BLOC ↔ DESSIN EST LE RANG DES ORIGINAUX (règle 6 de l'étude,
+ * mesurée : « le bloc binaire est associé aux sections par leur rang ») :
+ * le k-ième nom distinct parmi les sections originales, dans l'ordre du
+ * fichier, désigne le k-ième bloc du cache. C'est le lien que SheetCam
+ * écrit — et celui de NOTRE rendu (`jobRanksByDrawing`), si bien que le
+ * `.job` rendu reste cohérent avec les fiches qui l'ont produit. Le DXF
+ * déposé reste le correcteur : sa géométrie gagne toujours quand il est là.
+ *
+ * `projectFiles` : `[{ name, slug }]` — les fiches DÉJÀ dans le projet
+ * (`files.js` les passe depuis `state.projectFiles`).
+ *
+ * Rend `{ matched, reusable, fromJob, refused }` :
+ *  - `matched`   : `[{ drawing, file }]` — importer le DXF, il gagne ;
+ *  - `reusable`  : `[{ drawing, slug }]` — attacher les réglages à la fiche
+ *                  existante, rien de neuf à importer ;
+ *  - `fromJob`   : `[{ drawing, block }]` — `block` est une entrée de
+ *                  `jobDrawings`, sans erreur ;
+ *  - `refused`   : `[{ drawing, code, params }]` — refus NOMMÉ.
+ */
+export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) {
+    const { matched, missing } = matchDrawings(read, droppedFiles)
+    const projectByName = new Map()
+    for (const f of projectFiles || []) {
+        if (f?.name && !projectByName.has(key(f.name))) projectByName.set(key(f.name), f.slug)
+    }
+
+    // Les blocs du cache, DANS L'ORDRE DU FICHIER — et le lien par rang.
+    const blocks = jobDrawings(read?.job?.binary || null)
+    const rankedNames = []
+    for (const part of read?.job?.parts || []) {
+        if (part.copyOf >= 0) continue
+        if (!rankedNames.includes(part.drawingName)) rankedNames.push(part.drawingName)
+    }
+    const linkKnown = blocks != null && blocks.length === rankedNames.length
+
+    const reusable = []
+    const fromJob = []
+    const refused = []
+    for (const drawing of missing) {
+        const slug = projectByName.get(key(drawing.name))
+        if (slug != null) {
+            reusable.push({ drawing, slug })
+            continue
+        }
+        if (!linkKnown) {
+            // Flux illisible, ou autant de blocs que de noms non garanti :
+            // AUCUNE géométrie n'est attribuée — on ne devine jamais.
+            refused.push({
+                drawing,
+                code: blocks == null ? 'sheetcamJobDrawing.undecodable' : 'sheetcamJobDrawing.linkUnknown',
+                params: {},
+            })
+            continue
+        }
+        const block = blocks[rankedNames.indexOf(drawing.name)]
+        if (block?.error) {
+            refused.push({ drawing, code: block.error.code, params: block.error.params })
+            continue
+        }
+        fromJob.push({ drawing, block })
+    }
+    return {
+        matched,
+        reusable,
+        fromJob,
+        refused,
+        // Le bloc de chaque dessin par NOM, pour les replis de l'appelant
+        // (une fiche « déjà dans le projet » disparue entre-temps retombe
+        // sur la géométrie du `.job` au lieu d'échouer).
+        blockByName: linkKnown
+            ? new Map(rankedNames.map((name, k) => [name, blocks[k]]))
+            : new Map(),
+    }
 }
 
 /**

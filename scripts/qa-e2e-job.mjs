@@ -23,9 +23,16 @@
 // rien de nommé ne sort dans `docs/`. Par défaut le harnais prend la fixture
 // anonymisée du dépôt et les deux dessins du moulinet.
 //
+// Lot J6 — QA_ALONE=1 : le cas « `.job` SEUL » de bout en bout (§9.62
+// point 6) : la dépose ne contient QUE le `.job`, les fiches viennent du
+// bloc binaire (source: 'job'), le nesting tourne, le `.job` rendu est
+// relu avec les mêmes verrous D/E. À jouer sur la recette ×4 et sur le
+// fichier « ordre ».
+//
 // Usage :
 //   QA_JOB=<fichier.job> QA_DXF_DIR=<dossier des dessins> QA_OUT=<dir> \
 //   node scripts/qa-e2e-job.mjs
+//   QA_ALONE=1 QA_JOB=<fichier.job> QA_OUT=<dir> node scripts/qa-e2e-job.mjs
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -37,6 +44,8 @@ const OUT = process.env.QA_OUT || path.resolve('.qa-pw/j4')
 const JOB = process.env.QA_JOB || path.resolve('app/tests/fixtures/sheetcam/source.job')
 const DXF_DIR = process.env.QA_DXF_DIR || path.resolve('.testparts')
 const LOCALE = process.env.QA_LOCALE || 'fr'
+// Lot J6 : déposer le `.job` SANS ses DXF — la géométrie vient du binaire.
+const ALONE = process.env.QA_ALONE === '1'
 // QA_SAFETY : force la SECURITE du formulaire avant de nester, pour mesurer
 // l'effet de l'espacement toutes choses egales par ailleurs. Sans elle, le
 // harnais garde ce que le `.job` pre-remplit (1 mm, donc 2 x kerf + 1).
@@ -85,19 +94,21 @@ for (const part of source.parts) {
 log('le .job réclame :', [...wanted].map(([n, q]) => `${n} ×${q}`).join(', '))
 
 const drawings = []
-for (const name of wanted.keys()) {
-    const p = path.join(DXF_DIR, name)
-    if (fs.existsSync(p)) { drawings.push(p); continue }
-    // Casse ignorée : un `.job` Windows écrit `Piece_Trou.DXF`.
-    const found = fs.existsSync(DXF_DIR)
-        ? fs.readdirSync(DXF_DIR).find((f) => f.toLowerCase() === name.toLowerCase())
-        : null
-    if (found) drawings.push(path.join(DXF_DIR, found))
-    else log('ATTENTION : dessin introuvable sur ce poste —', name)
-}
-if (drawings.length !== wanted.size) {
-    console.error(`dessins manquants : ${wanted.size - drawings.length} sur ${wanted.size} (QA_DXF_DIR=${DXF_DIR})`)
-    process.exit(2)
+if (!ALONE) {
+    for (const name of wanted.keys()) {
+        const p = path.join(DXF_DIR, name)
+        if (fs.existsSync(p)) { drawings.push(p); continue }
+        // Casse ignorée : un `.job` Windows écrit `Piece_Trou.DXF`.
+        const found = fs.existsSync(DXF_DIR)
+            ? fs.readdirSync(DXF_DIR).find((f) => f.toLowerCase() === name.toLowerCase())
+            : null
+        if (found) drawings.push(path.join(DXF_DIR, found))
+        else log('ATTENTION : dessin introuvable sur ce poste —', name)
+    }
+    if (drawings.length !== wanted.size) {
+        console.error(`dessins manquants : ${wanted.size - drawings.length} sur ${wanted.size} (QA_DXF_DIR=${DXF_DIR})`)
+        process.exit(2)
+    }
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -138,11 +149,11 @@ try {
         .first()
     if (await devCard.count()) await devCard.click().catch(() => {})
 
-    // ---------- A. dépose du `.job` AVEC ses dessins ----------
-    await page.setInputFiles('input[name="dxf"]', [JOB, ...drawings])
+    // ---------- A. dépose du `.job` AVEC ses dessins (seul si QA_ALONE) ----
+    await page.setInputFiles('input[name="dxf"]', ALONE ? [JOB] : [JOB, ...drawings])
     await page.waitForURL('**/project/**', { timeout: 90000 })
     const slug = page.url().split('/project/')[1].split(/[?#]/)[0]
-    log('projet', slug)
+    log('projet', slug, ALONE ? '(dépose du .job SEUL — lot J6)' : '')
     // Les fiches sont écrites dans IndexedDB par l'import : on attend qu'il
     // y en ait autant que de dessins réclamés, pas un délai fixe.
     await page.waitForFunction(
@@ -167,6 +178,8 @@ try {
             hasCut: Boolean(r.sheetcam),
             leadIn: r.sheetcam?.leadIn ?? null,
             hasJobBytes: Boolean(r.sheetcamJobBytes),
+            source: r.source ?? null,
+            finding: (r.findings || []).some((f) => f.code === 'sheetcam.jobGeometry'),
         }))
     })
     log('fiches IndexedDB :', JSON.stringify(cards))
@@ -175,6 +188,20 @@ try {
     check('A2 réglages de coupe attachés', cards.every((c) => c.hasCut && c.leadIn > 0),
         `amorces : ${cards.map((c) => c.leadIn).join(', ')}`)
     check('A3 le .job est conservé pour la réécriture', cards.every((c) => c.hasJobBytes))
+    // Lot J6 — cas « .job seul » : chaque fiche vient du BLOC BINAIRE et le
+    // DIT (`source: 'job'` + constat d'information). Dans le cas normal
+    // (DXF déposés), AUCUNE ne doit porter la marque du binaire : le DXF a
+    // gagné — c'est le contrôle négatif de la priorité des sources.
+    if (ALONE) {
+        check('J6-A la géométrie de chaque fiche vient du `.job` et le dit',
+            cards.length === wanted.size
+            && cards.every((c) => c.source === 'job' && c.finding && c.parts > 0),
+            JSON.stringify(cards.map((c) => ({ n: c.name, src: c.source, parts: c.parts }))))
+    } else {
+        check('J6-A aucun dessin ne vient du binaire quand les DXF sont déposés',
+            cards.every((c) => c.source == null),
+            JSON.stringify(cards.map((c) => ({ n: c.name, src: c.source }))))
+    }
 
     // ---------- B. réglages pré-remplis ----------
     const sheet = jobSheet(source)

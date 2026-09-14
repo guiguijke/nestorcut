@@ -566,6 +566,17 @@ async function addFiles(files, slug) {
         await getProject(API_ROUTES.PROJECT(slug))
         return
     }
+    // Lot J6 — un `.job` ne se traite que sur le chemin NAVIGATEUR : le
+    // serveur n'accepte que .dxf/.svg/.dwg à l'upload et le miroir `.job`
+    // côté worker est le lot J5. Un `.job` déposé sur un projet serveur
+    // serait filtré en silence — on le DIT, avec la voie qui marche.
+    const jobFiles = files.filter((f) => /\.job$/i.test(f?.name || ''))
+    if (jobFiles.length) {
+        state.localImportError = 'jobImport.serverUnsupported'
+        state.localImportErrorParams = {
+            names: jobFiles.map((f) => f.name).join(', '),
+        }
+    }
     await uploadToServer(files, slug)
 }
 
@@ -591,7 +602,7 @@ async function uploadToServer(files, slug) {
 }
 
 /**
- * Dépose d'un `.job` SheetCam et de ses dessins — lot J4.
+ * Dépose d'un `.job` SheetCam et de ses dessins — lots J4 puis J6.
  *
  * Ce que cette fonction fait, dans cet ordre et pour ces raisons :
  *
@@ -602,21 +613,26 @@ async function uploadToServer(files, slug) {
  *     seul chemin qui garde `space = kerf + 2 × sécurité` cohérent, et
  *     l'écrire directement ferait re-dériver une autre valeur à la
  *     réouverture du projet.
- *  2. IMPORTE chaque dessin présent comme une fiche NORMALE (quantité,
- *     rotations, couleur, aperçu, suppression), en lui attachant les
- *     réglages de coupe que le `.job` donne POUR CE DESSIN, et les octets du
- *     `.job` pour pouvoir le réécrire à la fin du solve.
- *  3. NOMME ce qui manque. Un `.job` ne contient pas ses dessins (règle 9) :
- *     l'utilisateur doit les déposer. Importer à moitié en silence
- *     produirait un `.job` de sortie amputé — ce que `buildNestedJobs`
- *     refuse de toute façon, mais mieux vaut le dire ici, à la dépose.
+ *  2. RÉSOUT LA SOURCE DE GÉOMÉTRIE de chaque dessin (lot J6, §9.62) :
+ *     le DXF déposé gagne (géométrie source exacte) ; sinon la fiche du
+ *     même nom déjà dans le projet (le DXF y a été importé — on lui attache
+ *     les réglages, pas de doublon) ; sinon le BLOC BINAIRE du `.job`,
+ *     décodé puis repassé par l'import ordinaire — la fiche porte alors
+ *     `source: 'job'` et le constat « géométrie lue dans le fichier de
+ *     travail ». Plus AUCUN « dessin manquant, déposez-le » : ce message
+ *     n'a plus de sens depuis que le `.job` porte ses contours.
+ *  3. NOMME les refus, par dessin : segment inconnu, contour ouvert, arc
+ *     incohérent — les autres fiches vivent, le refus dit QUI est concerné.
  *
  * Les réglages restent MODIFIABLES : on pré-remplit, on n'impose pas
  * (consigne §5 point 2).
  */
 async function addSheetCamJobDrop(drop, slug) {
-    const { readSheetCamJob, importLocalFiles, assignJobStarts } = await import('./localImport')
-    const { matchDrawings, prefillFromJob, cutSettingsFor } = await import('./sheetcamJobImport')
+    const { readSheetCamJob, importLocalFiles, importLocalBytes, assignJobStarts } = await import('./localImport')
+    const {
+        prefillFromJob, cutSettingsFor, resolveJobDrawingSources,
+    } = await import('./sheetcamJobImport')
+    const { drawingCanonicalDxf } = await import('~~/shared/sheetcamJobDxf.js')
 
     let read
     try {
@@ -643,16 +659,23 @@ async function addSheetCamJobDrop(drop, slug) {
     }
     if (prefill.kerf != null) updateKerfSafety({ kerf: prefill.kerf, safety: prefill.safety })
 
-    // 2. Les dessins présents.
-    const { matched, missing } = matchDrawings(read, drop.drawings)
+    // 2. La source de géométrie de chaque dessin (lot J6).
+    const sources = resolveJobDrawingSources(
+        read,
+        drop.drawings,
+        (state.projectFiles || []).map((f) => ({ name: f.name, slug: f.slug })),
+    )
     const jobName = drop.jobFile?.name || null
     const wanted = new Map()
     let imported = 0
-    // Lot J4-bis-3 : les fiches importées, gardées pour l'appariement des
-    // blocs du cache binaire — il se fait par la GÉOMÉTRIE, donc APRÈS
-    // l'import (§9.45). Aucune lecture de plus : ce sont les mêmes objets.
+    // Les fiches importées, gardées pour l'appariement des blocs du cache
+    // binaire — il se fait par la GÉOMÉTRIE, donc APRÈS l'import (§9.45).
+    // Aucune lecture de plus : ce sont les mêmes objets.
     const importedByName = new Map()
-    for (const { drawing, file } of matched) {
+    const refused = [...sources.refused]
+
+    // a) le DXF déposé : la géométrie source exacte gagne.
+    for (const { drawing, file } of sources.matched) {
         try {
             const records = await importLocalFiles(file, slug, {
                 sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
@@ -674,6 +697,57 @@ async function addSheetCamJobDrop(drop, slug) {
         }
     }
 
+    // b) la fiche du même nom déjà dans le projet : le DXF y a été importé,
+    //    on attache les réglages de coupe du `.job` à CETTE fiche — jamais
+    //    de doublon (P4-9 : un `.job` redéposé réutilise ce qui est là).
+    //    Une fiche disparue entre-temps retombe sur le bloc binaire : la
+    //    source « projet » est une OPTIMISATION, pas une dépendance.
+    const fromJob = [...sources.fromJob]
+    const { getLocalFile, saveLocalFile } = await import('./localFilesStore')
+    for (const { drawing, slug: fileSlug } of sources.reusable) {
+        const record = await getLocalFile(fileSlug)
+        if (!record) {
+            const block = sources.blockByName.get(drawing.name)
+            if (block && !block.error) fromJob.push({ drawing, block })
+            else refused.push({ drawing, code: 'sheetcamJobDrawing.linkUnknown', params: {} })
+            continue
+        }
+        record.sheetcam = cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth })
+        record.sheetcamJobBytes = drop.jobBytes.slice().buffer
+        await saveLocalFile(record)
+        importedByName.set(drawing.name, [record])
+        wanted.set(record.slug, Number(drawing.quantity) || 1)
+    }
+
+    // c) le bloc binaire : DXF canonique LINE/ARC PUIS IMPORT ORDINAIRE —
+    //    une seule chaîne de fiches, de pièces et de trous (§9.62 point 2).
+    for (const { drawing, block } of fromJob) {
+        let records = null
+        try {
+            const dxf = drawingCanonicalDxf(block)
+            if (!(dxf instanceof Uint8Array)) {
+                refused.push({ drawing, code: 'sheetcamJobDrawing.noGeometry', params: {} })
+                continue
+            }
+            records = await importLocalBytes(dxf, drawing.name, slug, {
+                sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
+                sheetcamJobBytes: drop.jobBytes,
+                sheetcamSource: 'job',
+            })
+        } catch (err) {
+            state.localImportError = err?.message || 'localImport.parseError'
+            state.localImportErrorParams = err?.params || {}
+            continue
+        }
+        if (records?.length) {
+            importedByName.set(drawing.name, records)
+            imported += records.length
+            for (const rec of records) {
+                wanted.set(rec.slug, Number(drawing.quantity) || 1)
+            }
+        }
+    }
+
     // 2-bis. LES POINTS DE DÉPART, APPARIÉS PAR LA GÉOMÉTRIE (lot J4-bis-3).
     //
     // Le cache binaire du `.job` ne dit pas à quel dessin appartient chacun de
@@ -684,10 +758,10 @@ async function addSheetCamJobDrop(drop, slug) {
     // ceux de l'autre dessin.
     //
     // On ne peut donc le faire qu'ICI, une fois les dessins importés — et
-    // sans rien relire : `importLocalFiles` a déjà rendu les fiches, on y
-    // ajoute les points et on ré-enregistre. Un `.job` dont l'affectation
-    // n'est pas tranchable laisse les fiches SANS points : c'est le
-    // comportement « point non lu », qui retire les trous du nesting et
+    // sans rien relire : `importLocalFiles`/`importLocalBytes` ont déjà rendu
+    // les fiches, on y ajoute les points et on ré-enregistre. Un `.job` dont
+    // l'affectation n'est pas tranchable laisse les fiches SANS points : c'est
+    // le comportement « point non lu », qui retire les trous du nesting et
     // l'affiche, plutôt que de parier.
     if (importedByName.size) {
         const ringsByName = {}
@@ -703,7 +777,6 @@ async function addSheetCamJobDrop(drop, slug) {
         }
         const assigned = assignJobStarts(read, ringsByName)
         if (!assigned.ambiguous) {
-            const { saveLocalFile } = await import('./localFilesStore')
             for (const [name, records] of importedByName) {
                 const found = assigned.byName[name]
                 if (!found) continue
@@ -723,14 +796,20 @@ async function addSheetCamJobDrop(drop, slug) {
         }
     }
 
-    // 3. Ce qui manque, nommé.
-    if (missing.length) {
-        state.localImportError = 'jobImport.missingDrawings'
+    // 3. Les refus, nommés — et EUX SEULS en erreur : le message « déposez
+    //    le DXF manquant » n'existe plus, la fiche issue du binaire porte
+    //    son constat d'information (« géométrie lue dans le fichier de
+    //    travail ») et le reste du travail est fait.
+    if (refused.length) {
+        state.localImportError = 'jobImport.drawingRefused'
         state.localImportErrorParams = {
-            n: missing.length,
-            names: missing.map((d) => d.name).join(', '),
+            n: refused.length,
+            names: refused.map((r) => r.drawing.name).join(', '),
+            // Codes stables : la page les traduit (elle a le `t`), l'atelier
+            // lit « un contour ouvert », pas une clé technique.
+            reasonCodes: [...new Set(refused.map((r) => r.code))],
         }
-    } else if (!imported) {
+    } else if (!imported && !sources.reusable.length) {
         state.localImportError = 'jobImport.dropDrawings'
         state.localImportErrorParams = {
             n: read.drawings.length,

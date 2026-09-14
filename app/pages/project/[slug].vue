@@ -524,6 +524,12 @@ const localImportErrorText = computed(() => {
     const params = Object.fromEntries(
         Object.entries(raw).map(([k, v]) => [k, typeof v === 'number' ? fmtNumber(v, 0) : v]),
     );
+    // Lot J6 : les raisons d'un refus de dessin arrivent en CODES stables
+    // (sheetcamJobDrawing.*) — l'atelier lit « un contour ouvert », pas une
+    // clé technique.
+    if (Array.isArray(raw.reasonCodes) && raw.reasonCodes.length) {
+        params.reasons = raw.reasonCodes.map((c) => t(c)).join(', ');
+    }
     return t(key, params);
 });
 const demoQuotaReached = computed(() => filesGetters.demoQuotaReached);
