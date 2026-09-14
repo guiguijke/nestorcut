@@ -1,5 +1,6 @@
 import { defineEventHandler, createError } from 'h3'
 import { connectDB } from '~~/server/db/mongo'
+import { resolvePolygonParts } from '~~/server/utils/vault'
 
 /**
  * Lot E4-c (`docs/PLAN-ECLATEMENT-2026-09-12.md` §8.3) : « Éclater en
@@ -34,6 +35,15 @@ export default defineEventHandler(async (event) => {
     }
     if (file.purgedAt) {
         throw createError({ statusCode: 409, statusMessage: 'File expired' })
+    }
+    // Lot A1 (audit P3-10, réserve) : une fiche à UNE pièce n'a rien à
+    // éclater — le bouton est absent de l'UI, l'API refuse proprement au
+    // lieu d'un no-op silencieux (le worker aurait marqué explodeRequested
+    // pour rien). La géométrie peut être chiffrée (vault) : la lecture
+    // passe par le même résolveur que le mapper.
+    const parts = await resolvePolygonParts(userId, file)
+    if ((parts || []).length < 2) {
+        throw createError({ statusCode: 409, statusMessage: 'Single part file' })
     }
 
     await db.collection('user_dxf_files').updateOne(

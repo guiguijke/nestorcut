@@ -451,20 +451,32 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             // jamais de quota consommé sur un job qui n'a pas pu démarrer.
             // Plan 2026-09-05 §1.2a : refus de CAPACITÉ (espacement) —
             // l'unfit du builder part au local-fail (bandeau + leviers).
+            // Lot A1 (audit P3-4/P3-6d) : les refus ACTIONNABLES du builder
+            // (pièce/bloc trop grand pour toute tôle ; espacement plus grand
+            // que la bande initiale) portent leur marqueur structuré — ils
+            // gardent leur PROPRE code au lieu de retomber sur « payload_build »
+            // puis le générique « arrêté de façon inattendue » à l'écran.
             const isCapacity = e?.message === 'capacity_exceeded'
+            const tooLarge = e?.__tooLarge || null
+            const spacingTooLarge = e?.__spacingTooLarge || null
+            const errorCode = e?.message === 'local_geometry_missing' ? 'geometry_missing'
+                : isCapacity ? 'capacity_exceeded'
+                : tooLarge ? 'part_too_large'
+                : spacingTooLarge ? 'spacing_too_large'
+                : 'payload_build'
             await $fetch(`/api/results/${jobSlug}/local-fail`, {
                 method: 'POST',
                 body: {
-                    error: e?.message === 'local_geometry_missing' ? 'geometry_missing'
-                        : isCapacity ? 'capacity_exceeded' : 'payload_build',
+                    error: errorCode,
                     ...(isCapacity && e.__unfit ? { unfit: e.__unfit } : {}),
                 },
             }).catch(() => {})
             return {
                 ok: false,
-                error: e?.message === 'local_geometry_missing' ? 'geometry_missing'
-                    : isCapacity ? 'capacity_exceeded' : 'payload_build',
+                error: errorCode,
                 unfit: isCapacity ? e.__unfit : undefined,
+                ...(tooLarge ? { tooLarge } : {}),
+                ...(spacingTooLarge ? { spacingTooLarge } : {}),
             }
         }
     } else {

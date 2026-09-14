@@ -58,6 +58,18 @@ export function useLocalMode(projectSlug) {
         }
         // J-090 : géométrie d'un projet local absente de CE navigateur.
         if (err === 'geometry_missing') return t('localImport.missingGeometry')
+        // Lot A1 (audit P3-4) : pièce/bloc trop grand pour toute tôle
+        // déclarée à cet espacement — le message NOMME le fichier et son
+        // étendue mesurée, comme item_geometry nomme sa pièce. Jamais le
+        // générique « arrêté de façon inattendue ».
+        if (err === 'part_too_large') {
+            return params
+                ? t('localMode.partTooLarge', params)
+                : t('localMode.partTooLargePlain')
+        }
+        // Lot A1 (audit P3-6d) : espacement plus grand que la bande initiale
+        // de l'instance — les leviers sont l'espacement et le stock.
+        if (err === 'spacing_too_large') return t('localMode.spacingTooLarge')
         if (err === 'crash') {
             return localOnly ? t('localMode.crashLocal') : t('localMode.crashError')
         }

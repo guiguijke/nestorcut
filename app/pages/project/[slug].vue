@@ -328,9 +328,22 @@ const localGeom = ref(null);
 const localGeomParams = computed(() =>
     itemGeometryParams(localGeom.value, projectFiles.value)
 );
+// Lot A1 (audit P3-4/P3-6d) : paramètres des refus ACTIONNABLES du builder
+// local — { name, width, height } pour une pièce/bloc trop grand pour toute
+// tôle déclarée, chiffres de bande pour un espacement trop grand. Comme
+// localGeom, ils viennent du registre (progressFor les expose).
+const localTooLarge = ref(null);
+const localSpacingTooLarge = ref(null);
 const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
     localOnly: unref(isLocalProject),
-    params: localComputeError.value === 'item_geometry' ? localGeomParams.value : null,
+    params: localComputeError.value === 'item_geometry' ? localGeomParams.value
+        : localComputeError.value === 'part_too_large' && localTooLarge.value
+            ? {
+                file: localTooLarge.value.name,
+                w: localTooLarge.value.width,
+                h: localTooLarge.value.height,
+            }
+        : null,
 }));
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
 // leviers du pré-contrôle) — le registre le porte sur la phase error.
@@ -387,11 +400,15 @@ watch(
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
               : p.error === 'item_geometry' ? 'item_geometry'
+              : p.error === 'part_too_large' ? 'part_too_large'
+              : p.error === 'spacing_too_large' ? 'spacing_too_large'
               : p.error === 'cancelled' ? null
               : 'crash')
             : null;
         localUnfit.value = p.phase === 'error' ? (p.unfit || null) : null;
         localGeom.value = p.phase === 'error' ? (p.geom || null) : null;
+        localTooLarge.value = p.phase === 'error' ? (p.tooLarge || null) : null;
+        localSpacingTooLarge.value = p.phase === 'error' ? (p.spacingTooLarge || null) : null;
         if (p.phase === 'queued' || p.phase === 'running' || p.phase === 'finalizing') {
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
@@ -644,9 +661,17 @@ const projectFiles = computed(() => {
     return filesGetters.projectFiles || []
 })
 const biggestPartSizes = computed(() => {
+    // Lot A1 (audit P3-4) : une fiche-BLOC est UN item moteur de l'étendue
+    // de son enveloppe — la garde « tôle assez grande » doit la mesurer sur
+    // le BLOC (champ additif `block`, E4-a), pas sur sa plus grande pièce.
+    // Mesuré sur le dessin du collègue : enveloppe 2834 × 689, plus grande
+    // pièce 1612 × 231 — la garde pièce laissait le clic passer et l'échec
+    // repartait sur le message générique « arrêté de façon inattendue ».
     const parts = projectFiles.value
         .filter(file => file.count !== 0) // skip files with count 0
-        .reduce((acc, file) => [...acc, ...file.parts], [])
+        .reduce((acc, file) => file.block
+            ? [...acc, { width: file.block.width, height: file.block.height }]
+            : [...acc, ...file.parts], [])
         .map(part => ({
             width: part.width > part.height ? part.width : part.height,
             height: part.width > part.height ? part.height : part.width

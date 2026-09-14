@@ -133,6 +133,12 @@ async function launch(jobSlug, projectSlug, itemMap) {
         // Lot E0 : { slug, part } de la pièce dont le moteur a refusé la
         // géométrie — scalaires, gardés comme `unfit` après éviction.
         job.geom = res?.ok ? null : (res?.geom || null)
+        // Lot A1 (audit P3-4/P3-6d) : paramètres des refus ACTIONNABLES du
+        // builder — { slug, name, width, height } pour une pièce/bloc trop
+        // grand pour toute tôle, chiffres de la bande pour un espacement
+        // trop grand. Scalaires légers, gardés comme `unfit`.
+        job.tooLarge = res?.ok ? null : (res?.tooLarge || null)
+        job.spacingTooLarge = res?.ok ? null : (res?.spacingTooLarge || null)
         job.phase = res?.ok ? 'done' : (res?.error === 'cancelled' ? 'cancelled' : 'error')
     } catch (e) {
         job.ok = false

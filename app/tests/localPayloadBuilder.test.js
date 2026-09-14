@@ -146,6 +146,92 @@ describe('feasibility pre-check (message exact main.py)', () => {
     })
 })
 
+describe('A1 — les refus du builder portent leurs paramètres (audit P3-4/P3-6d)', () => {
+    const baseParams = {
+        sheets: [{ width: 1500, height: 1000, count: 1 }],
+        space: 2, fillHoles: true, addOutShape: false, outputUnit: 'mm',
+    }
+    const catchErr = async (input) => {
+        try {
+            await buildLocalPayload(input, {})
+        } catch (e) {
+            return e
+        }
+        return null
+    }
+
+    it('pièce trop grande : __tooLarge nomme le fichier RÉEL (pas le slug) et l’étendue', async () => {
+        const file = {
+            slug: 'toobig-x9y8z7.dxf', name: 'dessin reel.dxf', count: 1, rotations: [0],
+            parts: [{
+                coordinates: [[0, 0], [2000, 0], [2000, 50], [0, 50], [0, 0]],
+                holes: [], width: 2000, height: 50, handles: [], color: null,
+            }],
+        }
+        const err = await catchErr({ files: [file], params: baseParams, profile: { timeBudgetSec: 13 } })
+        // Le message exact reste celui du worker Python (verrou du describe
+        // précédent) ; le MARQUEUR structuré s'ajoute pour l'écran.
+        expect(err).not.toBeNull()
+        expect(err.message).toContain('Part(s) too large for the sheet')
+        expect(err.__tooLarge).toEqual({
+            slug: 'toobig-x9y8z7.dxf',
+            name: 'dessin reel.dxf',
+            width: '2000',
+            height: '50',
+        })
+    })
+
+    it('BLOC trop grand : l’étendue mesurée est celle de l’ENVELOPPE, pas de la pièce max', async () => {
+        // Deux pièces de 1000 × 50 posées à 100 mm d'écart : la plus grande
+        // pièce tient dans la tôle (1004 ≤ 1500), l'enveloppe non (2104 > 1500)
+        // — c'est le défaut mesuré au P3-4 sur le dessin du collègue
+        // (enveloppe 2834 × 689, pièce max 1612 × 231).
+        const file = {
+            slug: 'blk-m9n8o7.dxf', name: 'bloc.dxf', count: 1, rotations: [0],
+            parts: [
+                { coordinates: [[0, 0], [1000, 0], [1000, 50], [0, 50], [0, 0]], holes: [], width: 1000, height: 50, handles: [], color: null },
+                { coordinates: [[1100, 5], [2100, 5], [2100, 55], [1100, 55], [1100, 5]], holes: [], width: 1000, height: 50, handles: [], color: null },
+            ],
+        }
+        const err = await catchErr({ files: [file], params: baseParams, profile: { timeBudgetSec: 13 } })
+        expect(err).not.toBeNull()
+        expect(err.__tooLarge).toEqual({
+            slug: 'blk-m9n8o7.dxf',
+            name: 'bloc.dxf',
+            width: '2100',
+            height: '55',
+        })
+    })
+
+    it('espacement plus grand que la bande initiale : __spacingTooLarge porte les chiffres', async () => {
+        // P3-6d : un dessin minuscule (20 × 20, aire 400 mm²) sur une tôle
+        // 600 × 300 à espacement 2 — la bande initiale (400/300 ≈ 1,3 mm)
+        // est SOUS l'espacement : la garde strip tire.
+        const file = {
+            slug: 'tiny-z9y8x7.dxf', name: 'tiny.dxf', count: 1, rotations: [0],
+            parts: [{
+                coordinates: [[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]],
+                holes: [], width: 20, height: 20, handles: [], color: null,
+            }],
+        }
+        const err = await catchErr({
+            files: [file],
+            params: { ...baseParams, sheets: [{ width: 600, height: 300, count: 1 }] },
+            profile: { timeBudgetSec: 13 },
+        })
+        expect(err).not.toBeNull()
+        expect(err.message).toContain('too large for this instance')
+        expect(err.__spacingTooLarge).toEqual({
+            spacing: '2.0',
+            // pyRoundInt formate en chaîne (miroir Python) — le marqueur
+            // est destiné à l'affichage.
+            totalAreaMm2: '400',
+            sheetHeightMm: '300',
+            stripWidthMm: '1.3',
+        })
+    })
+})
+
 describe('SPP vs BPP — stock count', () => {
     const square = {
         slug: 'sq-a1b2c3.dxf', name: 'sq.dxf', count: 2, rotations: [0],

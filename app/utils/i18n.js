@@ -385,6 +385,10 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please retry with a smaller job.',
         'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
+        // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
+        'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+        'localMode.partTooLargePlain': 'A part does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+        'localMode.spacingTooLarge': 'Spacing is too large for this job (the initial strip would be empty) — reduce the spacing or add more parts/sheets. The nesting was refunded.',
         // Lot E0 : the engine refused ONE part's geometry at import. Naming
         // the file and the part is the whole point — 'crashLocal' told the
         // user nothing they could act on.
@@ -1198,6 +1202,10 @@ const dict = {
         // pas pour ces fichiers.
         'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez avec une tâche plus petite.",
         'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
+        // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
+        'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+        'localMode.partTooLargePlain': "Une pièce ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+        'localMode.spacingTooLarge': "L'espacement est trop grand pour cette tâche (la bande initiale serait vide) — réduisez l'espacement ou ajoutez des pièces/tôles. L'imbrication a été remboursée.",
         // Lot E4-b/E4-c : l'échelle et l'éclatement sont des actions SUR LA
         // FICHE — l'interrupteur du projet et la fenêtre de choix au dépôt
         // ont disparu avec le lot E4-d.

@@ -837,10 +837,24 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             .map((p) => `'${p.name}' (${pyFixed0(p.width)}x${pyFixed0(p.height)}mm, x${p.count})`)
             .join(', ')
         const sheetDesc = sheets.map((s) => `${pyFixed0(s.width)}x${pyFixed0(s.height)}mm`).join(' / ')
-        throw new Error(
+        const tooLargeErr = new Error(
             `Part(s) too large for the sheet: ${details} — sheet(s): ${sheetDesc}, `
             + `spacing: ${pyStrSpace(space)}mm. Use a larger sheet, allow more rotations, or reduce spacing.`,
         )
+        // Lot A1 (audit P3-4) : marqueur structuré pour un refus ACTIONNABLE
+        // à l'écran. Sans lui, le catch de runLocalJobPrivate réduisait ce
+        // message au code interne « payload_build », puis la page au
+        // générique « arrêté de façon inattendue ». Le nom RÉEL du fichier
+        // voyage avec l'erreur (le slug est opaque) : `unplaceable[].name`
+        // porte le slug, la correspondance se fait sur l'entrée `files`.
+        const firstOffender = unplaceable[0]
+        tooLargeErr.__tooLarge = {
+            slug: firstOffender.name,
+            name: (files || []).find((f) => f.slug === firstOffender.name)?.name || firstOffender.name,
+            width: pyFixed0(firstOffender.width),
+            height: pyFixed0(firstOffender.height),
+        }
+        throw tooLargeErr
     }
 
     // d) Trous / canaux : le canal plus large que l'inflation sinon jagua le
@@ -937,12 +951,24 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // Aire ENVELOPPE (majorante de la géométrie moteur) — l'aire nette
     // sous-estime et laisserait passer le panic (parité main.py).
     if (isSpp && space > 0 && totalOuterArea / sheets[0].height <= space) {
-        throw new Error(
+        const spacingErr = new Error(
             `Spacing ${pyStrSpace(space)} mm is too large for this instance: parts total `
             + `${pyRoundInt(totalOuterArea)} mm² on a ${pyFixed0(sheets[0].height)} mm-high sheet `
             + `(initial strip width ${pyFixed1(totalOuterArea / sheets[0].height)} mm). `
             + `Reduce the spacing or add more parts/stock.`,
         )
+        // Lot A1 (audit P3-6d) : même traitement que la garde faisabilité —
+        // marqueur structuré, refus actionnable à l'écran au lieu du
+        // générique « payload_build » → « arrêté de façon inattendue ».
+        // Mesuré : dessin de 21 × 27 mm sur tôle 600 × 300, espacement 2 —
+        // la bande initiale (aire/hauteur ≈ 1,9 mm) est sous l'espacement.
+        spacingErr.__spacingTooLarge = {
+            spacing: pyStrSpace(space),
+            totalAreaMm2: pyRoundInt(totalOuterArea),
+            sheetHeightMm: pyFixed0(sheets[0].height),
+            stripWidthMm: pyFixed1(totalOuterArea / sheets[0].height),
+        }
+        throw spacingErr
     }
 
     let instance
