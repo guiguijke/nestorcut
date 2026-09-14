@@ -2604,3 +2604,61 @@ verrouillé par le test « inversion croisée ».
 avis : c'est la seule lecture fidèle du format (règle 6 mesurée, et le
 `.job` rendu reste cohérent), le DXF déposé reste le correcteur ;
 (3) P4-10 attend toujours le `.job` réel d'atelier.
+
+#### 9.64 Lot J6 — vérification (vérificateur, 14/09, `dad20367`) — GO déploiement app seule
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, vitest, et un
+**décodage indépendant** du bloc binaire (sorties hors dépôt,
+`~/qa-out/verif-j6/`) : le décodeur `jobDrawings` est appelé tel quel, mais
+l'aire, l'étendue et l'arrivée de chaque arc sont recalculées ici ; côté DXF,
+ezdxf aplatit (0,0005 mm) et shapely polygonise — ni le writer canonique ni
+l'import wasm n'entrent dans la mesure. La coïncidence est donc établie par
+un second chemin que celui du verrou de l'implémenteur.
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **767 / 767** (64 fichiers, dont les 21 de `sheetcamJobGeometry.test.js` ; le verrou « série réelle » a bien vu `.testparts` : aucun avertissement `[J6]` au journal) |
+| périmètre | 10 fichiers, `app/` + `shared/` + étude + harnais ; rien sous `workers/`, `public/` — moteur, wasm et benchmarks hors sujet |
+| décodage | **47 `.job`** (série, recette, fixtures), **70 blocs de dessin, 187 contours, 0 erreur** ; blocs = noms originaux sur les 47 ; 0 contour ouvert ; l'arrivée de chaque arc reconstruit depuis (centre, rayon, sens, balayage) tombe sur son extrémité écrite à **7 × 10⁻¹⁴ mm** — la règle « balayage négatif = trigonométrique » est confirmée par un calcul indépendant |
+| coïncidence avec les DXF | **70 couples : 66 exacts, 4 croisés, 0 écart** — anneaux en même nombre, aires à 0,1 % (cercle r = 35 : 3 848,45 mm² décodé), étendues à **0,00000 mm** |
+| les 4 croisés | exactement les deux fichiers « ordre » fabriqués (`…_ordre_TEST`, `RECETTE-J4bis3_ordre`) : le bloc k porte la géométrie de l'AUTRE nom, coïncidence exacte par liaison croisée |
+| ellipse de la pièce L | 18 arcs ; **0,0996 mm** au pire milieu d'arc, 0,050 aux extrémités, contre l'ellipse analytique du DXF ; aire 5 027,95 contre π·a·b = 5 026,55 (+0,03 %) |
+| harnais `qa-e2e-job.mjs` | quatre passages, tous verrous verts : (1) fixture + DXF, contrôle négatif J6-A « aucune fiche ne vient du binaire » ; (2) recette ×4 SEULE : 2 fiches `source: 'job'` + constat, 5/5 posées, 3 + 2 points lus, 0 octet du binaire changé ; (3) `RECETTE-J4bis3_ordre` SEUL : vert ; (4) mon cas : `Pièce L - start ellipse moved` SEUL : 1 fiche du binaire, 1/1 posée, 3 points lus, 0 orphelin, **2 octets changés = les drapeaux des deux points automatiques, le point déplacé à la main intact** (§9.59 tenu sur le chemin « .job seul ») |
+| double dépôt (mon cas) | `.job` seul ⇒ 2 fiches du binaire ; puis, SUR LE MÊME PROJET, `.job` + ses deux DXF ⇒ **4 fiches** (une du binaire et une du DXF par nom, toutes avec réglages de coupe) ; puis un DXF seul ⇒ 5. Mesuré au navigateur, captures `~/qa-out/verif-j6/h-doubledrop/` |
+
+**Arbitrages (délégués, tranchés)** :
+
+1. **Ellipse : seuil 0,12 mm accepté.** L'écart n'est pas le nôtre : c'est
+   la tessellation de SheetCam (18 arcs, tolérance ~0,1 mm), et ces arcs sont
+   EXACTEMENT ce que la machine coupera — le contour du `.job` est plus
+   fidèle à la pièce réelle que l'ellipse du DXF. Sous le kerf, sous
+   `NEST_SIMPLIFY_MM`, sans effet sur le nesting. Le chiffre attendu (0,05)
+   de la consigne était une estimation, pas une mesure.
+2. **Liaison par rang : acceptée, c'est le format.** La règle 6 a été
+   MESURÉE au lot J1 dans SheetCam lui-même (déplacer une section échange les
+   géométries) : un `.job` aux sections réordonnées à la main est un fichier
+   que SheetCam affiche déjà croisé. Déposé seul, NestorCut lit ce que
+   SheetCam lit ; déposé avec ses DXF, la géométrie source gagne. Aucun
+   fichier produit par SheetCam n'est dans ce cas. Constat de cohérence à
+   garder en tête : l'appariement des POINTS DE DÉPART reste par géométrie
+   (`assignJobStarts`, §9.45) — sur un tel fichier déposé AVEC ses DXF les
+   deux liaisons divergent ; hors de portée d'un fichier réel, noté, pas de
+   lot.
+3. **Dépose d'un `.job` sur un projet serveur : le message remplace un
+   filtrage silencieux**, accepté tel quel ; J5 lèvera la limite.
+
+**Réserves (non bloquantes, lot court J6-bis avant la levée du gel)** :
+
+- **Le DXF ne « gagne » que dans le MÊME dépôt.** Le résolveur ne réutilise une fiche du projet que pour un dessin SANS DXF dans le lot ; un DXF déposé après coup pour un nom dont la fiche `source: 'job'` existe déjà s'ajoute au lieu de la remplacer. Le constat d'information (« le DXF d'origine n'a pas été fourni ») invite pourtant à le fournir : l'utilisateur qui obéit double ses quantités sans le voir. J6-bis : quand un DXF est importé (dans un lot `.job` ou seul) pour un nom dont une fiche `source: 'job'` existe dans le projet, REMPLACER cette fiche en place (mêmes quantité, rang, réglages de coupe, octets du `.job`) ; verrou unitaire + cas harnais « .job seul puis .job + DXF ⇒ toujours 2 fiches, source nulle ». Un DXF redéposé pour une fiche déjà DXF reste le comportement historique (hors lot).
+- Le verrou « série réelle » exige `inverted.length === 4` : il est vrai sur
+  les postes qui portent les deux fichiers « ordre », faux sur un poste où
+  `.testparts` existe sans eux. Tolérer `≤ 4` avec le détail au journal, ou
+  nommer les deux fichiers attendus dans le message d'échec.
+- Hygiène du lot précédent (`edbc84d7`) : la variable `QA_P3_ECRIN` et le
+  défaut `qa-p3-collegue.dxf` gardent la moitié du nom du dessin du
+  collègue ; renommer `QA_P3_MULTI` / `qa-p3-multi.dxf`. Aucun nom de client
+  n'apparaît nulle part.
+
+**GO déploiement app seule.** App seule, `dad20367` (HEAD), après que l'agent a ajouté
+J6-bis ou en le suivant de près ; homelab et benchmarks sans objet. La
+recette du propriétaire C1 peut se jouer « `.job` seul » dès ce déploiement.

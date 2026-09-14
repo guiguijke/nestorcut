@@ -36,7 +36,7 @@ Prod attendue : `gitCommitSha 8b87e678` (E4 complet, J4-ter, H1). Le lot
 
 | # | Geste | Attendu | Verdict |
 |---|---|---|---|
-| C1 | Déposer `Piece_Trou+Fill_x4_OK.job` **seul** (après le lot J6 ; avant lui, avec ses deux DXF) | deux fiches (hôte ×1, éventail ×4), tôle 1000 × 1250 pré-remplie, kerf 1,5 et sécurité 1 ⇒ « espacement = 2 × kerf + sécurité = 4 mm » | |
+| C1 | Déposer `Piece_Trou+Fill_x4_OK.job` **seul** (J6 vérifié le 14/09 soir ; dès qu'il est en production — la page dit `gitCommitSha dad20367` ou plus récent) | deux fiches (hôte ×1, éventail ×4), tôle 1000 × 1250 pré-remplie, kerf 1,5 et sécurité 1 ⇒ « espacement = 2 × kerf + sécurité = 4 mm » | |
 | C2 | Nester | 5 pièces placées ; le rapport dit, par pièce, la réserve d'amorce et le point de départ (lu / utilisateur) | |
 | C3 | Télécharger le `.job`, l'ouvrir dans SheetCam | 5 pièces aux poses de NestorCut, ordre de coupe manuel (nichées avant l'hôte s'il y en a), aucune pièce fantôme | |
 | C4 | Post-traiter dans SheetCam | le G-code amorce là où NestorCut a écrit (trou et contour) ; aucune amorce ne coupe une pièce voisine | |
