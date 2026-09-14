@@ -2700,3 +2700,10 @@ La réserve du §9.64, corrigée, plus les deux points d'hygiène — app +
 Chiffres : vitest **768/768** (le verrou unitaire J6-bis en plus),
 `nuxt build` vert, pile locale reconstruite aux sources, harnais
 « double dépôt » tous verrous verts.
+
+**Déployé le 14/09 au soir — `777b48a8b7db6ad379a65dc5c49f16d0d1684ecb`**
+(J6 + J6-bis dans la même promotion) : build `34897972929` vert,
+`promote-latest` `34898591945` vert, Hetzner `pull app` + `up -d app`
+(seul le service app a bougé), page de prod à ce SHA, app.nestorcut.com
+et nestorcut.com en 200. Homelab et benchmarks publics sans objet (aucun
+diff moteur/worker). La recette C1 peut se jouer « `.job` seul ».
