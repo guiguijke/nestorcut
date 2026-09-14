@@ -2393,3 +2393,19 @@ fuseau (automatique) du même fichier peut, lui, être réécrit.
 
 **J4-quater** en hérite : la recherche du « meilleur point » ne parcourt que
 les contours à `moved = false`.
+
+#### 9.60 Lot « point déplacé à la main intouchable » — vérification (vérificateur, 14/09, `117bb4ce`) — GO déploiement (app seule)
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **743** |
+| périmètre | `shared/sheetcamJob.js`, `shared/sheetcamReserve.js`, tests, harnais ; rien sous `workers/` ni `public/` |
+| harnais `qa-e2e-startpoint-moved.mjs`, image reconstruite, fichier « start rectangle moved » de la série | **6 / 6** : un point déplacé en entrée ; ses 17 octets identiques en sortie ; point conservé (10,00 ; 138,91) ; les deux chemins automatiques figés (réinscriptibles) ; constat `userPoints 1 / nestorcutPoints 2` ; 0 octet touché hors drapeaux |
+| garde structurelle | `writeJobStartPoints` écarte tout édit visant un chemin déjà marqué déplacé : aucun lot futur ne peut réécrire un point d'utilisateur, même par oubli |
+| bonus | noms de dessins accentués : le `.job` est écrit en UTF-8, le lecteur décodait en latin-1 (« PiÃ¨ce ») ⇒ « dessin manquant » à tort ; réparé dans `jobDrawingName` seul, texte canonique et binaire intacts (verrou) |
+
+**Déploiement E4 `8b87e678` contrôlé** : page de prod à ce SHA, homelab
+`ASSERT OVERFLOW=HEAD: OK`.
+
+**GO déploiement** de `117bb4ce` (app seule). Il entre dans la recette du
+propriétaire (`RECETTE-PROPRIETAIRE-2026-09-14.md`, ligne C5).

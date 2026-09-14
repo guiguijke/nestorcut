@@ -61,3 +61,4 @@ cités dans les documents antérieurs à la re-création du dépôt (2026-09)
 renvoient au dépôt archivé privé.
 
 | `PLAN-CORRECTIF-VUE-DXF-2026-09-14.md` | Vue DXF d'un résultat local figée : reproduction, cause, correctif H1 | vivant |
+| `RECETTE-PROPRIETAIRE-2026-09-14.md` | Recette des priorités 3 et 4 en production, à faire par le propriétaire avant toute nouvelle feature | vivant |
