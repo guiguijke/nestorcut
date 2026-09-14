@@ -1455,3 +1455,82 @@ sept cas sur le dessin du collègue, routes serveur lues.
 conservées côté serveur (même chaîne, plus d'émetteur client, couvertes par
 les tests E2) ; fenêtre de crash worker identique à celle de la dépose E2 ;
 fiche de démo en lecture seule ; fichier expiré non scalable (409).
+
+## 9. Lot E4-e — enveloppe « mixte » convexe / concave du bloc : faisabilité (14/09)
+
+**Demande du propriétaire (14/09)** : « explorer un mix convexe / concave, au
+moins regarder la faisabilité sans tout casser ». Le bloc rigide d'E4-a
+occupe l'aire de son enveloppe convexe : sur le logo du collègue, 8,9 fois
+l'aire vraie des pièces.
+
+### 9.1 Mesure du vérificateur (shapely, conteneur worker, 17 pièces réelles)
+
+Forme candidate = **fermeture morphologique** de l'union des pièces
+(dilater de r, unir, éroder de r), contour extérieur seul, trous internes
+rebouchés, simplifié à 0,05 mm.
+
+| r (mm) | composantes | aire du contour | vs convexe | sommets |
+|---|---|---|---|---|
+| 2 à 15 | 17 → 16 | ≈ 54 000 à 60 000 mm² | 4 % | 900 |
+| 20 / 30 / 50 | 14 / 13 / 11 | 100 000 / 147 000 / 169 000 | 7 / 10 / 12 % | 800 à 1 250 |
+| **70,5 (plus petit r qui relie tout)** | **1** | **395 048 mm²** | **27,7 %** | **1 396** |
+| 80 | 1 | 542 347 | 38 % | 1 112 |
+| convexe (E4-a) | 1 | 1 426 226 | 100 % | 239 |
+
+Lecture : tant que les pièces ne sont pas reliées, il n'y a pas de bloc (un
+item = UN polygone simple). Le premier r qui relie tout (70,5 mm, trouvé par
+dichotomie) rend un contour qui bloque **2,5 fois l'aire vraie au lieu de
+8,9** — convexe entre lettres voisines, concave entre les groupes. Coût :
+six fois plus de sommets pour le moteur. Le calcul prend 0,04 s en shapely.
+
+Variante « ponts » (arbre couvrant minimal entre pièces, ponts de largeur
+2 × espacement, contour de l'union) : ma mesure rapide était invalide (ponts
+à bouts plats qui touchent sans recouvrir ; à refaire avec un recouvrement)
+— en principe elle bloque encore moins (l'aire vraie plus des ponts fins),
+mais laisse des poches profondes que l'inflation du moteur scelle en partie.
+**À mesurer proprement par l'agent**, pas à écarter.
+
+**Idée du propriétaire (14/09) : un « raytraced hull »** — faire tourner un
+point autour de la forme, tirer des rayons dans un cône vers la pièce et
+relier les impacts. C'est la même famille que la fermeture : ce qu'un
+« palpeur » venu de l'extérieur peut toucher. La version robuste du palpeur
+est le **disque roulant** (le disque de rayon r qui roule autour de l'union
+sans y entrer) — et le contour qu'il laisse est exactement la fermeture
+morphologique de rayon r : la largeur du cône y devient r. L'écriture par
+rayons pose deux problèmes que le disque n'a pas : relier les impacts dans
+l'ordre d'orbite ne donne un polygone simple que si la forme est étoilée
+vue de l'orbite (un logo ne l'est pas : un rayon peut toucher une lettre
+derrière une autre), et rien ne garantit que le polygone obtenu contient
+toutes les pièces. À garder comme intuition ; à implémenter comme un disque
+roulant.
+
+### 9.2 Ce que l'étude doit établir (un jour, aucun changement de production)
+
+1. **Prototype** dans le crate géométrie Rust (`workers/geometry`, `i_overlay`
+   pour l'union, gonflement robuste — piège #2c : pas `geo_buffer` seul sur
+   des canaux fins, la méthode Minkowski du lot E0 tient) exposé au wasm,
+   ET miroir shapely côté worker : `block_outline(rings, mode)` ⇒ un anneau
+   simple, extérieur seul, fermé, contenant toutes les pièces (test
+   d'inclusion à 1e-6), simplifié à `NEST_SIMPLIFY_MM`.
+2. **Deux formes à comparer** : fermeture au r minimal connexe (dichotomie,
+   plafond r = demi-diagonale de la boîte ⇒ repli convexe) et ponts MST
+   (recouvrement aux extrémités). Repli **convexe** si le contour est
+   invalide, si les sommets dépassent un plafond (2 000) ou si le gain
+   d'aire est inférieur à 10 %.
+3. **Mesures** : sur le logo et quatre autres fichiers multi-pièces du corpus
+   (identifiants neutres) — aire du contour vs convexe, sommets, temps de
+   calcul des deux côtés, **écart JS ≡ Python** (aire à 0,5 %, inclusion
+   mutuelle à 0,1 mm : deux bibliothèques de gonflement ne rendront pas les
+   mêmes sommets, la parité se juge sur la forme, pas sur les points) ; et
+   **temps de solve** du moteur avec 1 400 sommets contre 239 sur la démo
+   (déterminisme : `determinism_lock.py` inchangé, le moteur ne change pas).
+4. **Effet utile** : nesting du bloc concave AVEC d'autres pièces sur une
+   tôle (les 17 pièces éclatées d'un second exemplaire, par exemple) :
+   combien de pièces entrent dans les creux, densité résultante vs bloc
+   convexe.
+5. Décision ensuite, avec les chiffres : forme par défaut du bloc (convexe /
+   fermeture / ponts), et si le choix se règle sur la fiche.
+
+Contraintes : rien ne part en production dans ce lot ; le bloc convexe
+d'E4-a reste le comportement livré ; toute mesure sur fichiers réels sous
+identifiants neutres.
