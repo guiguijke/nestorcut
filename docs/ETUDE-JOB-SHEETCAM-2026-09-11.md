@@ -2409,3 +2409,88 @@ les contours à `moved = false`.
 
 **GO déploiement** de `117bb4ce` (app seule). Il entre dans la recette du
 propriétaire (`RECETTE-PROPRIETAIRE-2026-09-14.md`, ligne C5).
+
+#### 9.61 Le `.job` PORTE la géométrie des contours (mesure du 14/09) — le DXF n'est pas indispensable
+
+Question du propriétaire devant le message « 1 dessin manquant : déposez-le » :
+*le `.job` ne contient-il pas le dessin ?* Réponse mesurée sur
+`Piece_Trou.job` : **si**. Le bloc binaire, au-delà des points de départ
+(§9.38), porte **chaque contour en segments**, dans le même flux
+tag / type / longueur :
+
+| tag | charge | lecture (vérifiée sur le carré à trou) |
+|---|---|---|
+| `0x02` | 0 | début d'un segment |
+| `0x04` | int32 | type : **1 = ligne, 2 = arc** |
+| `0x05` / `0x06` | 2 doubles | point de départ / d'arrivée du segment |
+| `0x07` | 2 doubles | centre (arc) |
+| `0x08` / `0x09` / `0x0a` | double | balayage signé (−π/2 = quart de tour horaire), angle de départ, **rayon** (35 pour le cercle) |
+| `0x12` … `0x1d`, `0x23`, `0x24`, `0x2f`-`0x32` | | l'enregistrement du chemin qui suit ses segments (amorces, point de départ, ordre, drapeau « déplacé ») |
+| `0x25` | 2 doubles | origine du dessin (§9.38) |
+
+Lu sur le fichier : le cercle r = 35 en arcs de quart de tour centrés en
+(0 ; 0), le carré par ses quatre côtés (±50), l'entité POINT comme une ligne
+dégénérée (0 ; 0)→(0 ; 0) ; le dernier segment d'un contour fermé est
+implicite. Sur la pièce L, l'ellipse est stockée en 18 arcs : les courbes
+libres (SPLINE, ELLIPSE) sont **déjà approchées par SheetCam** en arcs.
+
+**Ce que cela change** : aujourd'hui NestorCut exige les DXF parce que toute
+la chaîne (fiches, nesting, DXF de coupe) part de l'import DXF ; le binaire
+n'est relu que pour les points de départ. On peut lever cette exigence :
+**lot J6 « `.job` seul »** — décoder les segments en anneaux, écrire un DXF
+canonique (LINE / ARC) par dessin, puis l'import ordinaire ; le `.job` rendu
+n'a jamais eu besoin du DXF (poses seules). Verrous : sur les 18 `.job` de la
+série et de la recette, la géométrie décodée coïncide avec l'import du DXF
+(aire à 0,1 %, étendue à 0,01 mm) ; les DXF déposés en plus restent
+prioritaires quand ils sont là (géométrie source exacte). Deux jours.
+Réserves : précision des courbes approchées par SheetCam (arcs : exact ;
+splines : ce que SheetCam a tessellé) ; un contour ouvert ou une entité
+inconnue doit être dit, jamais avalé. **Décision du propriétaire** : ce lot
+est une nouveauté ; il passe avant ou après la levée du gel selon son usage
+réel (dépose-t-il ses `.job` avec ou sans leurs DXF ?).
+
+#### 9.62 Lot J6 — le `.job` seul suffit (consigne fermée, 14/09)
+
+**Décision du propriétaire** : « on dépose bien évidemment le `.job` sans
+son DXF ». J6 n'est donc pas une nouveauté sous le gel : c'est ce qui rend
+la priorité 4 utilisable. Il passe **avant la levée du gel**, tout de suite
+après le déploiement d'A1.
+
+1. **Décodage** (`shared/sheetcamJob.js`, à côté de `jobPathRecords`) :
+   `jobDrawings(binary)` rend, par dessin, ses chemins et pour chaque chemin
+   sa liste de segments — ligne `{a, b}` ou arc `{a, b, c, r, sweep}` — dans le
+   repère du dessin (origine `0x25` appliquée), fermeture implicite du
+   dernier segment rendue explicite. Tout tag inconnu est conservé tel quel
+   (le flux est déjà relu à l'octet). Un segment de type inconnu, un chemin
+   ouvert (arrivée ≠ départ à 1e-6) ou une longueur incohérente ⇒ refus
+   nommé du DESSIN, jamais un contour avalé ni deviné.
+2. **DXF canonique par dessin** : LINE et ARC (centre, rayon, angles, sens
+   déduit du signe du balayage), `$INSUNITS = 4`, `$MEASUREMENT = 1`
+   (piège #27), handles frais ; les segments dégénérés (le POINT) sont
+   omis. Le DXF passe ensuite par **l'import ordinaire** (fiche, pièces,
+   trous, handles canoniques) — aucune chaîne parallèle. Le nom de la fiche
+   est le nom du dessin du `.job`.
+3. **Priorité des sources** : si le DXF du même nom est déposé dans le lot
+   (ou déjà dans le projet), il gagne — géométrie source exacte ; sinon la
+   fiche vient du binaire et le dit (`source: 'job'`, libellé EN/FR :
+   « géométrie lue dans le fichier de travail »). Plus jamais « dessin
+   manquant, déposez-le » : ce message devient une information (« DXF
+   d'origine non fourni, géométrie du `.job` utilisée »).
+4. **Réserve d'amorce et points de départ** : inchangés (le binaire est le
+   même). Le `.job` rendu n'a jamais eu besoin du DXF.
+5. **Serveur** : sans objet avant J5 ; le projet serveur avec `.job` seul
+   dit ce qu'il fait (aujourd'hui : les DXF sont traités, le `.job` ignoré —
+   il refusera proprement tant que J5 n'est pas là).
+6. **Verrous** : sur les 18 `.job` de la série et de la recette, la
+   géométrie décodée coïncide avec l'import du DXF correspondant — aire à
+   0,1 %, étendue à 0,01 mm, même nombre de pièces et de trous ; l'ellipse
+   de la pièce L (18 arcs) à 0,05 mm de l'import de l'ELLIPSE ; contrôle
+   négatif : `.job` + DXF déposés ensemble ⇒ fiche bit-identique à l'import
+   DXF (le DXF a gagné) ; `.job` dont un dessin porte un segment inconnu ⇒
+   refus nommé, les autres dessins vivent. Harnais `qa-e2e-job.mjs` : un cas
+   « `.job` seul » de bout en bout (dépôt, nesting, `.job` rendu relu) sur
+   la recette × 4 et sur le fichier « ordre ».
+7. **Recette du propriétaire** : la ligne C1 devient « déposer le `.job`
+   SEUL ».
+
+Deux jours. Déploiement app seule après GO.
