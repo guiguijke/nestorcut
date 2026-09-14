@@ -1435,3 +1435,23 @@ sens du bloc rigide ; l'enveloppe concave notée au §8.1 réduira ce prix, et
 benchmarks) — avec E4-b/c/d dans la même promotion si ceux-ci arrivent vite,
 seul sinon : la fenêtre E3 encore en place offre l'éclatement et l'échelle en
 attendant.
+
+### Lot E4-b/c/d — vérification (vérificateur, 14/09, `8b87e678`) — GO déploiement
+
+Rejoué sur le poste : images `app` et `user-file-processing-worker`
+reconstruites à HEAD, vitest, pytest fileprocessing dans le conteneur, harnais
+sept cas sur le dessin du collègue, routes serveur lues.
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **739** (63 fichiers ; les verrous de la fenêtre et de l'interrupteur retirés avec eux) |
+| pytest fileprocessing, en conteneur | **60** (avec Mongo joignable sur le réseau compose ; sans lui la collecte échoue à l'import de `core.main`, ce qui n'est pas un défaut du lot) |
+| périmètre | 22 fichiers ; rien sous `workers/nesting`, `workers/geometry`, `public/` — ni moteur, ni wasm, ni worker nesting |
+| retraits | `ImportChoiceDialog.vue`, `AdvancedImportSwitch.vue`, `advanced-import.patch.js` absents du dépôt ; verrou « appels wasm du dépôt = exactement import + canonique » présent |
+| routes serveur | `PATCH /api/files/:slug/scale` et `POST /api/files/:slug/explode` : 401 sans session, 404 hors propriétaire, 409 si en cours / déjà éclaté / expiré, 400 sur facteur invalide |
+| harnais `qa-e2e-advanced-import.mjs`, sept cas | **26 / 26 verts** : A fiche « 1 bloc · 17 pièces », aucune fenêtre, actions sur la fiche ; B 1 bloc placé, 136 distances conservées ; C saisie 1000 ⇒ 0,353 et 243,02, application en place, poignée cohérente, réinitialisation 2834,34 × 688,81 ; D 17 fiches (k/17), quantité 3 héritée, nesting 17 pièces libres ; E serveur : dépôt, PATCH échelle 1000 ± 0,5, réinitialisation, POST éclatement 17/17 par le worker ; F `.job` intact ; G captures FR et EN sur dessin synthétique |
+
+**Arbitrages acceptés** : options d'échelle et d'éclatement à la dépose
+conservées côté serveur (même chaîne, plus d'émetteur client, couvertes par
+les tests E2) ; fenêtre de crash worker identique à celle de la dépose E2 ;
+fiche de démo en lecture seule ; fichier expiré non scalable (409).
