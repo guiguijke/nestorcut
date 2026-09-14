@@ -10,10 +10,23 @@ import path from 'node:path'
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
 const OUT = path.join(process.env.USERPROFILE || '', 'qa-out', 'audit-e2e')
 fs.mkdirSync(OUT, { recursive: true })
-const ECRIN = path.resolve('.testparts/ecrin de valandry.dxf')
-const TEMOIN = path.resolve('.testparts/Piece_Trou.DXF')
-const DENSE = path.resolve('specs/import-corpus/golden retriever.DXF')
-const BIG = path.resolve('specs/import-corpus/arbre brasero 400x400.dxf')
+// Fichiers du corpus privé — JAMAIS par leur nom dans le dépôt (règle de la
+// maison, audit §6) : passés par variable d'environnement, défaut neutre.
+// Rôles : QA_P3_ECRIN = dessin multi-pièces du collègue (17 pièces,
+// splines) ; QA_P3_TEMOIN = pièce à trou à une pièce ; QA_P3_DENSE =
+// dessin dense (10 pièces) ; QA_P3_BIG = dessin à 127 pièces.
+const needFile = (env, neutral) => {
+    const p = path.resolve(process.env[env] || neutral)
+    if (!fs.existsSync(p)) {
+        console.error(`${env} absent (défaut neutre « ${neutral} ») — fichier privé à passer par variable d'environnement`)
+        process.exit(2)
+    }
+    return p
+}
+const ECRIN = needFile('QA_P3_ECRIN', '.testparts/qa-p3-collegue.dxf')
+const TEMOIN = needFile('QA_P3_TEMOIN', '.testparts/qa-p3-temoin.dxf')
+const DENSE = needFile('QA_P3_DENSE', 'specs/import-corpus/qa-p3-dense.dxf')
+const BIG = needFile('QA_P3_BIG', 'specs/import-corpus/qa-p3-127pieces.dxf')
 const ONLY = process.argv.slice(2)
 
 const logs = []

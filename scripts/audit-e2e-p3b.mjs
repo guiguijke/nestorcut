@@ -8,9 +8,22 @@ import path from 'node:path'
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
 const OUT = path.join(process.env.USERPROFILE || '', 'qa-out', 'audit-e2e')
 fs.mkdirSync(OUT, { recursive: true })
-const ECRIN = path.resolve('.testparts/ecrin de valandry.dxf')
-const DENSE = path.resolve('specs/import-corpus/golden retriever.DXF')
-const BIG = path.resolve('specs/import-corpus/arbre brasero 400x400.dxf')
+// Fichiers du corpus privé — JAMAIS par leur nom dans le dépôt (règle de la
+// maison, audit §6) : passés par variable d'environnement, défaut neutre.
+// Rôles : QA_P3_ECRIN = dessin multi-pièces du collègue (17 pièces,
+// splines) ; QA_P3_DENSE = dessin dense (10 pièces) ; QA_P3_BIG = dessin
+// à 127 pièces.
+const needFile = (env, neutral) => {
+    const p = path.resolve(process.env[env] || neutral)
+    if (!fs.existsSync(p)) {
+        console.error(`${env} absent (défaut neutre « ${neutral} ») — fichier privé à passer par variable d'environnement`)
+        process.exit(2)
+    }
+    return p
+}
+const ECRIN = needFile('QA_P3_ECRIN', '.testparts/qa-p3-collegue.dxf')
+const DENSE = needFile('QA_P3_DENSE', 'specs/import-corpus/qa-p3-dense.dxf')
+const BIG = needFile('QA_P3_BIG', 'specs/import-corpus/qa-p3-127pieces.dxf')
 const ONLY = process.argv.slice(2)
 const wants = (...ids) => !ONLY.length || ids.some((i) => ONLY.includes(i))
 
@@ -230,7 +243,7 @@ try {
         check('P3-6b', 'nesting du dessin imbriqué abouti (DXF complet livré)', !rN.refused, rN.error)
         await shot('P3-6-imbrique.png')
 
-        // b) dense : golden retriever. Référence = l'import NAVIGATEUR (le
+        // b) dense (10 pièces). Référence = l'import NAVIGATEUR (le
         // scan conteneur sans budget en rendait 7 : l'écart lui-même est
         // noté au rapport, l'auto-cohérence fiche ↔ import est le verrou).
         const slugD = await createProject([DENSE])
@@ -246,7 +259,7 @@ try {
             rD.refused ? rD.error : 'nesting abouti')
         await shot('P3-6-dense.png')
 
-        // c) > 50 pièces : arbre brasero (127 pièces).
+        // c) > 50 pièces : dessin à 127 pièces.
         const slugB = await createProject([BIG])
         await waitCards(1); await sleep(1500)
         const csB = await cards(slugB)
@@ -263,7 +276,7 @@ try {
         check('P3-6g', '> 50 pièces : rapport place tout (1 bloc posé, 127 pièces)',
             resB && resB.placed === 1 && resB.requested === 1,
             `placed=${resB?.placed}, requested=${resB?.requested} (items=blocs)`)
-        await shot('P3-6-brasero.png')
+        await shot('P3-6-127pieces.png')
     }
 
     // ---- P3-8 : échelle en pouces -----------------------------------------
