@@ -449,11 +449,22 @@ try {
             !r.refused, r.refused ? r.error : 'nesting sans la pièce à 0')
         const res = await lastResultJobs(slug)
         const out = parseSheetCamJob(Uint8Array.from(res.jobs[0].bytes))
-        results['P4-12 meta'] = { requested: res?.requested, placed: res?.placed, count: out.count, parts: out.parts.map((p) => p.drawingName) }
-        check('P4-12b', 'quantité 0 : la pièce absente du .job rendu',
-            out.count === 1 && out.parts.every((p) => !/fill/i.test(p.drawingName || '')),
-            `Count=${out.count} (requested=${res?.requested}), dessins ${[...new Set(out.parts.map((p) => p.drawingName))].join(', ')}`)
-        results['P4-12 note'] = 'Aucune UI de suppression de fiche — rouge produit (fonction absente), équivalent quantité 0 mesuré.'
+        const fans = out.parts.filter((p) => /fill/i.test(p.drawingName || ''))
+        const host = out.parts.filter((p) => !/fill/i.test(p.drawingName || ''))
+        results['P4-12 meta'] = {
+            requested: res?.requested, placed: res?.placed, count: out.count,
+            sections: out.parts.map((p) => `${p.drawingName}:enabled=${p.enabled}`),
+        }
+        // Lot A2 : le rédacteur DÉSACTIVE les sections non posées (enabled=0,
+        // jamais coupées par SheetCam) au lieu de les supprimer — leur rang
+        // porte le lien binaire. Le premier passage de l'audit mesurait Count
+        // sans lire `enabled` : faux positif (« fantômes » en réalité
+        // désactivés). Verrou : éventails désactivés, hôte actif.
+        check('P4-12b', 'quantité 0 : sections de la pièce DÉSACTIVÉES (enabled=0, jamais coupées)',
+            fans.length > 0 && fans.every((p) => p.enabled === false)
+            && host.every((p) => p.enabled === true),
+            `${fans.length} section(s) éventail : ${fans.map((p) => `enabled=${p.enabled}`).join(', ')} ; hôte : ${host.map((p) => `enabled=${p.enabled}`).join(', ')}`)
+        results['P4-12 note'] = "Aucune UI de suppression de fiche (décision owner ouverte) ; quantité 0 = sections désactivées par conception (verrou sheetcamJob.test.js « désactive une pièce que le nesting n'a pas posée »)."
         await shot('P4-12-quantite0.png')
     }
 
