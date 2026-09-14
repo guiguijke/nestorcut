@@ -410,7 +410,17 @@ export async function importLocalBytes(source, label, projectSlug, options = {})
         throw new Error('localImport.parseError')
     }
 
-    return [await storeFiche(imported, canonical, label, projectSlug, options)]
+    // Lot J6-bis — REMPLACEMENT EN PLACE d'une fiche issue du binaire : le
+    // DXF d'origine déposé après coup (seul ou dans un lot `.job`) prend la
+    // place de la fiche `source: 'job'` du même nom — MÊME slug, MÊME rang
+    // (`addedAt`), réglages et octets du `.job` portés par les options.
+    // Sans cela, l'utilisateur qui obéit au constat « DXF d'origine non
+    // fourni » DOUBLAIT ses quantités sans le voir (mesure §9.64).
+    const replace = options.replace || null
+    return [await storeFiche(imported, canonical, label, projectSlug, options, {
+        ...(replace?.slug ? { slug: String(replace.slug) } : {}),
+        ...(replace?.addedAt ? { addedAt: String(replace.addedAt) } : {}),
+    })]
 }
 
 /**
@@ -762,5 +772,9 @@ export function localRecordToUiFile(record) {
         // parent d'éclatement (héritage de quantité) — additifs.
         importScaleApplied: record.importScaleApplied === true,
         explodedFromSlug: record.explodedFromSlug || null,
+        // Lot J6-bis : provenance géométrique visible dans la liste du
+        // projet — un DXF déposé pour un nom dont la fiche vient du binaire
+        // doit REMPLACER cette fiche, pas s'ajouter (§9.64).
+        source: record.source || null,
     }
 }

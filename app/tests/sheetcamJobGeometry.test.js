@@ -451,7 +451,15 @@ describe('J6 — coïncidence géométrie du `.job` ↔ import du DXF (import or
         // verrou ne passe pas pour vert sur trois fichiers.
         expect(compared).toBeGreaterThanOrEqual(40)
         expect(bad).toEqual([])
-        expect(inverted.length).toBe(4) // les deux fichiers « ordre », 2 dessins chacun
+        // Les deux fichiers « ordre » peuvent MANQUER sur un poste qui a
+        // `.testparts` sans eux (§9.64) : on n'exige plus leur présence,
+        // seulement que TOUT croisement soit l'un des leurs — jamais un
+        // autre écart ne passe pour de la « liaison par rang ».
+        expect(inverted.length).toBeLessThanOrEqual(4)
+        expect(inverted.every((x) => /ordre/i.test(x))).toBe(true)
+        if (inverted.length > 0) {
+            console.warn(`[J6] liaison croisée par rang sur ${inverted.length} couple(s) : ${inverted.join(' ; ')}`)
+        }
     })
 })
 
@@ -534,6 +542,40 @@ describe('J6 — la fiche issue du binaire le DIT', () => {
         // Sans le marqueur : aucune provenance posée (le DXF est la norme).
         const plain = await importLocalBytes(bytes, 'Piece_Trou.DXF', 'p1', {})
         expect(plain[0].source).toBeUndefined()
+    })
+
+    // J6-bis (§9.64) : le DXF déposé après coup pour un nom dont la fiche
+    // vient du binaire la REMPLACE en place — sinon l'utilisateur qui obéit
+    // au constat « DXF d'origine non fourni » double ses quantités.
+    it('le DXF d\'origine remplace la fiche du binaire EN PLACE', async () => {
+        const bytes = drawingCanonicalDxf(jobDrawings(parseSheetCamJob(SOURCE).binary)[0])
+        const sheetcam = { drawingName: 'Piece_Trou.DXF', leadIn: 5 }
+        const fromJob = await importLocalBytes(bytes, 'Piece_Trou.DXF', 'p1', {
+            sheetcamSource: 'job', sheetcam, sheetcamJobBytes: bytes,
+        })
+        const slug = fromJob[0].slug
+        const addedAt = fromJob[0].addedAt
+
+        // Le DXF arrive (seul ou dans un lot `.job`) : MÊME slug, MÊME rang,
+        // plus de provenance 'job' — la géométrie source a gagné, la fiche
+        // ne s'est pas dupliquée.
+        const fromDxf = await importLocalBytes(bytes, 'Piece_Trou.DXF', 'p1', {
+            sheetcam, sheetcamJobBytes: bytes,
+            replace: { slug, addedAt },
+        })
+        expect(fromDxf[0].slug).toBe(slug)
+        expect(fromDxf[0].addedAt).toBe(addedAt)
+        expect(fromDxf[0].source).toBeUndefined()
+        expect(fromDxf[0].findings || []).toEqual(
+            expect.not.arrayContaining([expect.objectContaining({ code: 'sheetcam.jobGeometry' })]))
+        // Réglages et octets du `.job` portés par le dépôt : conservés.
+        expect(fromDxf[0].sheetcam).toEqual(sheetcam)
+
+        // Et la LISTE du projet voit la provenance (le remplacement se
+        // décide sur elle) : 'job' pour la fiche du binaire, absent sinon.
+        const { localRecordToUiFile } = await import('../composables/localImport')
+        expect(localRecordToUiFile({ ...fromJob[0], parts: [], previewSvg: null }).source).toBe('job')
+        expect(localRecordToUiFile({ ...fromDxf[0], parts: [], previewSvg: null }).source).toBeNull()
     })
 })
 

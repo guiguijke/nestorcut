@@ -33,6 +33,7 @@
 //   QA_JOB=<fichier.job> QA_DXF_DIR=<dossier des dessins> QA_OUT=<dir> \
 //   node scripts/qa-e2e-job.mjs
 //   QA_ALONE=1 QA_JOB=<fichier.job> QA_OUT=<dir> node scripts/qa-e2e-job.mjs
+//   QA_TWO_DROPS=1 QA_JOB=… QA_DXF_DIR=… node scripts/qa-e2e-job.mjs   (J6-bis)
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -46,6 +47,11 @@ const DXF_DIR = process.env.QA_DXF_DIR || path.resolve('.testparts')
 const LOCALE = process.env.QA_LOCALE || 'fr'
 // Lot J6 : déposer le `.job` SANS ses DXF — la géométrie vient du binaire.
 const ALONE = process.env.QA_ALONE === '1'
+// Lot J6-bis (§9.64) : le cas double dépôt — `.job` seul PUIS `.job` + ses
+// DXF sur le MÊME projet. Le DXF doit REMPLACER la fiche du binaire en
+// place : toujours autant de fiches que de dessins, plus aucune source
+// 'job'. Implique ALONE pour la première dépose.
+const TWO_DROPS = process.env.QA_TWO_DROPS === '1'
 // QA_SAFETY : force la SECURITE du formulaire avant de nester, pour mesurer
 // l'effet de l'espacement toutes choses egales par ailleurs. Sans elle, le
 // harnais garde ce que le `.job` pre-remplit (1 mm, donc 2 x kerf + 1).
@@ -94,7 +100,7 @@ for (const part of source.parts) {
 log('le .job réclame :', [...wanted].map(([n, q]) => `${n} ×${q}`).join(', '))
 
 const drawings = []
-if (!ALONE) {
+if (!ALONE || TWO_DROPS) {
     for (const name of wanted.keys()) {
         const p = path.join(DXF_DIR, name)
         if (fs.existsSync(p)) { drawings.push(p); continue }
@@ -150,10 +156,10 @@ try {
     if (await devCard.count()) await devCard.click().catch(() => {})
 
     // ---------- A. dépose du `.job` AVEC ses dessins (seul si QA_ALONE) ----
-    await page.setInputFiles('input[name="dxf"]', ALONE ? [JOB] : [JOB, ...drawings])
+    await page.setInputFiles('input[name="dxf"]', (ALONE || TWO_DROPS) ? [JOB] : [JOB, ...drawings])
     await page.waitForURL('**/project/**', { timeout: 90000 })
     const slug = page.url().split('/project/')[1].split(/[?#]/)[0]
-    log('projet', slug, ALONE ? '(dépose du .job SEUL — lot J6)' : '')
+    log('projet', slug, (ALONE || TWO_DROPS) ? '(dépose du .job SEUL — lot J6)' : '')
     // Les fiches sont écrites dans IndexedDB par l'import : on attend qu'il
     // y en ait autant que de dessins réclamés, pas un délai fixe.
     await page.waitForFunction(
@@ -192,7 +198,7 @@ try {
     // DIT (`source: 'job'` + constat d'information). Dans le cas normal
     // (DXF déposés), AUCUNE ne doit porter la marque du binaire : le DXF a
     // gagné — c'est le contrôle négatif de la priorité des sources.
-    if (ALONE) {
+    if (ALONE || TWO_DROPS) {
         check('J6-A la géométrie de chaque fiche vient du `.job` et le dit',
             cards.length === wanted.size
             && cards.every((c) => c.source === 'job' && c.finding && c.parts > 0),
@@ -201,6 +207,60 @@ try {
         check('J6-A aucun dessin ne vient du binaire quand les DXF sont déposés',
             cards.every((c) => c.source == null),
             JSON.stringify(cards.map((c) => ({ n: c.name, src: c.source }))))
+    }
+
+    // ---------- J6-bis : le double dépôt (§9.64) -------------------------
+    //
+    // `.job` seul PUIS, SUR LE MÊME PROJET, `.job` + les DXF : le DXF
+    // REMPLACE la fiche du binaire en place — toujours autant de fiches que
+    // de dessins, plus AUCUNE source 'job'. C'est le défaut mesuré par le
+    // vérificateur (4 fiches au lieu de 2, quantités doublées).
+    if (TWO_DROPS) {
+        const slugsBefore = await page.evaluate(async () => {
+            const db = await new Promise((res, rej) => {
+                const r = indexedDB.open('nestorcut-local')
+                r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+            })
+            const recs = await new Promise((res, rej) => {
+                const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
+                tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
+            })
+            return recs.map((r) => r.slug).sort()
+        })
+        await page.setInputFiles('input[name="dxf"]', [JOB, ...drawings])
+        // La dépose repasse par addSheetCamJobDrop : les fiches se sont
+        // réécrites en place, la liste se recharge. On attend le même compte
+        // de fiches — PAS le double.
+        await page.waitForTimeout(4000)
+        const after = await page.evaluate(async () => {
+            const db = await new Promise((res, rej) => {
+                const r = indexedDB.open('nestorcut-local')
+                r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+            })
+            const recs = await new Promise((res, rej) => {
+                const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
+                tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
+            })
+            return recs.map((r) => ({
+                slug: r.slug, name: r.name, source: r.source ?? null,
+                hasCut: Boolean(r.sheetcam), addedAt: r.addedAt,
+            }))
+        })
+        log('après second dépôt :', JSON.stringify(after))
+        check('J6bis-1 toujours une fiche par dessin après .job + DXF',
+            after.length === wanted.size,
+            `${after.length} fiches pour ${wanted.size} dessins — ${after.map((c) => `${c.name}(${c.source ?? 'dxf'})`).join(', ')}`)
+        check('J6bis-2 la source binaire a été REMPLACÉE par le DXF',
+            after.every((c) => c.source == null),
+            JSON.stringify(after.map((c) => ({ n: c.name, src: c.source }))))
+        // EN PLACE : mêmes slugs, mêmes rangs (addedAt) — la quantité réglée
+        // à l'écran et l'ordre des fiches ne bougent pas.
+        const slugsAfter = after.map((c) => c.slug).sort()
+        check('J6bis-3 remplacement EN PLACE (mêmes slugs, mêmes rangs)',
+            JSON.stringify(slugsAfter) === JSON.stringify(slugsBefore)
+            && after.every((c) => c.hasCut),
+            `slugs ${slugsBefore.join(',')} → ${slugsAfter.join(',')}`)
+        await shot('02b-double-depot.png')
     }
 
     // ---------- B. réglages pré-remplis ----------

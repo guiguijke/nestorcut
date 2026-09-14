@@ -2662,3 +2662,41 @@ un second chemin que celui du verrou de l'implémenteur.
 **GO déploiement app seule.** App seule, `dad20367` (HEAD), après que l'agent a ajouté
 J6-bis ou en le suivant de près ; homelab et benchmarks sans objet. La
 recette du propriétaire C1 peut se jouer « `.job` seul » dès ce déploiement.
+
+#### 9.65 Lot J6-bis — rapport de l'implémenteur (14/09)
+
+La réserve du §9.64, corrigée, plus les deux points d'hygiène — app +
+`shared/` seuls.
+
+1. **Le DXF déposé après coup REMPLACE la fiche du binaire en place.**
+   `importLocalBytes` accepte `replace: { slug, addedAt }` (même slug,
+   même rang) ; `localRecordToUiFile` expose la provenance (`source:
+   'job'` ou absent) pour que la liste du projet porte la décision ; et
+   `importDxfReplacingJobFiche` (`files.js`) branché aux DEUX chemins —
+   le lot `.job` + DXF ET le DXF déposé seul. Réglages de coupe et octets
+   du `.job` conservés (ceux du dépôt quand il en porte, ceux de la fiche
+   remplacée sinon) ; la quantité réglée à l'écran ne bouge pas (même
+   slug). Un DXF redéposé pour une fiche déjà DXF reste le comportement
+   historique, hors lot comme convenu.
+2. **Verrous.** Unitaire : la fiche du binaire puis le DXF avec
+   `replace` ⇒ même slug, même `addedAt`, plus de `source: 'job'`, plus
+   de constat « géométrie lue dans le fichier de travail », réglages
+   conservés ; `localRecordToUiFile` rend la provenance. Harnais
+   `QA_TWO_DROPS=1` sur la recette ×4 : `.job` seul (2 fiches
+   `source: 'job'`, J6-A vert) PUIS `.job` + les deux DXF sur le MÊME
+   projet ⇒ **toujours 2 fiches, sources nulles, mêmes slugs, mêmes
+   rangs, réglages attachés**, puis le nesting et le `.job` rendu
+   repassent tous leurs verrous (5/5 posées, points de départ 3 + 2,
+   binaire intact hors drapeaux). La réserve mesurée par le vérificateur
+   (« 4 fiches, quantités doublées ») est levée sur les DEUX chemins —
+   le second dépôt d'un DXF SEUL passe par le même remplaçant.
+3. **Hygiène.** Le verrou « série réelle » tolère désormais l'absence des
+   deux fichiers « ordre » sur un poste qui a `.testparts` sans eux : il
+   exige ≤ 4 croisements, tous « ordre », et journalise le détail. Les
+   harnais d'audit passent de `QA_P3_ECRIN` / `qa-p3-collegue.dxf` à
+   `QA_P3_MULTI` / `qa-p3-multi.dxf` (la moitié du nom du dessin du
+   collègue vivait encore dans la variable et le défaut neutre).
+
+Chiffres : vitest **768/768** (le verrou unitaire J6-bis en plus),
+`nuxt build` vert, pile locale reconstruite aux sources, harnais
+« double dépôt » tous verrous verts.

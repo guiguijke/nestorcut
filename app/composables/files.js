@@ -523,6 +523,39 @@ async function explodeFiche(file) {
     })
 }
 
+/**
+ * Lot J6-bis — un DXF déposé pour un nom dont la fiche vient du BINAIRE du
+ * `.job` REMPLACE cette fiche en place (§9.64, réserve mesurée au
+ * vérificateur : sinon, l'utilisateur qui obéit au constat « DXF d'origine
+ * non fourni » double ses quantités sans le voir).
+ *
+ * Même slug, même rang (`addedAt`) — la quantité réglée à l'écran et les
+ * réglages de coupe restent ceux de la fiche remplacée quand le dépôt n'en
+ * porte pas (DXF déposé SEUL : réglages et octets du `.job` conservés depuis
+ * la fiche ; lot `.job` : ceux du dépôt, plus frais, gagnent). Un DXF
+ * redéposé pour une fiche déjà DXF reste le comportement historique —
+ * seules les fiches `source: 'job'` se remplacent.
+ */
+async function importDxfReplacingJobFiche(file, slug, options = {}) {
+    const { importLocalFiles, importLocalBytes } = await import('./localImport')
+    const nameEq = (a, b) => String(a || '').trim().toLowerCase()
+        === String(b || '').trim().toLowerCase()
+    const existing = (state.projectFiles || []).find(
+        (f) => f?.source === 'job' && nameEq(f.name, file.name))
+    if (!existing) return importLocalFiles(file, slug, options)
+    const { getLocalFile } = await import('./localFilesStore')
+    const previous = await getLocalFile(existing.slug)
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    return importLocalBytes(bytes, file.name, slug, {
+        ...options,
+        ...(previous?.sheetcam && !options.sheetcam ? { sheetcam: previous.sheetcam } : {}),
+        ...(previous?.sheetcamJobBytes && !options.sheetcamJobBytes
+            ? { sheetcamJobBytes: new Uint8Array(previous.sheetcamJobBytes) }
+            : {}),
+        replace: { slug: existing.slug, addedAt: previous?.addedAt },
+    })
+}
+
 async function addFiles(files, slug) {
     if (state.projectLocal) {
         // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
@@ -551,11 +584,11 @@ async function addFiles(files, slug) {
         }
         // Lot E4-d : le dépôt est TOUJOURS l'import ordinaire — la fenêtre
         // de choix et l'interrupteur ont disparu, l'échelle et l'éclatement
-        // vivent sur la fiche (E4-b/E4-c).
+        // vivent sur la fiche (E4-b/E4-c). Lot J6-bis : un DXF déposé pour
+        // un nom venu du binaire d'un `.job` remplace cette fiche en place.
         try {
-            const { importLocalFiles } = await import('./localImport')
             for (const file of files) {
-                await importLocalFiles(file, slug)
+                await importDxfReplacingJobFiche(file, slug)
             }
         } catch (err) {
             state.localImportError = err?.message || 'localImport.parseError'
@@ -674,10 +707,12 @@ async function addSheetCamJobDrop(drop, slug) {
     const importedByName = new Map()
     const refused = [...sources.refused]
 
-    // a) le DXF déposé : la géométrie source exacte gagne.
+    // a) le DXF déposé : la géométrie source exacte gagne. Lot J6-bis : si
+    //    la fiche de ce nom dans le projet vient du BINAIRE (dépôt `.job`
+    //    seul précédent), le DXF la REMPLACE en place — jamais de doublon.
     for (const { drawing, file } of sources.matched) {
         try {
-            const records = await importLocalFiles(file, slug, {
+            const records = await importDxfReplacingJobFiche(file, slug, {
                 sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
                 sheetcamJobBytes: drop.jobBytes,
             })

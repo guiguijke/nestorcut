@@ -12,7 +12,7 @@ const OUT = path.join(process.env.USERPROFILE || '', 'qa-out', 'audit-e2e')
 fs.mkdirSync(OUT, { recursive: true })
 // Fichiers du corpus privé — JAMAIS par leur nom dans le dépôt (règle de la
 // maison, audit §6) : passés par variable d'environnement, défaut neutre.
-// Rôles : QA_P3_ECRIN = dessin multi-pièces du collègue (17 pièces,
+// Rôles : QA_P3_MULTI = dessin multi-pièces du collègue (17 pièces,
 // splines) ; QA_P3_TEMOIN = pièce à trou à une pièce ; QA_P3_DENSE =
 // dessin dense (10 pièces) ; QA_P3_BIG = dessin à 127 pièces.
 const needFile = (env, neutral) => {
@@ -23,7 +23,7 @@ const needFile = (env, neutral) => {
     }
     return p
 }
-const ECRIN = needFile('QA_P3_ECRIN', '.testparts/qa-p3-collegue.dxf')
+const ECRIN = needFile('QA_P3_MULTI', '.testparts/qa-p3-multi.dxf')
 const TEMOIN = needFile('QA_P3_TEMOIN', '.testparts/qa-p3-temoin.dxf')
 const DENSE = needFile('QA_P3_DENSE', 'specs/import-corpus/qa-p3-dense.dxf')
 const BIG = needFile('QA_P3_BIG', 'specs/import-corpus/qa-p3-127pieces.dxf')
