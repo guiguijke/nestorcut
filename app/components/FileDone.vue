@@ -11,7 +11,7 @@
         </template>
         <template v-else>
             <SvgDisplay :size="sizeType.s" :src="file.svgUrl" class="file__display" preserve-colors />
-            <FileParts @click="openModal()" :parts="file.parts" class="file__parts" />
+            <FileParts @click="openModal()" :parts="file.parts" :block="file.block" class="file__parts" />
             <p class="file__name" :title="file.name">
                 {{ file.name }}
             </p>

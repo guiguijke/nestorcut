@@ -86,6 +86,63 @@ def _simplify_part(coords, holes):
     return new_coords, new_holes
 
 
+def _convex_hull_ring(points):
+    """E4-a (§8.1) : enveloppe convexe — miroir EXACT de convexHullRing
+    (localPayloadBuilder.js) : chaîne monotone d'Andrew, anneau FERMÉ,
+    anti-horaire, sommets stricts (colinéaires exclus), départ au sommet
+    lexico-minimal (x puis y). Même expression du produit vectoriel que le
+    JS — parité des sommets verrouillée à 1e-6 (fixture du dessin du
+    collègue). Moins de 3 points distincts : anneau vide."""
+    pts = sorted((float(x), float(y)) for x, y in points)
+    if len(pts) < 3:
+        return []
+    distinct = [pts[0]]
+    for p in pts[1:]:
+        if p != distinct[-1]:
+            distinct.append(p)
+    if len(distinct) < 3:
+        return []
+
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower = []
+    for p in distinct:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper = []
+    for p in reversed(distinct):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    lower.pop()
+    upper.pop()
+    ring = lower + upper
+    if len(ring) < 3:
+        return []
+    ring.append(ring[0])
+    return [[x, y] for x, y in ring]
+
+
+def _blocks_report(input_items, result_containers):
+    """E4-a : décompte blocs/pièces placés (« N blocs (M pièces) », §8.1.3) —
+    {} pour un job sans bloc (champ ADDITIF, jamais posé sinon)."""
+    if not any(i.get("block") for i in input_items):
+        return {}
+    by_id = {i["id"]: i for i in input_items}
+    placed_blocks = 0
+    pieces = 0
+    for c in result_containers:
+        for t in c.transforms:
+            it = by_id.get(getattr(t, "item_id", None))
+            if it is None or not it.get("block"):
+                continue
+            placed_blocks += 1
+            pieces += len(it.get("blockParts") or [])
+    return {"blocks": {"placed": placed_blocks, "pieces": pieces}}
+
+
 def convert_files_to_input_items(files, dek=None):
     """Builds the nesting input items from the project's files.
 
@@ -106,29 +163,68 @@ def convert_files_to_input_items(files, dek=None):
         # Decrypts the enc blob when the file was processed while the vault
         # was enabled; passes legacy plaintext through untouched.
         plogonParts = resolve_polygon_parts(db, user_dxf_file, dek)
+        # E4-a (§8.1) : chaque pièce passe par le traitement ORDINAIRE
+        # inchangé ; la fiche à PLUSIEURS pièces non éclatées devient ensuite
+        # UN item bloc rigide (miroir de localPayloadBuilder.js) ; à une
+        # pièce, le chemin historique est rejoué à l'identique.
+        processed = []
         for part_index, part in enumerate(plogonParts):
             coords, holes = _simplify_part(
                 part.get("coordinates"), part.get("holes") or []
             )
-            handles = part.get("handles")
-
-            item = {
-                'id': id,
-                'file_slug': file_slug,
-                'coords': coords,
-                'holes': holes,
-                'handles': handles,
-                'count': count,
-                'rotations': rotations,
+            processed.append({
+                "coords": coords,
+                "holes": holes,
+                "handles": part.get("handles"),
                 # Display color (screen rendering only — never applied to the
                 # production DXF). Persisted at import; deterministic fallback
                 # for files imported before colors existed.
-                'color': resolve_part_color(part, file_slug, part_index),
-            }
-
+                "color": resolve_part_color(part, file_slug, part_index),
+            })
+        if len(processed) > 1:
+            # Forme de collision = ENVELOPPE CONVEXE de l'union des contours
+            # extérieurs simplifiés, SANS trou ; demande/rotations de la
+            # fiche ; handles = union (l'export entités-par-handle transporte
+            # tout le dessin sous la même pose, §8.1.2). blockParts : les
+            # géométries VRAIES (aire du rapport, SVG, densité live).
+            hull = _convex_hull_ring(
+                [pt for p in processed for pt in p["coords"]]
+            )
+            if len(hull) < 4:
+                raise Exception(
+                    f"File '{file_slug}': degenerate block hull "
+                    f"({len(processed)} parts, all points collinear) — "
+                    "explode the file into parts first."
+                )
+            input_items.append({
+                'id': id,
+                'file_slug': file_slug,
+                'coords': hull,
+                'holes': [],
+                'handles': [h for p in processed for h in (p["handles"] or [])],
+                'count': count,
+                'rotations': rotations,
+                'color': processed[0]["color"],
+                'block': {'parts': len(processed)},
+                'blockParts': [
+                    {'coords': p["coords"], 'holes': p["holes"], 'color': p["color"]}
+                    for p in processed
+                ],
+            })
             id += 1
-
-            input_items.append(item)
+            continue
+        for p in processed:
+            input_items.append({
+                'id': id,
+                'file_slug': file_slug,
+                'coords': p["coords"],
+                'holes': p["holes"],
+                'handles': p["handles"],
+                'count': count,
+                'rotations': rotations,
+                'color': p["color"],
+            })
+            id += 1
 
     return input_items
 
@@ -649,21 +745,36 @@ def _nesting_process_impl(doc):
         jaguar_item = build_item(item.get("id"), count, shape_coords, allowed_orientations)
         total_requested_count += count
         requested_by_id[item.get("id")] = count
-        total_part_area += _Polygon(item.get("coords"), item.get("holes") or []).area * count
+        # E4-a : un bloc compte son AIRE VRAIE (somme des aires nettes de
+        # ses pièces, §8.1.3) — jamais celle de l'enveloppe, forme de
+        # collision seulement.
+        if item.get("blockParts"):
+            true_area = sum(
+                _Polygon(bp["coords"], bp.get("holes") or []).area
+                for bp in item["blockParts"]
+            )
+        else:
+            true_area = _Polygon(item.get("coords"), item.get("holes") or []).area
+        total_part_area += true_area * count
         total_outer_area += _Polygon(item.get("coords") or []).area * count
         jaguar_items.append(jaguar_item)
 
     # Map engine item ids back to (file, part) for the live visualizer:
     # input_items are built sequentially, so the part index is its position
     # within its file's polygonParts.
+    # E4-a : un item bloc couvre TOUTES les pièces de sa fiche — l'entrée
+    # porte `parts` pour que la vue live dessine chacune sous la même pose.
     part_index_by_id = {}
     per_file_counter = {}
     for item in input_items:
         item_file_slug = item.get("file_slug")
-        part_index_by_id[item["id"]] = {
+        entry = {
             "slug": item_file_slug,
             "part": per_file_counter.get(item_file_slug, 0),
         }
+        if item.get("block"):
+            entry["parts"] = item["block"]["parts"]
+        part_index_by_id[item["id"]] = entry
         per_file_counter[item_file_slug] = per_file_counter.get(item_file_slug, 0) + 1
 
     db["nesting_jobs"].update_one(
@@ -1365,10 +1476,14 @@ def _nesting_process_impl(doc):
                     rots = [0.0, 90.0, 180.0, 270.0]
                 elif not rots:
                     rots = [0.0]
-                return {
+                geom = {
                     "coords": it.get("coords") or [],
                     "rotations": rots,
                 }
+                # E4-a : drapeau bloc pour detect_structural_case (§8.1.4).
+                if it.get("block"):
+                    geom["block"] = it["block"]
+                return geom
 
             orig_items = [{"id": it["id"], "demand": int(it.get("count") or 0)}
                           for it in input_items]
@@ -1565,7 +1680,11 @@ def _nesting_process_impl(doc):
                     rots = [0.0, 90.0, 180.0, 270.0]
                 elif not rots:
                     rots = [0.0]
-                return {"coords": it.get("coords"), "rotations": rots}
+                geom = {"coords": it.get("coords"), "rotations": rots}
+                # E4-a : drapeau bloc pour detect_structural_case (§8.1.4).
+                if it.get("block"):
+                    geom["block"] = it["block"]
+                return geom
 
             engine_sheets = [
                 {"width": bin_dims_engine[eid][0],
@@ -2136,6 +2255,9 @@ def _nesting_process_impl(doc):
         # l'option. La densité moteur (matière / emprise) reste celle des
         # frames live.
         totals = report_totals(sheets_metrics)
+        # E4-a : décompte blocs/pièces de l'alternative (« N blocs (M
+        # pièces) », §8.1.3) — champ ADDITIF, absent des jobs sans bloc.
+        blocks_report = _blocks_report(input_items, result_containers)
         alternatives.append({
             "seed": engine_alt.get("seed"),
             "strategy": strategy,
@@ -2170,6 +2292,7 @@ def _nesting_process_impl(doc):
                 # X2 : solution partielle — compte explicite non placé
                 # (badge UI, jamais une erreur produit).
                 "unplaced": unplaced_count,
+                **blocks_report,
             },
         })
 

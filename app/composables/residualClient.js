@@ -414,7 +414,10 @@ export function freePis(layout, partsById) {
     // trou et classe différemment libre/nichée (parité serveur).
     return entries
         .filter((e) => {
-            if (!e.part || (e.part.holes || []).length) return false
+            // E4-a : un bloc n'est JAMAIS donneur de bande résiduelle
+            // (§8.1.4 — les pré-passes le voient comme une pièce pleine
+            // ordinaire, immobile).
+            if (!e.part || (e.part.holes || []).length || e.part.block) return false
             const ring = rotateRing(itemCoords(e.part), e.rot)
                 .map(([x, y]) => [x + e.tx, y + e.ty])
             const c = ringCentroid(ring)

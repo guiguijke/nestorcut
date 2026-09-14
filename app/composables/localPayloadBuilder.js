@@ -177,6 +177,41 @@ export function partArea(coords, holes) {
     return area
 }
 
+/** E4-a (§8.1) : enveloppe convexe d'un nuage de points (chaîne monotone
+ * d'Andrew). Anneau FERMÉ, anti-horaire, sommets stricts (colinéaires
+ * exclus), démarrant au sommet lexico-minimal (x puis y) — la même
+ * normalisation que le miroir Python (shapely convex_hull réorienté),
+ * parité verrouillée à 1e-6. Moins de 3 points distincts : anneau vide. */
+export function convexHullRing(points) {
+    const pts = [...points]
+    if (pts.length < 3) return []
+    pts.sort((a, b) => (a[0] - b[0]) || (a[1] - b[1]))
+    const distinct = [pts[0]]
+    for (let i = 1; i < pts.length; i++) {
+        const last = distinct[distinct.length - 1]
+        if (pts[i][0] !== last[0] || pts[i][1] !== last[1]) distinct.push(pts[i])
+    }
+    if (distinct.length < 3) return []
+    const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+    const lower = []
+    for (const p of distinct) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop()
+        lower.push(p)
+    }
+    const upper = []
+    for (let i = distinct.length - 1; i >= 0; i--) {
+        const p = distinct[i]
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop()
+        upper.push(p)
+    }
+    lower.pop()
+    upper.pop()
+    const ring = lower.concat(upper)
+    if (ring.length < 3) return []
+    ring.push(ring[0])
+    return ring
+}
+
 /** Bbox [w, h] d'un anneau. */
 function ringBBoxSize(ring) {
     let minX = Infinity
@@ -598,6 +633,12 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         const count = file.count
         const rotations = file.rotations ?? [0, 90, 180, 270]
         const parts = file.parts || []
+        // E4-a (§8.1) : chaque pièce est d'abord préparée par le traitement
+        // ORDINAIRE inchangé (simplification, réserve d'amorce) ; la fiche
+        // à PLUSIEURS pièces non éclatées devient ensuite UN seul item
+        // moteur — le bloc rigide. À UNE pièce, le chemin historique est
+        // rejoué à l'identique (contrôle négatif bit-identique).
+        const processed = []
         for (let partIndex = 0; partIndex < parts.length; partIndex++) {
             const part = parts[partIndex]
             let { coords, holes } = simplifyPart(
@@ -690,28 +731,79 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     ),
                 })
             }
-            inputItems.push({
-                id: inputItems.length,
-                file_slug: fileSlug,
+            processed.push({
                 coords,
                 holes,
                 handles: part.handles,
-                count,
-                rotations,
                 // Couleur d'affichage persistée à l'import ; fallback
                 // déterministe sinon (resolve_part_color côté Python).
                 color: part.color || (await colorForPart(fileSlug, partIndex)),
+            })
+        }
+        if (processed.length > 1) {
+            // E4-a : forme de collision = ENVELOPPE CONVEXE de l'union des
+            // contours extérieurs simplifiés, SANS trou (un bloc n'offre
+            // aucune zone libre au remplissage). demande = quantité de la
+            // fiche, rotations = celles de la fiche, handles = union des
+            // handles de toutes ses pièces (l'export entités-par-handle
+            // transporte tout le dessin sous la même pose, §8.1.2).
+            // blockParts : les géométries VRAIES pour le rapport (aire
+            // nette, jamais celle de l'enveloppe, §8.1.3), le SVG et la
+            // densité live.
+            const hull = convexHullRing(processed.flatMap((p) => p.coords || []))
+            if (hull.length < 4) {
+                throw new Error(
+                    `File '${fileSlug}': degenerate block hull (${processed.length} parts, `
+                    + 'all points collinear) — explode the file into parts first.',
+                )
+            }
+            inputItems.push({
+                id: inputItems.length,
+                file_slug: fileSlug,
+                coords: hull,
+                holes: [],
+                handles: processed.flatMap((p) => p.handles || []),
+                count,
+                rotations,
+                color: processed[0].color,
+                block: { parts: processed.length },
+                blockParts: processed.map((p) => ({
+                    coords: p.coords,
+                    holes: p.holes,
+                    color: p.color,
+                })),
+            })
+            continue
+        }
+        for (const p of processed) {
+            inputItems.push({
+                id: inputItems.length,
+                file_slug: fileSlug,
+                coords: p.coords,
+                holes: p.holes,
+                handles: p.handles,
+                count,
+                rotations,
+                color: p.color,
             })
         }
     }
 
     // itemMap : id moteur → (fichier, index de la pièce DANS son fichier) —
     // miroir exact de part_index_by_id/per_file_counter (main.py 560-571).
+    // E4-a : un item bloc couvre TOUTES les pièces de sa fiche — l'entrée
+    // porte `parts` (nombre) pour que la vue live dessine chacune sous la
+    // même pose.
     const itemMap = []
     const perFileCounter = new Map()
     for (const item of inputItems) {
         const part = perFileCounter.get(item.file_slug) ?? 0
-        itemMap.push({ id: item.id, slug: item.file_slug, part })
+        itemMap.push({
+            id: item.id,
+            slug: item.file_slug,
+            part,
+            ...(item.block ? { parts: item.block.parts } : {}),
+        })
         perFileCounter.set(item.file_slug, part + 1)
     }
 
@@ -778,7 +870,12 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         }
         jaguarItems.push(buildItem(item.id, item.count, shapeCoords, allowedOrientations))
         totalRequestedCount += item.count
-        totalPartArea += partArea(item.coords, item.holes) * item.count
+        // E4-a : un bloc compte son AIRE VRAIE (somme des aires nettes de
+        // ses pièces, §8.1.3) — jamais celle de l'enveloppe, qui n'est que
+        // la forme de collision.
+        totalPartArea += (item.blockParts?.length
+            ? item.blockParts.reduce((a, bp) => a + partArea(bp.coords, bp.holes), 0)
+            : partArea(item.coords, item.holes)) * item.count
         // Aire ENVELOPPE (trous non déduits) : le test SPP « tout tient
         // sur une tôle » doit mesurer ce que le placement occupe —
         // l'aire nette passait à tort sur les pièces à trous (bug démo
@@ -895,7 +992,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // est fournie, tenter le chemin 1+1 historique (stubs de test).
         if (!packs && typeof deps.pinwheelCapacity === 'function') {
             const hosts = inputItems.filter((it) => it.holes?.length)
-            const fills = inputItems.filter((it) => !it.holes?.length)
+            // E4-a : un bloc n'est jamais candidat au remplissage (§8.1.4).
+            const fills = inputItems.filter((it) => !it.holes?.length && !it.block)
             if (hosts.length === 1 && fills.length === 1) {
                 const hostItem = hosts[0]
                 const fillItem = fills[0]
@@ -1028,6 +1126,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         holes: it.holes || [],
         count: it.count || 0,
         rotations: it.rotations && it.rotations.length ? it.rotations : [0, 90, 180, 270],
+        // E4-a : ADDITIF, uniquement pour les items blocs — la géométrie
+        // vraie de chaque pièce (coords/holes/couleur), pour l'aire du
+        // rapport, le SVG et la densité live. Un payload sans bloc ne
+        // porte pas ces clés : bit-identique à avant.
+        ...(it.block ? { block: it.block, blockParts: it.blockParts } : {}),
     }))
 
     const payload = {

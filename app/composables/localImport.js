@@ -548,6 +548,30 @@ export async function importLocalFile(file, projectSlug, options = {}) {
     return records[0]
 }
 
+/** E4-a : résumé de la fiche-bloc — « 1 bloc · N pièces · W × H ». Étendue
+ * mesurée sur les coordonnées (l'UI ne garde que width/height par pièce,
+ * qui ne somment pas). */
+function blockSummary(parts) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const p of parts) {
+        for (const [x, y] of p.coordinates || []) {
+            if (x < minX) minX = x
+            if (y < minY) minY = y
+            if (x > maxX) maxX = x
+            if (y > maxY) maxY = y
+        }
+    }
+    if (!Number.isFinite(minX)) return null
+    return {
+        pieces: parts.length,
+        width: Math.round((maxX - minX) * 10) / 10,
+        height: Math.round((maxY - minY) * 10) / 10,
+    }
+}
+
 /** Forme UI attendue par ProjectFiles/FileDone (miroir du mapper serveur) —
  * géométrie complète omise (rechargée depuis IndexedDB au nest). */
 export function localRecordToUiFile(record) {
@@ -561,6 +585,7 @@ export function localRecordToUiFile(record) {
     } catch {
         dxfUrl = null
     }
+    const block = (record.parts || []).length > 1 ? blockSummary(record.parts) : null
     return {
         slug: record.slug,
         name: record.name,
@@ -576,5 +601,7 @@ export function localRecordToUiFile(record) {
             height: Math.round(p.height * 10) / 10,
             color: p.color,
         })),
+        // E4-a : résumé bloc, ADDITIF (fiches à une pièce inchangées).
+        ...(block ? { block } : {}),
     }
 }

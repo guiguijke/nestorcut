@@ -262,6 +262,20 @@ function buildItems(snap, itemMap, cache) {
         if (raw.length === 5) [id, bin, rot, x, y] = raw; // BPP
         else [id, rot, x, y] = raw; // SPP
         const m = byId[id];
+        // E4-a : un item BLOC couvre toutes les pièces de sa fiche —
+        // chacune est dessinée sous la MÊME pose (dessin rigide, `parts`
+        // porté par l'entrée itemMap). Un bloc sans géométrie en cache
+        // ne dessine RIEN plutôt qu'une seule lettre trompeuse.
+        const n = m?.parts || 1;
+        if (n > 1) {
+            const all = cache[m.slug] || [];
+            for (let k = 0; k < n; k++) {
+                const part = all[k];
+                if (!part) continue;
+                out.push({ d: part.d, color: part.color || FALLBACK_PART_COLOR, rot, x, y, bin: bin ?? 0 });
+            }
+            continue;
+        }
         const part = m && cache[m.slug]?.[m.part];
         if (!part) continue;
         // bin conservé (0 pour le SPP) : le rendu BPP répartit les pièces

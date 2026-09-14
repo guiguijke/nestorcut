@@ -1,9 +1,12 @@
 <template>
     <div class="parts">
         <h4 class="parts__title">
-            {{ partsTitle}}
+            {{ partsTitle }}
         </h4>
-        <UiScrollbar class="parts__scrollbar">
+        <!-- E4-a : une fiche-bloc se résume à UNE ligne (« 1 bloc · 17 pièces
+             · 2834 × 689 mm ») — la liste par pièce n'a plus de sens pour un
+             dessin rigide, l'aperçu reste la référence visuelle. -->
+        <UiScrollbar v-if="!block" class="parts__scrollbar">
             <ul class="parts__list">
                 <li
                     v-for="(part, index) in parts"
@@ -32,8 +35,21 @@ const props = defineProps({
         type: Array,
         required: true,
     },
+    // E4-a : { pieces, width, height } quand la fiche est un bloc rigide.
+    block: {
+        type: Object,
+        default: null,
+    },
 })
 const partsTitle = computed(() => {
+    if (props.block) {
+        return t('parts.block', {
+            n: props.block.pieces,
+            w: fmtLengthValue(props.block.width),
+            h: fmtLengthValue(props.block.height),
+            unit: unitLabel.value,
+        })
+    }
     return props.parts.length === 1 ? t('parts.label') : t('parts.count', { n: props.parts.length })
 })
 </script>

@@ -83,6 +83,63 @@ const _pin = (p, ring) => {
     }
     return inside
 }
+/** E4-a : transforms ÉTENDUS par pièce pour le SVG coloré — chaque pièce
+ * d'un bloc hérite de la pose de son item (pseudo-id `${id}#${k}`,
+ * enregistré côté svgItems). Hors blocs : liste inchangée. */
+function _blockExpandedTransforms(transforms, partsById) {
+    const out = []
+    for (const t of transforms || []) {
+        const part = partsById.get(String(t.item_id))
+        const n = part?.blockParts?.length || 0
+        if (!n) {
+            out.push(t)
+            continue
+        }
+        for (let k = 0; k < n; k++) out.push({ ...t, item_id: `${t.item_id}#${k}` })
+    }
+    return out
+}
+
+/** E4-a (§8.1.3, piège #19b) : le rapport wasm mesure la géométrie de
+ * l'ITEM — pour un bloc, l'enveloppe. La densité livrée doit rester
+ * l'AIRE VRAIE des pièces : on réécrit les champs d'aire par tôle et les
+ * totaux depuis blockParts. La vérification (espacement, chevauchements)
+ * reste au niveau enveloppe — conservative par construction, elle ne peut
+ * pas lire les gaps INTERNES d'un dessin rigide comme des violations. */
+export function applyTrueAreasToReport(report, containers, partsById) {
+    if (!report || report.error || !Array.isArray(report.sheets)) return report
+    let trueTotal = 0
+    report.sheets.forEach((s, i) => {
+        const c = containers[i]
+        if (!c || !s) return
+        let area = 0
+        for (const t of c.transforms || []) {
+            const part = partsById.get(String(t.item_id))
+            if (!part) continue
+            area += part.blockParts?.length
+                ? part.blockParts.reduce((a, bp) => a + _partArea(bp), 0)
+                : _partArea(part)
+        }
+        trueTotal += area
+        s.partsAreaMm2 = Math.round(area * 10) / 10
+        if (Number.isFinite(s.sheetAreaMm2)) {
+            s.freeAreaMm2 = Math.round(Math.max(0, s.sheetAreaMm2 - area) * 10) / 10
+            s.densityPct = s.sheetAreaMm2 > 0
+                ? Math.round((area / s.sheetAreaMm2) * 1000) / 10
+                : null
+        }
+    })
+    const totals = report.totals
+    if (totals && Number.isFinite(totals.sheetAreaMm2)) {
+        totals.partsAreaMm2 = Math.round(trueTotal * 10) / 10
+        totals.freeAreaMm2 = Math.round(Math.max(0, totals.sheetAreaMm2 - trueTotal) * 10) / 10
+        totals.densityPct = totals.sheetAreaMm2 > 0
+            ? Math.round((trueTotal / totals.sheetAreaMm2) * 1000) / 10
+            : null
+    }
+    return report
+}
+
 const _placedPoly = (coords, rotDeg, tx, ty) => {
     const r = (rotDeg * Math.PI) / 180; const c = Math.cos(r); const s = Math.sin(r)
     return coords.map(([x, y]) => [c * x - s * y + tx, s * x + c * y + ty])
@@ -322,8 +379,9 @@ function _fillCandidates(fillItems, stock) {
 }
 
 function _planLegacyFullPinwheel(inputItems, space) {
+    // E4-a : un bloc (item `block`) n'est ni hôte ni candidat (§8.1.4).
     const hosts = inputItems.filter((i) => (i.holes || []).length)
-    const fills = inputItems.filter((i) => !(i.holes || []).length)
+    const fills = inputItems.filter((i) => !(i.holes || []).length && !i.block)
     if (hosts.length !== 1 || fills.length !== 1) return null
     const host = hosts[0]
     const fill = fills[0]
@@ -361,8 +419,9 @@ function _planLegacyFullPinwheel(inputItems, space) {
 }
 
 function _planGeneric(inputItems, space, deadlineMs) {
+    // E4-a : les blocs ne sont ni hôtes (aucun trou) ni fillers (§8.1.4).
     const hosts = inputItems.filter((i) => (i.holes || []).length)
-    const fills = inputItems.filter((i) => !(i.holes || []).length)
+    const fills = inputItems.filter((i) => !(i.holes || []).length && !i.block)
     if (!hosts.length || !fills.length) return null
     const stock = Object.fromEntries(fills.map((i) => [i.id, i.count || 0]))
     const packs = []
@@ -969,7 +1028,8 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
     }
     const free = []
     for (const e of entries) {
-        if ((e.item.holes || []).length) continue
+        // E4-a : un bloc n'est jamais filler (§8.1.4) — il reste en place.
+        if ((e.item.holes || []).length || e.item.block) continue
         const hi = nestedHole(e.poly)
         if (hi < 0) free.push(e)
         else holes[hi].members.push(e)
@@ -1348,7 +1408,13 @@ export function decorateLiveLayout(evt, payload) {
         const usedBins = new Set()
         for (const raw of items) {
             const part = byId.get(String(raw[0]))
-            if (part) partsArea += _partArea(part)
+            // E4-a : densité live sur l'AIRE VRAIE (§8.1.3) — un bloc
+            // contribue la somme de ses pièces, pas son enveloppe.
+            if (part) {
+                partsArea += part.blockParts?.length
+                    ? part.blockParts.reduce((a, bp) => a + _partArea(bp), 0)
+                    : _partArea(part)
+            }
             if (isBpp) usedBins.add(raw[1])
         }
         const sheets = evt.sheets || []
@@ -1383,10 +1449,24 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
         const svgItems = {}
         const reportItems = []
         for (const p of parts) {
-            svgItems[String(p.id)] = {
-                coords: p.coords,
-                holes: p.holes || [],
-                color: p.color || null,
+            if (p.blockParts?.length) {
+                // E4-a : un bloc s'enregistre PAR PIÈCE sous des pseudo-ids
+                // `${id}#${k}` — le SVG coloré dessine le dessin réel, chaque
+                // pièce recevant la pose de l'item (rigide). Le DXF, lui,
+                // reste UN transform à handles-union par pose (§8.1.2).
+                p.blockParts.forEach((bp, k) => {
+                    svgItems[`${p.id}#${k}`] = {
+                        coords: bp.coords,
+                        holes: bp.holes || [],
+                        color: bp.color || p.color || null,
+                    }
+                })
+            } else {
+                svgItems[String(p.id)] = {
+                    coords: p.coords,
+                    holes: p.holes || [],
+                    color: p.color || null,
+                }
             }
             reportItems.push({ id: String(p.id), coords: p.coords, holes: p.holes || [] })
         }
@@ -1587,8 +1667,13 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     // pas l'intention d'une passe.
                     nestedIn: nestedInForLayout(layout, partsById),
                 })
+                // E4-a : le SVG coloré reçoit les transforms ÉTENDUS par
+                // pièce (pseudo-ids `${id}#${k}`, même pose) — le dessin
+                // réel, pas l'enveloppe. `containers.transforms` (DXF,
+                // gardes, nestedIn) reste AU NIVEAU ITEM : handles-union,
+                // une pose par bloc (§8.1.2).
                 const svg = await geoExportSvgSheet({
-                    transforms,
+                    transforms: _blockExpandedTransforms(transforms, partsById),
                     items: svgItems,
                     bin_width: binWidth,
                     bin_height: binHeight,
@@ -1600,6 +1685,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 containers,
                 space,
             })
+            applyTrueAreasToReport(report, containers, partsById)
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout
             // d57cbea) : le bundle wasm compte sans plafond — un double-
             // remplissage passerait silencieusement (cas trou600).
@@ -1759,6 +1845,23 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
                 postPass: art.postPass ?? null,
                 partsAreaMm2: totals?.partsAreaMm2 ?? null,
                 sheetAreaMm2: totals?.sheetAreaMm2 ?? null,
+                // E4-a : compteur blocs/pièces pour la ligne
+                // « N blocs (M pièces) » — ADDITIF, absent des jobs sans
+                // bloc (payload d'avant E4-a inchangé).
+                ...(() => {
+                    if (!parts.some((p) => p.block)) return {}
+                    let placedBlocks = 0
+                    let pieces = 0
+                    for (const l of layouts) {
+                        for (const pi of l.placed_items || []) {
+                            const p = partsById.get(String(pi.item_id))
+                            if (!p?.block) continue
+                            placedBlocks += 1
+                            pieces += p.blockParts?.length || p.block.parts || 0
+                        }
+                    }
+                    return { blocks: { placed: placedBlocks, pieces } }
+                })(),
                 iterations: alt.evaluations ?? alt.iterations ?? null,
                 vcores: 1,
                 sheets: perSheet,

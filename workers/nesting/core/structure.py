@@ -151,6 +151,10 @@ def detect_structural_case(solve_items, geom_of, total_area):
         geom = geom_of(it["id"])
         if not geom or not geom.get("coords"):
             return None
+        # E4-a : un bloc (item `block`) n'est NI le rectangle de grille NI
+        # la petite pièce (§8.1.4) — la passe structurelle l'ignore.
+        if geom.get("block"):
+            return None
         # P-m.1 : rotations absentes → quarts de tour (rétrocompat), liste
         # VIDE → [0] (l'entrée job normalise déjà ; les jobs legacy en file
         # peuvent encore porter []). Plus de « 4 angles inventés » silencieux.

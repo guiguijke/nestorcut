@@ -258,7 +258,16 @@ def per_sheet_metrics(containers, input_items):
             item = items_by_id.get(getattr(transform, "item_id", None))
             if item is None:
                 continue
-            parts_area += _placed_polygon(item, transform).area
+            # E4-a : la densité reste l'AIRE VRAIE (§8.1.3, piège #19b) —
+            # un bloc contribue la somme des aires nettes de ses pièces,
+            # jamais celle de son enveloppe de collision.
+            if item.get("blockParts"):
+                for bp in item["blockParts"]:
+                    parts_area += Polygon(
+                        bp["coords"], bp.get("holes") or []
+                    ).area
+            else:
+                parts_area += _placed_polygon(item, transform).area
             part_count += 1
         sheets.append({
             "index": index,

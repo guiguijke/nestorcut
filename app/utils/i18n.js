@@ -553,6 +553,9 @@ const dict = {
 
         'parts.label': 'Part: ',
         'parts.count': '{n} parts: ',
+        'parts.block': '1 block · {n} parts · {w} × {h} {unit}',
+        'report.blocks': '{n} block(s) · {m} parts',
+        'result.allPlacedBlocks': 'All {m} parts placed ({n} block(s))',
 
         'results.title': 'Results',
         'results.unfit': 'Does not fit — not cuttable',
@@ -1366,6 +1369,9 @@ const dict = {
 
         'parts.label': 'Pièce : ',
         'parts.count': '{n} pièces : ',
+        'parts.block': '1 bloc · {n} pièces · {w} × {h} {unit}',
+        'report.blocks': '{n} bloc(s) · {m} pièces',
+        'result.allPlacedBlocks': 'Toutes les {m} pièces sont placées ({n} bloc(s))',
 
         'results.title': 'Résultats',
         // C06 : la clé FR manquait (la valeur FR vivait dans le bloc EN —

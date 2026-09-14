@@ -306,8 +306,9 @@ def _fill_candidates(fill_items, stock):
 
 def _plan_legacy_full_pinwheel(input_items, space):
     """Repli J-085 : 1 hôte + 1 filler, pinwheel 4/4 seulement."""
+    # E4-a : un bloc (item `block`) n'est ni hôte ni candidat (§8.1.4).
     hosts = [i for i in input_items if i.get("holes")]
-    fills = [i for i in input_items if not i.get("holes")]
+    fills = [i for i in input_items if not i.get("holes") and not i.get("block")]
     if len(hosts) != 1 or len(fills) != 1:
         return None
     host, fill = hosts[0], fills[0]
@@ -341,8 +342,9 @@ def _plan_legacy_full_pinwheel(input_items, space):
 
 
 def _plan_generic(input_items, space, deadline):
+    # E4-a : les blocs ne sont ni hôtes (aucun trou) ni fillers (§8.1.4).
     hosts = [i for i in input_items if i.get("holes")]
-    fills = [i for i in input_items if not i.get("holes")]
+    fills = [i for i in input_items if not i.get("holes") and not i.get("block")]
     if not hosts or not fills:
         return None
     stock = {i["id"]: int(i.get("count") or 0) for i in fills}
@@ -657,7 +659,8 @@ def _fill_one_sheet_holes(row, by_id, space, deadline):
     free = []
     hole_members = {hi: [] for hi in range(len(holes))}
     for e in row:
-        if e[0]["holes"]:
+        # E4-a : un bloc n'est jamais filler (§8.1.4) — il reste en place.
+        if e[0]["holes"] or e[0].get("block"):
             continue
         hi = nested_hole(e[4])
         if hi is None:
@@ -869,6 +872,10 @@ def _ring_area(ring):
 
 
 def _part_area(item):
+    # E4-a : un bloc pèse la SOMME des aires nettes de ses pièces (§8.1.3)
+    # — l'enveloppe convexe n'est que la forme de collision.
+    if item.get("blockParts"):
+        return sum(_part_area(bp) for bp in item["blockParts"])
     coords = item.get("coords") or item.get("coordinates") or []
     holes = item.get("holes") or []
     return _ring_area(coords) - sum(_ring_area(h) for h in holes)

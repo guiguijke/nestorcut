@@ -7,6 +7,7 @@ import {
     channelWidthForSpace,
     channelsUsable,
     colorForPart,
+    convexHullRing,
     deterministicSeed,
     partFitsAnySheet,
     ringAreaAbs,
@@ -355,12 +356,20 @@ describe('itemMap (miroir part_index_by_id, multi-fichiers/multi-pieces)', () =>
         const { itemMap, payload } = await buildLocalPayload(
             { files, params, profile: { timeBudgetSec: 13 } }, {},
         )
+        // E4-a (§8.1) : la fiche multi-pièces = UN item bloc — une seule
+        // entrée itemMap, portant `parts` (nombre de pièces du dessin) pour
+        // la vue live ; les fiches à une pièce gardent la forme historique.
         expect(itemMap).toEqual([
-            { id: 0, slug: 'multi-a1b2c3.dxf', part: 0 },
-            { id: 1, slug: 'multi-a1b2c3.dxf', part: 1 },
-            { id: 2, slug: 'single-d4e5f6.dxf', part: 0 },
+            { id: 0, slug: 'multi-a1b2c3.dxf', part: 0, parts: 2 },
+            { id: 1, slug: 'single-d4e5f6.dxf', part: 0 },
         ])
-        expect(payload.parts.map((p) => p.id)).toEqual([0, 1, 2])
+        expect(payload.parts.map((p) => p.id)).toEqual([0, 1])
+        // Le payload du bloc porte la géométrie vraie et le résumé.
+        expect(payload.parts[0].block).toEqual({ parts: 2 })
+        expect(payload.parts[0].blockParts).toHaveLength(2)
+        expect(payload.parts[0].holes).toEqual([])
+        expect(payload.parts[1].block).toBeUndefined()
+        expect(payload.parts[1].blockParts).toBeUndefined()
     })
 })
 
@@ -449,5 +458,101 @@ describe('C13 : formats count:0 filtrés, containerMapBack (audit 2026-09-03)', 
             },
         })
         expect(out2.payload.containerMapBack).toBeUndefined()
+    })
+})
+
+// ---------------------------------------------------------------------------
+// E4-a — la fiche multi-pièces est UN item bloc à enveloppe convexe
+// (docs/PLAN-ECLATEMENT-2026-09-12.md §8.1). L'enveloppe attendue ci-dessous
+// est le résultat de la chaîne monotone d'Andrew (CCW, départ au sommet
+// lexico-minimal, colinéaires exclus) — les mêmes sommets sont attendus du
+// miroir Python _convex_hull_ring à 1e-6 (workers/nesting/tests).
+// ---------------------------------------------------------------------------
+
+describe('E4-a — fiche multi-pièces = UN item bloc (§8.1)', () => {
+    const rectA = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+    const rectB = [[20, 5], [30, 5], [30, 15], [20, 15], [20, 5]]
+    const tri = [[5, 20], [15, 35], [0, 35], [5, 20]]
+    // Calculé à la main : hull des 11 coins = 6 sommets stricts.
+    const EXPECTED_HULL = [[0, 0], [10, 0], [30, 5], [30, 15], [15, 35], [0, 35], [0, 0]]
+
+    const multiFile = (over = {}) => ({
+        slug: 'logo-q7w8e9.dxf',
+        name: 'logo.dxf',
+        count: 2,
+        rotations: [0, 90],
+        parts: [
+            { coordinates: rectA, holes: [], width: 10, height: 10, handles: ['A1'], color: '#111111' },
+            { coordinates: rectB, holes: [], width: 10, height: 10, handles: ['B2'], color: '#222222' },
+            { coordinates: tri, holes: [], width: 10, height: 15, handles: ['C3'], color: null },
+        ],
+        ...over,
+    })
+    const params = {
+        sheets: [{ width: 1500, height: 1000, count: 1 }],
+        space: 0, fillHoles: false, addOutShape: false, outputUnit: 'mm',
+    }
+
+    it('convexHullRing : CCW, départ lex-min, doublons et colinéaires exclus', () => {
+        const points = [
+            ...rectA.slice(0, -1), ...rectB.slice(0, -1), ...tri.slice(0, -1),
+            [10, 0],            // doublon
+            [5, 0],             // colinéaire sur l'arête (0,0)-(10,0)
+            [7.5, 35],          // colinéaire sur l'arête (15,35)-(0,35)
+        ]
+        expect(convexHullRing(points)).toEqual(EXPECTED_HULL)
+        // Dégnérérescence : moins de 3 points distincts → anneau vide.
+        expect(convexHullRing([[0, 0], [0, 0], [5, 5]])).toEqual([])
+    })
+
+    it('payload : 3 pièces ⇒ 1 item enveloppe sans trou, handles union, quantité/rotations de la fiche', async () => {
+        const { payload, itemMap } = await buildLocalPayload(
+            { files: [multiFile()], params, profile: { timeBudgetSec: 13 } }, {},
+        )
+        expect(payload.parts).toHaveLength(1)
+        const block = payload.parts[0]
+        expect(block.block).toEqual({ parts: 3 })
+        expect(block.holes).toEqual([])
+        expect(block.handles).toEqual(['A1', 'B2', 'C3'])
+        expect(block.count).toBe(2)
+        expect(block.rotations).toEqual([0, 90])
+        // Enveloppe de collision EXACTE (l'item moteur la reçoit).
+        expect(payload.instance.items[0].shape.data).toEqual(EXPECTED_HULL)
+        expect(block.coords).toEqual(EXPECTED_HULL)
+        // Géométrie vraie des pièces, dans l'ordre.
+        expect(block.blockParts).toHaveLength(3)
+        expect(block.blockParts[0].coords).toEqual(rectA)
+        expect(block.blockParts[2].coords).toEqual(tri)
+        // itemMap : UNE entrée, portant `parts`.
+        expect(itemMap).toEqual([{ id: 0, slug: 'logo-q7w8e9.dxf', part: 0, parts: 3 }])
+    })
+
+    it('l\'aire SPP « tout tient » mesure l\'ENVELOPPE du bloc, pas l\'aire nette (garde #2b)', async () => {
+        // totalOuterArea = hull 850 mm² × count 2 = 1700 → bande initiale
+        // 1700/1000 = 1,7 mm. À espacement 2 (> 1,7), la garde #2b DOIT
+        // refuser ; avec l'aire nette (312,5×2 = 625 → 0,625 mm), le refus
+        // passerait à tort — c'est le discriminateur enveloppe/net.
+        await expect(buildLocalPayload(
+            { files: [multiFile()], params: { ...params, space: 0.9 }, profile: { timeBudgetSec: 13 } }, {},
+        )).resolves.toHaveProperty('payload.problem')
+        await expect(buildLocalPayload(
+            { files: [multiFile()], params: { ...params, space: 2 }, profile: { timeBudgetSec: 13 } }, {},
+        )).rejects.toThrow(/too large for this instance/)
+    })
+
+    it('négatif bit-identique : fiches à une pièce ⇒ AUCUNE clé bloc dans le payload', async () => {
+        const single = (slug, x) => ({
+            slug, name: `${slug}.dxf`, count: 1, rotations: [0],
+            parts: [{ coordinates: [[x, 0], [x + 10, 0], [x + 10, 10], [x, 10], [x, 0]], holes: [], width: 10, height: 10, handles: ['H'], color: null }],
+        })
+        const { payload, itemMap } = await buildLocalPayload(
+            { files: [single('a-b1c2d3', 0), single('b-e4f5g6', 40)], params, profile: { timeBudgetSec: 13 } }, {},
+        )
+        // Complément des fixtures J-090 (qui verrouillent la parité exacte
+        // du payload mono-pièce) : aucune clé bloc sur le chemin ordinaire.
+        expect(payload.parts).toHaveLength(2)
+        expect(JSON.stringify(payload)).not.toContain('"block"')
+        expect(JSON.stringify(payload)).not.toContain('"blockParts"')
+        expect(itemMap.every((m) => m.parts === undefined)).toBe(true)
     })
 })

@@ -46,13 +46,15 @@
                  orpheline entre l'en-tete et la carte. C'est un badge
                  d'etat, aligne a gauche, sous la densite. -->
             <div class="result-report__state" data-testid="result-state">
+                <!-- E4-a : le badge compte les BLOCS demandés ; le décompte
+                     des pièces du dessin voyage en annotation (§8.1.3). -->
                 <UiBadge
                     v-if="resultModalData.requested === resultModalData.placed"
                     tone="ok"
                     dot
                     data-testid="badge-all-placed"
                 >
-                    {{ t('result.allPlaced') }}
+                    {{ blocksInfo ? t('result.allPlacedBlocks', { m: blocksInfo.pieces, n: blocksInfo.placed }) : t('result.allPlaced') }}
                 </UiBadge>
                 <template v-else>
                     <UiBadge tone="warn" dot data-testid="badge-partial-placed">
@@ -62,6 +64,13 @@
                         {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
                     </span>
                 </template>
+                <span
+                    v-if="blocksInfo"
+                    class="result-report__state-note"
+                    data-testid="blocks-count"
+                >
+                    {{ t('report.blocks', { n: blocksInfo.placed, m: blocksInfo.pieces }) }}
+                </span>
             </div>
         </header>
             <div v-if="isHaveError" class="modal__name modal__info info">
@@ -374,6 +383,8 @@ const partialUnplacedCount = computed(() => props.d.partialUnplacedCount)
 const unfitData = computed(() => props.d.unfitData)
 const activeReport = computed(() => props.d.activeReport)
 const activeReportOffcut = computed(() => props.d.activeReportOffcut)
+// E4-a : décompte blocs/pièces du rapport (« N blocs (M pièces) »).
+const blocksInfo = computed(() => props.d.activeReport?.blocks ?? null)
 const activeOffcut = computed(() => props.d.activeOffcut)
 const activeAltSeed = computed(() => props.d.activeAltSeed)
 const densityPct = computed(() => props.d.densityPct)

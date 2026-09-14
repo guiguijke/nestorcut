@@ -580,6 +580,9 @@ export function detectStructuralCase(instanceItems, geomOf, totalArea) {
     for (const it of instanceItems) {
         const geom = geomOf(it.id)
         if (!geom || !geom.coords || !geom.coords.length) return null
+        // E4-a : un bloc (item `block`) n'est NI le rectangle de grille NI
+        // la petite pièce (§8.1.4) — la passe structurelle l'ignore.
+        if (geom.block) return null
         // P-m.1 : absentes → quarts de tour (rétrocompat), VIDES → [0]
         // (miroir structure.py ; l'entrée job normalise déjà).
         let rotList = geom.rotations

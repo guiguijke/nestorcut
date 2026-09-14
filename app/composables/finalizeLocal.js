@@ -59,6 +59,8 @@ async function appendBppGrid(result, payload) {
         return {
             coords: p?.coords,
             rotations: (p?.rotations?.length ? p.rotations : [0, 90, 180, 270]),
+            // E4-a : drapeau bloc pour detectStructuralCase (§8.1.4).
+            ...(p?.block ? { block: p.block } : {}),
         }
     }
     const sheets = inst.bins.map((b) => {

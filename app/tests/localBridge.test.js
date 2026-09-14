@@ -7,6 +7,7 @@ import {
     sheetDims,
     layoutTransforms,
     toServerShapeAlternatives,
+    applyTrueAreasToReport,
     expandMeta,
     expandPacks,
     planHoleFills,
@@ -18,6 +19,7 @@ import {
     enginePlacedById,
     layoutsCountByClass,
 } from '../composables/localBridge'
+import { detectStructuralCase } from '../composables/structureClient'
 import { uniquifyDxfHandles } from '../composables/localHydrate'
 
 // Résolution du VRAI analyseur consommé par la vue (node_modules), pas une
@@ -969,5 +971,169 @@ describe('J4-bis — aucune pièce ne disparaît entre la réduction et l’expa
                 expect(r.attached).toBe(r.removed)
             }
         }
+    })
+})
+
+// ---------------------------------------------------------------------------
+// E4-a — les blocs : aire vraie au rapport, exclusion des pré-passes,
+// compteur « N blocs (M pièces) » (docs/PLAN-ECLATEMENT-2026-09-12.md §8.1)
+// ---------------------------------------------------------------------------
+
+describe('E4-a — blocs (§8.1)', () => {
+    // Même géométrie que le verrou payload : deux rectangles 10×10 et un
+    // triangle — aire VRAIE 312,5 mm², enveloppe 850 mm² (le discriminateur
+    // du test de densité : une densité calculée sur l'enveloppe serait
+    // presque le triple).
+    const rectA = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]
+    const rectB = [[20, 5], [30, 5], [30, 15], [20, 15], [20, 5]]
+    const tri = [[5, 20], [15, 35], [0, 35], [5, 20]]
+    const blockPart = {
+        id: 7,
+        file_slug: 'multi-x.dxf',
+        coords: [[0, 0], [10, 0], [30, 5], [30, 15], [15, 35], [0, 35], [0, 0]],
+        holes: [],
+        block: { parts: 3 },
+        blockParts: [
+            { coords: rectA, holes: [] },
+            { coords: rectB, holes: [] },
+            { coords: tri, holes: [] },
+        ],
+        count: 1,
+    }
+    const plainPart = {
+        id: 8,
+        file_slug: 'single-y.dxf',
+        coords: [[100, 0], [110, 0], [110, 10], [100, 10], [100, 0]],
+        holes: [],
+        count: 2,
+    }
+    const partsById = new Map(['7', '8'].map((k) => [k, k === '7' ? blockPart : plainPart]))
+
+    it('applyTrueAreasToReport : densité sur la somme des pièces, jamais l’enveloppe', () => {
+        const report = {
+            sheets: [{
+                sheetAreaMm2: 1000,
+                // Ce que le wasm aurait mesuré sur l'ITEM : l'enveloppe.
+                partsAreaMm2: 850,
+                freeAreaMm2: 150,
+                densityPct: 85,
+            }],
+            totals: { sheetAreaMm2: 1000, partsAreaMm2: 850, freeAreaMm2: 150, densityPct: 85 },
+        }
+        const containers = [{
+            bin_width: 100,
+            bin_height: 10,
+            transforms: [
+                { item_id: '7' },
+                { item_id: '8' },
+            ],
+        }]
+        applyTrueAreasToReport(report, containers, partsById)
+        // 312,5 (bloc, aire vraie) + 100 (UNE pose de la pièce simple) = 412,5
+        expect(report.sheets[0].partsAreaMm2).toBe(412.5)
+        expect(report.sheets[0].densityPct).toBe(41.3)
+        expect(report.totals.partsAreaMm2).toBe(412.5)
+        expect(report.totals.densityPct).toBe(41.3)
+    })
+
+    it('applyTrueAreasToReport : sans blocs, la valeur mesurée est confirmée telle quelle', () => {
+        const report = {
+            sheets: [{ sheetAreaMm2: 1000, partsAreaMm2: 100, freeAreaMm2: 900, densityPct: 10 }],
+            totals: { sheetAreaMm2: 1000, partsAreaMm2: 100, freeAreaMm2: 900, densityPct: 10 },
+        }
+        const containers = [{ bin_width: 100, bin_height: 10, transforms: [{ item_id: '8' }] }]
+        applyTrueAreasToReport(report, containers, partsById)
+        expect(report.sheets[0].partsAreaMm2).toBe(100)
+        expect(report.totals.densityPct).toBe(10)
+    })
+
+    it('planHoleFills : un bloc n’est jamais candidat au remplissage', () => {
+        const hole = Array.from({ length: 8 }, (_, i) => {
+            const a = (2 * Math.PI * i) / 8
+            return [35 * Math.cos(a) + 200, 35 * Math.sin(a) + 200]
+        })
+        const host = {
+            id: 1,
+            coords: [[150, 150], [250, 150], [250, 250], [150, 250], [150, 150]],
+            holes: [hole],
+            count: 1,
+            rotations: [0, 90, 180, 270],
+        }
+        // Le bloc ET une petite pièce simple sont « sans trous » : seule la
+        // petite pièce doit être candidate.
+        const small = {
+            id: 2,
+            coords: [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]],
+            holes: [],
+            count: 4,
+            rotations: [0, 90, 180, 270],
+        }
+        const block = { ...blockPart, count: 2, rotations: [0, 90, 180, 270] }
+        const packs = planHoleFills([host, small, block], 2)
+        const usedIds = new Set(
+            (packs || []).flatMap((p) => (p.fills || []).map((f) => f.fillId)),
+        )
+        expect(usedIds.has(2)).toBe(true)
+        expect(usedIds.has(7)).toBe(false)
+    })
+
+    it('detectStructuralCase : un bloc ne prend aucun rôle de grille', () => {
+        const rect = {
+            id: 1,
+            coords: [[0, 0], [100, 0], [100, 50], [0, 50], [0, 0]],
+            holes: [],
+        }
+        const small = { id: 2, coords: [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]], holes: [] }
+        const items = [{ id: 1, demand: 10 }, { id: 2, demand: 10 }]
+        const geomPlain = (id) => ({
+            1: { coords: rect.coords, rotations: [0] },
+            2: { coords: small.coords, rotations: [0] },
+        }[id])
+        expect(detectStructuralCase(items, geomPlain, 51000)).not.toBeNull()
+        // Le rectangle devient un bloc ⇒ plus de grille du tout (§8.1.4).
+        const geomBlock = (id) => ({
+            1: { coords: rect.coords, rotations: [0], block: { parts: 2 } },
+            2: { coords: small.coords, rotations: [0] },
+        }[id])
+        expect(detectStructuralCase(items, geomBlock, 51000)).toBeNull()
+    })
+
+    it('toServerShapeAlternatives : report.blocks = { placed, pieces } (additif)', () => {
+        const result = {
+            problem: 'bpp',
+            alternatives: [{
+                rank: 0,
+                seed: 1,
+                solution: {
+                    layouts: [{
+                        container_id: 0,
+                        placed_items: [
+                            { item_id: 7, transformation: { rotation: 0, translation: [0, 0] } },
+                            { item_id: 8, transformation: { rotation: 0, translation: [50, 0] } },
+                            { item_id: 8, transformation: { rotation: 0, translation: [70, 0] } },
+                        ],
+                    }],
+                },
+            }],
+        }
+        const payload = { parts: [blockPart, plainPart], engineConfig: { min_item_separation: 0 } }
+        const artifacts = [{
+            sheets: [null],
+            containers: [{ bin_width: 1000, bin_height: 100, transforms: [] }],
+            report: {
+                verify: {}, totals: { densityPct: 40, sheetAreaMm2: 100000, partsAreaMm2: 40000 },
+                sheets: [],
+            },
+            postPass: null, engineCounts: {}, expansionPlanned: 0,
+        }]
+        const out = toServerShapeAlternatives(result, payload, artifacts)
+        expect(out[0].report.blocks).toEqual({ placed: 1, pieces: 3 })
+        // Sans bloc dans le payload : le champ n'existe pas (additif).
+        const outPlain = toServerShapeAlternatives(
+            { ...result, alternatives: [{ ...result.alternatives[0], solution: { layouts: [{ container_id: 0, placed_items: [{ item_id: 8, transformation: { rotation: 0, translation: [0, 0] } }] }] } }] },
+            { parts: [plainPart], engineConfig: { min_item_separation: 0 } },
+            artifacts,
+        )
+        expect(outPlain[0].report.blocks).toBeUndefined()
     })
 })

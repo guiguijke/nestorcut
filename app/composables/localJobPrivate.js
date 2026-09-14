@@ -114,7 +114,13 @@ async function buildGridAlternative(jobSlug, payload, result, { onZone, concurre
     const geomOf = (itemId) => {
         const part = partsById.get(Number(itemId))
         if (!part) return null
-        return { coords: part.coords, rotations: rotationsByOrig.get(Number(itemId)) }
+        // E4-a : le drapeau bloc voyage jusqu'à detectStructuralCase
+        // (exclusion des deux rôles, §8.1.4).
+        return {
+            coords: part.coords,
+            rotations: rotationsByOrig.get(Number(itemId)),
+            ...(part.block ? { block: part.block } : {}),
+        }
     }
 
     const { runPool, deriveSeed } = await import('./localPool')
@@ -828,10 +834,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         body: {
             placed,
             // Lot E1 : le compte d'ITEMS demandés (quantité × pièces de
-            // chaque fichier). Le serveur d'un projet « cet appareil » ne
-            // connaît que des quantités de fichiers : sans ce scalaire, il
-            // annonçait « 1 pièce demandée » pour un fichier de 17 pièces et
-            // le badge « toutes les pièces posées » sortait en rouge sur un
+            // chaque fichier ; E4-a : une fiche multi-pièces non éclatée
+            // compte SES BLOCS — 1 item par pose de dessin rigide). Le
+            // serveur d'un projet « cet appareil » ne connaît que des
+            // quantités de fichiers : sans ce scalaire, il annonçait
+            // « 1 pièce demandée » pour un fichier de 17 pièces et le
+            // badge « toutes les pièces posées » sortait en rouge sur un
             // résultat complet.
             requested,
             // Lot E2 : pièces plus fines que l'espacement (le gonflement

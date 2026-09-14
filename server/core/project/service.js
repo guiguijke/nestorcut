@@ -266,6 +266,28 @@ const mapBinFileToUi = async (userId, file) => {
   // active session), passes legacy plaintext through untouched.
   const parts = await resolvePolygonParts(userId, file);
 
+  // E4-a : résumé de la fiche-bloc (« 1 bloc · N pièces · W × H »),
+  // ADDITIF — mesuré sur les coordonnées, miroir de localImport.js.
+  let block = null;
+  if (parts.length > 1) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const part of parts) {
+      for (const [x, y] of part.coordinates || []) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (Number.isFinite(minX)) {
+      block = {
+        pieces: parts.length,
+        width: Math.round((maxX - minX) * 10) / 10,
+        height: Math.round((maxY - minY) * 10) / 10,
+      };
+    }
+  }
+
   return {
     slug: file.slug,
     name: file.name,
@@ -281,6 +303,7 @@ const mapBinFileToUi = async (userId, file) => {
       // legacy files so the list matches the live view and result SVG.
       color: resolvePartColor(part, file.slug, index),
     })),
+    ...(block ? { block } : {}),
     // Purge 24 h (D-PRV-10) : géométrie/blobs purgés → l'UI affiche
     // « expiré » et masque compteur/preview. Champs additifs.
     expired: Boolean(file.purgedAt),

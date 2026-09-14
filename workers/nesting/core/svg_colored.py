@@ -40,23 +40,29 @@ def build_colored_sheet_svg(transforms, items_by_id, bin_width, bin_height,
 
     for t in transforms:
         item = items_by_id.get(t.item_id) or {}
-        rings = [item.get("coords"), *(item.get("holes") or [])]
-        d = " ".join(
-            "M" + " ".join(f"{x * unit_scale:.3f} {y * unit_scale:.3f}" for x, y in ring) + "Z"
-            for ring in rings
-            if ring and len(ring) > 2
-        )
-        if not d:
-            continue
-        color = t.color or item.get("color") or FALLBACK_PART_COLOR
-        deg = math.degrees(t.angle)
-        parts.append(
-            f'<path d="{d}" '
-            f'transform="translate({t.x * unit_scale:.3f} {h - t.y * unit_scale:.3f}) '
-            f'scale(1 -1) rotate({deg:.3f})" '
-            f'fill="{color}" fill-opacity="{FILL_OPACITY_LAYOUT}" fill-rule="evenodd" '
-            f'stroke="{color}" stroke-width="{stroke_width}" />'
-        )
+        # E4-a : un bloc se dessine PAR PIÈCE sous la même pose (dessin
+        # réel) — l'enveloppe convexe n'est que la forme de collision et
+        # ne doit jamais apparaître à l'écran. Miroir des pseudo-ids
+        # `${id}#${k}` du SVG navigateur (localBridge.js).
+        draw_items = item.get("blockParts") or [item]
+        for draw in draw_items:
+            rings = [draw.get("coords"), *(draw.get("holes") or [])]
+            d = " ".join(
+                "M" + " ".join(f"{x * unit_scale:.3f} {y * unit_scale:.3f}" for x, y in ring) + "Z"
+                for ring in rings
+                if ring and len(ring) > 2
+            )
+            if not d:
+                continue
+            color = t.color or draw.get("color") or item.get("color") or FALLBACK_PART_COLOR
+            deg = math.degrees(t.angle)
+            parts.append(
+                f'<path d="{d}" '
+                f'transform="translate({t.x * unit_scale:.3f} {h - t.y * unit_scale:.3f}) '
+                f'scale(1 -1) rotate({deg:.3f})" '
+                f'fill="{color}" fill-opacity="{FILL_OPACITY_LAYOUT}" fill-rule="evenodd" '
+                f'stroke="{color}" stroke-width="{stroke_width}" />'
+            )
 
     parts.append("</svg>")
     return "\n".join(parts)
