@@ -54,6 +54,13 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
+    // Lot J9-bis : la légende affichée est celle du MODE (appareil vs
+    // serveur), pas déduite de la liste d'extensions — le filtre de la
+    // création porte désormais l'UNION des formats des deux modes.
+    limitDevice: {
+        type: Boolean,
+        default: null,
+    },
 });
 const emit = defineEmits(["files", "rejected", "oversize"]);
 
@@ -66,9 +73,12 @@ const fileExt = (name) => {
     return i >= 0 ? n.slice(i) : ''
 }
 
-const limitLabel = computed(() =>
-    unref(extensions).includes('.dwg') ? t('upload.limit') : t('upload.limitDevice')
-)
+const limitLabel = computed(() => {
+    const device = props.limitDevice === null
+        ? !unref(extensions).includes('.dwg')
+        : props.limitDevice === true
+    return device ? t('upload.limitDevice') : t('upload.limit')
+})
 
 const updateDragStatus = (newValue = true) => {
     isDragOver.value = newValue;

@@ -316,23 +316,42 @@ try {
                 namedRejection.includes('j8bis-plan.dwg'), namedRejection.slice(0, 160))
         }
 
-        // (b) `.job` + `.dwg` ⇒ refus figé, aucun projet. La contradiction
-        // n'existe qu'en mode SERVEUR (le seul où les DEUX formats passent
-        // le filtre de la création) : en mode appareil, le .dwg est écarté
-        // et NOMMÉ par (d), le .job suit son chemin — rien à refuser.
+        // (b) `.job` + `.dwg` ⇒ refus figé, aucun projet — dans les DEUX
+        // modes (J9-bis, §9.79 : le filtre de la création prend l'union des
+        // formats et handleSubmit tranche ; l'ancien filtre écartait le
+        // .dwg en mode appareil AVANT le refus, le fichier disparaissait
+        // sans un mot et le projet se créait).
         await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
         await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
-        if (await srvCardBis.count()) {
-            await srvCardBis.click()
+        for (const [modeName, card] of [['serveur', srvCardBis], ['appareil', devCardBis]]) {
+            if (!(await card.count())) continue
+            await card.click()
             await page.setInputFiles('input[name="dxf"]', [jobAsFile, fakeDwg])
             await page.waitForTimeout(2500)
             const stillHome = !/\/project\//.test(page.url())
             const refusal = (await page.locator('.create__error').allInnerTexts().catch(() => []))
                 .join(' ').replace(/\s+/g, ' ').trim()
-            log('J8-bis (b) refus :', refusal.slice(0, 140))
-            check('J8-bis (b) .job + .dwg ⇒ AUCUN projet créé', stillHome, page.url())
-            check('J8-bis (b) le refus nomme les deux (texte figé)',
+            log(`J9-bis (b/${modeName}) refus :`, refusal.slice(0, 140))
+            check(`J9-bis (b) .job + .dwg en mode ${modeName} ⇒ AUCUN projet créé`,
+                stillHome, page.url())
+            check(`J9-bis (b) mode ${modeName} : le refus nomme les deux (texte figé)`,
                     /(deux projets séparés|two separate projects)/.test(refusal), refusal.slice(0, 140))
+            await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+            await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+        }
+
+        // (b2) J9-bis : un DWG SEUL en mode appareil ne crée pas non plus
+        // de projet — il exige « Nos serveurs », et le message NOMME le
+        // fichier (plus jamais avali en silence par le filtre).
+        if (await devCardBis.count()) {
+            await devCardBis.click()
+            await page.setInputFiles('input[name="dxf"]', [fakeDwg])
+            await page.waitForTimeout(2000)
+            const stillHome2 = !/\/project\//.test(page.url())
+            const dwgMsg = (await page.locator('.create__error').allInnerTexts().catch(() => []))
+                .join(' ').replace(/\s+/g, ' ').trim()
+            check('J9-bis (b2) DWG seul en mode appareil ⇒ aucun projet, fichier NOMMÉ',
+                stillHome2 && dwgMsg.includes('j8bis-plan.dwg'), dwgMsg.slice(0, 140))
         }
 
         // (c) négatif : sans `.job`, le mode choisi ne change pas.

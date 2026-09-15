@@ -4085,3 +4085,36 @@ obligatoire avant tout prochain déploiement** (§9.79 : refus `.job`+`.dwg`
 dans les DEUX modes, écartés nommés au navigateur, verrou d'aller-retour
 étendu aux fixtures du dépôt). La recette du propriétaire peut ajouter son
 fichier à quatre pièces.
+
+#### 9.80 Lot J9-bis — rapport de l'implémenteur (15/09)
+
+Les deux défauts du §9.79, corrigés — app seule.
+
+1. **Le refus `.job` + `.dwg` tient dans les DEUX modes.** Le filtre de
+   l'écran de création prend désormais l'UNION des formats des deux
+   modes (le `.dwg` passe en mode appareil, comme le `.job` passeait en
+   mode serveur depuis J8-bis) : c'est `handleSubmit` qui tranche — le
+   mélange est refusé AVANT tout projet, texte figé, des deux côtés.
+   Corollaire traité au passage : un DWG SEUL en mode appareil ne crée
+   plus de projet non plus — message NOMMANT le fichier (« Ignorés —
+   …plan.dwg : les fichiers DWG sont convertis sur nos serveurs »).
+2. **La légende reste celle du MODE.** L'union des formats au filtre ne
+   devait pas faire afficher « DWG » dans la légende appareil :
+   `DxfUpload` reçoit `limitDevice` (le mode), et la légende ne se
+   déduit plus du contenu de la liste d'extensions.
+3. **Le verrou d'aller-retour couvre le DÉPÔT.** Un test PERMANENT
+   dédié aux 4 `.job` de `app/tests/fixtures/sheetcam` — les seuls
+   présents en intégration continue — identiques à l'octet, plancher
+   ≥ 4 sans `.testparts`. Le balayage des fichiers privés (50/50)
+   reste à côté.
+
+Verrous : harnais repassé COMPLET, tous verrous verts — dont
+`.job`+`.dwg` refusé en mode serveur ET en mode appareil (aucun projet,
+texte figé), DWG seul en appareil nommé sans projet, et les verrous J8-d
+(la légende appareil cite le `.job`, la serveuse ne le cite pas)
+repassés avec la légende par mode. vitest **789/789, exit 0, Errors 0** ;
+build 0 erreur.
+
+**Non-fait, dit** : le filtre de la PAGE PROJET (ProjectFiles) reste
+par mode — un `.dwg` écarté y est NOMMÉ (verrou J8-bis d, repassé
+vert), c'est le comportement voulu : la page projet ne bascule rien.

@@ -40,6 +40,7 @@
                  demandent sur la fiche après import. -->
             <DxfUpload
                 :extensions="uploadExtensions"
+                :limit-device="localProject"
                 @files="handleSubmit"
                 @rejected="handleRejected"
                 @oversize="handleOversize"
@@ -131,13 +132,16 @@
     // silence — les DXF partaient seuls et le nesting se faisait sans les
     // réserves d'amorce. Défaut trouvé au harnais navigateur, qu'aucun
     // test unitaire ne pouvait voir. Lot J8-bis : le `.job` passe le filtre
-    // dans les DEUX modes — c'est `handleSubmit` qui décide (bascule
-    // « Cet appareil » si le mode choisi est serveur, §9.73 point 22) ;
-    // la liste ne sert qu'au filtre du sélecteur de fichiers : la vérité
-    // du format reste la SIGNATURE (piège #31).
+    // dans les DEUX modes. Lot J9-bis (§9.79) : le filtre de la création
+    // prend l'UNION des formats des deux modes — le `.dwg` passe LUI AUSSI
+    // en mode appareil, car c'est `handleSubmit` qui tranche (le mélange
+    // `.job`+`.dwg` doit être REFUSÉ des deux côtés, pas avali en silence
+    // par le mode qui ne le convertit pas). La liste ne sert qu'au filtre
+    // du sélecteur de fichiers : la vérité du format reste la SIGNATURE
+    // (piège #31).
     const uploadExtensions = computed(() =>
         localImportEnabled.value
-            ? ['.dxf', '.svg', '.job', ...(localProject.value ? [] : ['.dwg'])]
+            ? ['.dxf', '.svg', '.job', '.dwg']
             : ['.dxf', '.svg', '.dwg']
     )
 
@@ -192,6 +196,13 @@
         }
         if (jobNames.length && dwgNames.length) {
             error.value = t('home.jobPlusDwg')
+            return
+        }
+        // Lot J9-bis : un DWG SEUL en mode appareil ne crée pas non plus de
+        // projet — il exige « Nos serveurs », le dire AVANT (l'ancien filtre
+        // l'écartait en silence dès qu'un autre fichier passait).
+        if (dwgNames.length && localProject.value && localImportEnabled.value) {
+            error.value = t('upload.dwgNamed', { names: dwgNames.join(', ') })
             return
         }
         let switchedForJob = false

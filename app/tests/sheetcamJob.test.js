@@ -140,6 +140,23 @@ describe('J1 — lire puis écrire ne change pas un octet', () => {
         }
     })
 
+    it('sur les FIXTURES du dépôt — permanent, présent en CI (J9-bis, §9.79)', () => {
+        // Les 4 `.job` de app/tests/fixtures/sheetcam sont les SEULS
+        // présents en intégration continue : le verrou d'aller-retour
+        // doit tourner là où il protège, pas seulement sur les fichiers
+        // privés du poste.
+        const fixDir = path.resolve(__dirname, 'fixtures/sheetcam')
+        const fixtures = fs.readdirSync(fixDir)
+            .filter((f) => f.toLowerCase().endsWith('.job'))
+            .map((f) => path.join(fixDir, f))
+        expect(fixtures.length).toBeGreaterThanOrEqual(4)
+        for (const p of fixtures) {
+            const bytes = read(p)
+            const out = serializeSheetCamJob(parseSheetCamJob(bytes))
+            expect(out.length).toBe(bytes.length)
+            expect(Buffer.compare(Buffer.from(out), Buffer.from(bytes))).toBe(0)
+        }
+    })
     it('sur les .job réels du propriétaire (s’ils sont là) — TOUS dossiers', () => {
         // Lot J10-a (§9.77 point 1) : le verrou d'aller-retour devient
         // TOTAL — racine, job-tests, rétro-ingénierie et série j7/j9 — et
