@@ -226,3 +226,84 @@ journal.
 journal ni incrément » demande de toucher `build-images.yml` (GitHub
 Actions) — fait au déploiement, avec le GO ; D1 documentation démarré
 en parallèle selon le plan.
+
+## 4. Vérification du lot J11 (`ba4dbad9`) — vérificateur, 15/09 — NO-GO, lot J11-bis
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, `npx vitest run`
+(**794 passés, code de sortie 0**), puis un parcours au navigateur avec
+captures, relues une à une (`~/qa-out/verif-j11/`). La suite est verte et
+c'est le problème : **aucun des défauts ci-dessous n'est du ressort d'un test
+unitaire, ils sont tous visibles à l'écran**, et le rapport dit « vérifié
+servi » là où personne n'a regardé l'écran.
+
+### 4.1 Ce qui est juste, mesuré
+
+| Point | Mesure |
+|---|---|
+| A1 | le projet issu de j9-1 s'appelle « c16__marine_lpl_005 x4 parts » — plus de « 4) » ; celui de la recette porte « RECETTE-J4ter_x4 » |
+| A2 (le fond) | **une** carte groupée « ×4 » pour les quatre pièces, dépliable, les quatre vignettes distinctes, la marque « votre point » sous chacune ; la recette ×4 garde bien deux cartes |
+| A3 (l'en-tête) | « 4 pièces · 1 fichier déposé » |
+| A4 | la vue live dit « densité de la bande », le résultat « densité matière » — deux mots, deux grandeurs |
+| J11-b | l'en-tête affiche « NestorCut V0.9 » ; `package.json` porte `0.9.0`, exposé dans le HTML servi ; `CHANGELOG.md` existe et sa première entrée est en langage d'atelier |
+
+### 4.2 Ce qui ne tient pas — par gravité, tout mesuré
+
+| # | Constat | Preuve |
+|---|---|---|
+| **R1 — la carte groupée est CASSÉE à l'écran** | Elle garde la largeur d'une carte simple : titre tronqué en « c16… », fragment « ×4 c. », champ quantité « 4 » écrasé dans le coin avec le « – » au-dessus et le « + » qui chevauche « 3/4 », la **quatrième vignette coupée** (on voit un « v » au bord). Le fond est bon, la mise en page ne suit pas son contenu. | capture `04-groupe-deplie.png` |
+| **R2 — la page Nouveautés est illisible** | Chaque puce est **tronquée à sa première ligne** (« Un dessin présent plusieurs fois dans un même `.job` (par exemple »), et le Markdown est affiché BRUT (`**avant**`, les accents graves). Cause lue : `extractBlock` (`app/utils/changelogParser.js`) ne garde que les lignes qui COMMENCENT par « - » et jette les lignes de continuation. Titre et sous-titre de la page codés en dur en anglais (« Changelog », « What changed in NestorCut, newest first. ») sous un « Version actuelle » en français. | capture `02-nouveautes.png` |
+| **R3 — le badge « Nouveau » n'est posé NULLE PART** | Le registre porte quatre entrées datées des 14 et 15/09 (donc actives), le composant existe et est testé à J+6/J+8… et `NewBadge` n'apparaît dans aucune page, aucun composant, aucune mise en page. Zéro badge à l'écran. Livré, verrouillé, jamais branché. | `grep -rln NewBadge app/components app/pages app/layouts` vide |
+| **R4 — B3 n'est pas fait** | Le modal de résultat affiche toujours le slug technique `nested-f-71a8fb…-and1more-a1228e.dxf` sous son en-tête ; le nom du projet n'y apparaît pas. Le rapport dit le contraire. | capture `06-modal.png` |
+| **R5 — la version manque dans le pied de page de l'APPLICATION** | Le pied de page des pages connectées (`© 2026 NestorCut · Mentions · Confidentialité · Nouveautés · Support`) ne porte aucun numéro ; seul le pied de page « public » (Nouveautés) affiche « V0.9.0 ». Le rapport dit « pied de page V0.9.0 » — vrai sur une page, faux là où l'atelier travaille. | capture `01-accueil-version.png` |
+| **R6 — A3 à moitié** | L'en-tête dit « 1 fichier déposé » mais la barre grise juste dessous dit toujours « 4 pièces · **4 fichiers** · 0.06 m² ». Deux comptes contradictoires à cinq centimètres. | capture `04-groupe-deplie.png` |
+| **R7 — B1 : le bouton « Support » EST dans le code** | `app/layouts/auth.vue`, lignes 33 à 39 : un `MainButton` avec `tracking-tag="support_open"` et le libellé `common.support`. Le rapport le dit « non localisé, probablement un widget tiers ». Il recouvre bien les presets de tôle sous 480 px. | code |
+| R8 — deux coquilles dans `CHANGELOG.md` | « Le bouton de **téléchargée** `.job` » et « se **nesté** désormais » — dans la première entrée que lira un utilisateur. | `CHANGELOG.md` |
+| R9 — désaccord d'hydratation sur toutes les pages, **rendu visible par J11** | Le serveur rend l'anglais (« Create your account ») et le client rend le français : Vue signale un mismatch sur chaque page (0 en production, 1 en local sur la même page publique avec le même cookie). **La cause est ANTÉRIEURE** : mesuré par `curl` avec `Cookie: locale=fr`, **la production aussi rend l'anglais côté serveur** — l'utilisateur français a toujours eu un éclair d'anglais au chargement ; J11 a seulement avancé le moment où le client applique la langue, ce qui fait tousser l'hydratation. Le vrai correctif est côté serveur : honorer le cookie de langue AU RENDU (`app/composables/useLocale.js`, `useCookie` ligne 22 — vérifier qu'il est bien lu pendant le rendu serveur et que `t()` s'en sert). Ça supprime l'éclair ET le mismatch. | `curl` prod/local + console |
+| R10 — non mesuré par moi | A5 (la vue agrandie avec légende) : ma sonde n'a pas atteint le modal depuis la carte groupée. À prouver par capture dans le rapport du J11-bis. | — |
+
+### 4.3 Règle de méthode, posée fermement
+
+**Un lot d'interface se rapporte AVEC ses captures, et l'implémenteur les a
+regardées avant d'écrire « vérifié ».** Le harnais les produit déjà : le
+rapport liste chaque capture avec une ligne disant ce qu'on y voit, et le
+vérificateur commence par ouvrir les mêmes images. « 794 tests verts » ne
+dit rien d'une carte tronquée, d'un badge absent ou d'une page en deux
+langues. C'est la troisième fois qu'un rapport affirme ce que l'écran
+dément ; la règle entre dans `AGENTS.md` §7 avec ce lot.
+
+### 4.4 Lot J11-bis — consigne fermée
+
+1. **R1** : la carte groupée occupe la LARGEUR nécessaire (toute la rangée
+   de la grille, ou une grille à part pour les groupes) ; titre entier,
+   quantité et ses boutons alignés comme sur une carte simple, les N
+   vignettes visibles sans coupe, à 1440 comme à 390 px. Capture avant /
+   après dans le rapport.
+2. **R2** : le parseur prend les lignes de continuation d'une puce (une
+   ligne indentée qui ne commence pas par « - » appartient à la puce
+   précédente) ; le Markdown minimal est rendu (`**gras**`, `code`) ou
+   retiré du fichier — pas affiché brut ; titre et sous-titre de la page
+   passent par `i18n` en EN et FR. Capture de la page dans les deux langues.
+3. **R3** : le badge est POSÉ sur les quatre nouveautés du registre : le
+   bouton « Télécharger le `.job` », la carte groupée, l'aperçu des amorces,
+   la vue agrandie. Capture montrant au moins un badge visible aujourd'hui,
+   et le verrou navigateur compte les badges > 0 tant que le registre en a
+   d'actifs.
+4. **R4** : l'en-tête du modal montre le NOM DU PROJET ; le slug part dans
+   « Détails techniques ». Capture.
+5. **R5** : le pied de page de l'application affiche le numéro complet,
+   comme le pied de page public. Capture d'une page connectée.
+6. **R6** : la barre de résumé et l'en-tête donnent le MÊME compte, avec le
+   même mot.
+7. **R7** : le bouton « Support » (`app/layouts/auth.vue:33-39`) ne recouvre
+   aucun contrôle sous 480 px. Capture à 390 px.
+8. **R8** : les deux coquilles corrigées ; le propriétaire relit l'entrée.
+9. **R9** : le serveur honore le cookie de langue au rendu ; verrou : `curl
+   -H "Cookie: locale=fr" /auth/local` contient « Créez votre compte », et
+   la console ne signale plus de mismatch sur `/auth/local`, `/home`,
+   `/changelog`. **Aucune autre correction à côté** : ce défaut est
+   ancien, on le corrige proprement et seul.
+10. **R10** : capture de la vue agrandie d'une fiche `.job` avec sa légende.
+11. `AGENTS.md` §7 : la règle du §4.3, en une phrase.
+
+App seule. Rapport avec captures listées, puis vérification, puis GO. Le lot
+D1 (documentation) peut avancer en parallèle : il ne touche pas l'app.
