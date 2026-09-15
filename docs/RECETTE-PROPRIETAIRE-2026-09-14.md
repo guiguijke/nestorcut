@@ -51,6 +51,16 @@ Prod attendue : `gitCommitSha 8b87e678` (E4 complet, J4-ter, H1). Le lot
 | C8 | Le fichier aux trois points déplacés à la main, et son jumeau aux points par défaut | sur le premier, tes trois points sont conservés à l'octet ; sur le second, NestorCut pose les siens | |
 | C9 | Post-traiter l'un des deux dans SheetCam | le G-code amorce là où la capture d'écran le montre | |
 
+| C10 | Déposer **seul** le `.job` où le même dessin est présent **quatre fois**, chaque exemplaire avec son point de départ | **quatre fiches** « (1/4) … (4/4) », une pièce chacune ; nesting 4/4 ; le `.job` rendu porte **quatre sections**, pas sept | |
+| C11 | Ouvrir ce `.job` rendu dans SheetCam et le post-traiter | quatre pièces aux poses de NestorCut, **tes quatre points de départ inchangés**, le G-code amorce à chacun | |
+
+### Comment consigner un échec
+
+Pour chaque ligne rouge : le **numéro** (C4, C10…), le **fichier** utilisé, ce
+que tu **attendais** et ce que tu as **vu**. Garde le `.job` téléchargé et, si
+tu as post-traité, le `.nc` — ce sont eux qui permettent de mesurer. Une
+capture d'écran de SheetCam vaut mieux qu'une description.
+
 ## D. Ce qui n'est PAS dans la recette
 
 - La densité d'un bloc clairsemé (E4-e, étude en cours) : le bloc convexe
