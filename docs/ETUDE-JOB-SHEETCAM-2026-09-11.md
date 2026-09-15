@@ -4118,3 +4118,41 @@ build 0 erreur.
 **Non-fait, dit** : le filtre de la PAGE PROJET (ProjectFiles) reste
 par mode — un `.dwg` écarté y est NOMMÉ (verrou J8-bis d, repassé
 vert), c'est le comportement voulu : la page projet ne bascule rien.
+
+#### 9.81 Déploiement `5cffa2f6` et lot J9-bis — vérification (vérificateur, 15/09) — GO
+
+**Le déploiement, contrôlé sans rien écrire.** La page de production expose
+`gitCommitSha 5cffa2f6…`, `app.nestorcut.com` répond 200, et le digest de
+`:latest` est **identique** à celui de `:5cffa2f6…` — la promotion a bien
+porté sur le SHA qui a reçu le GO. Aucun diff sous `workers/` ni `public/`
+depuis ce SHA : app seule, homelab et benchmarks sans objet, vérifié.
+
+**J9-bis (`711f4b44`) — les deux défauts du §9.79 sont corrigés, mesurés par
+moi au navigateur, zéro verrou rouge.**
+
+| Contrôle | Résultat |
+|---|---|
+| mélange `.job` + `.dwg`, **mode appareil** | refus au texte figé, mot pour mot, **aucun projet créé** |
+| mélange `.job` + `.dwg`, **mode serveur** | idem, **aucun projet créé** |
+| **DWG seul en mode appareil** | « Ignorés — `…dwg` : les fichiers DWG sont convertis sur nos serveurs — choisissez « Nos serveurs » pour eux. » — nommé, actionnable, **aucun projet** |
+| légende **appareil** | « DXF, SVG ou .job SheetCam » — **le DWG n'y apparaît PAS** malgré l'union au filtre du sélecteur |
+| légende **serveur** | « DXF, SVG ou DWG » — le `.job` n'y apparaît pas |
+| non-régression | `.job` + son DXF crée toujours le projet |
+| suite | **789 passés, code de sortie 0, `Errors 0`** |
+| verrou d'aller-retour sur les FIXTURES | présent, dédié, plancher ≥ 4, **indépendant de `.testparts`** — il tourne donc en intégration continue, là où il protège |
+
+La correction est la bonne : le filtre du sélecteur prend l'union des formats
+et c'est la logique de dépôt qui tranche, au lieu d'un filtre silencieux qui
+décidait à sa place. Au passage, un DWG seul en mode appareil ne crée plus de
+projet muet — un défaut de bord que personne n'avait relevé et que
+l'implémenteur a traité de lui-même.
+
+**GO déploiement** `711f4b44`, app seule, par SHA puis `promote-latest`.
+
+**État de la priorité 4 après ce lot.** Le `.job` est lu seul, sa géométrie
+est décodée, ses points de départ sont honorés à l'octet, ses amorces sont
+visibles, il ressort en `.job` par tôle, un dessin peut porter plusieurs
+pièces indépendantes, et l'export ne détruit rien de ce qu'il ne comprend pas
+(54 fichiers rendus identiques à l'octet). Ce qui reste ouvert est nommé :
+les zones d'exclusion, les outils multiples, les opérations multiples, les
+deux champs binaires `0x14`/`0x15` non identifiés, et le miroir serveur (J5).
