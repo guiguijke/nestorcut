@@ -278,7 +278,16 @@ describe('J8-a — downloadLocalJobs : un .job par tôle, en un clic', () => {
         const realCreate = globalThis.document?.createElement
         globalThis.document = globalThis.document || {}
         globalThis.document.createElement = (tag) => {
-            const el = { tag, style: {}, set href(v) { created.push(v) }, click: () => clicks.push(el) }
+            const el = {
+                tag, style: {},
+                set href(v) { created.push(v) },
+                click: () => clicks.push(el),
+                // §9.75 point 3 : le VRAI élément du navigateur a un
+                // remove() — le faux doit l'avoir aussi, sinon les
+                // setTimeout du lot lèvent une exception non rattrapée et
+                // la suite sort en code 1 même avec tous ses tests verts.
+                remove: () => {},
+            }
             return el
         }
         globalThis.document.body = globalThis.document.body || { appendChild: () => {} }

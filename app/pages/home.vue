@@ -42,7 +42,7 @@
                 :extensions="uploadExtensions"
                 @files="handleSubmit"
                 @rejected="handleRejected"
-                @oversize="error = t('upload.tooLarge')"
+                @oversize="handleOversize"
             />
             <div
                 v-if="error"
@@ -129,30 +129,76 @@
     // toute première dépose, celle qui CRÉE le projet. Lot J4 : sans `.job`
     // ici, un `.job` déposé à la création était écarté par la dropzone, en
     // silence — les DXF partaient seuls et le nesting se faisait sans les
-    // réserves d'amorce. Défaut trouvé par le harnais navigateur, qu'aucun
-    // test unitaire ne pouvait voir. Garder cette liste alignée sur celle de
-    // `ProjectFiles.vue`. La liste ne sert qu'au filtre du sélecteur de
-    // fichiers : la vérité du format reste la SIGNATURE (piège #31).
+    // réserves d'amorce. Défaut trouvé au harnais navigateur, qu'aucun
+    // test unitaire ne pouvait voir. Lot J8-bis : le `.job` passe le filtre
+    // dans les DEUX modes — c'est `handleSubmit` qui décide (bascule
+    // « Cet appareil » si le mode choisi est serveur, §9.73 point 22) ;
+    // la liste ne sert qu'au filtre du sélecteur de fichiers : la vérité
+    // du format reste la SIGNATURE (piège #31).
     const uploadExtensions = computed(() =>
-        localProject.value && localImportEnabled.value
-            ? ['.dxf', '.svg', '.job']
+        localImportEnabled.value
+            ? ['.dxf', '.svg', '.job', ...(localProject.value ? [] : ['.dwg'])]
             : ['.dxf', '.svg', '.dwg']
     )
 
+    // Lot J8-bis (§9.75) : tout fichier écarté est NOMMÉ — le silence de
+    // setFiles dès qu'un autre fichier passait était la même famille de
+    // défaut que le mutisme d'uploadToServer (J8-e). Le motif rappelle ce
+    // que CE mode accepte (la même chose que la légende, jamais plus).
     const handleRejected = (files) => {
-        const names = (files || []).map((f) => String(f.name || '').toLowerCase())
-        if (names.some((n) => n.endsWith('.dwg')) && localProject.value) {
-            error.value = t('localImport.dwgRejected')
+        const list = files || []
+        const names = list.map((f) => String(f.name || '?')).join(', ')
+        if (localProject.value && list.some((f) => /\.dwg$/i.test(String(f.name || '')))) {
+            error.value = t('upload.dwgNamed', { names })
             return
         }
         error.value = localProject.value
-            ? t('localImport.unsupportedType')
-            : t('upload.unsupported')
+            ? t('upload.rejectedDevice', { names })
+            : t('upload.rejectedServer', { names })
+    }
+
+    const handleOversize = (files) => {
+        const names = (files || []).map((f) => String(f.name || '?')).join(', ')
+        error.value = t('upload.oversizeNamed', { names })
     }
 
     const handleSubmit = async (files) => {
         error.value = ''
         if (!files?.length) return
+
+        // Lot J8-bis — les points 22 et 23 du §8.3-ter : la dépose est lue
+        // par SIGNATURE (piège #31), pas par extension. Un `.job` déposé en
+        // mode « Nos serveurs » BASCULE le projet en « Cet appareil » (le
+        // seul mode qui les neste) et le DIT en information — l'écran ne
+        // peut pas promettre « .job acceptés » sur une carte et répondre
+        // « type non supporté » au dépôt. Le seul cas contradictoire,
+        // `.job` + `.dwg` dans la MÊME dépose (l'un exige l'appareil,
+        // l'autre le serveur), est un refus explicite qui nomme les deux.
+        let jobNames = []
+        let dwgNames = []
+        if (localImportEnabled.value) {
+            const { isSheetCamJob } = await import('~~/shared/sheetcamJob.js')
+            for (const file of files) {
+                try {
+                    const bytes = new Uint8Array(await file.arrayBuffer())
+                    if (isSheetCamJob(bytes)) jobNames.push(String(file.name || '?'))
+                    else if (/\.dwg$/i.test(String(file.name || ''))) dwgNames.push(String(file.name || '?'))
+                } catch {
+                    // Illisible : la chaîne ordinaire saura le dire.
+                }
+            }
+        } else {
+            dwgNames = files.filter((f) => /\.dwg$/i.test(String(f.name || ''))).map((f) => String(f.name || '?'))
+        }
+        if (jobNames.length && dwgNames.length) {
+            error.value = t('home.jobPlusDwg')
+            return
+        }
+        let switchedForJob = false
+        if (jobNames.length && !localProject.value && localImportEnabled.value) {
+            privacyChoice.value = 'device'
+            switchedForJob = true
+        }
 
         if (localProject.value && localImportEnabled.value) {
             // J-090 : création JSON sans fichiers — l'import navigateur des
@@ -163,6 +209,15 @@
                     body: { local: true },
                 })
                 filesActions.setPendingLocalFiles(files)
+                // Lot J8-bis (point 22) : l'information de bascule survit à
+                // la navigation — la page projet l'affiche UNE fois, en
+                // information, puis l'oublie (sessionStorage : rien de
+                // persistant, rien de serveur).
+                if (switchedForJob) {
+                    try {
+                        sessionStorage.setItem('nestorcut-job-switched', '1')
+                    } catch { /* pas de session : l'info se perd, pas le projet */ }
+                }
                 await getProjects()
                 router.push({ path: `/project/${data.slug}` })
             } catch (err) {

@@ -122,11 +122,22 @@ try {
         const slug = await createProject(files, 'server')
         const ok = await serverDone(slug, 25)
         page.off('request', onRequest)
-        const banner = (await page.locator('.content__error').allInnerTexts().catch(() => [])).join(' ').trim()
+        // TRANCHE (§9.75 point 4) : le verrou ne porte plus « aucune bannière
+        // » mais AUCUNE ERREUR D'ENVOI. Le vérificateur a mesuré que
+        // l'indice d'état vide « Sélectionnez au moins un fichier à
+        // imbriquer » partage la classe .content__error (défaut de STYLING
+        // préexistant, visible tant qu'aucune fiche n'est cochée) : il
+        // n'est ni une erreur d'envoi ni le défaut muet que J8-e corrige.
+        // Le re-styler sort du lot ; le verrou protège ce qui doit l'être.
+        const banner = (await page.locator('.content__error').allInnerTexts().catch(() => []))
+            .join(' ').replace(/\s+/g, ' ').trim()
+        const sendError = /(n'ont pas pu être envoyés|could not be uploaded)/.test(banner)
         check('J8e-a 25 fichiers serveur : 25 fiches importées', ok, ok ? '' : 'fiches non toutes done')
         check('J8e-a la dépose est passée par DEUX requêtes (création + lot suivant)',
             fileRequests === 2, `${fileRequests} requête(s) portant des fichiers`)
-        check('J8e-a aucun message d\'erreur', banner === '', banner.slice(0, 160))
+        check('J8e-a aucune erreur d\'ENVOI (l\'indice d\'état vide stylé en erreur est hors périmètre, raison au §9.76)',
+            !sendError, banner.slice(0, 160))
+        log('bannière brute :', banner.slice(0, 160))
         log('projet serveur', slug)
     }
 

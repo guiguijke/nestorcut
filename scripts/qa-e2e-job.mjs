@@ -238,6 +238,113 @@ try {
         }
     }
 
+    // ---------- J8-bis : les points 22 et 23 du §8.3-ter -------------------
+    //
+    // (a) un `.job` déposé en mode SERVEUR depuis l'écran de création
+    //     BASCULE le projet en « Cet appareil » et l'affiche en
+    //     INFORMATION (texte figé) — l'écran ne peut pas promettre
+    //     « .job acceptés » et répondre « type non supporté » au dépôt ;
+    // (b) `.job` + `.dwg` dans la même dépose ⇒ refus explicite (texte
+    //     figé), AUCUN projet créé ;
+    // (c) négatif : une dépose sans `.job` ne change JAMAIS le mode choisi ;
+    // (d) corollaire §9.75 : un fichier écarté est NOMMÉ même quand un
+    //     autre passe (le .dwg mêlé ne disparaît plus en silence).
+    {
+        const squareDxf = {
+            name: 'j8bis-carre.dxf', mimeType: 'application/dxf',
+            buffer: Buffer.from(
+                '0\r\nSECTION\r\n2\r\nHEADER\r\n9\r\n$ACADVER\r\n1\r\nAC1009\r\n9\r\n$INSUNITS\r\n70\r\n4\r\n0\r\nENDSEC\r\n0\r\nSECTION\r\n2\r\nENTITIES\r\n0\r\nLINE\r\n5\r\n2F\r\n8\r\n0\r\n10\r\n-10.0\r\n20\r\n-10.0\r\n30\r\n0.0\r\n11\r\n10.0\r\n21\r\n-10.0\r\n31\r\n0.0\r\n0\r\nLINE\r\n5\r\n30\r\n8\r\n0\r\n10\r\n10.0\r\n20\r\n-10.0\r\n30\r\n0.0\r\n11\r\n10.0\r\n21\r\n10.0\r\n31\r\n0.0\r\n0\r\nLINE\r\n5\r\n31\r\n8\r\n0\r\n10\r\n10.0\r\n20\r\n10.0\r\n30\r\n0.0\r\n11\r\n-10.0\r\n21\r\n10.0\r\n31\r\n0.0\r\n0\r\nLINE\r\n5\r\n32\r\n8\r\n0\r\n10\r\n-10.0\r\n20\r\n10.0\r\n30\r\n0.0\r\n11\r\n-10.0\r\n21\r\n-10.0\r\n31\r\n0.0\r\n0\r\nENDSEC\r\n0\r\nEOF\r\n',
+                'latin1'),
+        }
+        const fakeDwg = { name: 'j8bis-plan.dwg', mimeType: 'application/acad', buffer: Buffer.from('AC1015fake') }
+        // JOB en OBJET : Playwright refuse de mélanger chemins et buffers
+        // dans un même setInputFiles.
+        const jobAsFile = { name: path.basename(JOB), mimeType: 'application/octet-stream', buffer: fs.readFileSync(JOB) }
+        const srvCardBis = page
+            .locator('.create__privacy [role="radio"]')
+            .filter({ hasText: /(Our servers|Nos serveurs)/i })
+            .first()
+        const devCardBis = page
+            .locator('.create__privacy [role="radio"]')
+            .filter({ hasText: /(This device|Cet appareil)/i })
+            .first()
+
+        // (a) `.job` en mode serveur ⇒ bascule + information.
+        if (await srvCardBis.count()) {
+            await srvCardBis.click()
+            await page.setInputFiles('input[name="dxf"]', [JOB])
+            await page.waitForURL('**/project/**', { timeout: 90000 })
+            const slugBis = page.url().split('/project/')[1].split(/[?#]/)[0]
+            const isLocal = await page.evaluate(async (s) => {
+                const data = await fetch(`/api/project/${s}`).then((r) => r.json()).catch(() => ({}))
+                return data.local === true
+            }, slugBis).catch(() => null)
+            // L'info est posée APRÈS l'import asynchrone (le watch de la
+            // page attend getProject + addFiles) : on l'ATTEND.
+            await page.locator('.content__notice').waitFor({ timeout: 20000 }).catch(() => {})
+            const notice = (await page.locator('.content__notice').allInnerTexts().catch(() => []))
+                .join(' ').replace(/\s+/g, ' ').trim()
+            log('J8-bis (a) projet', slugBis, 'local:', isLocal, '— info:', notice.slice(0, 90))
+            check('J8-bis (a) .job en mode serveur ⇒ projet créé « Cet appareil »', isLocal === true)
+            check('J8-bis (a) l\'information de bascule est affichée (texte figé)',
+                /(passage en « Cet appareil »|switched to "This device")/.test(notice), notice.slice(0, 120))
+            await shot('00b-j8bis-bascule.png')
+
+            // (d) corollaire §9.75 : un écarté NOMMÉ même quand un autre
+            // passe. Joué SUR LA PAGE PROJET de (a) — à la création, la
+            // navigation gagnerait la course de l'affichage ; ici le
+            // message reste. Mode APPAREIL : le .dwg y est écarté (le
+            // serveur seul le convertit) et doit être NOMMÉ pendant que le
+            // carré passe.
+            await page.setInputFiles('input[name="dxf"]', [squareDxf, fakeDwg])
+            await page.waitForTimeout(2500)
+            const namedRejection = (await page.locator('.files__error').allInnerTexts().catch(() => []))
+                .join(' ').replace(/\s+/g, ' ').trim()
+            log('J8-bis (d) message d\'écart :', namedRejection.slice(0, 140))
+            check('J8-bis (d) le .dwg écarté est NOMMÉ (un autre fichier passait)',
+                namedRejection.includes('j8bis-plan.dwg'), namedRejection.slice(0, 160))
+        }
+
+        // (b) `.job` + `.dwg` ⇒ refus figé, aucun projet. La contradiction
+        // n'existe qu'en mode SERVEUR (le seul où les DEUX formats passent
+        // le filtre de la création) : en mode appareil, le .dwg est écarté
+        // et NOMMÉ par (d), le .job suit son chemin — rien à refuser.
+        await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+        await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+        if (await srvCardBis.count()) {
+            await srvCardBis.click()
+            await page.setInputFiles('input[name="dxf"]', [jobAsFile, fakeDwg])
+            await page.waitForTimeout(2500)
+            const stillHome = !/\/project\//.test(page.url())
+            const refusal = (await page.locator('.create__error').allInnerTexts().catch(() => []))
+                .join(' ').replace(/\s+/g, ' ').trim()
+            log('J8-bis (b) refus :', refusal.slice(0, 140))
+            check('J8-bis (b) .job + .dwg ⇒ AUCUN projet créé', stillHome, page.url())
+            check('J8-bis (b) le refus nomme les deux (texte figé)',
+                    /(deux projets séparés|two separate projects)/.test(refusal), refusal.slice(0, 140))
+        }
+
+        // (c) négatif : sans `.job`, le mode choisi ne change pas.
+        await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+        await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+        if (await srvCardBis.count()) {
+            await srvCardBis.click()
+            await page.setInputFiles('input[name="dxf"]', [squareDxf])
+            await page.waitForURL('**/project/**', { timeout: 90000 })
+            const slugC = page.url().split('/project/')[1].split(/[?#]/)[0]
+            const isServer = await page.evaluate(async (s) => {
+                const data = await fetch(`/api/project/${s}`).then((r) => r.json()).catch(() => ({}))
+                return data.local === false
+            }, slugC).catch(() => null)
+            check('J8-bis (c) négatif : sans .job, le mode SERVEUR est respecté', isServer === true)
+            const noticeC = await page.locator('.content__notice').count()
+            check('J8-bis (c) aucune information de bascule', noticeC === 0)
+        }
+    }
+
+    // Les actes J8-bis finissent sur une page PROJET : retour à la création.
+    await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+    await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
     const devCard = page
         .locator('.create__privacy [role="radio"]')
         .filter({ hasText: /(This device|Cet appareil)/i })
@@ -258,7 +365,7 @@ try {
     ).catch(() => log('ATTENTION : le compte de fiches attendu n’est pas atteint'))
     await shot('01-depose.png')
 
-    const cards = await page.evaluate(async () => {
+    const cards = await page.evaluate(async (projectSlug) => {
         const db = await new Promise((res, rej) => {
             const r = indexedDB.open('nestorcut-local')
             r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
@@ -267,7 +374,10 @@ try {
             const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
             tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
         })
-        return recs.map((r) => ({
+        // Seules les fiches du projet COURANT (piège #47 : les actes
+        // préparatoires J8-bis créent d'autres projets dans le même
+        // navigateur, la sonde globale ne vaut plus un verrou).
+        return recs.filter((r) => r.projectSlug === projectSlug).map((r) => ({
             name: r.name,
             parts: (r.parts || []).length,
             hasCut: Boolean(r.sheetcam),
@@ -276,7 +386,7 @@ try {
             source: r.source ?? null,
             finding: (r.findings || []).some((f) => f.code === 'sheetcam.jobGeometry'),
         }))
-    })
+    }, slug)
     log('fiches IndexedDB :', JSON.stringify(cards))
     check('A1 une fiche par dessin', cards.length === wanted.size,
         `${cards.length} fiches pour ${wanted.size} dessins`)
@@ -433,17 +543,28 @@ try {
             document.querySelector('.size__rule')?.textContent?.trim() ?? null)
         log('securite forcee a', SAFETY, '— regle affichee :', lu)
     }
-    // Lot J8-a — forcer une tôle PETITE (QA_J8_SHEETS=600x300) pour
-    // provoquer plusieurs tôles et verrouiller le « tout télécharger les
-    // .job » : autant de fichiers téléchargés que de tôles, chacun relu.
+    // Lot J8-a — forcer la tôle (QA_J8_SHEETS=600x300 ou 500x600x2 : largeur
+    // × hauteur × NOMBRE, le nombre dépassant 1 fait sortir du mode bande
+    // quand une seconde direction est donnée) pour provoquer plusieurs tôles
+    // et verrouiller le « tout télécharger les .job » : autant de fichiers
+    // téléchargés que de tôles, chacun relu.
     if (process.env.QA_J8_SHEETS) {
-        const [w, h] = String(process.env.QA_J8_SHEETS).split('x')
+        const [w, h, count] = String(process.env.QA_J8_SHEETS).split('x')
         const inputs = page.locator('[data-testid="settings-sheets"] input')
         await inputs.first().waitFor({ timeout: 30000 })
         await inputs.first().fill(String(w))
         await inputs.nth(1).fill(String(h))
+        if (count) {
+            await inputs.nth(2).fill(String(count))
+            // Sortir du « gauche seule » : une seconde direction rend le
+            // leftOnly faux, et le nombre de tôles ≥ 2 rend totalStock > 1 —
+            // les deux conditions du mode multi-tôles (payload #isSpp).
+            const dirBtn = page.locator('[data-testid="settings-directions"] .compute__option')
+                .filter({ hasText: /(bas|bottom)/i }).first()
+            if (await dirBtn.count()) await dirBtn.click().catch(() => {})
+        }
         await inputs.nth(1).dispatchEvent('change')
-        log('tôle forcée à', `${w} × ${h}`)
+        log('tôle forcée à', `${w} × ${h}${count ? ' × ' + count : ''}`)
     }
     // … ou forcer les QUANTITÉS (QA_J8_QUANTITY=40 : la voie P4-8 de
     // l'audit, deux tôles sur la tôle du `.job` sans tôle pathologique).

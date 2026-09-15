@@ -77,12 +77,15 @@ const setFiles = (newFiles) => {
     const allowed = unref(extensions)
     const typed = newFiles.filter((file) => allowed.includes(fileExt(file.name)))
     const sized = typed.filter((file) => file.size <= MAX_UPLOAD_FILE_BYTES)
-    if (typed.length && !sized.length) {
-        emit("oversize", typed)
-        return
-    }
     if (sized.length) emit("files", sized)
-    else if (newFiles.length) emit("rejected", newFiles)
+    // Lot J8-bis (§9.75) : tout fichier ÉCARTÉ est NOMMÉ, quel que soit le
+    // sort des autres. L'ancien code ne disait rien dès qu'UN fichier
+    // passait — un .dwg mêlé à un .job disparaissait en silence : la même
+    // famille de défaut que le mutisme d'uploadToServer que J8-e a corrigé.
+    const wrongType = newFiles.filter((file) => !allowed.includes(fileExt(file.name)))
+    const oversize = typed.filter((file) => file.size > MAX_UPLOAD_FILE_BYTES)
+    if (wrongType.length) emit("rejected", wrongType)
+    if (oversize.length) emit("oversize", oversize)
 };
 const onDrop = (event) => {
     updateDragStatus(false);

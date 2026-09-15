@@ -121,6 +121,12 @@
         <!-- AF1 (L3-bis) : UN SEUL message de refus — quand le panneau de
              capacité est affiché, le bandeau rouge sous la scène se tait
              (la mention de remboursement vit dans le panneau). -->
+        <!-- Lot J8-bis (§9.73 point 22) : l'INFORMATION de bascule « .job
+             détecté → passage en Cet appareil » — une seule fois, jamais
+             un refus : le projet est créé, dans le bon mode. -->
+        <div v-if="jobSwitchedInfo" class="content__notice">
+            {{ t('home.jobSwitched') }}
+        </div>
         <div v-if="localComputeError && !capacityPanel" class="content__error">
             {{ localErrorText }}
         </div>
@@ -512,6 +518,9 @@ const nestRequestError = computed(() => filesGetters.nestRequestError);
 const nestSubmitError = computed(() => filesGetters.nestError);
 const nestBusy = computed(() => filesGetters.nestBusy);
 const localImportError = computed(() => filesGetters.localImportError);
+// Lot J8-bis (point 22) : information de bascule « .job détecté → Cet
+// appareil », posée par l'écran de création (sessionStorage), une fois.
+const jobSwitchedInfo = ref(false);
 // Lot 2a : un refus d'import peut porter des nombres (entités, budget) —
 // formatés dans la locale (piège #24 : « 1 200 entités », pas « 1200 »).
 const localImportErrorText = computed(() => {
@@ -732,6 +741,15 @@ watch(pageSlug, async (s, prev) => {
     if (pending.length) {
         await actions.addFiles(pending, s)
     }
+    // Lot J8-bis (point 22) : l'information de bascule posée par l'écran de
+    // création survit à la navigation — affichée UNE fois, puis oubliée
+    // (sessionStorage : rien de persistant, rien ne quitte la machine).
+    try {
+        if (sessionStorage.getItem('nestorcut-job-switched') === '1') {
+            sessionStorage.removeItem('nestorcut-job-switched')
+            jobSwitchedInfo.value = true
+        }
+    } catch { /* pas de session : pas d'info, pas de panne */ }
     trackEvent("page_view", {
         page: "project",
         projectSlug: s,
@@ -888,6 +906,19 @@ const startsNest = () => {
         padding: 12px;
         background-color: var(--error-background);
         border: solid 1px var(--error-border);
+        color: var(--label-secondary);
+        border-radius: var(--radius-l);
+    }
+
+    // Lot J8-bis : l'INFORMATION de bascule n'est pas une erreur — teinte
+    // neutre-bleue, couleurs EXPLICITES lisibles sur les deux thèmes
+    // (piège #21 : jamais les vars de thème seules pour un texte qui doit
+    // rester lisible).
+    &__notice {
+        margin-top: 16px;
+        padding: 12px;
+        background-color: rgba(110, 168, 255, 0.10);
+        border: solid 1px rgba(110, 168, 255, 0.45);
         color: var(--label-secondary);
         border-radius: var(--radius-l);
     }

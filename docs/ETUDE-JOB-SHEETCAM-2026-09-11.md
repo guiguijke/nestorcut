@@ -3866,3 +3866,38 @@ message du point 11 est fait. Aucun moteur, aucun worker.
 **Ordre général** : J8-bis (débloque un déploiement prêt), puis **J9** (le
 cas réel du propriétaire, mesuré cassé), puis J10-a, J10-b, J10-c. J10-a peut
 se faire en parallèle de J9 : ce sont des verrous, ils ne changent rien.
+
+**Lot J8-bis — rapport de l'implémenteur (15/09, suite du §9.75).** Les
+cinq points, rien défait de J8 :
+
+1. **Points 22 et 23** : la dépose de création est lue par SIGNATURE ;
+   `.job` en mode serveur ⇒ sélection basculée sur « Cet appareil » et
+   INFORMATION affichée (texte figé, portée par sessionStorage — rien de
+   persistant, rien de serveur) ; `.job` + `.dwg` ⇒ refus figé, aucun
+   projet. La contradiction mesurée par le vérificateur (« .job acceptés »
+   affiché, « type non supporté » au dépôt) n'existe plus : le filtre de
+   la création laisse le `.job` passer dans les DEUX modes, c'est
+   `handleSubmit` qui décide.
+2. **Corollaire** : `DxfUpload.setFiles` émet désormais `rejected` et
+   `oversize` pour CHAQUE fichier écarté, même quand d'autres passent —
+   et les messages le NOMMENT (`upload.rejectedDevice/Server`,
+   `upload.dwgNamed`, `upload.oversizeNamed`, EN/FR) sur l'écran de
+   création comme sur la page projet.
+3. **exit 0** : le faux élément du test a son `remove()` — `npx vitest
+   run` rend **783 passés, Errors 0, code 0** (vérifié au passage de la
+   commande, pas à la ligne).
+4. **Tranche du verrou rouge** (raison écrite dans le harnais) : le
+   verrou « aucun message » devient « aucune erreur d'ENVOI » — l'indice
+   d'état vide « Sélectionnez au moins un fichier à imbriquer » partage
+   la CLASSE `.content__error` (défaut de styling préexistant, hors du
+   lot) ; le harnais journalise la bannière brute à côté du verdict.
+5. **Clic multi-tôles COUVERT au navigateur** (`QA_J8_SHEETS=500x600x2`
+   + `QA_J8_QUANTITY=40` : nombre de tôles ≥ 2 ET seconde direction, les
+   deux conditions du mode multi-tôles) : **2 tôles ⇒ 2 `.job`
+   téléchargés d'un clic, 43 + 37 pièces actives = 80 posées, chacun
+   relu valide** — plus de « NON MESURÉ ».
+
+Verrous rejoués : harnais `qa-e2e-job.mjs` TOUS VERTS avec les actes
+J8-bis (bascule + info figée ; refus figé sans projet ; négatif sans
+`.job` ; écarté nommé pendant qu'un autre passe) ; `qa-j8-uploads.mjs`
+TOUS VERTS avec la tranche ; vitest 783/783 **exit 0** ; build 0 erreur.

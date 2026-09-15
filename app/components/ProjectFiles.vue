@@ -10,9 +10,9 @@
             class="files__upload"
             @files="addFiles"
             @rejected="onRejected"
-            @oversize="rejectError = 'upload.tooLarge'"
+            @oversize="onOversize"
         />
-        <p v-if="rejectError" class="files__error">{{ t(rejectError) }}</p>
+        <p v-if="rejectError" class="files__error">{{ t(rejectError, rejectParams) }}</p>
         <div class="files__grid">
             <template
                 v-for="(file, fileIndex) in projectFiles"
@@ -111,6 +111,7 @@ const uploadExtensions = computed(() =>
 const emit = defineEmits(["addFiles"])
 const { t } = useLocale()
 const rejectError = ref('')
+const rejectParams = ref({})
 
 // Lot E4-b/E4-c : les actions de fiche passent par le store — lui seul sait
 // si la fiche est locale (IndexedDB) ou serveur (routes + worker).
@@ -132,13 +133,24 @@ const onExplode = () => {
     if (file) filesActions.explodeFiche(file)
 }
 
+// Lot J8-bis (§9.75) : tout fichier écarté est NOMMÉ — le motif rappelle
+// ce que CE mode accepte (le silence dès qu'un autre passait était la même
+// famille de défaut que le mutisme d'uploadToServer, corrigé en J8-e).
 const onRejected = (files) => {
-    const names = (files || []).map((f) => String(f.name || '').toLowerCase())
-    if (props.local && names.some((n) => n.endsWith('.dwg'))) {
-        rejectError.value = 'localImport.dwgRejected'
+    const list = files || []
+    const names = list.map((f) => String(f.name || '?')).join(', ')
+    if (props.local && list.some((f) => /\.dwg$/i.test(String(f.name || '')))) {
+        rejectParams.value = { names }
+        rejectError.value = 'upload.dwgNamed'
         return
     }
-    rejectError.value = props.local ? 'localImport.unsupportedType' : 'upload.unsupported'
+    rejectParams.value = { names }
+    rejectError.value = props.local ? 'upload.rejectedDevice' : 'upload.rejectedServer'
+}
+
+const onOversize = (files) => {
+    rejectParams.value = { names: (files || []).map((f) => String(f.name || '?')).join(', ') }
+    rejectError.value = 'upload.oversizeNamed'
 }
 
 const fileIsDone = (status) => status === processingType.done

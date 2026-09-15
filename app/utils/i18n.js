@@ -562,6 +562,14 @@ const dict = {
         'upload.drop': 'or drop your files here',
         'upload.limit': 'DXF, SVG or DWG — max 5 MB per file',
         'upload.batchFailed': '{n} file(s) could not be uploaded: {names} — {reasons}. The other files were uploaded.',
+        // Lot J8-bis (§9.75) : tout fichier écarté est NOMMÉ, et les points
+        // 22-23 du §8.3-ter (textes FIGÉS tels qu'écrits dans la consigne).
+        'upload.rejectedDevice': 'Ignored — {names}: only DXF, SVG and SheetCam .job are accepted on this device.',
+        'upload.rejectedServer': 'Ignored — {names}: only DXF, SVG and DWG are accepted on our servers.',
+        'upload.dwgNamed': 'Ignored — {names}: DWG files are converted on our servers — choose "Our servers" for them.',
+        'upload.oversizeNamed': 'Ignored — {names}: each file must be 5 MB or less.',
+        'home.jobSwitched': 'SheetCam .job detected — switched to "This device", the mode that nests them.',
+        'home.jobPlusDwg': 'A SheetCam .job needs "This device"; a DWG needs "Our servers". Drop them in two separate projects.',
         // Lot J8-c : le sélecteur accepte les .job en mode appareil — la
         // légende le dit (jamais en mode serveur avant J5).
         // Lot J8-e (§9.73 point 30) : le compte disparaît — plus personne
@@ -1396,6 +1404,12 @@ const dict = {
         'upload.drop': 'ou déposez vos fichiers ici',
         'upload.limit': "DXF, SVG ou DWG — 5 Mo max par fichier",
         'upload.batchFailed': "{n} fichier(s) n'ont pas pu être envoyés : {names} — {reasons}. Les autres fichiers ont été envoyés.",
+        'upload.rejectedDevice': "Ignorés — {names} : seuls DXF, SVG et .job SheetCam sont acceptés sur cet appareil.",
+        'upload.rejectedServer': "Ignorés — {names} : seuls DXF, SVG et DWG sont acceptés sur nos serveurs.",
+        'upload.dwgNamed': "Ignorés — {names} : les fichiers DWG sont convertis sur nos serveurs — choisissez « Nos serveurs » pour eux.",
+        'upload.oversizeNamed': "Ignorés — {names} : chaque fichier doit faire 5 Mo ou moins.",
+        'home.jobSwitched': "Fichier .job SheetCam détecté — passage en « Cet appareil », le mode qui les neste.",
+        'home.jobPlusDwg': "Un .job SheetCam demande « Cet appareil », un DWG demande « Nos serveurs ». Déposez-les dans deux projets séparés.",
         'upload.limitDevice': "DXF, SVG ou .job SheetCam — 5 Mo max par fichier",
         'upload.unsupported': "Type de fichier non supporté — DXF, SVG ou DWG.",
         'upload.tooLarge': "Chaque fichier doit faire 5 Mo ou moins.",
