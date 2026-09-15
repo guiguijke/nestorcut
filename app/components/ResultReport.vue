@@ -304,12 +304,35 @@
                     :theme="themeType.primary"
                     trackingTag="result_download_all"
                 />
+                <!-- Lot J8-a — sur un projet issu d'un `.job`, le `.job` EST
+                     la sortie attendue (« si je mets des .job, je m'attends à
+                     télécharger un .job ») : PRIMAIRE et EN TÊTE ; le DXF
+                     devient secondaire et dit son nom. Ordre et thèmes
+                     Mesurés au harnais ; sans `.job` déposé, rien ne bouge. -->
                 <MainButton
-                    v-if="resultModalData.isMultiSheet && isLocal"
-                    :label="t('results.downloadAll')"
+                    v-if="isLocal && resultModalData.hasJobs && resultModalData.isMultiSheet"
+                    :label="t('jobImport.downloadAllJobs')"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="themeType.primary"
+                    trackingTag="result_download_job_all"
+                    @click="downloadLocalAllJobs"
+                />
+                <MainButton
+                    v-if="isLocal && resultModalData.hasJobs && !resultModalData.isMultiSheet"
+                    :label="t('jobImport.downloadJob')"
+                    :isDisable="isHaveError || isUnfit"
+                    :size="sizeType.s"
+                    :theme="themeType.primary"
+                    trackingTag="result_download_job"
+                    @click="downloadLocalJob"
+                />
+                <MainButton
+                    v-if="resultModalData.isMultiSheet && isLocal"
+                    :label="t(resultModalData.hasJobs ? 'results.downloadAllDxf' : 'results.downloadAll')"
+                    :isDisable="isHaveError || isUnfit"
+                    :size="sizeType.s"
+                    :theme="resultModalData.hasJobs ? themeType.secondary : themeType.primary"
                     trackingTag="result_download_all"
                     @click="downloadLocalAll"
                 />
@@ -325,24 +348,11 @@
                 />
                 <MainButton
                     v-if="!resultModalData.isMultiSheet && isLocal"
-                    :label="t('results.download')"
+                    :label="t(resultModalData.hasJobs ? 'results.downloadDxf' : 'results.download')"
                     :size="sizeType.s"
-                    :theme="themeType.primary"
+                    :theme="resultModalData.hasJobs ? themeType.secondary : themeType.primary"
                     trackingTag="result_download"
                     @click="downloadLocalSingle"
-                />
-                <!-- Lot J4 — le `.job` SheetCam, un par tôle. Le bouton
-                     n'existe que pour un projet issu d'un `.job` déposé
-                     (`resultModalData.hasJobs`) : un projet ordinaire ne voit
-                     rien de plus qu'avant. -->
-                <MainButton
-                    v-if="isLocal && resultModalData.hasJobs"
-                    :label="t('jobImport.downloadJob')"
-                    :isDisable="isHaveError || isUnfit"
-                    :size="sizeType.s"
-                    :theme="themeType.secondary"
-                    trackingTag="result_download_job"
-                    @click="downloadLocalJob"
                 />
                 <MainButton
                     :label="t('result.tryAgain')"
@@ -363,7 +373,7 @@ import { themeType } from '~~/constants/theme.constants'
 const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
-    'download-single', 'download-job', 'close', 'copy-slug',
+    'download-single', 'download-job', 'download-all-jobs', 'close', 'copy-slug',
 ])
 
 const t = (...a) => props.d.t(...a)
@@ -426,6 +436,7 @@ const downloadLocalSingle = () => emit('download-single')
 // Lot J4 : le `.job` SheetCam d'une tole. L'orchestrateur (ResultModal) sait
 // quelle alternative et quelle tole sont a l'ecran.
 const downloadLocalJob = () => emit('download-job')
+const downloadLocalAllJobs = () => emit('download-all-jobs')
 
 // Lot J4-bis : les constats de reserve d'amorce, en phrases. Un refus de
 // reserve ou un trou retire du nesting DOIT se voir — la degradation etait

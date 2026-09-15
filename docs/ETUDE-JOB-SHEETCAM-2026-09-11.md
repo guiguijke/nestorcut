@@ -3465,3 +3465,100 @@ du propriétaire (tableaux A, B, C, C-bis) et P4-10 — le `.job` d'atelier rée
 avec plus de sept dessins, plusieurs opérations, et si possible une zone
 d'exclusion `[Work/keepout]` non nulle — restent la porte d'entrée des
 nouveautés de calcul. Ce lot-ci passe parce qu'il n'en est pas une.
+
+#### 9.74 Lot J8 — rapport de l'implémenteur (15/09)
+
+Livré dans l'ordre consigné : **J8-e d'abord** (le défaut muet), puis
+J8-a, J8-c, J8-d, puis J8-b. App seule (`app/`, `shared/`, harnais) —
+aucun diff sous `workers/`, `public/` ni le moteur ; la page de
+présentation et `docs/STRATEGY.md` restent hors périmètre (promesses
+publiques, décision du propriétaire).
+
+**J8-e — plus personne ne compte ses fichiers.**
+- `uploadToServer` envoie par LOTS automatiques de `MAX_UPLOAD_FILES`
+  (constante partagée, jamais dupliquée) ; les erreurs d'envoi
+  S'AFFICHENT (`upload.batchFailed`, EN/FR) : message du serveur quand il
+  en porte un, NOMS des fichiers du lot fautif, lots suivants partis
+  quand même. Le défaut muet (console.error seul, projet vide) est mort.
+- La CRÉATION serveur portait elle aussi tout le dépôt d'un coup (trouvé
+  au harnais : le plafond refusait AVANT `uploadToServer`) : `home.vue`
+  emporte le PREMIER lot, le restant part en fichiers en attente — la
+  page projet les consomme désormais dans les DEUX modes.
+- Les légendes FIGÉES du point 30 sont posées (elles remplacent celles
+  du §8.3-ter) : le compte a disparu des deux côtés.
+- Verrous (`scripts/qa-j8-uploads.mjs`, DXF carrés GÉNÉRÉS) :
+  **(a)** 25 fichiers serveur ⇒ 25 fiches done, le transfert complet en
+  DEUX requêtes porteuses (création + lot suivant), aucun message ;
+  **(b)** le lot suivant refusé (400 simulé, forme Nitro) ⇒ la bannière
+  porte le message ET les cinq noms (« j8-lot-b-21 … j8-lot-b-25 »), le
+  premier lot reste importé — le cœur du défaut, tué ; **(c)** 30
+  fichiers appareil ⇒ 30 fiches, nesting abouti (aucun plafond de
+  nombre, MESURÉ, pas affirmé) ; **(d)** les deux légendes verrouillées
+  AU CARACTÈRE PRÈS en unitaire (`sheetcamLeads.test.js`).
+
+**J8-a — le `.job` est la sortie principale.** Primaire et en tête dès
+que `hasJobs` ; le DXF devient secondaire et dit son nom (« Télécharger
+le DXF », « Tout télécharger (DXF) ») ; multi-tôles : « Télécharger tous
+les .job » (`downloadLocalJobs` — un fichier par tôle, chacun son nom,
+téléchargements étalés de 300 ms contre la garde anti-rafale du
+navigateur, PAS d'archive : un `.job` s'ouvre tel quel dans SheetCam).
+Sans `.job` déposé, RIEN ne change (vérifié au harnais sur le projet
+synthétique : aucun bouton `.job`, DXF « Télécharger » primaire).
+Verrous : ordre ET thème mesurés dans le DOM au harnais (`.job` à
+l'indice 3, DXF à 4, `button--theme-primary` vs `secondary`), FR et EN ;
+`downloadLocalJobs` verrouillé en unitaire (trois téléchargements
+nommés et étalés, refus sans job). **Dit franchement : l'acte
+navigateur multi-tôles n'a pas été joué** — la série n'a pas de cas
+multi-tôles rapide (mode bande = une mise en page par conception ; les
+tentatives par tôle étriquée ou quantité ×200 ont dépassé le délai du
+harnais), le harnais le journalise « NON MESURÉ » ; le vérificateur
+peut le rejouer avec un cas fabriqué.
+
+**J8-c — chaque fiche dit d'où elle vient.** Puce « .job » + nom du
+fichier déposé en ligne secondaire sur la carte (le titre reste le nom
+du DESSIN) ; la phrase complète reste dans la fenêtre de détail. Et le
+trou produit trouvé au harnais : **la dépose de plusieurs `.job` d'un
+coup ignorait silencieusement les suivants** — `splitSheetCamDrop`
+rend désormais TOUS les jobs et `addFiles` traite chacun (réglages
+pré-remplis : le dernier `.job` gagne ; deux `.job` déclarant le même
+dessin font deux fiches, documenté). Verrous : deux `.job` à dessin
+unique déposés ensemble ⇒ deux fiches, chacune SA puce et SON nom ;
+négatif : zéro puce sur des fiches DXF ordinaires. La légende de la
+zone cite le `.job` en mode appareil (texte J8-e).
+
+**J8-d — les deux cartes disent la vérité.** Textes du §9.73 posés EN/FR
+(carte appareil : « Fichiers de travail SheetCam (.job) acceptés » ;
+carte serveurs : « Fichiers .job SheetCam : pas encore ici » — à
+retirer à J5). Verrous au harnais dans les DEUX langues : `.job` présent
+dans la carte appareil ET la légende appareil, présent dans la carte
+serveurs, ABSENT de la légende serveurs. Captures posées FR et EN.
+
+**J8-b — les amorces se voient, avant et pendant.**
+`leadWorldPaths` (+ `leadFramesAt`, `drawingLeadShapes`) dans
+`sheetcamReserve.js` : même arithmétique que la réserve (`leadWorldMapper`
+commun — calcul en facteur, pas dupliqué), tangente rendue en ZONE
+d'éventail (jamais une droite certaine), perçage `2 × kerf`. L'APERÇU de
+la fiche se reconstruit avec les amorces dès que les points de départ
+sont attachés (`previewSvgWithLeads` — trait fin ambré sans
+remplissage, zone translucide, disque en pointillé, couleurs
+explicites) ; la VUE LIVE les dessine dans le MÊME groupe transformé
+que la pièce (piège #20b). Jamais d'amorce inventée : fiche sans `.job`
+ou point non posable ⇒ rien (aperçu bit-identique, verrouillé).
+Verrous : arc au 1e-9 (départ = point + kerf/2 vers la chute, arrivée =
+bout libre), PARITÉ — tout point rendu dans l'enveloppe convexe de la
+réserve (les trois types), tangente = zone, omission des non-posables,
+aperçu négatif identique ; au harnais (recette seule) : 18 éléments
+d'amorce vus pendant le nesting, capture posée.
+
+**Chiffres.** vitest **783/783** (65 fichiers : 769 + les 14 du lot) ;
+`nuxt build` vert ; pile locale reconstruite aux sources ; harnais
+vert sur quatre passages (AB, seul recette, EN normal, uploads) et le
+harnais `qa-j8-uploads.mjs` committé rejouable.
+
+**Non-faits et arêtes, dits.** L'acte navigateur multi-tôles (ci-dessus).
+Le marqueur `__spacingTooLarge` inatteignable attend toujours le
+prochain lot qui touche ces fichiers (arbitrage §9.71). Les amorces ne
+sont NI dans l'aperçu couleur du résultat NI dans la vue DXF (§8.3 :
+lots à part, miroir Python à tenir). Et la série J7 a appris que les
+points de départ tombent au MILIEU des arêtes — la passe « meilleur
+point » (§9.58, gelée) en tiendra compte (piège AGENTS 5d).

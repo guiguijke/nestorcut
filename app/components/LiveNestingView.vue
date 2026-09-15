@@ -75,17 +75,31 @@
                     <g :transform="pane.landscape">
                         <rect x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
                         <g :clip-path="`url(#${clipId})`">
-                            <path
+                            <!-- Lot J8-b : la pièce ET ses amorces vivent dans
+                                 le MÊME groupe transformé — translate(x, H−y)
+                                 scale(1,-1) rotate(θ), jamais une autre
+                                 formule, sinon les amorces dériveraient à
+                                 chaque rotation (piège #20b). -->
+                            <g
                                 v-for="(item, i) in mainItemsByBin.get(pane.bin) || []"
                                 :key="i"
-                                :d="item.d"
                                 :transform="partTransform(item, pane.h)"
-                                class="live__part"
-                                :fill="item.color"
-                                :fill-opacity="partFillOpacity"
-                                :stroke="item.color"
-                                fill-rule="evenodd"
-                            />
+                            >
+                                <path
+                                    :d="item.d"
+                                    class="live__part"
+                                    :fill="item.color"
+                                    :fill-opacity="partFillOpacity"
+                                    :stroke="item.color"
+                                    fill-rule="evenodd"
+                                />
+                                <path
+                                    v-for="(lead, j) in item.leads || []"
+                                    :key="'lead' + j"
+                                    :d="lead.d"
+                                    :class="`live__lead--${lead.kind}`"
+                                />
+                            </g>
                         </g>
                         <text
                             v-if="!mainItems.length && pane.bin === mainPanes.panes[0].bin"
@@ -136,17 +150,26 @@
                             <g :transform="pane.landscape">
                                 <rect x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
                                 <g :clip-path="`url(#${clipId})`">
-                                    <path
+                                    <g
                                         v-for="(item, i) in card.paneItems.get(pane.bin) || []"
                                         :key="i"
-                                        :d="item.d"
                                         :transform="partTransform(item, pane.h)"
-                                        class="live__part"
-                                        :fill="item.color"
-                                        :fill-opacity="partFillOpacity"
-                                        :stroke="item.color"
-                                        fill-rule="evenodd"
-                                    />
+                                    >
+                                        <path
+                                            :d="item.d"
+                                            class="live__part"
+                                            :fill="item.color"
+                                            :fill-opacity="partFillOpacity"
+                                            :stroke="item.color"
+                                            fill-rule="evenodd"
+                                        />
+                                        <path
+                                            v-for="(lead, j) in item.leads || []"
+                                            :key="'lead' + j"
+                                            :d="lead.d"
+                                            :class="`live__lead--${lead.kind}`"
+                                        />
+                                    </g>
                                 </g>
                             </g>
                         </g>
@@ -181,6 +204,8 @@ import {
     livePaneLayout,
     sheetAxesDisplay,
 } from '~/utils/sheetView';
+// Lot J8-b : la géométrie des amorces (mêmes trajets que la réserve).
+import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
@@ -223,6 +248,14 @@ async function ensureGeometry(slug) {
             // (deterministic fallback for legacy files).
             color: p.color || FALLBACK_PART_COLOR,
         }));
+        // Lot J8-b — les AMORCES d'une fiche `.job`, en coordonnées du
+        // dessin (y-up : le flip vient du transform du groupe, piège #20b).
+        // Une fiche ordinaire n'en a PAS : rien n'est ajouté (§9.73 point 11
+        // — jamais d'amorce inventée). Un point non posable est omis.
+        const leadsByPart = leadPathsForRecord(local);
+        if (leadsByPart) {
+            parts.forEach((p, k) => { p.leads = leadsByPart[k] || []; });
+        }
         geometryCache.value = { ...geometryCache.value, [slug]: parts };
     } catch (e) {
         // 404 = fichier vraiment absent (projet local inconnu de CE
@@ -243,6 +276,66 @@ function ringsToPath(rings) {
         .filter((r) => r && r.length > 2)
         .map((ring) => 'M' + ring.map((p) => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join('L') + 'Z')
         .join(' ');
+}
+
+// Lot J8-b — amorces d'un record local `.job` en chemins SVG, par pièce.
+// Rend null pour une fiche sans `.job` (aucun `leads` posé sur le cache),
+// et des entrées `{ d, kind }` sinon : kind 'stroke' (trajet CERTAIN,
+// trait fin sans remplissage), 'zone' (éventail tangent TRANSLUCIDE — la
+// règle exacte n'est pas mesurée, une droite serait un mensonge),
+// 'pierce' (disque de perçage en pointillé).
+function leadPathsForRecord(record) {
+    const sc = record?.sheetcam;
+    if (!sc || !Array.isArray(sc.starts) || !sc.starts.length) return null;
+    const rings = [];
+    const isHole = [];
+    const ringPart = [];
+    (record.parts || []).forEach((p, k) => {
+        rings.push(p.coordinates); isHole.push(false); ringPart.push(k);
+        for (const h of p.holes || []) {
+            rings.push(h); isHole.push(true); ringPart.push(k);
+        }
+    });
+    let shapes;
+    try {
+        shapes = drawingLeadShapes({
+            rings, isHole,
+            starts: sc.starts,
+            origin: sc.origin || null,
+            kerf: Number(sc.kerfWidth) || 0,
+            leadIn: Number(sc.leadIn) || 0,
+            leadInType: Number(sc.leadInType) || 0,
+            leadOut: Number(sc.leadOut) || 0,
+            leadOutType: Number(sc.leadOutType) || 0,
+        });
+    } catch {
+        return null;
+    }
+    const byPart = {};
+    for (const s of shapes) {
+        const k = ringPart[s.ringIndex];
+        if (k == null) continue;
+        (byPart[k] = byPart[k] || []).push(...leadToPaths(s));
+    }
+    return byPart;
+}
+
+function leadToPaths(shape) {
+    const out = [];
+    const toD = (pts) => 'M' + pts.map((p) => `${p[0].toFixed(2)} ${p[1].toFixed(2)}`).join('L');
+    for (const side of [shape.inPath, shape.outPath]) {
+        if (side?.points?.length > 1) out.push({ d: toD(side.points), kind: 'stroke' });
+        if (side?.zone?.length > 2) out.push({ d: toD(side.zone) + 'Z', kind: 'zone' });
+    }
+    if (shape.pierce && Number.isFinite(shape.pierce.r) && shape.pierce.r > 0) {
+        const [cx, cy] = shape.pierce.c;
+        const r = shape.pierce.r;
+        out.push({
+            d: `M${(cx - r).toFixed(2)} ${cy.toFixed(2)}A${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(cx + r).toFixed(2)} ${cy.toFixed(2)}A${r.toFixed(2)} ${r.toFixed(2)} 0 1 0 ${(cx - r).toFixed(2)} ${cy.toFixed(2)}Z`,
+            kind: 'pierce',
+        });
+    }
+    return out;
 }
 
 // SVG is y-down, the engine frame is y-up: translate(x, H - y) scale(1, -1)
@@ -272,7 +365,7 @@ function buildItems(snap, itemMap, cache) {
             for (let k = 0; k < n; k++) {
                 const part = all[k];
                 if (!part) continue;
-                out.push({ d: part.d, color: part.color || FALLBACK_PART_COLOR, rot, x, y, bin: bin ?? 0 });
+                out.push({ d: part.d, color: part.color || FALLBACK_PART_COLOR, leads: part.leads, rot, x, y, bin: bin ?? 0 });
             }
             continue;
         }
@@ -280,7 +373,7 @@ function buildItems(snap, itemMap, cache) {
         if (!part) continue;
         // bin conservé (0 pour le SPP) : le rendu BPP répartit les pièces
         // par tôle au lieu de les superposer sur le contour unique.
-        out.push({ d: part.d, color: part.color || FALLBACK_PART_COLOR, rot, x, y, bin: bin ?? 0 });
+        out.push({ d: part.d, color: part.color || FALLBACK_PART_COLOR, leads: part.leads, rot, x, y, bin: bin ?? 0 });
     }
     return out;
 }
@@ -695,6 +788,33 @@ const formatElapsed = (sec) => {
         // here would override the SVG presentation attributes.
         stroke-width: 1.2;
         transition: transform 0.18s ease, fill 0.2s ease, stroke 0.2s ease;
+    }
+
+    // Lot J8-b — une amorce n'est PAS de la matière (§9.73 point 9) :
+    // trait fin ambré sans remplissage pour les trajets certains, zone
+    // TRANSLUCIDE pour l'éventail tangent, disque de perçage en pointillé.
+    // Couleurs EXPLICITES (piège #21 : jamais les vars de thème) — l'ambre
+    // est distinct de la palette des pièces et lisible sur les deux thèmes.
+    &__lead--stroke {
+        fill: none;
+        stroke: #D97706;
+        stroke-width: 1;
+        vector-effect: non-scaling-stroke;
+    }
+
+    &__lead--zone {
+        fill: rgba(217, 119, 6, 0.18);
+        stroke: rgba(217, 119, 6, 0.55);
+        stroke-width: 0.6;
+        vector-effect: non-scaling-stroke;
+    }
+
+    &__lead--pierce {
+        fill: rgba(217, 119, 6, 0.08);
+        stroke: #D97706;
+        stroke-width: 1;
+        stroke-dasharray: 3 2;
+        vector-effect: non-scaling-stroke;
     }
 
     &__cards {

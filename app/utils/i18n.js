@@ -253,9 +253,15 @@ const dict = {
         // Régime privacy (création + pastille projet).
         'privacy.choice': 'Where parts are stored',
         'privacy.device.title': 'This device',
-        'privacy.device.body': 'Your parts stay here. No other computer, no DWG.',
+        // Lot J8-d : ce mode est le SEUL qui accepte un .job SheetCam — la
+        // carte le dit comme une capacité, au rang de la phrase de
+        // confidentialité (texte du propriétaire, §9.73 point 17).
+        'privacy.device.body': 'Your parts stay here. SheetCam job files (.job) accepted. No other computer, no DWG.',
         'privacy.cloud.title': 'Our servers',
-        'privacy.cloud.body': 'Any of your devices, including DWG. Without the vault: stored in the clear, deleted 24 h after nesting.',
+        // Lot J8-d : le refus .job du mode serveur (jobImport.serverUnsupported)
+        // ne doit plus être une découverte au dépôt. À RETIRER quand J5 livre
+        // le miroir serveur (§9.73 point 18).
+        'privacy.cloud.body': 'Any of your devices, including DWG. SheetCam .job files: not here yet. Without the vault: stored in the clear, deleted 24 h after nesting.',
         'privacy.cloud.vaultOff': 'Activate the vault (your key)',
         'privacy.cloud.vaultOn': 'Vault on — new uploads are encrypted',
         'privacy.chip.device': 'This device',
@@ -332,6 +338,7 @@ const dict = {
         'jobImport.download': 'Download the .job — sheet {n}',
         'jobImport.downloadHint': 'One job file per sheet, ready to open in SheetCam: same cut order, same tools.',
         'jobImport.downloadJob': 'Download the .job',
+        'jobImport.downloadAllJobs': 'Download all the .job files',
         'jobImport.holeTooSmallForLeadIn': 'The cutout in {name} is too small for the lead-in to fit: nothing will be nested inside it. It is still cut.',
         // Erreurs du lecteur / ecrivain `.job` (lot J1) - `code` EST la cle.
         'sheetcamJob.notBytes': 'This file could not be read as a SheetCam job file.',
@@ -553,8 +560,13 @@ const dict = {
 
         'upload.choose': 'Choose files',
         'upload.drop': 'or drop your files here',
-        'upload.limit': 'Up to 20 files (DXF, SVG or DWG), max 5 MB each',
-        'upload.limitDevice': 'Up to 20 files (DXF or SVG), max 5 MB each',
+        'upload.limit': 'DXF, SVG or DWG — max 5 MB per file',
+        'upload.batchFailed': '{n} file(s) could not be uploaded: {names} — {reasons}. The other files were uploaded.',
+        // Lot J8-c : le sélecteur accepte les .job en mode appareil — la
+        // légende le dit (jamais en mode serveur avant J5).
+        // Lot J8-e (§9.73 point 30) : le compte disparaît — plus personne
+        // ne le rencontre (envoi par lots automatiques côté client).
+        'upload.limitDevice': 'DXF, SVG or SheetCam .job — max 5 MB per file',
         'upload.unsupported': 'Unsupported file type — DXF, SVG or DWG.',
         'upload.tooLarge': 'Each file must be 5 MB or smaller.',
 
@@ -577,6 +589,10 @@ const dict = {
         'results.empty': 'Your nested results will be here',
         'results.nothingPlaced': 'No parts placed',
         'results.download': 'Download',
+        // Lot J8-a : dès que deux téléchargements coexistent, chacun dit son
+        // nom — « Télécharger » seul est ambigu.
+        'results.downloadDxf': 'Download the DXF',
+        'results.downloadAllDxf': 'Download All (DXF)',
         'results.downloadAll': 'Download All',
         'result.nestingReport': 'Nesting report',
 
@@ -1086,9 +1102,9 @@ const dict = {
         // Régime privacy (création + pastille projet).
         'privacy.choice': "Où vivent les pièces",
         'privacy.device.title': "Cet appareil",
-        'privacy.device.body': "Vos pièces restent ici. Pas d'autre appareil, pas de DWG.",
+        'privacy.device.body': "Vos pièces restent ici. Fichiers de travail SheetCam (.job) acceptés. Pas d'autre appareil, pas de DWG.",
         'privacy.cloud.title': "Nos serveurs",
-        'privacy.cloud.body': "Tous vos appareils, DWG compris. Sans coffre : en clair, effacé après 24 h.",
+        'privacy.cloud.body': "Tous vos appareils, DWG compris. Fichiers .job SheetCam : pas encore ici. Sans coffre : en clair, effacé après 24 h.",
         'privacy.cloud.vaultOff': "Activer le coffre (votre clé)",
         'privacy.cloud.vaultOn': "Coffre actif — les nouveaux envois sont chiffrés",
         'privacy.chip.device': "Cet appareil",
@@ -1161,6 +1177,7 @@ const dict = {
         'jobImport.download': "Télécharger le .job — tôle {n}",
         'jobImport.downloadHint': "Un fichier .job par tôle, prêt à ouvrir dans SheetCam : même ordre de coupe, mêmes outils.",
         'jobImport.downloadJob': "Télécharger le .job",
+        'jobImport.downloadAllJobs': "Télécharger tous les .job",
         'jobImport.holeTooSmallForLeadIn': "Le trou de {name} est trop petit pour que l'amorce y tienne : rien n'y sera niché. Il est bien coupé.",
         // Erreurs du lecteur / ecrivain `.job` (lot J1) - `code` EST la cle.
         'sheetcamJob.notBytes': "Ce fichier n'a pas pu être lu comme un fichier .job SheetCam.",
@@ -1377,8 +1394,9 @@ const dict = {
 
         'upload.choose': 'Choisir des fichiers',
         'upload.drop': 'ou déposez vos fichiers ici',
-        'upload.limit': "Jusqu'à 20 fichiers (DXF, SVG ou DWG), 5 Mo max chacun",
-        'upload.limitDevice': "Jusqu'à 20 fichiers (DXF ou SVG), 5 Mo max chacun",
+        'upload.limit': "DXF, SVG ou DWG — 5 Mo max par fichier",
+        'upload.batchFailed': "{n} fichier(s) n'ont pas pu être envoyés : {names} — {reasons}. Les autres fichiers ont été envoyés.",
+        'upload.limitDevice': "DXF, SVG ou .job SheetCam — 5 Mo max par fichier",
         'upload.unsupported': "Type de fichier non supporté — DXF, SVG ou DWG.",
         'upload.tooLarge': "Chaque fichier doit faire 5 Mo ou moins.",
 
@@ -1403,6 +1421,8 @@ const dict = {
         'results.empty': "Vos résultats d'imbrication apparaîtront ici",
         'results.nothingPlaced': 'Aucune pièce posée',
         'results.download': 'Télécharger',
+        'results.downloadDxf': 'Télécharger le DXF',
+        'results.downloadAllDxf': 'Tout télécharger (DXF)',
         'results.downloadAll': 'Tout télécharger',
         'result.nestingReport': "Rapport de nesting",
 

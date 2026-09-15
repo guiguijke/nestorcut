@@ -194,6 +194,50 @@ try {
 
     await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+
+    // ---------- J8-d : ce que l'écran de création DIT des `.job` ----------
+    //
+    // La carte « Cet appareil » nomme le `.job` comme une CAPACITÉ, la
+    // carte « Nos serveurs » dit qu'il n'y est pas encore, la légende de la
+    // zone de dépôt confirme — et ne le cite JAMAIS en mode serveur (§9.73
+    // points 17-19 et 21 : promesse et zone de dépôt racontent la même
+    // chose).
+    {
+        const legend = page.locator('.upload__text--gray').first()
+        const devCardJ8 = page
+            .locator('.create__privacy [role="radio"]')
+            .filter({ hasText: /(This device|Cet appareil)/i })
+            .first()
+        const srvCardJ8 = page
+            .locator('.create__privacy [role="radio"]')
+            .filter({ hasText: /(Our servers|Nos serveurs)/i })
+            .first()
+        if (await devCardJ8.count()) {
+            await devCardJ8.click().catch(() => {})
+            await page.waitForTimeout(300)
+            const deviceBody = (await devCardJ8.innerText()).replace(/\s+/g, ' ')
+            const legendDevice = (await legend.innerText()).replace(/\s+/g, ' ')
+            check('J8-d la carte « Cet appareil » cite le .job (capacité)',
+                /\.job/.test(deviceBody), deviceBody)
+            check('J8-d la légende cite le .job en mode appareil',
+                /\.job/.test(legendDevice), legendDevice)
+            await shot('00-j8d-carte-appareil.png')
+            if (await srvCardJ8.count()) {
+                await srvCardJ8.click().catch(() => {})
+                await page.waitForTimeout(300)
+                const srvBody = (await srvCardJ8.innerText()).replace(/\s+/g, ' ')
+                const legendSrv = (await legend.innerText()).replace(/\s+/g, ' ')
+                check('J8-d la carte « Nos serveurs » dit que le .job n\'y est pas encore',
+                    /\.job/.test(srvBody) && /(pas encore|not here yet)/i.test(srvBody), srvBody)
+                check('J8-d la légende ne cite PAS le .job en mode serveur',
+                    !/\.job/.test(legendSrv), legendSrv)
+                await shot('00-j8d-carte-serveur.png')
+            }
+            // Le dépôt principal repart en mode appareil.
+            await devCardJ8.click().catch(() => {})
+        }
+    }
+
     const devCard = page
         .locator('.create__privacy [role="radio"]')
         .filter({ hasText: /(This device|Cet appareil)/i })
@@ -252,6 +296,13 @@ try {
         check('J6-A aucun dessin ne vient du binaire quand les DXF sont déposés',
             cards.every((c) => c.source == null),
             JSON.stringify(cards.map((c) => ({ n: c.name, src: c.source }))))
+    }
+    // Lot J8-c, contrôle négatif : une fiche DXF ordinaire n'a NI puce
+    // « .job » NI ligne secondaire — sa carte est inchangée (§9.73 point 16).
+    if (!(ALONE || TWO_DROPS || J7_AB)) {
+        const chips = await page.locator('[data-testid="file-job-origin"]').count()
+        check('J8-c négatif : aucune puce .job sur des fiches DXF ordinaires',
+            chips === 0, `${chips} puce(s) trouvée(s)`)
     }
 
     // ---------- J6-bis : le double dépôt (§9.64) -------------------------
@@ -382,10 +433,50 @@ try {
             document.querySelector('.size__rule')?.textContent?.trim() ?? null)
         log('securite forcee a', SAFETY, '— regle affichee :', lu)
     }
+    // Lot J8-a — forcer une tôle PETITE (QA_J8_SHEETS=600x300) pour
+    // provoquer plusieurs tôles et verrouiller le « tout télécharger les
+    // .job » : autant de fichiers téléchargés que de tôles, chacun relu.
+    if (process.env.QA_J8_SHEETS) {
+        const [w, h] = String(process.env.QA_J8_SHEETS).split('x')
+        const inputs = page.locator('[data-testid="settings-sheets"] input')
+        await inputs.first().waitFor({ timeout: 30000 })
+        await inputs.first().fill(String(w))
+        await inputs.nth(1).fill(String(h))
+        await inputs.nth(1).dispatchEvent('change')
+        log('tôle forcée à', `${w} × ${h}`)
+    }
+    // … ou forcer les QUANTITÉS (QA_J8_QUANTITY=40 : la voie P4-8 de
+    // l'audit, deux tôles sur la tôle du `.job` sans tôle pathologique).
+    if (process.env.QA_J8_QUANTITY) {
+        const counts = page.locator('.file input[type="number"], [data-testid="file-count"] input')
+        await counts.first().waitFor({ timeout: 30000 })
+        const n0 = await counts.count()
+        for (let k = 0; k < n0; k++) {
+            await counts.nth(k).fill(String(process.env.QA_J8_QUANTITY))
+            await counts.nth(k).dispatchEvent('change')
+        }
+        log('quantités forcées à ×' + process.env.QA_J8_QUANTITY)
+    }
     const nestBtn = page.locator('.atelier__nest')
     await nestBtn.waitFor({ timeout: 30000 })
     await nestBtn.click()
     log('nesting lancé')
+    // Lot J8-b : pendant le nesting, les AMORCES se voient dans la vue live
+    // (trajets CERTAINS en trait fin, éventail tangent en zone, disque de
+    // perçage pointillé) — sous la MÊME transformation que la pièce. Sonde
+    // unique dès la première pièce posée.
+    let leadProbeDone = false
+    const probeLeads = async () => {
+        if (leadProbeDone) return
+        if (!(await page.locator('.live__part').count())) return
+        leadProbeDone = true
+        await page.waitForTimeout(400)
+        const strokes = await page.locator('.live__lead--stroke, .live__lead--pierce, .live__lead--zone').count()
+        // Capture pendant le live : c'est la pièce du vérificateur.
+        await shot('02a-j8b-live-amorces.png')
+        log('amorces dans la vue live :', String(strokes), 'élément(s)')
+        results.j8bLiveLeads = strokes
+    }
     const t0 = Date.now()
     let outcome = 'timeout'
     while (Date.now() - t0 < 8 * 60 * 1000) {
@@ -400,11 +491,19 @@ try {
             if (failed) { outcome = 'échec'; break }
             if (!running && done && !(await page.locator('.stage__status').count())) { outcome = 'fini'; break }
         }
+        await probeLeads()
         await page.waitForTimeout(1500)
     }
     log('nesting :', outcome, `${Math.round((Date.now() - t0) / 1000)} s`)
     results.spacing = { safetyForcee: SAFETY }
     check('C1 le nesting aboutit', outcome === 'fini', outcome)
+    // Lot J8-b : sur un projet `.job`, la vue live a montré les amorces
+    // (sonde posée dès la première pièce) ; l'APERÇU de la fiche les porte
+    // aussi — le record le dit, c'est la donnée pas le pixel.
+    if ((ALONE || TWO_DROPS || J7_AB) && leadProbeDone) {
+        check('J8-b les amorces se voient dans la vue live pendant le nesting',
+            Number(results.j8bLiveLeads) > 0, `${results.j8bLiveLeads ?? 0} élément(s) d'amorce`)
+    }
     await shot('02-resultat.png')
     if (outcome !== 'fini') throw new Error('nesting non abouti : ' + outcome)
 
@@ -455,7 +554,10 @@ try {
     check('C2 autant de pieces posees que demandees',
         record.placed === record.requested,
         `posees ${record.placed}, demandees ${record.requested}`)
-    check('C3 le nombre demande est celui du `.job`',
+    // QA_J8_QUANTITY force les quantités (acte multi-tôles) : l'écart au
+    // `.job` est VOULU, le verrou C3 n'a alors rien à mesurer.
+    if (process.env.QA_J8_QUANTITY) log('C3 NON MESURÉ : quantités forcées par acte J8-a')
+    else check('C3 le nombre demande est celui du `.job`',
         record.requested === totalWanted,
         `demandees ${record.requested}, somme des quantites du .job ${totalWanted}`)
     // F — LA RESERVE D'AMORCE, LOT J4-bis-2. Elle est desormais posee au
@@ -535,6 +637,79 @@ try {
     check('D0 le bouton « Télécharger le .job » est présent', await jobBtn.count() > 0,
         labels.join(' | '))
     if (!(await jobBtn.count())) throw new Error('bouton .job absent')
+
+    // ---------- J8-a : le `.job` EST la sortie attendue --------------------
+    //
+    // PRIMAIRE et EN TÊTE ; le DXF dit son nom et passe secondaire. Ordre ET
+    // thème mesurés dans le DOM (§9.73 point 5) — sur un projet issu d'un
+    // `.job`, l'outil ne propose plus en premier ce qu'on ne lui a pas
+    // demandé.
+    {
+        const all = page.locator('.result-report button, .result-report a')
+        const n = await all.count()
+        let jobIdx = -1
+        let dxfIdx = -1
+        let jobTheme = ''
+        let dxfTheme = ''
+        for (let k = 0; k < n; k++) {
+            const el = all.nth(k)
+            const text = (await el.innerText().catch(() => '')).replace(/\s+/g, ' ')
+            const cls = await el.getAttribute('class')
+            if (jobIdx < 0 && /\.job/i.test(text)) { jobIdx = k; jobTheme = cls || '' }
+            if (dxfIdx < 0 && /(Télécharger le DXF|Download the DXF|Tout télécharger \(DXF\)|Download All \(DXF\))/i.test(text)) {
+                dxfIdx = k; dxfTheme = cls || ''
+            }
+        }
+        check('J8-a le bouton `.job` vient EN TÊTE, avant le DXF',
+            jobIdx >= 0 && dxfIdx >= 0 && jobIdx < dxfIdx,
+            `.job à ${jobIdx}, DXF à ${dxfIdx}`)
+        check('J8-a le `.job` est PRIMAIRE, le DXF secondaire',
+            /button--theme-primary/.test(jobTheme) && /button--theme-secondary/.test(dxfTheme),
+            `.job « ${jobTheme.slice(0, 60)} », DXF « ${dxfTheme.slice(0, 60)} »`)
+        check('J8-a le DXF dit son nom (plus de « Télécharger » ambigu)',
+            labels.some((l) => /(Télécharger le DXF|Download the DXF|Tout télécharger \(DXF\)|Download All \(DXF\))/i.test(l)),
+            labels.join(' | '))
+
+        // J8-a, multi-tôles — le `.job` a le même « tout télécharger » que
+        // le DXF : autant de fichiers que de tôles, chacun relu par NOTRE
+        // lecteur (§9.73 point 5). L'asymétrie d'avant : changer d'onglet
+        // et recliquer une fois par tôle.
+        const allJobsBtn = page.locator('.result-report button, .result-report a')
+            .filter({ hasText: /(Télécharger tous les \.job|Download all the \.job files)/i }).first()
+        if (await allJobsBtn.count()) {
+            const downloads = []
+            const grab = (d) => downloads.push(d)
+            page.on('download', grab)
+            await allJobsBtn.click()
+            // Les téléchargements sont ÉTALÉS de 300 ms (garde anti-rafale
+            // du navigateur) : on laisse le temps à tous de partir.
+            await page.waitForTimeout(4000)
+            page.off('download', grab)
+            const savedJobs = []
+            for (const d of downloads) {
+                const p = path.join(OUT, `j8-multi-${savedJobs.length + 1}.job`)
+                await d.saveAs(p).catch(() => null)
+                if (fs.existsSync(p)) savedJobs.push(p)
+            }
+            let allValid = savedJobs.length > 0
+            const counts = []
+            for (const p of savedJobs) {
+                try {
+                    const j = parseSheetCamJob(new Uint8Array(fs.readFileSync(p)))
+                    counts.push(j.parts.filter((x2) => x2.enabled).length)
+                } catch {
+                    allValid = false
+                }
+            }
+            log('tous les .job téléchargés :', savedJobs.length, 'fichiers, pièces actives', counts.join('/'))
+            check('J8-a multi-tôles : autant de .job téléchargés que de tôles, chacun valide',
+                allValid && savedJobs.length >= 2
+                && counts.reduce((a, b) => a + b, 0) === record.placed,
+                `${savedJobs.length} fichier(s), pièces actives ${counts.join('/')} pour ${record.placed} posées`)
+        } else {
+            log('J8-a multi-tôles NON MESURÉ : une seule tôle (bouton « tous les .job » absent)')
+        }
+    }
 
     const dl = await Promise.all([
         page.waitForEvent('download', { timeout: 60000 }),
@@ -773,6 +948,62 @@ try {
             out2.binary.length === autoBinary.length
             && bouges2.length > 0 && bouges2.every((i) => flagOffsets.has(i)),
             `${bouges2.length} octet(s) change(s), drapeaux attendus : ${flagOffsets.size}`)
+    }
+
+    // ---------- J8-c : PLUSIEURS `.job` d'un coup, chacun reconnaissable --
+    //
+    // L'atelier dépose cinq `.job` d'un coup : autant de fiches que de
+    // fichiers, chacune portant SA puce « .job » et le NOM DE SON fichier
+    // déposé en ligne secondaire (§9.73 point 16). Les fichiers viennent de
+    // QA_J7_DIR, choisis PAR CARACTÉRISTIQUES (dessin unique) — aucun nom
+    // du propriétaire ici ni au journal.
+    if (fs.existsSync(J7_DIR)) {
+        const singles = []
+        for (const f of fs.readdirSync(J7_DIR).filter((x) => x.toLowerCase().endsWith('.job'))) {
+            try {
+                const job = parseSheetCamJob(new Uint8Array(fs.readFileSync(path.join(J7_DIR, f))))
+                if (job.parts.filter((p) => p.copyOf < 0).length === 1) singles.push(path.join(J7_DIR, f))
+            } catch { /* hors cas */ }
+            if (singles.length >= 2) break
+        }
+        if (singles.length >= 2) {
+            await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+            await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+            const devCardJ8 = page
+                .locator('.create__privacy [role="radio"]')
+                .filter({ hasText: /(This device|Cet appareil)/i })
+                .first()
+            if (await devCardJ8.count()) await devCardJ8.click().catch(() => {})
+            await page.setInputFiles('input[name="dxf"]', singles)
+            await page.waitForURL('**/project/**', { timeout: 90000 })
+            const j8Slug = page.url().split('/project/')[1].split(/[?#]/)[0]
+            await page.waitForFunction(
+                (n) => document.querySelectorAll('[data-testid="file-card"], .file').length >= n,
+                singles.length,
+                { timeout: 120000 },
+            ).catch(() => log('ATTENTION : fiches multi-.job attendues non visibles'))
+            await shot('06-j8c-multi-job.png')
+            const origins = await page.locator('[data-testid="file-job-origin"]').allInnerTexts()
+                .then((xs) => xs.map((s) => s.replace(/\s+/g, ' ').trim()))
+            log('lignes de provenance :', JSON.stringify(origins))
+            check('J8-c autant de fiches que de `.job` déposés',
+                origins.length === singles.length,
+                `${origins.length} ligne(s) pour ${singles.length} fichiers`)
+            check('J8-c chaque fiche porte sa puce .job',
+                origins.every((o) => /^\.job/.test(o) && o.length > 4),
+                JSON.stringify(origins))
+            // Chaque fiche nomme SON `.job` : les lignes sont DISTINCTES.
+            check('J8-c chaque fiche nomme SON `.job` (lignes distinctes)',
+                new Set(origins).size === origins.length,
+                JSON.stringify(origins))
+            // Et les fiches du projet principal ne sont pas comptées : la
+            // sonde est DOM (page courante), pas IndexedDB.
+            void j8Slug
+        } else {
+            log('J8-c NON MESURÉ : moins de deux `.job` à dessin unique dans', J7_DIR)
+        }
+    } else {
+        log('J8-c NON MESURÉ : dossier de la série absent')
     }
 
 } catch (e) {

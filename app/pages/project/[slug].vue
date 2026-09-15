@@ -726,7 +726,10 @@ watch(pageSlug, async (s, prev) => {
         import.meta.server ? { headers: projectReqHeaders } : {},
     )
     const pending = consumePendingLocalFiles()
-    if (pending.length && filesGetters.projectLocal) {
+    // Lot J8-e : les fichiers en attente se consomment dans les DEUX modes —
+    // au-delà du premier lot, la création serveur reporte le reste ici, et
+    // `addFiles` route par mode (serveur : envoi par lots automatiques).
+    if (pending.length) {
         await actions.addFiles(pending, s)
     }
     trackEvent("page_view", {

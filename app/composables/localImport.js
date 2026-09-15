@@ -17,7 +17,7 @@ import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import {
     isSheetCamJob, jobDrawingName, jobPathRecords, jobSheet, parseSheetCamJob,
 } from '~~/shared/sheetcamJob.js'
-import { assignJobBlocks } from '~~/shared/sheetcamReserve.js'
+import { assignJobBlocks, drawingLeadShapes } from '~~/shared/sheetcamReserve.js'
 
 // Miroir EXACT de workers/common/worker_common/colors.py — ne pas diverger
 // (le rendu liste/live/résultat partage cette palette).
@@ -87,9 +87,20 @@ function pickColors(count) {
 
 /** Aperçu SVG (data URI) des pièces d'un fichier : rangée horizontale,
  * chaque pièce normalisée à son bbox. Coords moteur y-up → SVG y-down :
- * flip vertical obligatoire (piège #20b). */
-function buildPreviewSvg(parts) {
+ * flip vertical obligatoire (piège #20b).
+ *
+ * Lot J8-b : `ringLeads` (les amorces de `drawingLeadShapes`, indexées par
+ * anneau À PLAT contour+trous) se dessinent PAR-DESSUS le contour, dans la
+ * case de LEUR pièce, sous la MÊME normalisation + flip. Une amorce n'est
+ * pas de la matière : trait fin ambré sans remplissage, l'éventail tangent
+ * en zone translucide, le disque de perçage en pointillé (§9.73 points
+ * 7 et 9). Sans `ringLeads`, la sortie est IDENTIQUE à avant — une fiche
+ * ordinaire ne change pas d'un pixel (verrou). */
+function buildPreviewSvg(parts, ringLeads = null) {
     const GAP_RATIO = 0.08
+    // L'ambre est distinct de la palette des pièces (bleu/rouge/vert/violet…)
+    // et lisible sur les deux thèmes — couleurs EXPLICITES (piège #21).
+    const LEAD_COLOR = '#D97706'
     const entries = parts.map((p) => {
         const xs = p.coordinates.map((c) => c[0])
         const ys = p.coordinates.map((c) => c[1])
@@ -103,15 +114,28 @@ function buildPreviewSvg(parts) {
     const gap = maxH * GAP_RATIO
     const totalW = entries.reduce((acc, e) => acc + e.w, 0) + gap * Math.max(0, entries.length - 1)
 
+    // Anneau à plat → (pièce, ième anneau de la pièce) : pour poser chaque
+    // amorce dans la case de SA pièce.
+    const ringOwner = new Map()
+    {
+        let flat = 0
+        parts.forEach((p, k) => {
+            ringOwner.set(flat, { part: k, ring: 0 })
+            flat++
+            for (let h = 0; h < (p.holes || []).length; h++) ringOwner.set(flat++, { part: k, ring: h + 1 })
+        })
+    }
+
     let cursor = 0
     const paths = []
-    for (const e of entries) {
+    for (let eIndex = 0; eIndex < entries.length; eIndex++) {
+        const e = entries[eIndex]
         const ty = (maxH - e.h) / 2 // centrage vertical dans la rangée
+        const mapPt = (c) => [cursor + (c[0] - e.minX), ty + (e.h - (c[1] - e.minY))] // flip y
         const ringToD = (ring) =>
             ring
                 .map((c, i) => {
-                    const x = cursor + (c[0] - e.minX)
-                    const y = ty + (e.h - (c[1] - e.minY)) // flip y
+                    const [x, y] = mapPt(c)
                     return `${i === 0 ? 'M' : 'L'}${x.toFixed(3)} ${y.toFixed(3)}`
                 })
                 .join('') + 'Z'
@@ -119,6 +143,35 @@ function buildPreviewSvg(parts) {
         paths.push(
             `<path d="${d}" fill="${e.p.color}" fill-opacity="${FILL_OPACITY_PREVIEW}" fill-rule="evenodd" stroke="${e.p.color}" stroke-width="${(maxH / 200).toFixed(3)}"/>`,
         )
+        // Les amorces des anneaux de CETTE pièce (J8-b).
+        if (ringLeads) {
+            const thin = Math.max(maxH / 300, 0.5).toFixed(3)
+            for (const lead of ringLeads) {
+                const owner = ringOwner.get(lead.ringIndex)
+                if (!owner || owner.part !== eIndex) continue
+                const toD = (pts) => pts
+                    .map((c, i) => {
+                        const [x, y] = mapPt(c)
+                        return `${i === 0 ? 'M' : 'L'}${x.toFixed(3)} ${y.toFixed(3)}`
+                    })
+                    .join('')
+                if (lead.inPath?.points) {
+                    paths.push(`<path d="${toD(lead.inPath.points)}" fill="none" stroke="${LEAD_COLOR}" stroke-width="${thin}"/>`)
+                }
+                if (lead.outPath?.points) {
+                    paths.push(`<path d="${toD(lead.outPath.points)}" fill="none" stroke="${LEAD_COLOR}" stroke-width="${thin}"/>`)
+                }
+                // Tangente : l'éventail d'incertitude, en zone translucide —
+                // jamais une droite certaine (§9.73 point 10).
+                for (const zone of [lead.inPath?.zone, lead.outPath?.zone]) {
+                    if (zone) paths.push(`<path d="${toD(zone)}Z" fill="${LEAD_COLOR}" fill-opacity="0.16" stroke="none"/>`)
+                }
+                if (lead.pierce) {
+                    const [cx, cy] = mapPt(lead.pierce.c)
+                    paths.push(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${lead.pierce.r.toFixed(3)}" fill="${LEAD_COLOR}" fill-opacity="0.10" stroke="${LEAD_COLOR}" stroke-width="${thin}" stroke-dasharray="${(lead.pierce.r / 2).toFixed(3)} ${(lead.pierce.r / 3).toFixed(3)}"/>`)
+                }
+            }
+        }
         cursor += e.w + gap
     }
     const svg =
@@ -126,6 +179,39 @@ function buildPreviewSvg(parts) {
         paths.join('') +
         '</svg>'
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
+/**
+ * Lot J8-b — reconstruit l'aperçu d'une fiche `.job` avec ses AMORCES, une
+ * fois les points de départ attachés (`assignJobStarts`, files.js 2-bis) :
+ * c'est là que l'atelier vérifie ses points AVANT de lancer le nesting
+ * (§9.73 point 7 — « la surface la plus utile du lot »). Sans points posables,
+ * l'aperçu est reconstruit À L'IDENTIQUE (aucune amorce inventée, point 11).
+ */
+export function previewSvgWithLeads(record) {
+    const rings = []
+    const isHole = []
+    for (const part of record.parts || []) {
+        rings.push(part.coordinates)
+        isHole.push(false)
+        for (const hole of part.holes || []) {
+            rings.push(hole)
+            isHole.push(true)
+        }
+    }
+    const sc = record.sheetcam || {}
+    const leads = drawingLeadShapes({
+        rings,
+        isHole,
+        starts: sc.starts || [],
+        origin: sc.origin || null,
+        kerf: Number(sc.kerfWidth) || 0,
+        leadIn: Number(sc.leadIn) || 0,
+        leadInType: Number(sc.leadInType) || 0,
+        leadOut: Number(sc.leadOut) || 0,
+        leadOutType: Number(sc.leadOutType) || 0,
+    })
+    return buildPreviewSvg(record.parts || [], leads)
 }
 
 // --- `.job` SheetCam (lot J4) ----------------------------------------------
@@ -776,5 +862,9 @@ export function localRecordToUiFile(record) {
         // projet — un DXF déposé pour un nom dont la fiche vient du binaire
         // doit REMPLACER cette fiche, pas s'ajouter (§9.64).
         source: record.source || null,
+        // Lot J8-c : le NOM DU FICHIER `.job` déposé, pour la ligne
+        // secondaire de la carte — l'atelier doit dire d'un coup d'œil
+        // quelle fiche vient de quel `.job` quand il en dépose cinq.
+        sheetcamJobName: record.sheetcam?.jobName || null,
     }
 }

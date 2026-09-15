@@ -62,6 +62,7 @@
 
 <script setup>
     import { sizeType } from '~~/constants/size.constants'
+    import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 
     const { t } = useLocale()
 
@@ -175,8 +176,16 @@
             return
         }
 
+        // Lot J8-e (étude §9.73, 8.3-quater) : le plafond de
+        // MAX_UPLOAD_FILES protège le CORPS HTTP de la requête, pas une
+        // règle produit. La CRÉATION emporte le premier lot, le reste suit
+        // sur la page projet par l'envoi par lots automatiques — plus
+        // personne n'a à compter ses fichiers, et le dépôt de plus de
+        // vingt fichiers ne meurt plus en silence au moment de créer.
+        const firstLot = files.slice(0, MAX_UPLOAD_FILES)
+        const rest = files.slice(MAX_UPLOAD_FILES)
         const formData = new FormData()
-        files.forEach((file) => formData.append('dxf', file))
+        firstLot.forEach((file) => formData.append('dxf', file))
 
 
         try {
@@ -184,6 +193,7 @@
                 method: 'POST',
                 body: formData,
             })
+            if (rest.length) filesActions.setPendingLocalFiles(rest)
 
             await Promise.all([getProjects(), getProject(API_ROUTES.PROJECT(data.slug))])
 

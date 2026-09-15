@@ -48,20 +48,26 @@ export async function splitSheetCamDrop(files) {
     const list = Array.from(files || [])
     if (!list.length) return null
     const bytesOf = new Map()
-    let jobFile = null
+    const jobFiles = []
     for (const file of list) {
         const bytes = new Uint8Array(await file.arrayBuffer())
         bytesOf.set(file, bytes)
-        // Le PREMIER `.job` de la dépose fait foi. Deux `.job` dans la même
-        // dépose, ce sont deux jobs de découpe : on ne les fusionne pas.
-        if (!jobFile && isSheetCamJob(bytes)) jobFile = file
+        // Lot J8-c : TOUS les `.job` de la dépose sont des jobs de découpe —
+        // on ne les FUSIONNE pas, mais on ne les IGNORE plus non plus
+        // (défaut mesuré : le second `.job` disparaissait en silence).
+        // L'ordre du dépôt fait foi pour les réglages pré-remplis.
+        if (isSheetCamJob(bytes)) jobFiles.push(file)
     }
-    if (!jobFile) return null
+    if (!jobFiles.length) return null
+    // Compat lot J4 : le PREMIER `.job` reste `jobFile`/`jobBytes`.
     return {
-        jobFile,
-        jobBytes: bytesOf.get(jobFile),
-        drawings: list.filter((f) => f !== jobFile),
-        extraJobs: list.filter((f) => f !== jobFile && isSheetCamJob(bytesOf.get(f))).length,
+        jobFile: jobFiles[0],
+        jobBytes: bytesOf.get(jobFiles[0]),
+        drawings: list.filter((f) => !jobFiles.includes(f)),
+        extraJobs: jobFiles.length - 1,
+        // Lot J8-c — chaque `.job` du dépôt, AVEC ses octets : l'appelant
+        // traite chacun (fiches, quantités, réglages) sans rien relire.
+        jobs: jobFiles.map((f) => ({ jobFile: f, jobBytes: bytesOf.get(f) })),
     }
 }
 

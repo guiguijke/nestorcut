@@ -15,6 +15,17 @@
             <p class="file__name" :title="file.name">
                 {{ file.name }}
             </p>
+            <!-- Lot J8-c : provenance compacte pour une fiche issue d'un
+                 `.job` — une puce « .job » et, en ligne secondaire, le NOM
+                 DU FICHIER DÉPOSÉ. Le titre reste le nom du DESSIN (celui
+                 que SheetCam rouvrira dans le `.job` rendu) : l'atelier voit
+                 d'un coup d'œil quelle fiche vient de quel `.job` quand il
+                 en dépose cinq d'un coup. Une fiche DXF ordinaire n'a ni
+                 puce ni ligne — sa carte est inchangée. -->
+            <p v-if="file.source === 'job'" class="file__origin" data-testid="file-job-origin">
+                <span class="file__job-chip">.job</span>
+                <span v-if="file.sheetcamJobName" class="file__origin-name" :title="file.sheetcamJobName">{{ file.sheetcamJobName }}</span>
+            </p>
             <!-- Lot 2c : UNE ligne de constats sous le nom (perte de matière,
                  unité supposée, tracés ouverts). Rien à dire ⇒ rien affiché :
                  pas de « 0 avertissement », pas de pastille verte. -->
@@ -171,6 +182,38 @@ const openModal = () => {
         margin-bottom: 10px;
         color: var(--label-secondary);
         transition: color 0.3s;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    // Lot J8-c : ligne de provenance `.job` — puce + nom du fichier déposé.
+    // Couleurs EXPLICITES (piège #21 : jamais les vars de thème seules pour
+    // un texte qui doit rester lisible) : le fond de puce garde une teinte
+    // bleue translucide qui passe sur les deux thèmes.
+    &__origin {
+        width: 100%;
+        margin-top: -4px;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        font-size: var(--fs-12);
+    }
+
+    &__job-chip {
+        flex: none;
+        padding: 1px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        color: #6ea8ff;
+        background: rgba(110, 168, 255, 0.14);
+        border: 1px solid rgba(110, 168, 255, 0.45);
+    }
+
+    &__origin-name {
+        color: var(--label-tertiary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

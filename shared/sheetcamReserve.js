@@ -363,10 +363,7 @@ export function leadEnvelopePoints({
     // de la bande brûlée seule — même argument que l'espacement du §9.40.
     const band = Math.max(k, 0)
     const finish = endFrame || startFrame
-    const toWorld = (frame) => (p) => [
-        point[0] + frame.tangent[0] * p[0] + frame.normal[0] * (p[1] + half),
-        point[1] + frame.tangent[1] * p[0] + frame.normal[1] * (p[1] + half),
-    ]
+    const toWorld = leadWorldMapper(point, half)
     const entry = leadPathLocal(leadInType, leadIn, -1)
     const exit = leadPathLocal(leadOutType, leadOut, +1)
     const out = []
@@ -386,6 +383,140 @@ export function leadEnvelopePoints({
     // Le perçage, au bout de l'entrée : `2 × kerf`, planché à la bande (même
     // sans marge de perçage la torche brûle sa largeur).
     out.push(...pierceDisc(toWorld(startFrame)(entry.far), Math.max(margin, band)))
+    return out
+}
+
+/** Local `(t, n)` → monde : `point + tangent·t + normal·(n + kerf/2)`. Le
+ *  calcul commun de la réserve et de l'AFFICHAGE (J8-b) — mis en facteur
+ *  pour qu'ils ne puissent pas diverger (même décalage kerf/2, même repère). */
+function leadWorldMapper(point, half) {
+    return (frame) => (p) => [
+        point[0] + frame.tangent[0] * p[0] + frame.normal[0] * (p[1] + half),
+        point[1] + frame.tangent[1] * p[0] + frame.normal[1] * (p[1] + half),
+    ]
+}
+
+/**
+ * Lot J8-b (§9.73 point 6) — les TRAJETS d'amorce en coordonnées du dessin,
+ * pour l'AFFICHAGE. Même arithmétique que `leadEnvelopePoints` (elles partent
+ * le `leadWorldMapper` commun) : une amorce dessinée ici est exactement
+ * celle que la réserve garde.
+ *
+ * Rend `{ inPath, outPath, pierce }` :
+ *  - `inPath` / `outPath` : `{ kind, points, zone }`. `points` est la
+ *    polyligne CERTAINE (arc échantillonné, perpendiculaire) ; `zone` est
+ *    l'éventail d'INCERTITUDE de la tangente (`[départ, extrême à plat,
+ *    extrême inclinée]`, triangle à dessiner en translucide — la règle
+ *    exacte n'est pas mesurée, une seule droite serait un mensonge).
+ *    `kind: 'none'` ⇒ rien à dessiner. Une amorce est un trajet d'outil,
+ *    PAS de la matière : trait fin sans remplissage (rendu côté consommateur).
+ *  - `pierce` : `{ c, r }` — centre et rayon du disque de perçage
+ *    (`2 × kerf`, §9.51), au bout libre de l'entrée.
+ */
+export function leadWorldPaths({
+    point,
+    startFrame,
+    endFrame = null,
+    leadIn = 0,
+    leadInType = LEAD_NONE,
+    leadOut = 0,
+    leadOutType = LEAD_NONE,
+    kerf = 0,
+} = {}) {
+    const k = Math.max(0, Number(kerf) || 0)
+    const half = k / 2
+    const finish = endFrame || startFrame
+    const toWorld = leadWorldMapper(point, half)
+
+    const side = (type, length, sign, frame) => {
+        const local = leadPathLocal(type, length, sign)
+        const map = toWorld(frame)
+        const kind = [LEAD_NONE, LEAD_ARC, LEAD_TANGENT, LEAD_PERPENDICULAR]
+            .indexOf(Math.trunc(Number(type)))
+        if (kind <= 0 || length <= 0) return { kind: 'none', points: null, zone: null }
+        const points = local.points.map(map)
+        // Tangente : les trois points locaux sont [départ, à plat, incliné] —
+        // l'éventail ENTIER, jamais une droite certaine (§9.73 point 10).
+        if (kind === 2) return { kind: 'tangent', points: null, zone: points }
+        return { kind: kind === 1 ? 'arc' : 'perpendicular', points, zone: null }
+    }
+    const entry = leadPathLocal(leadInType, leadIn, -1)
+    return {
+        inPath: side(leadInType, leadIn, -1, startFrame),
+        outPath: side(leadOutType, leadOut, +1, finish),
+        pierce: {
+            c: toWorld(startFrame)(entry.far),
+            r: Math.max(pierceRadiusFromKerf(k).radius, k),
+        },
+    }
+}
+
+/**
+ * Lot J8-b — les repères de coupe `(tangent, normale)` au point de départ
+ * `start` de l'anneau `ring`, pour dessiner ses amorces. `scrapInside` : la
+ * chute est-elle l'INTÉRIEUR de l'anneau (trou). Rend `null` quand le point
+ * ne se pose pas (arête dégénérée) : le consommateur ne dessine RIEN, il
+ * n'invente pas (§9.73 point 11). C'est la même mécanique que `biteAtStart`,
+ * sans la morsure.
+ */
+export function leadFramesAt(ring, start, scrapInside = false) {
+    const src = (ring || []).map((p) => [Number(p[0]), Number(p[1])])
+    const base = openRing(src)
+    if (base.length < 3) return null
+    if (!Array.isArray(start) || !Number.isFinite(Number(start[0]))
+        || !Number.isFinite(Number(start[1]))) return null
+    const placed = insertOnRing(base, [Number(start[0]), Number(start[1])])
+    return cutFramesAt(placed.ring, placed.index, scrapInside)
+}
+
+/**
+ * Lot J8-b — les amorces à DESSINER pour une fiche issue d'un `.job`.
+ *
+ * `rings` : tous les anneaux de la fiche (contour + trous, dans l'ordre de
+ * `parts`), `isHole` : côté chute de chaque anneau. `starts` : les points de
+ * départ lus (`record.sheetcam.starts`, offsets relatifs à `origin`). Rend
+ * une entrée par point de départ POSABLE :
+ * `{ ringIndex, inPath, outPath, pierce }` — la forme de `leadWorldPaths`.
+ * Un point qui ne se pose sur AUCUN anneau est OMIS : jamais d'amorce
+ * inventée (§9.73 point 11).
+ */
+export function drawingLeadShapes({ rings, isHole = [], starts = [], origin = null, kerf = 0, leadIn = 0, leadInType = LEAD_NONE, leadOut = 0, leadOutType = LEAD_NONE } = {}) {
+    const out = []
+    for (const s of starts || []) {
+        const off = s?.offset
+        if (!Array.isArray(off) || !Number.isFinite(Number(off[0])) || !Number.isFinite(Number(off[1]))) continue
+        // Dessin = origine mémorisée par SheetCam + offset lu (même règle
+        // qu'assignJobBlocks).
+        const p = [
+            off[0] + (Array.isArray(origin) ? Number(origin[0]) || 0 : 0),
+            off[1] + (Array.isArray(origin) ? Number(origin[1]) || 0 : 0),
+        ]
+        let best = -1
+        let bestD = Infinity
+        for (let i = 0; i < (rings || []).length; i++) {
+            if (!Array.isArray(rings[i]) || rings[i].length < 3) continue
+            const d = nearestOnRing(p, rings[i]).d
+            if (d < bestD) { bestD = d; best = i }
+        }
+        // Tolérance large (1 mm) : le point lu est sur le contour SIMPLIFIÉ
+        // du `.job`, l'anneau affiché vient de notre import.
+        if (best < 0 || bestD > 1) continue
+        const frames = leadFramesAt(rings[best], p, isHole[best] === true)
+        if (!frames) continue
+        out.push({
+            ringIndex: best,
+            ...leadWorldPaths({
+                point: p,
+                startFrame: frames.start,
+                endFrame: frames.end,
+                leadIn: Number.isFinite(Number(s.leadIn)) ? s.leadIn : leadIn,
+                leadInType: Number.isFinite(Number(s.leadInType)) ? s.leadInType : leadInType,
+                leadOut: Number.isFinite(Number(s.leadOut)) ? s.leadOut : leadOut,
+                leadOutType: Number.isFinite(Number(s.leadOutType)) ? s.leadOutType : leadOutType,
+                kerf,
+            }),
+        })
+    }
     return out
 }
 

@@ -4,6 +4,7 @@ import { processingType } from '~~/constants/files.constants'
 import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
 import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
+import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 
 const { actions } = globalStore
 const { getProjects, setModalNestData } = actions
@@ -572,14 +573,26 @@ async function addFiles(files, slug) {
         // un `.job` porte déjà sa tôle, son espacement et ses quantités.
         // Reconnu par SIGNATURE (piège #31) ; sans `.job` dans la dépose,
         // `splitSheetCamDrop` rend `null` et rien ne change.
+        //
+        // Lot J8-c : la dépose peut porter PLUSIEURS `.job` — chacun est un
+        // job de découpe, aucun n'est ignoré (le second disparaissait en
+        // silence). Réglages pré-remplis : le DERNIER `.job` gagne (ordre du
+        // dépôt), les fiches et quantités s'accumulent.
         {
             const { splitSheetCamDrop } = await import('./sheetcamJobImport')
             const drop = await splitSheetCamDrop(files)
             if (drop) {
-                const wanted = await addSheetCamJobDrop(drop, slug)
+                const wanted = new Map()
+                for (const one of drop.jobs) {
+                    const w = await addSheetCamJobDrop(
+                        { ...one, drawings: drop.drawings },
+                        slug,
+                    )
+                    for (const [k, v] of w || []) wanted.set(k, v)
+                }
                 await getProject(API_ROUTES.PROJECT(slug))
                 // Les quantités du `.job`, une fois la liste rechargée.
-                if (wanted?.size) {
+                if (wanted.size) {
                     state.projectFiles.forEach((f, index) => {
                         const n = wanted.get(f.slug)
                         if (n != null) updateCount(n, index)
@@ -623,21 +636,50 @@ async function addFiles(files, slug) {
  * Dépose SERVEUR (« nos serveurs ») : les octets partent, le worker importe.
  * Lot E4-d : dépôt ordinaire, sans options — l'échelle et l'éclatement se
  * demandent sur la fiche après import (E4-b/E4-c).
+ *
+ * Lot J8-e (étude §9.73, 8.3-quater) — PAR LOTS AUTOMATIQUES. Le plafond
+ * serveur de MAX_UPLOAD_FILES protège la TAILLE DU CORPS HTTP
+ * (5 Mo × 20 + 1 Mo), pas une règle produit : cinquante fichiers partent en
+ * trois requêtes, personne n'a à compter ses fichiers. Le plafond reste en
+ * place côté serveur (garde de taille), il n'est simplement plus rencontré.
+ *
+ * Les erreurs d'envoi S'AFFICHENT — défaut muet mesuré en production : un
+ * dépôt de plus de vingt fichiers échouait sans rien dire (console.error
+ * seul, projet vide), et le même silence avalait coffre verrouillé, quota et
+ * panne réseau. Un lot qui échoue est NOMMÉ avec ses fichiers ; les lots
+ * suivants partent quand même — mieux vaut un projet rempli à moitié DIT
+ * qu'un échec total muet.
  */
 async function uploadToServer(files, slug) {
-    const formData = new FormData()
-    formData.append('projectName', state.projectName)
-    files.forEach((file) => formData.append('dxf', file))
-    try {
-        await $fetch(API_ROUTES.ADDFILES(slug), {
-            method: 'POST',
-            body: formData
-        })
-
-        await getProject(API_ROUTES.PROJECT(slug))
-    } catch (error) {
-        console.error('Error while uploading files:', error)
+    const list = [...files]
+    const failedNames = []
+    const reasons = new Set()
+    for (let i = 0; i < list.length; i += MAX_UPLOAD_FILES) {
+        const lot = list.slice(i, i + MAX_UPLOAD_FILES)
+        const formData = new FormData()
+        formData.append('projectName', state.projectName)
+        lot.forEach((file) => formData.append('dxf', file))
+        try {
+            await $fetch(API_ROUTES.ADDFILES(slug), { method: 'POST', body: formData })
+        } catch (error) {
+            // Le message du serveur quand il en porte un (Nitro createError
+            // voyage dans error.data), sinon le status — jamais de bulldozer.
+            reasons.add(String(
+                error?.data?.message || error?.message
+                || `HTTP ${error?.status ?? error?.statusCode ?? '?'}`,
+            ))
+            failedNames.push(...lot.map((f) => f?.name || '?'))
+        }
     }
+    if (failedNames.length) {
+        state.localImportError = 'upload.batchFailed'
+        state.localImportErrorParams = {
+            n: failedNames.length,
+            names: failedNames.join(', '),
+            reasons: [...reasons].join(' · '),
+        }
+    }
+    await getProject(API_ROUTES.PROJECT(slug))
 }
 
 /**
@@ -818,6 +860,7 @@ async function addSheetCamJobDrop(drop, slug) {
         }
         const assigned = assignJobStarts(read, ringsByName)
         if (!assigned.ambiguous) {
+            const { previewSvgWithLeads } = await import('./localImport')
             for (const [name, records] of importedByName) {
                 const found = assigned.byName[name]
                 if (!found) continue
@@ -830,6 +873,16 @@ async function addSheetCamJobDrop(drop, slug) {
                         // Lot J4-ter : le rang du dessin dans le cache binaire,
                         // pour pouvoir y RÉÉCRIRE les points de départ.
                         blockIndex: found.blockIndex,
+                    }
+                    // Lot J8-b : l'aperçu se RECONSTRUIT avec les amorces —
+                    // c'est ici que l'atelier voit ses points de départ et le
+                    // disque de perçage AVANT de lancer le nesting (§9.73
+                    // point 7). Sans point posable, aperçu identique.
+                    try {
+                        record.previewSvg = previewSvgWithLeads(record)
+                    } catch {
+                        // L'aperçu d'origine reste : une amorce ratée ne
+                        // doit jamais casser la fiche.
                     }
                     await saveLocalFile(record)
                 }

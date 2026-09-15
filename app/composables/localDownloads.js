@@ -79,6 +79,30 @@ export function hasLocalJobs(record, altId = 0) {
     return Boolean((record?.alternatives || [])[altId]?.jobs?.length)
 }
 
+/**
+ * Lot J8-a — TOUS les `.job` de la meilleure alternative, un par tôle, en
+ * un seul clic. L'asymétrie mesurée (§9.73) : le DXF avait son « tout
+ * télécharger » (zip) et le `.job` exigeait de changer d'onglet et de
+ * recliquer une fois par tôle. Chaque fichier garde SON nom (`…_toleK.job`)
+ * — pas d'archive : un `.job` s'ouvre tel quel dans SheetCam.
+ */
+export function downloadLocalJobs(record, altId = 0) {
+    const jobs = (record?.alternatives || [])[altId]?.jobs || []
+    if (!jobs.length) throw new Error('job_unavailable')
+    let k = 0
+    for (const job of jobs) {
+        if (!job?.bytes) continue
+        const bytes = job.bytes instanceof Uint8Array ? job.bytes : new Uint8Array(job.bytes)
+        // Étalés de ~300 ms : les navigateurs bloquent les rafales de
+        // téléchargements — le premier partirait, les suivants non.
+        const blob = new Blob([bytes], { type: 'application/octet-stream' })
+        const name = job.fileName || `${record.slug}_tole${k + 1}.job`
+        setTimeout(() => download(blob, name), k * 300)
+        k++
+    }
+    if (!k) throw new Error('job_unavailable')
+}
+
 /** Téléchargement principal (bouton carte/modal) : DXF seul en mono-tôle,
  * ZIP en multi-tôles — même comportement que les boutons serveur. */
 export function downloadLocalResult(record, altId = 0) {
