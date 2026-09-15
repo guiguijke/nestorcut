@@ -3146,3 +3146,14 @@ Deux gestes, indépendants et cumulables :
 Ce n'est pas un lot : c'est une ligne de compose et une ligne de runbook, à
 faire au prochain passage sur l'infrastructure. Je le signale parce qu'un
 déploiement d'application ne devrait jamais pouvoir changer la base.
+
+**Les deux gestes du §9.72, faits le 15/09** (implémenteur) :
+`docker-compose.yml` du dépôt épingle `mongo:7.0.43` (les deux sites,
+mongo et mongo-init) — la version exacte qui tourne en production, digest
+`9854f713…` vérifié identique avant application ; le compose de prod
+(`/opt/nestorcut`) synchronisé à la main (compose recrée au changement de
+référence même à digest égal : dernier arrêt de 6 s, volume intact,
+app/workers non touchés, retour sain). Le runbook privé passe aux pulls
+CIBLÉS (`docker compose pull app nesting-worker`, ajustés à la portée du
+lot — jamais de pull nu). Désormais, mettre à jour Mongo est un geste
+décidé : changer le tag, lire les notes d'amont, puis déployer.

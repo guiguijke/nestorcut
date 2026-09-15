@@ -117,7 +117,9 @@ services:
       - nest2d
 
   mongo:
-    image: mongo:7
+    # Épinglé (étude .job §9.72, 15/09) : le tag flottant mongo:7 faisait
+    # recréer la base à chaque pull de routine. Mise à jour = geste décidé.
+    image: mongo:7.0.43
     volumes:
       - mongo-data:/data/db
     # No host port needed: the app and workers reach it over the internal
@@ -155,7 +157,7 @@ services:
   # cleanly — de-duplicate the data, then the index builds on the next run.
   # ---------------------------------------------------------------------------
   mongo-init:
-    image: mongo:7
+    image: mongo:7.0.43
     # Mount the migration script read-only. --quiet keeps the output to just
     # our own print() lines.
     volumes:
