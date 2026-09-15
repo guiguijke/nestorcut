@@ -4156,3 +4156,12 @@ pièces indépendantes, et l'export ne détruit rien de ce qu'il ne comprend pas
 (54 fichiers rendus identiques à l'octet). Ce qui reste ouvert est nommé :
 les zones d'exclusion, les outils multiples, les opérations multiples, les
 deux champs binaires `0x14`/`0x15` non identifiés, et le miroir serveur (J5).
+
+**Déployé le 15/09 — `711f4b44c51253e696fbbc8ee8a360ad9ff9212c`** (J9-bis,
+GO immédiat) : build `34974923342` vert, `promote-latest` `34975840282`
+vert, Hetzner `pull app` + `up -d app` (seul service touché), page de prod
+à ce SHA, `app.nestorcut.com` en 200. Ni homelab ni benchmarks (aucun diff
+moteur, worker ou wasm). La chaîne J8-bis + J9 + J10 + J9-bis est ENTIÈREE
+en production : le `.job` seul marche, le mélange `.job`+`.dwg` est refusé
+dans les deux modes, les écartés sont nommés, le verrou d'aller-retour
+tourne en CI.
