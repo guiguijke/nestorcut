@@ -60,6 +60,8 @@ Convention de nommage : `AUDIT-`, `PLAN-`, `RAPPORT-` (implémenteur),
 cités dans les documents antérieurs à la re-création du dépôt (2026-09)
 renvoient au dépôt archivé privé.
 
+| `PLAN-DOCUMENTATION-2026-09-15.md` | La documentation NestorCut (15/09) : Starlight dans le site vitrine, FR + EN, recherche, menu ; architecture en huit sections et lots D1 à D5. |
+| `PLAN-UX-JOB-VERSION-2026-09-15.md` | Audit UI/UX du flux `.job` (15/09) et lot J11 : carte groupée pour un `.job` multi-pièces, version affichée « NestorCut V2.x », badges « Nouveau » à expiration. |
 | `PLAN-CORRECTIF-VUE-DXF-2026-09-14.md` | Vue DXF d'un résultat local figée : reproduction, cause, correctif H1 | vivant |
 | `RECETTE-PROPRIETAIRE-2026-09-14.md` | Recette des priorités 3 et 4 en production, à faire par le propriétaire avant toute nouvelle feature | vivant |
 | `AUDIT-E2E-PRIO3-4-2026-09-14.md` | Consigne d'audit de bout en bout des priorités 3 et 4, exécuté par l'implémenteur, rapport en §5 | vivant |
