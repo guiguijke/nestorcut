@@ -3650,3 +3650,219 @@ carte qui parle de stockage. **Accepté.** Je le note seulement pour que
 
 Périmètre : app seule. Après ce J8-bis, la vérification reprend et le GO
 suit. Rien de ce qui est livré n'est à défaire.
+
+#### 9.76 Lot J9 — un dessin, PLUSIEURS pièces, chacune son point de départ (consigne fermée, 15/09)
+
+Le propriétaire a déposé un `.job` où **le même dessin est présent quatre
+fois, chaque exemplaire portant son propre point de départ** (capture
+SheetCam jointe : quatre L nichés en escalier, quatre amorces). Identifiant
+neutre **j9-1**.
+
+Ce fichier casse une hypothèse de fond de tout le chantier `.job`, et il le
+fait proprement. Voici la mesure.
+
+**Ce que le fichier contient réellement** (décodage indépendant, dump du flux
+tag/longueur) :
+
+| Fait | Mesure |
+|---|---|
+| sections `Part` | **4, toutes `copyOf = -1`** — quatre ORIGINAUX du même dessin, aucune copie |
+| noms de dessin distincts | **1** |
+| blocs `0x25` dans le binaire | **4** |
+| points de départ | **quatre, tous marqués « déplacé à la main »** : `(−60 ; 25,7041)`, `(−60 ; 25,7041)`, `(−35 ; 24,9608)`, `(−35 ; −1,8478)` — deux identiques, deux différents |
+| origines des blocs 2 à 4 | **une SENTINELLE** `≈ 3,0000000055 × 10³⁸` sur les deux coordonnées |
+
+**La règle du format, corrigée.** La règle 6 dit « le bloc binaire est
+associé aux sections par leur RANG ». Je l'avais implémentée au lot J6 comme
+« par rang des NOMS DE DESSIN distincts » — les deux coïncident tant qu'un
+dessin n'a qu'une section originale, ce qui était vrai des dix-huit fichiers
+de la série. Vérifié sur quatre fichiers, dont j9-1 :
+
+    nombre de blocs == nombre de SECTIONS ORIGINALES (copyOf < 0)
+
+et jamais « nombre de noms distincts ». Sur j9-1 : 4 blocs, 4 originaux,
+1 nom.
+
+**La sentinelle.** Quand plusieurs sections partagent un dessin, SheetCam
+n'écrit l'origine `0x25` que sur le PREMIER bloc ; les suivants portent la
+sentinelle, qui veut dire « même origine que le bloc précédent de ce
+dessin ». Notre décodeur l'additionne aux coordonnées : les blocs 2 à 4
+sortent donc **à 3 × 10³⁸ mm**.
+
+**Ce que l'outil en fait aujourd'hui, mesuré au navigateur :**
+
+| Dépôt | Résultat |
+|---|---|
+| **j9-1 SEUL** | **zéro fiche** — le fichier est refusé en entier (4 blocs ≠ 1 nom ⇒ `linkUnknown`). Le garde du rang a évité le pire (aucune géométrie à 10³⁸ n'est sortie), mais l'atelier n'a rien |
+| **j9-1 AVEC son DXF** | 1 fiche, nesting abouti 4/4 — **mais `startNotRead`, zéro point de départ lu**, donc aucune réserve d'amorce ; et le `.job` rendu porte **7 sections** pour 4 pièces (nos 3 copies ajoutées par-dessus les 4 originaux) |
+
+Les quatre points de départ que le propriétaire a placés à la main sont donc
+**perdus dans les deux cas**, et le fichier qu'on lui rend est mal formé.
+
+**La cause profonde, en une phrase** : notre modèle porte UN jeu de points de
+départ PAR DESSIN, celui de SheetCam en porte UN PAR PIÈCE.
+
+### Consigne
+
+1. **Le lien est la SECTION ORIGINALE, pas le nom.** Dans
+   `resolveJobDrawingSources` (`sheetcamJobImport.js`), le k-ième bloc
+   correspond à la k-ième section `copyOf < 0`, dans l'ordre du fichier.
+   Corriger `rankedNames` en conséquence ; le contrôle de cohérence devient
+   `blocks.length === nombre d'originaux`.
+2. **La sentinelle d'origine se propage.** Dans `jobDrawings`
+   (`shared/sheetcamJob.js`) : une coordonnée d'origine de module > 1e30
+   signifie « reprendre la dernière origine RÉELLE » (celle du bloc
+   précédent). Ne JAMAIS l'additionner. Si aucune origine réelle ne précède,
+   c'est un refus nommé du dessin — jamais une géométrie à 10³⁸.
+3. **Une fiche par section ORIGINALE.** Aujourd'hui un dessin donne une
+   fiche de quantité N ; désormais **chaque original donne sa fiche**, de
+   quantité 1 + le nombre de ses `copyOf`. Sur tous les fichiers existants
+   le comportement est INCHANGÉ (un original par dessin) ; il ne change que
+   là où un dessin a plusieurs originaux — le cas de j9-1, qui donne quatre
+   fiches de quantité 1. Le nom de fiche reste celui du dessin ; ajouter le
+   rang quand plusieurs fiches partagent un nom (« nom (2/4) », comme
+   l'éclatement E4-c).
+4. **Chaque fiche porte SES points de départ**, ceux de SON bloc, avec leur
+   drapeau « déplacé ». La règle §9.59 s'applique fiche par fiche : un point
+   déplacé à la main reste intouchable, à l'octet.
+5. **Le `.job` rendu réutilise les sections originales** au lieu d'en
+   ajouter : quatre originaux entrent, quatre sections sortent. Le verrou D4
+   du harnais doit redevenir vert sur j9-1 (aujourd'hui : 7 sections pour
+   4 pièces). Règle 6 tenue : aucun original n'est réordonné ni supprimé,
+   une pièce non posée est mise à `enabled=0` comme aujourd'hui.
+6. **Conséquence à mesurer et à DIRE** : quatre fiches de quantité 1 font
+   quatre items moteur au lieu d'un item de demande 4. Le regroupement par
+   demande disparaît pour ce cas. Mesurer l'effet sur un job d'atelier
+   (durée, densité) et le rapporter — si l'écart est sensible, le dire, ne
+   pas le masquer.
+7. Verrous : décodage de j9-1 (4 blocs, 4 origines résolues à (60 ; 60),
+   quatre points distincts, aucune coordonnée > 1e6) ; coïncidence
+   géométrique des quatre blocs avec le DXF du dessin, aux seuils habituels
+   (aire 0,1 %, étendue 0,01 mm) ; harnais — j9-1 **seul** ⇒ 4 fiches,
+   4 × 1 pièce, nesting 4/4, réserve appliquée sur chacune, `.job` rendu à
+   **4 sections** ; j9-1 **avec son DXF** ⇒ même résultat, géométrie du DXF ;
+   **non-régression** : les 53 fichiers du verrou J6 gardent des sorties
+   identiques (un original par dessin partout).
+8. Hygiène : identifiant **j9-1** dans les rapports, jamais le nom du
+   fichier ; variable d'environnement comme la série j7.
+
+### Portée et ordre
+
+App et `shared/` seulement — le moteur, le wasm et les workers ne bougent
+pas. **Après J8-bis** (qui débloque un déploiement déjà prêt), et **avant**
+toute nouvelle fonctionnalité : c'est le cas d'usage réel du propriétaire,
+et c'est le plus proche de P4-10 que nous ayons vu.
+
+**Note pour P4-10** : ce fichier n'est toujours pas le `.job` d'atelier
+attendu (un seul dessin, une seule opération), mais il en porte enfin une
+caractéristique — plusieurs pièces indépendantes du même dessin. Le fichier
+réel reste demandé, de préférence avec une zone `[Work/keepout]` non nulle.
+
+#### 9.77 Lot J10 — la carte complète du `.job` (exigence du propriétaire, 15/09)
+
+**Exigence** : « il faut que l'import et l'export de `.job` soit parfait. il
+faut parfaitement comprendre comment fonctionne le fichier ».
+
+Avant de planifier, j'ai mesuré où nous en sommes. Deux chiffres, sur les
+**54 `.job`** du poste.
+
+##### 1. L'export ne détruit RIEN — c'est déjà acquis, et c'est le socle
+
+Aller-retour `parseSheetCamJob` → `serializeSheetCamJob` **sans aucune
+modification** : **54 fichiers sur 54 rendus IDENTIQUES À L'OCTET.** Tout ce
+que nous ne comprenons pas est donc déjà préservé tel quel, y compris les
+champs que nous ne savons pas nommer. C'est la bonne fondation : la
+« perfection » de l'export ne demande pas de tout comprendre, elle demande de
+ne toucher QUE ce qu'on a mesuré — ce qui est le cas.
+
+##### 2. Ce que nous comprenons, et ce que nous ignorons
+
+Inventaire mécanique du flux tag/longueur sur les 54 fichiers :
+
+| | nombre |
+|---|---|
+| champs distincts dans le bloc binaire | **38** |
+| décodés aujourd'hui | **19** |
+| jamais identifiés | **19** |
+
+Mais les 19 inconnus ne se valent pas, et c'est la bonne nouvelle :
+
+| famille | champs | ce qu'on en sait |
+|---|---|---|
+| **constants sur les 54 fichiers** | `0x16` (−1), `0x17` (1), `0x1b` (0), `0x1c` (0), `0x23` (0), `0x24` (0), `0x30` (0), `0x31` (0), `0x32` (0) | des réglages que nos fichiers n'exercent JAMAIS — il faut une expérience pour les faire bouger |
+| **présents dans UN seul fichier** | `0x26`..`0x2d` (8 champs, 4 occurrences chacun) | ils n'apparaissent que dans j9-1, le `.job` à quatre sections originales ; `0x26`/`0x27` forment un POINT `(−35 ; 23,1713)` |
+| **qui VARIENT vraiment** | `0x14` et `0x15` (entiers, valeur 1 ou 2, toujours égaux entre eux) | **deux champs, et deux seulement** |
+
+J'ai testé l'hypothèse évidente — `0x14`/`0x15` = types d'amorce d'entrée et
+de sortie — et **elle est FAUSSE** : les variantes « none », « tangeant » et
+« perpendicular » portent toutes la même valeur 2. Je le dis parce que c'est
+la mesure : nous ne savons pas ce que sont ces deux champs.
+
+**Côté TEXTE**, nous lisons `[Misc]`, `[Work]`, `[Tool0]`, `[Part N]` et les
+opérations. Nous ne lisons PAS : **`[Work/keepout]`** (zone d'exclusion sur
+la tôle — celle-là peut coûter de la matière en silence), `[Table]`,
+`[Cutoff]`, `[pathRules]`, `[ToolChange]`, `[Variables]`.
+
+##### 3. Le plan — trois marches, dans cet ordre
+
+**J10-a — verrouiller ce qui est acquis (court, aucun risque).**
+
+1. Le verrou d'aller-retour devient un TEST : les 54 fichiers, parse puis
+   sérialise sans modification, **identiques à l'octet**. Il tourne à chaque
+   changement de `sheetcamJob.js`.
+2. Le verrou d'écriture devient UNIVERSEL : après un nesting, le diff
+   d'octets entre le `.job` déposé et le `.job` rendu est **inclus dans une
+   liste blanche DÉCLARÉE** (aujourd'hui : les champs de point de départ et
+   leur drapeau, plus les sections texte). Tout octet hors liste est un
+   échec de verrou, pas une surprise à découvrir en atelier.
+3. L'inventaire ci-dessus entre dans l'étude sous forme de table tenue à
+   jour, avec le nombre de champs décodés / inconnus. On saura toujours où
+   on en est.
+
+**J10-b — épuiser ce que les 54 fichiers PEUVENT dire (sans rien demander au
+propriétaire).**
+
+4. Diff systématique par PAIRES sur les fichiers qui ne diffèrent que d'un
+   réglage (la série de rétro-ingénierie est faite pour ça : types d'amorce,
+   kerf 0 / kerf 4, miroir, 45°, les quatre coins de départ). Pour chaque
+   champ inconnu, chercher la paire qui le fait bouger.
+5. Lire correctement le type d'amorce dans `[Part N/OperationM]` — mon
+   sondage rapide a lu celui de `[Tool0]` et s'est trompé de section ; c'est
+   un piège à noter.
+6. Rapporter, champ par champ : identifié (avec la preuve), ou « ne bouge
+   sur aucune paire disponible ». **Aucune interprétation sans preuve.**
+
+**J10-c — la liste courte d'expériences pour le propriétaire.**
+
+7. Ce que J10-b n'aura pas tranché devient une liste de fichiers à produire,
+   **une variable à la fois**, même pièce, même tôle, enregistrement immédiat.
+   Le protocole est celui qui a déjà fonctionné pour les amorces.
+8. Ordre de valeur pour le propriétaire, à lui de dire s'il veut les faire :
+   d'abord une **zone d'exclusion `[Work/keepout]` non nulle** (elle coûte
+   de la matière et nous l'ignorons), puis un fichier à **plusieurs
+   opérations** sur la même pièce, puis **plusieurs outils** (`[Tool1]`…),
+   puis une pièce **tournée à un angle non multiple de 90°** avec copies.
+
+##### 4. Les règles qui rendent « parfait » atteignable
+
+9. **Un champ non identifié n'est JAMAIS interprété — il est préservé.**
+   C'est déjà le cas (54/54), cela devient une règle écrite.
+10. **Une VALEUR inconnue dans un champ CONNU est un refus NOMMÉ**, jamais
+    une supposition. Exemple en vigueur : un type de segment autre que
+    1 ou 2 refuse le dessin.
+11. **Une section texte non lue ne doit pas pouvoir coûter silencieusement** :
+    tant que `[Work/keepout]` n'est pas comprise, si elle est NON NULLE, le
+    dépôt doit le DIRE (« ce fichier déclare une zone d'exclusion que
+    NestorCut ne sait pas encore respecter »). Petit, à faire dès J10-a.
+12. **Le périmètre de « parfait » se déclare** : nous garantissons la
+    géométrie, les points de départ, les amorces, la tôle, le kerf, les
+    quantités, l'ordre de coupe et la préservation de tout le reste. Nous ne
+    garantissons PAS encore les zones d'exclusion, les outils multiples et
+    les opérations multiples. Cette liste vit dans l'étude et rétrécit.
+
+Périmètre : `shared/` et les tests pour J10-a et J10-b ; app seule si le
+message du point 11 est fait. Aucun moteur, aucun worker.
+
+**Ordre général** : J8-bis (débloque un déploiement prêt), puis **J9** (le
+cas réel du propriétaire, mesuré cassé), puis J10-a, J10-b, J10-c. J10-a peut
+se faire en parallèle de J9 : ce sont des verrous, ils ne changent rien.
