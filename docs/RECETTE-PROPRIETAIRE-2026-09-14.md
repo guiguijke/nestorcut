@@ -43,6 +43,14 @@ Prod attendue : `gitCommitSha 8b87e678` (E4 complet, J4-ter, H1). Le lot
 | C5 | Refaire C1-C4 avec ton `.job` où le point de départ du trou est **déplacé à la main** (après déploiement de `117bb4ce`) | ton point est conservé à l'octet, la réserve est posée dessus, le G-code y amorce | |
 | C6 | Un `.job` réel d'atelier (plus de 7 dessins, noms accentués) | toutes les fiches créées, aucun « dessin manquant » à tort, nesting et `.job` rendu | |
 
+## C-bis. Priorité 4 — la série « points de départ » (après le déploiement de J7)
+
+| # | Geste | Attendu | Verdict |
+|---|---|---|---|
+| C7 | Déposer seul chacun des six `.job` de `job-tests-new` | une fiche par fichier, « géométrie lue dans le fichier de travail », nesting abouti — **y compris les deux petites pièces**, qui refusaient avant J7 | |
+| C8 | Le fichier aux trois points déplacés à la main, et son jumeau aux points par défaut | sur le premier, tes trois points sont conservés à l'octet ; sur le second, NestorCut pose les siens | |
+| C9 | Post-traiter l'un des deux dans SheetCam | le G-code amorce là où la capture d'écran le montre | |
+
 ## D. Ce qui n'est PAS dans la recette
 
 - La densité d'un bloc clairsemé (E4-e, étude en cours) : le bloc convexe

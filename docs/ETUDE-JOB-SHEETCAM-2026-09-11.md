@@ -3029,3 +3029,60 @@ Déploiement : app + worker nesting (main.py a bougé) après GO — J6-ter
 nesting change). Benchmarks publics SANS objet : aucun diff moteur, le
 corpus rend les mêmes densités (la bascule ne touche que des jobs qui
 échouaient avant).
+
+#### 9.71 Lot J7 — vérification (vérificateur, 15/09, `efa0e37e`) — GO déploiement app + worker nesting + homelab
+
+Rejoué sur le poste : images `app` ET `nesting-worker` reconstruites à HEAD
+puis conteneurs recréés, suites des deux langages, rejeu navigateur des deux
+fichiers qui refusaient, chemin serveur, non-régression et banc de référence.
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **769 / 769** (64 fichiers) |
+| pytest `workers/nesting`, dans l'image reconstruite | **251 passés, 2 ignorés** |
+| périmètre | **aucun diff sous `workers/nesting/engine`, `workers/geometry`, `public/`** depuis la production (`777b48a8`) — moteur et wasm intacts, benchmarks publics sans objet |
+| **j7-3** (3 450 mm², refusé avant) | **se neste : 1/1 posée**, `.job` rendu complet, 1 octet changé (son unique drapeau) |
+| **j7-5** (4 050 mm², refusé avant, point manuel sur l'hypoténuse) | **se neste : 1/1 posée**, et **0 octet changé** — le point déplacé à la main survit à la bascule |
+| qualité du résultat (contrôle que je m'étais promis) | pièce posée EN COIN, badges mesurés tous verts (sans recouvrement, dans la tôle, écart ≥ 4 mm, toutes posées), chute 1 000 × 1 176 mm déclarée réutilisable, densité annoncée 0,3 % — un résultat utilisable, pas seulement « pas d'erreur » |
+| chemin SERVEUR (miroir `main.py`) | harnais `qa-j7-server-parity.mjs` : le worker bascule aussi et **finit 1/1** là où il levait « spacing too large » |
+| non-régression | la pièce L à trois points manuels : **29 verrous verts, 0 octet changé, les deux trous conservés** — identique à la mesure du §9.68 |
+| banc de référence `seed_job.py` | **3 alternatives directionnelles distinctes**, densité 0,4320 — le pipeline serveur ne bouge pas pour les jobs qui passaient |
+
+**Sur la forme du correctif.** La bascule se déclenche exactement sur
+l'ancienne condition de refus (`if (stripTooNarrow) isSpp = false`, miroir
+Python à l'identique) : par construction, un job qui n'y tombait pas garde un
+payload inchangé. Je l'ai lu des deux côtés, et les suites couvrent le
+discriminateur bande/multi-tôles à la frontière.
+
+**Un verrou que je n'ai PAS pu rejouer, dit franchement** :
+`determinism_lock.py` a besoin de `node` pour son côté wasm, absent de
+l'image d'exécution du worker — il sort en `FileNotFoundError`. Je l'ai
+remplacé par la preuve directe qui le rend sans objet ici : `git diff
+777b48a8..HEAD` ne montre **aucun fichier** sous le moteur, la géométrie wasm
+ou `public/`. L'implémenteur dit l'avoir passé de son côté ; je n'ai pas de
+raison d'en douter, je note seulement que ma mesure à moi n'a pas eu lieu.
+
+**Arbitrage délégué — le marqueur `__spacingTooLarge` devenu inatteignable.**
+Le balayage résiduel donne huit points d'appel sur six fichiers, dont deux
+libellés i18n qui décrivent un refus qui ne peut plus se produire. Décision :
+**le retirer, mais pas dans un lot à lui et pas maintenant** — il part avec le
+prochain lot qui touche déjà ces fichiers, balayage résiduel à l'appui
+(`app/composables/localJobPrivate.js`, `localSolverRegistry.js`,
+`useLocalMode.js`, `app/pages/project/[slug].vue`, les deux entrées
+`localMode.spacingTooLarge` d'`app/utils/i18n.js`). Raison : un message
+impossible est un piège pour le prochain lecteur, mais le supprimer
+aujourd'hui ajouterait du risque à un déploiement qui débloque un vrai
+blocage, pour zéro bénéfice utilisateur.
+
+**GO déploiement.** `efa0e37e`, avec **J6-ter (`3256f706`) dans la même
+promotion** : **app + worker nesting**, et le **homelab** puisque
+`workers/nesting` a bougé (`docker compose pull && up -d --force-recreate`
+dans `/containers/nestorcut-overflow`, puis `assert_overflow_head.py` OK,
+AGENTS §6). Benchmarks publics sans objet, vérifié par le diff.
+
+Après ce déploiement, les six fichiers de la série du propriétaire sont
+jouables, y compris les deux petits. **P4-10 reste le seul point d'audit
+jamais joué** : il faut un `.job` d'atelier réel — plus de sept dessins,
+plusieurs pièces et copies, plusieurs opérations — et de préférence un qui
+porte une zone d'exclusion `[Work/keepout]` non nulle, que nous ne lisons
+toujours pas.
