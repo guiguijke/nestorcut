@@ -4075,3 +4075,13 @@ pour le propriétaire est en place, zone d'exclusion en tête.
 
 **Déploiement** : app seule (aucun diff sous `workers/`, `public/` ni le
 moteur), par SHA puis `promote-latest`. Ni homelab, ni benchmarks.
+
+**Déployé le 15/09 — `5cffa2f6d1c284b58bf7f545c4a7290938cef479`** (J8-bis +
+J9 + J10 dans la même promotion, GO du §9.79) : build `34970737375` vert,
+`promote-latest` `34973455076` vert, Hetzner `pull app` + `up -d app` (seul
+service touché), page de prod à ce SHA, `app.nestorcut.com` en 200. Ni
+homelab ni benchmarks — aucun diff moteur, worker ou wasm. **J9-bis
+obligatoire avant tout prochain déploiement** (§9.79 : refus `.job`+`.dwg`
+dans les DEUX modes, écartés nommés au navigateur, verrou d'aller-retour
+étendu aux fixtures du dépôt). La recette du propriétaire peut ajouter son
+fichier à quatre pièces.
