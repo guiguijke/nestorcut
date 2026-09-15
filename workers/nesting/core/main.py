@@ -967,6 +967,22 @@ def _nesting_process_impl(doc):
         and total_inflated <= single_sheet_area * SPP_MAX_AREA_RATIO
         and (total_stock == 1 or left_only)
     )
+
+    # Garde #2b, lot J7-a (étude §9.69) : une bande initiale DÉGÉNÉRÉE
+    # (aire enveloppe / hauteur ≤ espacement) ne REFUSE plus la tâche —
+    # elle la bascule en MULTI-TÔLES (BPP) : le constructif place dans des
+    # tôles entières, il n'a pas de bande à initialiser puis déflater de
+    # space/2. C'est le cas d'une PIÈCE SEULE petite sur une grande tôle
+    # (mesuré : 1 000 × 1 250 au kerf 1,5 ⇒ espacement 4, toute pièce de
+    # moins de 5 000 mm² était refusée, et « ajoutez du stock » était sans
+    # effet — le mode bande reste bande tant que la direction est gauche
+    # seule). Décision de PAYLOAD : moteur, wasm et benchmarks intacts.
+    # La bascule se déclenche EXACTEMENT sur la condition qui refusait
+    # avant : tout job qui passait garde un payload identique. Miroir
+    # exact de localPayloadBuilder.js.
+    if is_spp and space > 0 and total_outer_area / bin_dims[0][1] <= space:
+        is_spp = False
+
     problem_type = "spp" if is_spp else "bpp"
     logger.info(
         "Problem type selected",
@@ -980,22 +996,6 @@ def _nesting_process_impl(doc):
             "area_ratio": round(total_part_area / single_sheet_area, 3) if single_sheet_area else None,
         },
     )
-
-    if is_spp and space > 0 and total_outer_area / bin_dims[0][1] <= space:
-        # jagua initializes the strip width to total_area/strip_height and then
-        # DEFLATES it by space/2 on each side (min_item_separation). When the
-        # spacing exceeds that initial width the strip offset comes out empty
-        # and the engine panics deep inside a rayon walk ("Offset resulted in
-        # an empty polygon") — fail fast with an actionable message instead.
-        # Aire ENVELOPPE (majorante de la géométrie moteur : anneaux ouverts
-        # canaux ≤ aire externe) : l'aire nette sous-estime et laisserait
-        # passer le panic sur les pièces très trouées.
-        raise Exception(
-            f"Spacing {space} mm is too large for this instance: parts total "
-            f"{round(total_outer_area)} mm² on a {bin_dims[0][1]:.0f} mm-high sheet "
-            f"(initial strip width {total_outer_area / bin_dims[0][1]:.1f} mm). "
-            f"Reduce the spacing or add more parts/stock."
-        )
 
     if is_spp:
         instance = build_spp_instance(

@@ -383,17 +383,30 @@ describe('J6 — coïncidence géométrie du `.job` ↔ import du DXF (import or
 
     // Les fichiers réels sont PRIVÉS (gitignorés). Sur le poste de
     // développement ils sont là : on mesure TOUT ce qui est appariable — la
-    // consigne exige la série (18 fichiers) ET la recette.
+    // consigne exige la série (18 fichiers) ET la recette. Lot J7-b : la
+    // série « points de départ » du propriétaire (six `.job` à dessin
+    // unique, §9.69) entre dans le même balayage.
     it('la série et la recette réelles, quand elles sont là (≥ 40 couples)', () => {
         if (!glue) return console.warn('[J6] bundle wasm absent — coïncidence non mesurée')
         const dirs = [
+            // 15/09 : les `.job` de recette ont déménagé de la racine de
+            // `.testparts` vers `job-tests/` (réorganisation du poste) —
+            // les deux chemins sont balayés, le verrou ne dépend pas du
+            // rangement.
             path.resolve(__dirname, '../../.testparts'),
+            path.resolve(__dirname, '../../.testparts/job-tests'),
             path.resolve(__dirname, '../../.testparts/retro-eng-job'),
+            path.resolve(__dirname, '../../.testparts/job-tests-new'),
         ]
         if (!dirs.some((d) => existsSync(d))) {
             return console.warn('[J6] .testparts absent — série non mesurée (la suite reste verte, la mesure n\'est pas faite)')
         }
-        const dxfDirs = [...dirs, FIX]
+        const dxfDirs = [
+            ...dirs,
+            path.resolve(__dirname, '../../.testparts/corpus'),
+            path.resolve(__dirname, '../../specs/import-corpus'),
+            FIX,
+        ]
         const findDxf = (name) => {
             for (const d of dxfDirs) {
                 if (!existsSync(d)) continue

@@ -34,19 +34,64 @@
 //   node scripts/qa-e2e-job.mjs
 //   QA_ALONE=1 QA_JOB=<fichier.job> QA_OUT=<dir> node scripts/qa-e2e-job.mjs
 //   QA_TWO_DROPS=1 QA_JOB=… QA_DXF_DIR=… node scripts/qa-e2e-job.mjs   (J6-bis)
+//   QA_J7_AB=1 [QA_J7_DIR=<dossier>] node scripts/qa-e2e-job.mjs      (J7-b)
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
-import { parseSheetCamJob, jobSheet } from '../shared/sheetcamJob.js'
+import { jobDrawings, parseSheetCamJob, jobSheet } from '../shared/sheetcamJob.js'
 import { spacingFromKerf } from '../shared/sheetcamReserve.js'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
 const OUT = process.env.QA_OUT || path.resolve('.qa-pw/j4')
-const JOB = process.env.QA_JOB || path.resolve('app/tests/fixtures/sheetcam/source.job')
 const DXF_DIR = process.env.QA_DXF_DIR || path.resolve('.testparts')
 const LOCALE = process.env.QA_LOCALE || 'fr'
+// Lot J7-b (§9.69 point 6) : le couple A/B des points de départ — deux
+// `.job` du MÊME dessin, l'un à points tous DÉPLACÉS À LA MAIN, l'autre à
+// points tous AUTOMATIQUES. Résolus PAR CARACTÉRISTIQUES dans QA_J7_DIR
+// (défaut neutre) : aucun nom de fichier du propriétaire dans ce script ni
+// au journal — identifiants j7-ab-manuel / j7-ab-auto. La phase principale
+// joue le MANUEL (§9.59 : 0 octet du binaire ne doit bouger), une phase 2
+// en fin de parcours joue l'AUTOMATIQUE (seuls les DRAPEAUX changent).
+const J7_DIR = process.env.QA_J7_DIR || path.resolve('.testparts/job-tests-new')
+const J7_AB = process.env.QA_J7_AB === '1'
+let JOB_MANUAL = null
+let JOB_AUTO = null
+if (J7_AB) {
+    const cands = fs.existsSync(J7_DIR)
+        ? fs.readdirSync(J7_DIR).filter((f) => f.toLowerCase().endsWith('.job'))
+        : []
+    const byDrawing = new Map()
+    for (const f of cands) {
+        try {
+            const bytes = new Uint8Array(fs.readFileSync(path.join(J7_DIR, f)))
+            const job = parseSheetCamJob(bytes)
+            const blocks = jobDrawings(job.binary)
+            const originals = job.parts.filter((p) => p.copyOf < 0)
+            if (!blocks || originals.length !== 1) continue
+            const paths = blocks[0]?.paths || []
+            if (!paths.length) continue
+            const moved = paths.filter((p) => p.moved).length
+            const list = byDrawing.get(originals[0].drawingName) || []
+            list.push({ f: path.join(J7_DIR, f), moved, total: paths.length })
+            byDrawing.set(originals[0].drawingName, list)
+        } catch {
+            // illisible : hors couple
+        }
+    }
+    for (const list of byDrawing.values()) {
+        if (list.length !== 2) continue
+        const man = list.find((x) => x.moved === x.total)
+        const aut = list.find((x) => x.moved === 0)
+        if (man && aut) { JOB_MANUAL = man.f; JOB_AUTO = aut.f; break }
+    }
+    if (!JOB_MANUAL) {
+        console.error(`QA_J7_AB : couple (tous manuels / tous automatiques, même dessin) introuvable dans ${J7_DIR}`)
+        process.exit(2)
+    }
+}
+const JOB = J7_AB ? JOB_MANUAL : (process.env.QA_JOB || path.resolve('app/tests/fixtures/sheetcam/source.job'))
 // Lot J6 : déposer le `.job` SANS ses DXF — la géométrie vient du binaire.
-const ALONE = process.env.QA_ALONE === '1'
+const ALONE = process.env.QA_ALONE === '1' || J7_AB
 // Lot J6-bis (§9.64) : le cas double dépôt — `.job` seul PUIS `.job` + ses
 // DXF sur le MÊME projet. Le DXF doit REMPLACER la fiche du binaire en
 // place : toujours autant de fiches que de dessins, plus aucune source
@@ -543,12 +588,21 @@ try {
         out.binary.length === source.binary.length && bouges.every((i) => champs.has(i)),
         `${bouges.length} octet(s) change(s), tous dans les champs de depart : `
         + `${bouges.every((i) => champs.has(i))}`)
-    // D6b : et nous avons BIEN ecrit — un `.job` rendu dont aucun drapeau
-    // n'est leve signifierait que J4-ter ne fait rien.
-    const leves = (jobPathRecords(out.binary) || [])
-        .flatMap((d) => d.paths).filter((p) => p.moved).length
-    check('D6b au moins un point de depart est marque « deplace »', leves > 0,
-        `${leves} drapeau(x) leve(s)`)
+    // Lot J7-b — phase MANUELLE du couple A/B : TOUS les points de ce
+    // fichier sont déplacés à la main (§9.59) : NestorCut n'écrit RIEN, le
+    // bloc binaire sort IDENTIQUE à l'octet près.
+    if (J7_AB) {
+        check('J7-ab (manuel) : 0 octet du bloc binaire change',
+            out.binary.length === source.binary.length && bouges.length === 0,
+            `${bouges.length} octet(s) change(s)`)
+    } else {
+        // D6b : et nous avons BIEN ecrit — un `.job` rendu dont aucun drapeau
+        // n'est leve signifierait que J4-ter ne fait rien.
+        const leves = (jobPathRecords(out.binary) || [])
+            .flatMap((d) => d.paths).filter((p) => p.moved).length
+        check('D6b au moins un point de depart est marque « deplace »', leves > 0,
+            `${leves} drapeau(x) leve(s)`)
+    }
     // D7 ne compte PAS les pièces : le cas A4 dépose volontairement une
     // seconde fois, et une tôle peut de toute façon n'en porter qu'une partie.
     // Ce qui doit être vrai quoi qu'il arrive : aucune section écrite qui ne
@@ -607,6 +661,118 @@ try {
             log('D10 NON MESURÉ : aucune pièce nichée dans aucune alternative')
             results.D10 = { ok: null, detail: 'aucun nichage' }
         }
+    }
+
+    // ---------- J7-b : phase 2 — le fichier AUTOMATIQUE du couple ----------
+    //
+    // MÊME dessin que la phase principale, points TOUS automatiques : la
+    // géométrie importée doit être identique (même compte de pièces et de
+    // trous), et le `.job` rendu ne doit changer QUE LES DRAPEAUX « déplacé
+    // à la main » — les valeurs écrites sont celles lues, elles ne bougent
+    // pas (mesure §9.69 : 3 octets sur le fichier j7-2). Contraste exact
+    // avec la phase manuelle : 0 octet.
+    if (J7_AB) {
+        // Les fiches des DEUX projets cohabitent dans IndexedDB : on ne
+        // compte que celles du projet courant ( piège #47 ).
+        const countsOf = (slugFilter) => page.evaluate(async ({ slugFilter }) => {
+            const db = await new Promise((res, rej) => {
+                const r = indexedDB.open('nestorcut-local')
+                r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+            })
+            const recs = await new Promise((res, rej) => {
+                const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
+                tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
+            })
+            return recs
+                .filter((r) => r.projectSlug === slugFilter)
+                .map((r) => ({
+                    parts: (r.parts || []).length,
+                    holes: (r.parts || []).reduce((n, p) => n + (p.holes || []).length, 0),
+                    source: r.source ?? null,
+                }))
+        }, { slugFilter })
+        const phase1Counts = (await countsOf(slug)).map((c) => `${c.parts}p/${c.holes}t`)
+        log('phase 1 (manuel) :', JSON.stringify(phase1Counts))
+
+        const autoBytes = new Uint8Array(fs.readFileSync(JOB_AUTO))
+        await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+        await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+        const devCard2 = page
+            .locator('.create__privacy [role="radio"]')
+            .filter({ hasText: /(This device|Cet appareil)/i })
+            .first()
+        if (await devCard2.count()) await devCard2.click().catch(() => {})
+        await page.setInputFiles('input[name="dxf"]', [JOB_AUTO])
+        await page.waitForURL('**/project/**', { timeout: 90000 })
+        const slug2 = page.url().split('/project/')[1].split(/[?#]/)[0]
+        await page.waitForFunction(
+            (n) => document.querySelectorAll('[data-testid="file-card"], .file').length >= n,
+            1,
+            { timeout: 120000 },
+        ).catch(() => log('ATTENTION : fiche attendue non visible (phase 2)'))
+        await shot('04-j7ab-auto-depose.png')
+
+        const phase2Counts = (await countsOf(slug2)).map((c) => `${c.parts}p/${c.holes}t`)
+        log('phase 2 (auto) :', JSON.stringify(phase2Counts))
+        check('J7-ab même compte de pièces et de trous des deux côtés',
+            JSON.stringify(phase1Counts) === JSON.stringify(phase2Counts),
+            `manuel ${phase1Counts.join(',')} / auto ${phase2Counts.join(',')}`)
+
+        const nestBtn2 = page.locator('.atelier__nest')
+        await nestBtn2.waitFor({ timeout: 30000 })
+        await nestBtn2.click()
+        const t2 = Date.now()
+        let outcome2 = 'timeout'
+        while (Date.now() - t2 < 5 * 60 * 1000) {
+            const err2 = (await page.locator('.content__error').allInnerTexts().catch(() => []))
+                .map((s) => s.trim()).filter(Boolean).join(' | ')
+            if (err2) { outcome2 = 'erreur: ' + err2; break }
+            const item2 = page.locator('.results__item').first()
+            if (await item2.count()) {
+                const failed2 = await item2.locator('.result__placeholder').count()
+                const done2 = await item2.locator('.controls__report, .controls__download').count()
+                if (failed2) { outcome2 = 'échec'; break }
+                if (done2) { outcome2 = 'fini'; break }
+            }
+            await page.waitForTimeout(1500)
+        }
+        log('phase 2 nesting :', outcome2)
+        check('J7-ab (auto) le nesting aboutit', outcome2 === 'fini', outcome2)
+        if (outcome2 !== 'fini') throw new Error('phase 2 : nesting non abouti — ' + outcome2)
+        await shot('05-j7ab-auto-resultat.png')
+
+        await page.locator('.results__item .controls__report').first().click()
+        await page.waitForSelector('.modal__report, .result-report', { timeout: 60000 })
+        const jobBtn2 = page.locator('.result-report button, .result-report a')
+            .filter({ hasText: /\.job/i }).first()
+        const dl2 = await Promise.all([
+            page.waitForEvent('download', { timeout: 60000 }),
+            jobBtn2.click(),
+        ]).then(([d]) => d)
+        const saved2 = path.join(OUT, 'sortie-auto.job')
+        await dl2.saveAs(saved2)
+        const out2 = parseSheetCamJob(new Uint8Array(fs.readFileSync(saved2)))
+        // Le BLOC BINAIRE du `.job` d'entrée (sous-tableau depuis le
+        // marqueur) — jamais le fichier entier, qui commencerait la lecture
+        // dans le texte INI.
+        const autoBinary = parseSheetCamJob(autoBytes).binary
+
+        const flagOffsets = new Set()
+        for (const d of jobPathRecords(autoBinary) || []) {
+            for (const p of d.paths) {
+                if (Number.isInteger(p.at?.moved)) flagOffsets.add(p.at.moved)
+            }
+        }
+        const bouges2 = []
+        if (out2.binary.length === autoBinary.length) {
+            for (let i = 0; i < out2.binary.length; i++) {
+                if (out2.binary[i] !== autoBinary[i]) bouges2.push(i)
+            }
+        }
+        check('J7-ab (auto) seuls les DRAPEAUX « déplacé » changent',
+            out2.binary.length === autoBinary.length
+            && bouges2.length > 0 && bouges2.every((i) => flagOffsets.has(i)),
+            `${bouges2.length} octet(s) change(s), drapeaux attendus : ${flagOffsets.size}`)
     }
 
 } catch (e) {

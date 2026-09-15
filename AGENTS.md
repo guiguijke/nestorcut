@@ -185,6 +185,14 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    aboutit ; réserve sur les quatre éventails ⇒ refusé. Verrou :
    `sheetcamReserve.test.js` « même convention de fermeture ».
 
+5d. **Un point de départ SheetCam tombe le plus souvent À L'INTÉRIEUR d'une
+   arête, pas sur un sommet** (mesure du 15/09, étude `.job` §9.69 : 9
+   contours sur 11, points AUTOMATIQUES comme manuels, y compris sur un
+   arc — un départ à 49 % d'une hypoténuse, à 62,8 mm du sommet le plus
+   proche). Toute passe « meilleur point de départ » (§9.58, gelée) doit
+   candidater le MILIEU des arêtes et des arcs, pas seulement les sommets ;
+   et un point posé à la main reste INTOUCHABLE (§9.59), où qu'il tombe.
+
 ### Moteur (Rust / sparrow)
 6. **sparrow n'a PAS de borne dure** : une solution « feasible »
    (sans collision) peut dépasser `max_strip_width`. Tout affichage doit

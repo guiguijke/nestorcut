@@ -2952,3 +2952,80 @@ nesterait dedans sans le savoir.
 
 Ordre : **J7-a d'abord** (c'est un blocage de la priorité 4, donc dans le
 gel, pas une nouveauté), puis J7-b. Rapport, vérification, GO, déploiement.
+
+#### 9.70 Lot J7 — rapport de l'implémenteur (15/09)
+
+J7-a et J7-b livrés ensemble, comme consigné §9.69. Périmètre :
+`localPayloadBuilder.js` + son miroir `main.py`, deux fichiers de test,
+le harnais `.job`, un harnais de parité serveur, `AGENTS.md` (note 5d).
+**Aucun diff moteur, wasm ni benchmarks** — `determinism_lock.py`
+rejoué : natif ≡ wasm, SHA `4ff43700…` identiques, tolérance 0.
+
+**J7-a — la petite pièce seule se nestent.** Quand la bande initiale
+serait dégénérée (aire enveloppe / hauteur ≤ espacement — la condition
+QUI REFUSAIT, inchangée), la tâche bascule en MULTI-TÔLES au niveau du
+payload : `isSpp = false`, la tôle déclarée devient le conteneur BPP
+entier, le constructif place dedans. Miroir exact en Python (la bascule
+avant `problem_type`, le refus supprimé des deux côtés). Le message
+« réduisez l'espacement ou ajoutez des pièces/tôles » a disparu avec sa
+cause ; le refus de CAPACITÉ qui reste, lui, donne un conseil EFFECTIF
+(les pièces ne tiennent pas). Le plombage `__spacingTooLarge` (marqueur
+A1, câblage UI, libellés EN/FR) devient INATTEIGNABLE : conservé tel
+quel dans ce lot — le périmètre consigné était payload seul — sa
+suppression est proposée en hygiène suivante, à trancher.
+
+Verrous J7-a :
+- le cas P3-6d (20 × 20 sur 600 × 300, espacement 2) **neste** :
+  `problem: 'bpp'`, conteneur = la tôle déclarée entière ; à un cheveu
+  AU-DESSUS du seuil (aire/hauteur 2,4 > 2) la tâche reste en BANDE —
+  la bascule ne touche que la condition qui refusait ;
+- le discriminateur ENVELOPPE/NET transposé (bloc à bande 1,7 mm :
+  espacement 1 → reste bande ; espacement 2 → bascule) ;
+- la suite « SPP vs BPP » et les goldens de replay verts — tout job qui
+  passait garde son payload (vitest **769/769**, dont le test de
+  signature J1 ajusté à la réorganisation de `.testparts` — les `.job`
+  de recette ont déménagé à la racine vers `job-tests/`, les deux
+  chemins sont balayés) ;
+- **j7-3 et j7-5 déposés seuls** (harnais, image reconstruite) :
+  1/1 posée chacun, `.job` rendu complet, tous verrous verts — les deux
+  fichiers refusés hier ;
+- **parité JS ≡ Python** : `scripts/qa-j7-server-parity.mjs` (carré
+  20 × 20 GÉNÉRÉ, tôle 1 000 × 1 250, kerf 1,5 + sécurité 1 ⇒
+  espacement 4, bande initiale 0,32 mm) — le WORKER (chemin `main.py`,
+  image reconstruite) rend un résultat fini **1/1 en 2 s** ; le même cas
+  mourrait en « Spacing 4 mm is too large » avant J7-a.
+
+**J7-b — les verrous de la série.**
+- Le verrou de coïncidence couvre désormais **53 fichiers** (47 + les
+  six de la série) : **76 couples mesurés, tous exacts** — les six
+  nouveaux coïncident en direct (aires 0,1 %, étendues au centième),
+  les 4 croisements restent exactement les deux fichiers « ordre »
+  fabriqués (journalisés).
+- **Le couple A/B des points de départ au harnais** (`QA_J7_AB=1`,
+  résolu PAR CARACTÉRISTIQUES dans `QA_J7_DIR` — deux `.job` du même
+  dessin, points tous manuels / tous automatiques ; aucun nom du
+  propriétaire dans le script ni le journal) : côté manuel
+  **0 octet du bloc binaire changé** ; côté automatique **3 octets
+  changés = exactement les 3 drapeaux** ; même compte de pièces et de
+  trous (1 pièce, 2 trous) des deux côtés ; les deux nestings aboutissent.
+  C'est le verrou naturel de §9.59, et il s'applique aussi à j7-5 seul
+  (point manuel au milieu de l'hypoténuse : 0 octet).
+- **AGENTS.md §2, piège 5d** : le fait mesuré est consigné — un point de
+  départ SheetCam tombe le plus souvent À L'INTÉRIEUR d'une arête (9
+  contours sur 11, automatiques comme manuels, y compris sur un arc) ;
+  toute passe « meilleur point » devra candidater les milieux d'arêtes
+  et d'arcs, pas seulement les sommets.
+- Régressions : double dépôt (J6-bis) et parcours normal du harnais
+  repassés — tous verrous verts.
+
+**Non-faits, dits.** Le plombage `spacing_too_large` inatteignable
+(voir ci-dessus). La section `[Work/keepout]` : NOTÉE par le
+vérificateur, non lue — hors périmètre, attend le vrai fichier d'atelier
+(P4-10, toujours ouvert). Et la découverte des milieux d'arête ne change
+rien tant que la passe « meilleur point » (§9.58) reste gelée.
+
+Déploiement : app + worker nesting (main.py a bougé) après GO — J6-ter
+(GO du §9.68) part dans la même promotion. Homelab à penser (le worker
+nesting change). Benchmarks publics SANS objet : aucun diff moteur, le
+corpus rend les mêmes densités (la bascule ne touche que des jobs qui
+échouaient avant).

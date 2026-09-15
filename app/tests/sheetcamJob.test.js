@@ -312,19 +312,27 @@ describe('J4 — reconnaître un `.job` par sa SIGNATURE, jamais par l’extensi
     it('mesuré sur les `.job` RÉELS du propriétaire quand ils sont là', () => {
         // `.testparts/` est gitignoré : sans eux la suite reste verte, mais
         // elle DIT qu'elle n'a pas mesuré (même convention qu'au lot J1).
-        const dir = path.resolve(__dirname, '../../.testparts')
-        if (!fs.existsSync(dir)) {
+        // 15/09 : les `.job` de recette ont déménagé de la racine vers
+        // `job-tests/` (réorganisation du poste) — les deux sont balayés.
+        const root = path.resolve(__dirname, '../../.testparts')
+        if (!fs.existsSync(root)) {
             console.warn('[J4] .testparts absent — signature non mesurée sur les fichiers réels')
             return
         }
-        const jobs = fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.job'))
+        const jobs = []
+        for (const dir of [root, path.join(root, 'job-tests')]) {
+            if (!fs.existsSync(dir)) continue
+            for (const f of fs.readdirSync(dir).filter((x) => x.toLowerCase().endsWith('.job'))) {
+                jobs.push(path.join(dir, f))
+            }
+        }
         expect(jobs.length).toBeGreaterThan(0)
-        for (const f of jobs) {
-            expect(isSheetCamJob(read(path.join(dir, f)))).toBe(true)
+        for (const p of jobs) {
+            expect(isSheetCamJob(read(p))).toBe(true)
         }
         // Et les DXF du même dossier ne passent pas.
-        for (const f of fs.readdirSync(dir).filter((x) => x.toLowerCase().endsWith('.dxf'))) {
-            expect(isSheetCamJob(read(path.join(dir, f)))).toBe(false)
+        for (const f of fs.readdirSync(root).filter((x) => x.toLowerCase().endsWith('.dxf'))) {
+            expect(isSheetCamJob(read(path.join(root, f)))).toBe(false)
         }
     })
 })

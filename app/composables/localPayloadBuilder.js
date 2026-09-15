@@ -940,36 +940,26 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     }
     const totalInflated = inputItems.reduce(
         (n, it) => n + inflatedArea(it, space) * (it.count || 0), 0)
-    const isSpp = sheets.length === 1
+    let isSpp = sheets.length === 1
         && totalPartArea > 0
         && totalInflated <= sheetArea * SPP_MAX_AREA_RATIO
         && (totalStock === 1 || leftOnly)
 
-    // Garde #2b : jagua initialise la bande à aire_totale/hauteur puis la
-    // DÉFLATE de space/2 — si l'espacement dépasse cette largeur initiale,
-    // l'offset sort vide et le moteur panique dans un thread rayon.
-    // Aire ENVELOPPE (majorante de la géométrie moteur) — l'aire nette
-    // sous-estime et laisserait passer le panic (parité main.py).
-    if (isSpp && space > 0 && totalOuterArea / sheets[0].height <= space) {
-        const spacingErr = new Error(
-            `Spacing ${pyStrSpace(space)} mm is too large for this instance: parts total `
-            + `${pyRoundInt(totalOuterArea)} mm² on a ${pyFixed0(sheets[0].height)} mm-high sheet `
-            + `(initial strip width ${pyFixed1(totalOuterArea / sheets[0].height)} mm). `
-            + `Reduce the spacing or add more parts/stock.`,
-        )
-        // Lot A1 (audit P3-6d) : même traitement que la garde faisabilité —
-        // marqueur structuré, refus actionnable à l'écran au lieu du
-        // générique « payload_build » → « arrêté de façon inattendue ».
-        // Mesuré : dessin de 21 × 27 mm sur tôle 600 × 300, espacement 2 —
-        // la bande initiale (aire/hauteur ≈ 1,9 mm) est sous l'espacement.
-        spacingErr.__spacingTooLarge = {
-            spacing: pyStrSpace(space),
-            totalAreaMm2: pyRoundInt(totalOuterArea),
-            sheetHeightMm: pyFixed0(sheets[0].height),
-            stripWidthMm: pyFixed1(totalOuterArea / sheets[0].height),
-        }
-        throw spacingErr
-    }
+    // Garde #2b, lot J7-a (étude §9.69) : une bande initiale DÉGÉNÉRÉE
+    // (aire enveloppe / hauteur ≤ espacement) ne REFUSE plus la tâche —
+    // elle la bascule en MULTI-TÔLES (BPP) : le constructif place dans des
+    // tôles entières, il n'a pas de bande à initialiser puis déflater de
+    // space/2. C'est le cas d'une PIÈCE SEULE petite sur une grande tôle
+    // (mesuré : 1 000 × 1 250 au kerf 1,5 ⇒ espacement 4, toute pièce de
+    // moins de 5 000 mm² était refusée, et le conseil « ajoutez du stock »
+    // était sans effet — le mode bande reste bande tant que la direction
+    // est gauche seule). Décision de PAYLOAD : moteur, wasm et benchmarks
+    // intacts. La bascule se déclenche EXACTEMENT sur la condition qui
+    // refusait avant : tout job qui passait garde un payload identique
+    // (verrous : la suite SPP/BPP et les goldens de replay ci-dessous).
+    const stripTooNarrow = isSpp && space > 0
+        && totalOuterArea / sheets[0].height <= space
+    if (stripTooNarrow) isSpp = false
 
     let instance
     let containerMapBack = null

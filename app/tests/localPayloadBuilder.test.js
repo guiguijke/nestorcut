@@ -203,32 +203,55 @@ describe('A1 — les refus du builder portent leurs paramètres (audit P3-4/P3-6
         })
     })
 
-    it('espacement plus grand que la bande initiale : __spacingTooLarge porte les chiffres', async () => {
+    it('bande initiale dégénérée : bascule en MULTI-TÔLES, plus de refus (J7-a)', async () => {
         // P3-6d : un dessin minuscule (20 × 20, aire 400 mm²) sur une tôle
         // 600 × 300 à espacement 2 — la bande initiale (400/300 ≈ 1,3 mm)
-        // est SOUS l'espacement : la garde strip tire.
-        const file = {
+        // est SOUS l'espacement. Ce cas REFUSAIT (garde #2b : « réduisez
+        // l'espacement ou ajoutez des pièces/tôles », deux conseils
+        // inapplicables — l'espacement est la règle de l'atelier et le mode
+        // bande ignore le stock en direction gauche seule, mesuré §9.69).
+        // Il bascule désormais en BPP : le constructif place dans une tôle
+        // ENTIÈRE, il n'a pas de bande à déflater de space/2. Une pièce
+        // seule de moins de 5 000 mm² sur 1 000 × 1 250 (kerf 1,5) se
+        // nestait ainsi depuis toujours — le cas le plus ordinaire qui
+        // soit. Moteur et wasm intacts (étude §9.69, J7-a).
+        const tiny = {
             slug: 'tiny-z9y8x7.dxf', name: 'tiny.dxf', count: 1, rotations: [0],
             parts: [{
                 coordinates: [[0, 0], [20, 0], [20, 20], [0, 20], [0, 0]],
                 holes: [], width: 20, height: 20, handles: [], color: null,
             }],
         }
-        const err = await catchErr({
-            files: [file],
+        const { payload } = await buildLocalPayload({
+            files: [tiny],
             params: { ...baseParams, sheets: [{ width: 600, height: 300, count: 1 }] },
             profile: { timeBudgetSec: 13 },
-        })
-        expect(err).not.toBeNull()
-        expect(err.message).toContain('too large for this instance')
-        expect(err.__spacingTooLarge).toEqual({
-            spacing: '2.0',
-            // pyRoundInt formate en chaîne (miroir Python) — le marqueur
-            // est destiné à l'affichage.
-            totalAreaMm2: '400',
-            sheetHeightMm: '300',
-            stripWidthMm: '1.3',
-        })
+        }, {})
+        expect(payload.problem).toBe('bpp')
+        // La tôle déclarée devient le conteneur BPP, ENTIÈRE (600 × 300,
+        // stock 1) — le constructif place dedans, aucune bande à déflater.
+        expect(payload.instance.bins).toHaveLength(1)
+        expect(payload.instance.bins[0].stock).toBe(1)
+        expect(payload.instance.bins[0].shape.data.outer)
+            .toEqual([[0, 0], [600, 0], [600, 300], [0, 300], [0, 0]])
+
+        // Le seuil exact : même dessin à un cheveu AU-DESSUS de la bande
+        // dégénérée reste en BANDE — la bascule ne touche QUE la condition
+        // qui refusait (aire/hauteur 2,4 > espacement 2).
+        const near = {
+            ...tiny,
+            parts: [{
+                coordinates: [[0, 0], [20, 0], [20, 36], [0, 36], [0, 0]],
+                holes: [], width: 20, height: 36, handles: [], color: null,
+            }],
+        }
+        const { payload: nearPayload } = await buildLocalPayload({
+            files: [near],
+            params: { ...baseParams, sheets: [{ width: 600, height: 300, count: 1 }] },
+            profile: { timeBudgetSec: 13 },
+        }, {})
+        expect(nearPayload.problem).toBe('spp')
+        expect(nearPayload.instance.strip_height).toBe(300)
     })
 })
 
@@ -260,8 +283,12 @@ describe('SPP vs BPP — stock count', () => {
     })
 })
 
-describe('garde #2b (strip initial deflate vide)', () => {
-    it('espacement >= largeur initiale de bande → Error au format Python', async () => {
+describe('garde #2b (strip initial deflate vide) — bascule multi-tôles depuis J7-a', () => {
+    it('espacement ≥ largeur initiale de bande → BPP, la tôle déclarée en conteneur', async () => {
+        // Avant J7-a (étude §9.69) ce cas REFUSAIT au format Python
+        // (Error « Reduce the spacing… ») ; la bascule BPP le remplace :
+        // 50 × 50 sur 1 000 × 1 000 à espacement 3 — bande initiale
+        // 2 500/1 000 = 2,5 mm ≤ 3.
         const file = {
             slug: 'tiny-r4t5y6.dxf', name: 'tiny.dxf', count: 1, rotations: [0, 90, 180, 270],
             parts: [{
@@ -273,9 +300,13 @@ describe('garde #2b (strip initial deflate vide)', () => {
             sheets: [{ width: 1000, height: 1000, count: 1 }],
             space: 3, fillHoles: true, addOutShape: false, outputUnit: 'mm',
         }
-        await expect(buildLocalPayload(
+        const { payload } = await buildLocalPayload(
             { files: [file], params, profile: { timeBudgetSec: 13 } }, {},
-        )).rejects.toThrow(EXTRA.spacingMessage)
+        )
+        expect(payload.problem).toBe('bpp')
+        expect(payload.instance.bins).toHaveLength(1)
+        expect(payload.instance.bins[0].shape.data.outer)
+            .toEqual([[0, 0], [1000, 0], [1000, 1000], [0, 1000], [0, 0]])
     })
 })
 
@@ -613,17 +644,26 @@ describe('E4-a — fiche multi-pièces = UN item bloc (§8.1)', () => {
         expect(itemMap).toEqual([{ id: 0, slug: 'logo-q7w8e9.dxf', part: 0, parts: 3 }])
     })
 
-    it('l\'aire SPP « tout tient » mesure l\'ENVELOPPE du bloc, pas l\'aire nette (garde #2b)', async () => {
-        // totalOuterArea = hull 850 mm² × count 2 = 1700 → bande initiale
-        // 1700/1000 = 1,7 mm. À espacement 2 (> 1,7), la garde #2b DOIT
-        // refuser ; avec l'aire nette (312,5×2 = 625 → 0,625 mm), le refus
-        // passerait à tort — c'est le discriminateur enveloppe/net.
-        await expect(buildLocalPayload(
+    it('la bascule J7-a mesure l\'ENVELOPPE du bloc, pas l\'aire nette', async () => {
+        // totalOuterArea = hull 850 mm² × count 2 = 1 700 → bande initiale
+        // 1 700/1 000 = 1,7 mm. À espacement 2 (> 1,7), la bascule BPP
+        // DOIT tirer ; à espacement 1 (< 1,7 mais > 0,625, la bande que
+        // donnerait l'aire NETTE 312,5 × 2), la tâche reste en BANDE —
+        // c'est le discriminateur enveloppe/net, transposé du refus #2b à
+        // sa bascule (J7-a).
+        const atNine = await buildLocalPayload(
             { files: [multiFile()], params: { ...params, space: 0.9 }, profile: { timeBudgetSec: 13 } }, {},
-        )).resolves.toHaveProperty('payload.problem')
-        await expect(buildLocalPayload(
+        )
+        expect(atNine.payload.problem).toBe('spp')
+        expect(atNine.payload.instance.strip_height).toBeDefined()
+        const atOne = await buildLocalPayload(
+            { files: [multiFile()], params: { ...params, space: 1 }, profile: { timeBudgetSec: 13 } }, {},
+        )
+        expect(atOne.payload.problem).toBe('spp')
+        const atTwo = await buildLocalPayload(
             { files: [multiFile()], params: { ...params, space: 2 }, profile: { timeBudgetSec: 13 } }, {},
-        )).rejects.toThrow(/too large for this instance/)
+        )
+        expect(atTwo.payload.problem).toBe('bpp')
     })
 
     it('négatif bit-identique : fiches à une pièce ⇒ AUCUNE clé bloc dans le payload', async () => {
