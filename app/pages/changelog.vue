@@ -1,10 +1,8 @@
 <template>
     <div class="changelog">
         <header class="changelog__header">
-            <h1 class="changelog__title">Changelog</h1>
-            <p class="changelog__subtitle">
-                What changed in NestorCut, newest first.
-            </p>
+            <h1 class="changelog__title">{{ t('changelog.title') }}</h1>
+            <p class="changelog__subtitle">{{ t('changelog.subtitle') }}</p>
         </header>
 
         <!-- Lot J11-b : le journal UNIQUE (CHANGELOG.md, la seule source) —
@@ -23,9 +21,7 @@
                     v-for="(item, itemIndex) in bulletsOf(post)"
                     :key="itemIndex"
                     class="entry__item"
-                >
-                    {{ item }}
-                </li>
+                 v-html="item"></li>
             </ul>
         </article>
     </div>

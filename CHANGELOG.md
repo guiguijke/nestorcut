@@ -11,7 +11,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Vous déposez un fichier de travail SheetCam (`.job`) seul, sans ses DXF :
   la géométrie, la tôle, le kerf, les quantités et vos points de départ
   sont lus dans le fichier, et le nesting rend **un `.job` par tôle**
-  prêt à rouvrir dans SheetCam. Le bouton de téléchargée `.job` est
+  prêt à rouvrir dans SheetCam. Le bouton de téléchargement `.job` est
   devenu l'action principale du résultat.
 - Un dessin présent plusieurs fois dans un même `.job` (par exemple
   quatre exemplaires) donne **quatre pièces libres**, regroupées sous une
@@ -23,7 +23,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
   que vous voyez.
 - Déposez tous vos fichiers d'un coup — même plus de vingt : l'envoi
   se fait par lots automatiques, et un fichier refusé est toujours nommé.
-- Une pièce seule sur une grande tôle se nesté désormais (elle passait
+- Une pièce seule sur une grande tôle se nest désormais (elle passait
   en erreur si elle était petite devant la tôle).
 
 *EN*

@@ -31,6 +31,7 @@
                     :job-name="entry.group[0].file.sheetcamJobName"
                     class="files__item file"
                     data-testid="file-grouped-card"
+                    @openModal="openModal"
                 />
                 <template v-else>
                     <FileDone

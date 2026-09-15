@@ -258,6 +258,12 @@
                      (ce sont les itérations du recuit moteur). -->
                 <details v-if="hasTechDetails" class="report__tech" data-testid="report-tech">
                     <summary>{{ t('report.techDetails') }}</summary>
+                    <!-- Lot J11-bis (R4) : le slug technique — l'en-tête
+                         montre le NOM DU PROJET, l'identifiant reste
+                         visible ici. -->
+                    <p v-if="props.d.resultSlug" class="report__tech-line" data-testid="report-slug">
+                        {{ t('report.techSlug', { slug: props.d.resultSlug }) }}
+                    </p>
                     <!-- AB2 (L2-bis) : une option écartée au filet final
                          n'est plus perdue en silence — info repliée. -->
                     <p v-if="discardedCount" class="report__tech-line" data-testid="report-discarded">
@@ -309,6 +315,7 @@
                      télécharger un .job ») : PRIMAIRE et EN TÊTE ; le DXF
                      devient secondaire et dit son nom. Ordre et thèmes
                      Mesurés au harnais ; sans `.job` déposé, rien ne bouge. -->
+                <NewBadge feature="job-download-primary" />
                 <MainButton
                     v-if="isLocal && resultModalData.hasJobs && resultModalData.isMultiSheet"
                     :label="t('jobImport.downloadAllJobs')"

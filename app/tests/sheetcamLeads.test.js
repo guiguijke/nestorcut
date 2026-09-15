@@ -15,7 +15,7 @@
  *
  * Et les TEXTES FIGÉS du lot J8-e (point 30) — parité EN/FR exacte.
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -378,6 +378,22 @@ describe('J11-c — le badge « Nouveau » expire à 7 jours', () => {
         for (const [k, d] of Object.entries(WHATS_NEW)) {
             const age = (now - new Date(d)) / 86400000
             expect(age).toBeLessThan(30)
+        }
+    })
+
+    // Lot J11-bis (R3) : tant que le registre a une entrée ACTIVE, la clé
+    // est posée sur au moins un point de montage — un badge retiré du
+    // template pendant que le registre le promet serait une nouveauté
+    // fantôme (annoncée nulle part).
+    it('chaque clé active du registre est montée dans au moins un composant', async () => {
+        const { WHATS_NEW, isNewFeature } = await import('../utils/whatsNew')
+        const comps = readdirSync(fileURLToPath(new URL('../components', import.meta.url)))
+            .filter((f) => f.endsWith('.vue'))
+            .map((f) => readFileSync(fileURLToPath(new URL('../components/' + f, import.meta.url)), 'utf8'))
+            .join('\n')
+        for (const key of Object.keys(WHATS_NEW)) {
+            if (!isNewFeature(key)) continue
+            expect(comps).toContain(`feature="${key}"`)
         }
     })
 })

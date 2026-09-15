@@ -23,6 +23,9 @@
                  en dépose cinq d'un coup. Une fiche DXF ordinaire n'a ni
                  puce ni ligne — sa carte est inchangée. -->
             <p v-if="file.source === 'job'" class="file__origin" data-testid="file-job-origin">
+                <!-- Lot J11-bis (R3) : l'aperçu des amorces (vignette
+                     enrichie d'une fiche .job) porte SON badge du registre. -->
+                <NewBadge feature="lead-preview" />
                 <span class="file__job-chip">.job</span>
                 <span v-if="file.sheetcamJobName" class="file__origin-name" :title="file.sheetcamJobName">{{ file.sheetcamJobName }}</span>
             </p>

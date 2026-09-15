@@ -1022,6 +1022,7 @@ propre.
   force-push fait courir deux builds vers l'image `:latest` et le hash
   injecté au build peut référencer un commit orphelin (constaté :
   `1972f84`).
+- **Un lot d'interface se rapporte AVEC ses captures, et l'implémenteur les a regardées avant d'écrire « vérifié »** : « N tests verts » ne dit rien d'une carte tronquée, d'un badge absent ou d'une page en deux langues — le rapport liste chaque capture avec une ligne disant ce qu'on y voit (constat J11-bis, 15/09).
 - i18n : `app/utils/i18n.js` (EN+FR, dict plat) ; site marketing :
   `src/i18n/ui.ts` dans le dépôt frère `../nestorcut-website`.
 - Documents : vivants à la racine de `docs/`, cycle clos → `git mv` vers

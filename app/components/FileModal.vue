@@ -16,6 +16,7 @@
                     class="modal__display modal__enriched"
                 >
                     <SvgDisplay  :src="fileModalData.enrichedSvg" preserve-colors class="modal__enriched-svg" />
+                    <NewBadge feature="lead-enlarged-view" />
                     <ul class="modal__legend">
                         <li><span class="modal__swatch modal__swatch--cut" />{{ t('jobImport.legendCut') }}</li>
                         <li><span class="modal__swatch modal__swatch--lead" />{{ t('jobImport.legendLead') }}</li>

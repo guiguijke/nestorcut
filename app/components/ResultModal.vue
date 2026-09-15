@@ -560,6 +560,9 @@ const hasTechDetails = computed(() => Boolean(
     || unref(activeReport)?.iterations
     || unref(activeReport)?.vcores
     || unref(postPassLines).length
+    // Lot J11-bis (R4) : le slug vit dans les détails techniques — la
+    // section existe donc dès qu'il y a un identifiant à montrer.
+    || unref(resultModalData)?.slug
 ))
 const formatDensity = (density) => {
     if (density == null) return '—'
@@ -629,6 +632,12 @@ const placeholderClasses = computed(() => ({
         unref(isFullScreen) && !unref(isHaveError)
 }))
 const name = computed(() => {
+    // Lot J11-bis (R4) : l'en-tête du rapport montre le NOM DU PROJET —
+    // le slug technique reste copiable (le clipboard prend resultModalData.slug)
+    // mais l'atelier lit un nom, pas un identifiant.
+    const projectLabel = (globalGetters.projectsList || [])
+        .find((p) => p.slug === unref(resultModalData).projectSlug)?.name
+    if (projectLabel) return projectLabel
     const endPart = unref(resultModalData).isMultiSheet ? `.zip` : `.dxf`
     return unref(resultModalData).slug + endPart
 })
@@ -736,6 +745,9 @@ const bundle = computed(() => ({
     headlineTitle: unref(headlineTitle),
     activeStrategyExplain: unref(activeStrategyExplain),
     name: unref(name),
+    // Lot J11-bis (R4) : le slug technique vit dans les détails
+    // techniques — l'en-tête montre le nom du projet.
+    resultSlug: String(unref(resultModalData).slug || ''),
 }))
 
 // U3 passe 2 : le slug n'est plus une ligne morte — il se copie.

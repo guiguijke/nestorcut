@@ -514,6 +514,7 @@ const dict = {
         'report.coresOne': '1 core',
         // C03 : détails techniques repliés (post-pass, seed, moteur).
         'report.techDetails': 'Technical details',
+        'report.techSlug': 'Job identifier: {slug}',
         'report.discarded': '{n} option(s) rejected by final validation — diagnostic kept',
         'report.material': 'Material to plan',
         'report.sheet.num': '#',
@@ -579,7 +580,11 @@ const dict = {
         'jobImport.legendZone': 'possible tangent position (zone)',
         'jobImport.legendPierce': 'pierce point',
         'common.new': 'New',
+        'files.groupExpand': 'Show copies',
+        'files.groupCollapse': 'Hide copies',
         'changelog.current': 'Current version:',
+        'changelog.title': "What's new",
+        'changelog.subtitle': 'What changed in NestorCut, newest first.',
         'jobImport.userPointShort': 'your point',
         // Lot J8-c : le sélecteur accepte les .job en mode appareil — la
         // légende le dit (jamais en mode serveur avant J5).
@@ -1368,6 +1373,7 @@ const dict = {
         'report.coresOne': '1 cœur',
         // C03 : détails techniques repliés (post-pass, seed, moteur).
         'report.techDetails': 'Détails techniques',
+        'report.techSlug': "Identifiant du job : {slug}",
         'report.discarded': '{n} option(s) écartée(s) par la validation finale — diagnostic conservé',
         'report.material': "Matière à prévoir",
         'report.sheet.num': '#',
@@ -1431,7 +1437,11 @@ const dict = {
         'jobImport.legendZone': "position tangente possible (zone)",
         'jobImport.legendPierce': "point de perçage",
         'common.new': "Nouveau",
+        'files.groupExpand': "Voir les exemplaires",
+        'files.groupCollapse': "Masquer les exemplaires",
         'changelog.current': "Version actuelle :",
+        'changelog.title': "Nouveautés",
+        'changelog.subtitle': "Ce qui change dans NestorCut, du plus récent au plus ancien.",
         'jobImport.userPointShort': "votre point",
         'upload.limitDevice': "DXF, SVG ou .job SheetCam — 5 Mo max par fichier",
         'upload.unsupported': "Type de fichier non supporté — DXF, SVG ou DWG.",

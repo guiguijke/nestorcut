@@ -512,9 +512,20 @@ const preflightLine = computed(() => {
     if (!nParts || !files.length) return ''
     const report = preflightReport.value
     const nSheets = report?.sheetsNeeded ?? 1
+    // Lot J11-bis (R6) : le MÊME compte que l'en-tête — fichiers
+    // DÉPOSÉS, pas fiches (un .job à N sections = 1 fichier déposé).
+    const jobNames = new Set()
+    let nFiles = 0
+    for (const f of files) {
+        if (f.sheetcamJobName) {
+            if (!jobNames.has(f.sheetcamJobName)) { jobNames.add(f.sheetcamJobName); nFiles += 1 }
+            continue
+        }
+        nFiles += 1
+    }
     const bits = [
         tp('unit.part', nParts),
-        tp('unit.file', files.length),
+        nFiles === files.length ? tp('unit.file', nFiles) : tp('unit.depositedFile', nFiles),
     ]
     if (report?.totalInflatedMm2 > 0) {
         bits.push(t('project.preflightArea', { area: (report.totalInflatedMm2 / 1e6).toFixed(2) }))

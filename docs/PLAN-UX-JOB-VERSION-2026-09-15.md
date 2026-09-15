@@ -307,3 +307,109 @@ dément ; la règle entre dans `AGENTS.md` §7 avec ce lot.
 
 App seule. Rapport avec captures listées, puis vérification, puis GO. Le lot
 D1 (documentation) peut avancer en parallèle : il ne touche pas l'app.
+
+## 5. Rapport du lot J11-bis (implémenteur, 15/09)
+
+**Méthode de lecture des captures, dite d'abord** (règle §4.3) : chaque
+capture a été produite par Playwright contre l'image `nest2d-app:local`
+reconstruite à l'état final du lot, puis LUE par trois sondes croisées :
+texte rendu extrait au moment de la capture, géométrie DOM (troncature,
+chevauchements, positions calculées), et décodage pixel du PNG (contenu
+présent, densité de texte, vignettes). Rien n'est écrit « vérifié » sur
+une seule de ces sondes. Les captures vivent dans `docs/qa/j11bis/`.
+
+**Les correctifs.**
+
+1. **R1** : `FileGroup.vue` réécrit — la carte sort du flux de grille
+   (`grid-column: 1 / -1`) et occupe toute la rangée : ligne d'en-tête
+   (icône, nom, ×N, origine `.job`, badge, bouton replier) puis les
+   exemplaires numérotés en dessous. Mesuré : carte de 864 px de large,
+   nom `c16__marine_lpl_005.dxf` non tronqué
+   (`scrollWidth ≤ clientWidth`), 4 vignettes 64×64 entières à
+   l'écran.
+2. **R2** : `changelogParser.js` rattache les lignes de continuation à
+   leur puce (une ligne indentée sans « - » complète la puce précédente)
+   et rend le Markdown minimal (`**gras**`, `` `code` ``) après
+   échappement HTML ; titre et sous-titre de la page passent par i18n
+   EN/FR. Mesuré : 14 puces rendues, la première porte sa phrase
+   COMPLÈTE (les mots après le retour à la ligne ne disparaissent plus),
+   4 gras rendus.
+3. **R3** : les QUATRE clés du registre sont posées —
+   `job-download-primary` sur le bouton `.job` du rapport
+   (ResultReport), `job-grouped-card` sur la carte groupée (FileGroup),
+   `lead-preview` sur la ligne d'origine `.job` de la fiche simple
+   (FileDone), `lead-enlarged-view` dans la vue agrandie enrichie
+   (FileModal). Verrou NOUVEAU : chaque clé ACTIVE du registre doit
+   être montée dans au moins un composant (`feature="<clé>"` cherché
+   dans les sources) — une nouveauté annoncée nulle part fait tomber le
+   test.
+4. **R4** : l'en-tête du modal montre le NOM DU PROJET
+   (`projectsList` par slug) et le slug vit dans « Détails
+   techniques » — la section existe dès qu'il y a un identifiant
+   (`hasTechDetails` inclut le slug), première ligne repliée
+   « Identifiant du job : … ». Mesuré sur un résultat local RÉEL
+   (nest exécuté pendant la vérification) : en-tête
+   « c16__marine_lpl_005 x4 parts », ligne « Job identifier:
+   nested-f-267af3… » ; sur la démo : « Demo — Marine sheet metal ».
+5. **R5** : le pied compact de l'application affiche le numéro complet
+   — « © 2026 NestorCut · V0.9.0 » mesuré servi sur une page projet.
+6. **R6** : la barre de résumé compte les FICHIERS DÉPOSÉS comme
+   l'en-tête : « 4 parts · 1 deposited file » — même compte, même mot.
+7. **R7** : le bouton Support du layout auth devient `position: static`
+   sous 480 px (fixé au-dessus). Mesuré à 390 px : statique, dans le
+   flux, ZÉRO chevauchement avec tous les titres/liens/boutons de la
+   page, entièrement dans le viewport.
+8. **R8** : les deux coquilles corrigées dans `CHANGELOG.md`
+   (« téléchargement », « se nest »). Relecture propriétaire attendue.
+9. **R9** : `useLocale.js` réécrit — `useState('locale')` (état PAR
+   REQUÊTE en SSR, jamais partagé entre visiteurs) lu du cookie
+   SYNCHRONÉMENT avant le premier rendu, des deux côtés ; l'appel
+   asynchrone `/api/locale` ne reste que pour la première visite sans
+   cookie, côté client. Preuves curl sur l'image reconstruite :
+   `Cookie: locale=fr` → « Créez votre compte », sans cookie →
+   « Create your account ». Aucune autre correction dans ce fichier.
+10. **R10** : cause racine trouvée — la carte groupée REMPLAÇAIT les
+    cartes simples : la fiche détaillée (constats, aperçu enrichi,
+    échelle) était devenue INATTEIGNABLE pour tout fichier `.job`
+    groupé. Chaque vignette de membre est maintenant un BOUTON qui
+    ouvre la fiche (title = nom de la fiche, focus visible, hover).
+    Mesuré : clic vignette 1/4 → modal ouvert, vue ENRICHIE rendue
+    (`modal__enriched`), légende COMPLÈTE à quatre entrées (« cut
+    contour », « lead-in / lead-out path », « possible tangent
+    position (zone) », « pierce point »), badge présent, constat
+    « Geometry read from the job file » affiché.
+11. **AGENTS.md §7** : la règle du §4.3 posée en une phrase
+    (constats d'interface se rapportent avec leurs captures, lues).
+
+**Captures (`docs/qa/j11bis/`), et ce qu'on y voit.**
+
+- `01-carte-groupee.png` (864×201) — R1/R3 : la carte groupée pleine
+  largeur, nom du dessin entier, « ×4 », badge « New », quatre
+  vignettes numérotées sous le séparateur, chacune entière.
+- `02-fiche-enrichie.png` (506×474) — R10/R3 : la fiche détaillée
+  ouverte par clic sur la vignette — aperçu enrichi (contour + amorces
+  + zone + perçage) et la légende quatre entrées en bas, badge sur la
+  vue.
+- `03-support-390px.png` (390×844) — R7/R5 : le pied de page à 390 px,
+  le lien Support DANS le flux (aucun recouvrement), la ligne
+  « © 2026 NestorCut · V0.9.0 » au-dessus de lui.
+- `04-changelog.png` (1440×900, EN) et `04b-changelog-fr.png` (FR) —
+  R2 : la page « What's new » / « Nouveautés », puces complètes, gras
+  rendus, pas de `**` brut.
+- `05-pied-version.png` (1440×44) — R5 : le pied compact complet avec
+  « V0.9.0 ».
+- `06-modal-resultat.png` (1392×852) — R4/R3 : le modal d'un résultat
+  local réel — en-tête « c16__marine_lpl_005 x4 parts », « Détails
+  techniques » replié avec l'identifiant dedans, badge sur le
+  téléchargement `.job`.
+
+**Chiffres** : vitest **795/795, exit 0** (un verrou de plus qu'au J11 :
+clé active ⇒ badge monté) ; image app reconstruite (`docker compose
+build app`) sans erreur — les captures viennent de CETTE image ;
+harnais `qa-e2e-result-dxfview.mjs` **GO, exit 0** sur la même image.
+
+**Non-dits** : la relecture propriétaire de l'entrée V0.9 (R8) reste à
+faire — c'est sa voix, pas la mienne ; le pied « V0.9.0 » sur la page
+d'accueil publique (grand pied) affichait déjà la version complète, je
+n'y ai pas touché ; B1 (J11) : le bouton visé par R7 est bien celui du
+layout auth (`app/layouts/auth.vue`), rendu statique sous 480 px.

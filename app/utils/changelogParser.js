@@ -23,16 +23,36 @@ function parseChangelog(md) {
 }
 
 function extractBlock(body, tag) {
-    // PAS de drapeau « m » : `$` doit matcher la FIN DU BLOC (paresseux),
-    // sinon il s'arrête à la première fin de ligne et ne prend qu'une ligne.
+    // PAS de drapeau « m » : `$` doit matcher la FIN DU BLOC (paresseux).
+    // Lot J11-bis (R2) : une ligne INDENTÉE qui ne commence pas par « - »
+    // est une CONTINUATION de la puce précédente — l'ancien parseur la
+    // jetait, et chaque puce se retrouvait tronquée à sa première ligne.
     const re = new RegExp(`\\*${tag}\\*\\s*\\n([\\s\\S]*?)(?=\\s*\\*(?:FR|EN)\\*\\s*\\n|$)`)
     const m = re.exec(body)
     if (!m) return []
-    return m[1]
-        .split('\n')
-        .map((l) => l.trim())
-        .filter((l) => /^[-*]\s+/.test(l))
-        .map((l) => l.replace(/^[-*]\s+/, ''))
+    const lines = m[1].split('\n').map((l) => l.trim())
+    const items = []
+    for (const line of lines) {
+        if (/^[-*]\s+/.test(line)) {
+            items.push(renderSimpleMd(line.replace(/^[-*]\s+/, '')))
+        } else if (line && items.length && !/^\*/.test(line)) {
+            // Continuation : appartient à la puce précédente.
+            items[items.length - 1] += ' ' + renderSimpleMd(line)
+        }
+    }
+    return items
+}
+
+/**
+ * Markdown minimal : `**gras**` → <strong>, `` `code` `` → <code>, les
+ * accents graves solitaires retirés — JAMAIS affichés bruts (R2). Le
+ * contenu vient de NOTRE `CHANGELOG.md`, pas d'une entrée utilisateur.
+ */
+export function renderSimpleMd(text) {
+    return String(text || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
 }
 
 export function useAppChangelog() {

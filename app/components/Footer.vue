@@ -3,7 +3,7 @@
          Mentions · Confidentialité · Changelog · Support) ; le grand
          pied reste sur default/doc/profile. -->
     <footer v-if="compact" class="footer footer--compact">
-        <span>© {{ copyrightYear }} NestorCut</span>
+        <span>© {{ copyrightYear }} NestorCut · V{{ fullVersion }}</span>
         <NuxtLink to="/legal-notice" class="footer__one-link">{{ t('footer.legal') }}</NuxtLink>
         <NuxtLink to="/privacy" class="footer__one-link">{{ t('footer.privacy') }}</NuxtLink>
         <NuxtLink to="/changelog" class="footer__one-link">{{ t('nav.changelog') }}</NuxtLink>

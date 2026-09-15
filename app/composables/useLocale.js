@@ -11,39 +11,36 @@ import { translate, DEFAULT_LOCALE, LOCALES, formatNumber, formatPercent, plural
  *  3. The switcher in MainHeader writes the cookie, which re-renders
  *     everything reactively.
  *
- * The locale is a module-level reactive singleton shared by every component
- * that calls useLocale() (same pattern as authStore / themeStore).
+ * Lot J11-bis (R9) — LE SERVEUR HONORE LE COOKIE DE LANGUE AU RENDU.
+ * Ancien comportement : l'état démarrait à DEFAULT_LOCALE ('en') et le
+ * cookie n'était lu que côté client dans detectLocale() — le serveur
+ * rendait donc l'anglais même avec `Cookie: locale=fr`, et l'utilisateur
+ * français voyait un éclair d'anglais à chaque chargement (mesuré par
+ * curl sur la PRODUCTION). Le correctif : `useState` de Nuxt (étât PAR
+ * REQUÊTE, jamais partagé entre visiteurs) lu du cookie AVANT le premier
+ * rendu, sur le serveur comme sur le client. L'appel asynchrone
+ * /api/locale ne reste que pour la première visite sans cookie, côté
+ * client seulement.
  */
-const localeState = ref(DEFAULT_LOCALE)
-let initialized = false
+export function useLocale() {
+    // useState = PAR REQUÊTE en SSR (jamais partagé), hydraté en client.
+    const localeState = useState('locale', () => DEFAULT_LOCALE)
 
-async function detectLocale() {
-    // Cookie already set — explicit user choice, highest priority.
+    // Le cookie est lu SYNCHRONÈMENT, AVANT tout rendu — les deux côtés.
     const cookie = useCookie('locale', { maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
     if (cookie.value && LOCALES.includes(cookie.value)) {
-        return cookie.value
+        localeState.value = cookie.value
     }
-    // No cookie — ask the server to detect from the visitor's country.
-    try {
-        const detected = await $fetch('/api/locale')
-        if (detected?.locale && LOCALES.includes(detected.locale)) {
-            cookie.value = detected.locale
-            return detected.locale
-        }
-    } catch {
-        // Server route unavailable — fall back to default.
-    }
-    return DEFAULT_LOCALE
-}
 
-export function useLocale() {
-    const cookie = useCookie('locale', { maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
-
-    // Detect once per client session (on first useLocale() call).
-    if (import.meta.client && !initialized) {
-        initialized = true
-        detectLocale().then((loc) => {
-            localeState.value = loc
+    // Détection pays : uniquement côté client, et seulement sans cookie.
+    if (import.meta.client && !cookie.value) {
+        $fetch('/api/locale').then((detected) => {
+            if (detected?.locale && LOCALES.includes(detected.locale)) {
+                localeState.value = detected.locale
+                cookie.value = detected.locale
+            }
+        }).catch(() => {
+            // Server route unavailable — fall back to default.
         })
     }
 

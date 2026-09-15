@@ -120,10 +120,21 @@ const isHomePage = computed(() => {
         z-index: 2;
     }
     &__btn {
-        position: fixed;
-        bottom: 16px;
-        right: 16px;
-        z-index: 3;
+        // Lot J11-bis (R7) : sous 480 px le bouton devient STATIQUE —
+        // flottant il recouvrait les presets de tôle et tout contrôle
+        // en bas de page. Il rejoint le flux, en fin de contenu.
+        position: static;
+        margin: 16px auto 0;
+        display: block;
+        width: fit-content;
+
+        @media (min-width: 480px) {
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            margin: 0;
+            z-index: 3;
+        }
 
         @media (min-width: 1199px) {
             bottom: 60px;
