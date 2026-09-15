@@ -3086,3 +3086,20 @@ jamais joué** : il faut un `.job` d'atelier réel — plus de sept dessins,
 plusieurs pièces et copies, plusieurs opérations — et de préférence un qui
 porte une zone d'exclusion `[Work/keepout]` non nulle, que nous ne lisons
 toujours pas.
+
+**Déployé le 15/09 — `efa0e37ec90aabb805fe6b10c22d22ee425ef8c0`** (J7 +
+J6-ter `3256f706` dans la même promotion, GO du §9.71) : build
+`34942335493` vert, `promote-latest` `34944584282` vert. Hetzner
+`pull + up -d` : app et nesting-worker recréés à ce digest — et le
+conteneur Mongo a été recréé AU PASSAGE (le tag amont `mongo:7` a
+avancé) : volume intact, conteneur revenu sain, les workers ont
+reconnecté seuls ; noté ici parce que ce n'était pas voulu. Homelab :
+les trois workers de débordement `--force-recreate`, tunnel sain,
+`assert_overflow_head.py` : **ASSERT OVERFLOW=HEAD: OK** (md5 des cinq
+fichiers clés = HEAD, binaire moteur inchangé). Benchmarks publics sans
+objet — aucun fichier moteur ni wasm n'a changé depuis la production
+(vérifié par le vérificateur au §9.71). Arbitrage consigné : le marqueur
+`__spacingTooLarge` inatteignable partira avec le prochain lot qui
+touche déjà ces fichiers, pas dans un lot dédié. La recette du
+propriétaire reprend avec le tableau C-bis (les six fichiers déposés
+seuls, jumeau manuel / jumeau automatique, post-traitement SheetCam).
