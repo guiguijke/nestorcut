@@ -4165,3 +4165,31 @@ moteur, worker ou wasm). La chaîne J8-bis + J9 + J10 + J9-bis est ENTIÈREE
 en production : le `.job` seul marche, le mélange `.job`+`.dwg` est refusé
 dans les deux modes, les écartés sont nommés, le verrou d'aller-retour
 tourne en CI.
+
+#### 9.82 Déploiement J9-bis `711f4b44` — contrôle du vérificateur (15/09) — conforme
+
+Contrôlé sans rien écrire : la page de production expose
+`gitCommitSha 711f4b44…`, `app.nestorcut.com` et `nestorcut.com` répondent
+200, et le digest de `:latest` est **identique** à celui de
+`:711f4b44…` — la promotion a porté sur le SHA vérifié. Aucun diff sous
+`workers/` ni `public/` : app seule, homelab et benchmarks sans objet.
+
+**La chaîne `.job` est complète en production.** Le code de ce périmètre a
+été vérifié au lot précédent (§9.81, zéro verrou rouge sur mes propres
+mesures) ; ce contrôle-ci ne porte que sur la mise en ligne.
+
+**Ce qui reste, et qui n'attend plus que le propriétaire :**
+
+1. **La recette** — tableaux C et C-bis de
+   `docs/RECETTE-PROPRIETAIRE-2026-09-14.md`, désormais avec le fichier à
+   quatre pièces. C'est la porte d'entrée de toute nouveauté de calcul, gel
+   compris.
+2. **La carte du format** — la liste d'essais du §9.77, **zone d'exclusion
+   `[Work/keepout]` non nulle en premier** : le message d'avertissement
+   livré au lot J10 s'allumerait, et ce serait son premier essai en
+   conditions réelles.
+3. **P4-10** — le `.job` d'atelier réel : plus de sept dessins, plusieurs
+   pièces et copies, plusieurs opérations. C'est le seul point d'audit
+   jamais joué depuis l'ouverture du chantier.
+
+Rien n'est en attente côté implémenteur ni côté vérificateur.
