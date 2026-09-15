@@ -63,7 +63,7 @@ vi.mock('../composables/localFilesStore', async (importOriginal) => ({
     ...await importOriginal(),
     saveLocalFile: vi.fn(async (record) => { saved.records.push(record) }),
 }))
-const { readSheetCamJob, importLocalBytes } = await import('../composables/localImport')
+const { readSheetCamJob, importLocalBytes, importLocalFiles } = await import('../composables/localImport')
 const { resolveJobDrawingSources } = await import('../composables/sheetcamJobImport')
 
 beforeEach(() => { saved.records = [] })
@@ -576,6 +576,44 @@ describe('J6 — la fiche issue du binaire le DIT', () => {
         const { localRecordToUiFile } = await import('../composables/localImport')
         expect(localRecordToUiFile({ ...fromJob[0], parts: [], previewSvg: null }).source).toBe('job')
         expect(localRecordToUiFile({ ...fromDxf[0], parts: [], previewSvg: null }).source).toBeNull()
+    })
+
+    // J6-ter (§9.66) : le chemin de remplacement repasse PAR les gardes
+    // d'entrée d'`importLocalFiles` — `replace` voyage dans les options.
+    // Avant : un DWG déposé sous le nom d'une fiche du binaire rendait
+    // « Aucune pièce fermée trouvée » (générique) au lieu du refus
+    // actionnable, et le plafond de taille tombait avec.
+    it('les refus d\'entrée restent actifs quand replace est demandé', async () => {
+        const bytes = drawingCanonicalDxf(jobDrawings(parseSheetCamJob(SOURCE).binary)[0])
+        const fromJob = await importLocalBytes(bytes, 'Piece_Trou.DXF', 'p1', { sheetcamSource: 'job' })
+        const replace = { slug: fromJob[0].slug, addedAt: fromJob[0].addedAt }
+        const fakeFile = (name, size) => ({
+            name, size,
+            arrayBuffer: async () => new Uint8Array([0x41, 0x43, 1, 0]).buffer,
+        })
+        const before = saved.records.length
+
+        // Un `.dwg` (le nom d'un dessin peut finir en .dwg si le `.job`
+        // l'appelle ainsi) : le refus ACTIONNABLE du garde, pas le message
+        // générique du wasm.
+        await expect(importLocalFiles(fakeFile('Piece_Trou.DWG', 7537), 'p1', { replace }))
+            .rejects.toMatchObject({ message: 'localImport.dwgRejected' })
+        // Le plafond de taille suit le même chemin.
+        await expect(importLocalFiles(fakeFile('Piece_Trou.DXF', 6 * 1024 * 1024), 'p1', { replace }))
+            .rejects.toMatchObject({ message: 'upload.tooLarge' })
+        // La fiche n'est PAS touchée : rien de nouveau n'a été stocké.
+        expect(saved.records.length).toBe(before)
+
+        // Et la transmission marche : un dépôt valide AVEC replace remplace
+        // bien en place (même slug, même rang) — les gardes ne l'avalent pas.
+        const valid = {
+            name: 'Piece_Trou.DXF', size: bytes.length,
+            arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+        }
+        const fromDxf = await importLocalFiles(valid, 'p1', { replace })
+        expect(fromDxf[0].slug).toBe(replace.slug)
+        expect(fromDxf[0].addedAt).toBe(replace.addedAt)
+        expect(fromDxf[0].source).toBeUndefined()
     })
 })
 

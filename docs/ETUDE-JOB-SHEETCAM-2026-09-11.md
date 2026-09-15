@@ -2763,3 +2763,29 @@ un `.dwg` déposé sous le nom d'une fiche `source: 'job'` rend
 **GO a posteriori pour `777b48a8`** (déploiement couvert par le GO du §9.64,
 qui autorisait J6 et J6-bis dans la même promotion). La recette C1 du
 propriétaire se joue désormais avec le `.job` **seul**.
+
+#### 9.67 Lot J6-ter — rapport de l'implémenteur (15/09)
+
+Le constat du §9.66, corrigé tel que demandé — une ligne de chaque côté.
+
+Le chemin de remplacement ne court-circuite plus `importLocalFiles` :
+`importDxfReplacingJobFiche` (`files.js`) lui passe le File AVEC
+`replace` dans les options, et `importLocalFiles` — qui transmettait déjà
+ses options à `importLocalBytes` — exécute ses gardes d'entrée AVANT de
+remplacer : extension (`.dwg` → `localImport.dwgRejected`), type accepté,
+plafond de taille, signature `.job`. Plus aucune différence de message
+entre le chemin ordinaire et le chemin de remplacement pour un même
+dépôt.
+
+**Verrou** (`sheetcamJobGeometry.test.js`) : un `.dwg` déposé avec
+`replace` rend le refus ACTIONNABLE du garde et la fiche n'est pas
+touchée (rien de stocké) ; le plafond de taille suit le même chemin
+(`upload.tooLarge`) ; et la transmission reste intacte — un dépôt valide
+avec `replace` remplace bien en place (même slug, même `addedAt`,
+provenance retirée). Suite entière **769/769**, `nuxt build` vert, pile
+locale reconstruite aux sources et harnais `QA_TWO_DROPS` repassé : tous
+verrous verts (le remplacement par le chemin des gardes fonctionne de
+bout en bout — 2 fiches, sources nulles, mêmes slugs et rangs).
+
+Périmètre : deux fichiers (`files.js`, test) — app seule. Déploiement
+après GO, ou groupé avec le prochain lot.

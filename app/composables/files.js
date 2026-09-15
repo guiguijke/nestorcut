@@ -535,9 +535,16 @@ async function explodeFiche(file) {
  * la fiche ; lot `.job` : ceux du dépôt, plus frais, gagnent). Un DXF
  * redéposé pour une fiche déjà DXF reste le comportement historique —
  * seules les fiches `source: 'job'` se remplacent.
+ *
+ * Lot J6-ter (§9.66) : le remplacement passe PAR `importLocalFiles`, ses
+ * gardes d'entrée comprises (extension, taille, signature `.job`) —
+ * `replace` voyage dans les options jusqu'à `importLocalBytes`. Auparavant
+ * le chemin court-circuitait ces gardes : un DWG déposé sous le nom d'une
+ * fiche du binaire rendait « Aucune pièce fermée trouvée » au lieu du refus
+ * actionnable, et le plafond de taille tombait avec.
  */
 async function importDxfReplacingJobFiche(file, slug, options = {}) {
-    const { importLocalFiles, importLocalBytes } = await import('./localImport')
+    const { importLocalFiles } = await import('./localImport')
     const nameEq = (a, b) => String(a || '').trim().toLowerCase()
         === String(b || '').trim().toLowerCase()
     const existing = (state.projectFiles || []).find(
@@ -545,8 +552,7 @@ async function importDxfReplacingJobFiche(file, slug, options = {}) {
     if (!existing) return importLocalFiles(file, slug, options)
     const { getLocalFile } = await import('./localFilesStore')
     const previous = await getLocalFile(existing.slug)
-    const bytes = new Uint8Array(await file.arrayBuffer())
-    return importLocalBytes(bytes, file.name, slug, {
+    return importLocalFiles(file, slug, {
         ...options,
         ...(previous?.sheetcam && !options.sheetcam ? { sheetcam: previous.sheetcam } : {}),
         ...(previous?.sheetcamJobBytes && !options.sheetcamJobBytes
