@@ -3,7 +3,28 @@
         <div class="modal">
             <div class="modal__wrapper">
                 <FileParts :class="partsClasses" :parts="fileModalData.parts" class="modal__parts"/>
+                <!-- Lot J11-a (A5) : la vue agrandie d'une fiche `.job` montre
+                     l'aperçu ENRICHI (contour, points de départ, amorces,
+                     disque de perçage) — c'est PRÉCISÉMENT là qu'on veut les
+                     vérifier, la vignette de la carte les rend illisibles.
+                     Même source que la vignette (J8-b), à taille lisible,
+                     avec la légende des quatre tracés. Une fiche ordinaire
+                     garde la vue DXF d'origine, inchangée. -->
+                <div
+                    v-if="fileModalData.enrichedSvg"
+                    :class="displayClasses"
+                    class="modal__display modal__enriched"
+                >
+                    <SvgDisplay  :src="fileModalData.enrichedSvg" preserve-colors class="modal__enriched-svg" />
+                    <ul class="modal__legend">
+                        <li><span class="modal__swatch modal__swatch--cut" />{{ t('jobImport.legendCut') }}</li>
+                        <li><span class="modal__swatch modal__swatch--lead" />{{ t('jobImport.legendLead') }}</li>
+                        <li><span class="modal__swatch modal__swatch--zone" />{{ t('jobImport.legendZone') }}</li>
+                        <li><span class="modal__swatch modal__swatch--pierce" />{{ t('jobImport.legendPierce') }}</li>
+                    </ul>
+                </div>
                 <DxfViewerComponent
+                    v-else
                     :key="`dxf-0-${isFullScreen}`"
                     :dxfUrl="fileModalData.dxfUrl"
                     :isFullScreen="isFullScreen"
@@ -137,6 +158,62 @@ const partsClasses = computed(() => ({
                 height: calc(80vh - 148px);
             }
         }
+    }
+}
+</style><style lang="scss" scoped>
+// Lot J11-a (A5) : la vue agrandie enrichie — même source que la vignette,
+// à taille lisible, avec sa légende. Couleurs explicites (piège #21).
+.modal__enriched {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px;
+}
+
+.modal__enriched-svg {
+    width: 100%;
+    max-height: 320px;
+}
+
+.modal__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--fs-12, 12px);
+    color: var(--label-secondary);
+
+    li {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+}
+
+.modal__swatch {
+    width: 14px;
+    height: 8px;
+    border-radius: 2px;
+    flex: none;
+
+    &--cut {
+        background: #2563eb;
+    }
+
+    &--lead {
+        background: #D97706;
+    }
+
+    &--zone {
+        background: rgba(217, 119, 6, 0.25);
+        border: 1px solid rgba(217, 119, 6, 0.6);
+    }
+
+    &--pierce {
+        background: rgba(217, 119, 6, 0.15);
+        border: 1px dashed #D97706;
     }
 }
 </style>

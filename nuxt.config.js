@@ -60,6 +60,9 @@ export default defineNuxtConfig({
         public: {
             baseUrl: "http://localhost:3000",
             gitCommitSha: "",
+            // Lot J11-b : version produit de package.json — l'en-tête affiche
+            // MAJEUR.MINEUR, le pied de page et le journal le numéro complet.
+            appVersion: require('./package.json').version,
             googleClientId: "",
             clarityId: "",
             localAuthEnabled: true,

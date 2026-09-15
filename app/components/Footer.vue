@@ -92,6 +92,8 @@
             <div class="footer__meta">
                 <p class="footer__copyright">
                     © {{ copyrightYear }} NestorCut by APlasma.
+                    <!-- Lot J11-b : le numéro complet, et le lien vers le journal. -->
+                    <br>NestorCut V{{ fullVersion }} — <NuxtLink to="/changelog" class="footer__one-link">{{ t('footer.whatsNew') }}</NuxtLink>
                 </p>
                 <p class="footer__note">
                     NestorCut is under very active development — a bug you hit today may already be fixed tomorrow.
@@ -109,6 +111,8 @@ defineProps({
 })
 const { t } = useLocale()
 const { copyrightYear, discordUrl, githubIssues: supportUrl } = useSiteConfig();
+// Lot J11-b : version complète (MAJEUR.MINEUR.CORRECTIF) au pied de page.
+const fullVersion = String(useRuntimeConfig().public.appVersion || '')
 </script>
 
 <style lang="scss" scoped>

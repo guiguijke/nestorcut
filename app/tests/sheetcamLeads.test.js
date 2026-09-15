@@ -330,3 +330,65 @@ describe('J8-a — downloadLocalJobs : un .job par tôle, en un clic', () => {
         }
     })
 })
+
+// --- J11-b : la version produit et le journal ---------------------------------
+
+describe('J11-b — version produit et journal unique', () => {
+    it('package.json porte la version 0.9.x, le journal en parle', () => {
+        const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'))
+        expect(pkg.version).toMatch(/^0\.9\.\d+$/)
+        const md = readFileSync(fileURLToPath(new URL('../../CHANGELOG.md', import.meta.url)), 'utf8')
+        expect(md).toMatch(/^## V0\.9/m)
+        // FR puis EN dans CHAQUE entrée (règle du §9.77bis : jamais après).
+        for (const chunk of md.split(/^## /m).slice(1)) {
+            expect(chunk).toMatch(/\*FR\*/)
+            expect(chunk).toMatch(/\*EN\*/)
+        }
+    })
+
+    it('le parseur du journal découpe versions et blocs FR/EN', async () => {
+        const { useAppChangelog } = await import('../utils/changelogParser')
+        const versions = useAppChangelog()
+        expect(versions.length).toBeGreaterThanOrEqual(1)
+        expect(versions[0].title).toMatch(/^V0\.9/)
+        expect(versions[0].fr.length).toBeGreaterThanOrEqual(4)
+        expect(versions[0].en.length).toBeGreaterThanOrEqual(4)
+    })
+})
+
+// --- J11-c : le badge « Nouveau » qui expire tout seul ------------------------
+
+describe('J11-c — le badge « Nouveau » expire à 7 jours', () => {
+    it("à J+6 il est nouveau, à J+8 il ne l'est plus", async () => {
+        const { isNewFeature } = await import('../utils/whatsNew')
+        // Une clé réelle du registre.
+        const key = 'job-download-primary'
+        const released = new Date('2026-09-14')
+        const at = (days) => new Date(released.getTime() + days * 86400000)
+        expect(isNewFeature(key, at(6))).toBe(true)
+        expect(isNewFeature(key, at(8))).toBe(false)
+    })
+
+    it('une clé inconnue n\'est jamais nouvelle ; le registre est vivant', async () => {
+        const { isNewFeature, WHATS_NEW } = await import('../utils/whatsNew')
+        expect(isNewFeature('cle-inexistante')).toBe(false)
+        expect(Object.keys(WHATS_NEW).length).toBeGreaterThanOrEqual(3)
+        // Discipline : aucune entrée de plus de 30 jours (le lot doit vider).
+        const now = new Date()
+        for (const [k, d] of Object.entries(WHATS_NEW)) {
+            const age = (now - new Date(d)) / 86400000
+            expect(age).toBeLessThan(30)
+        }
+    })
+})
+
+// --- J11-a : le titre de projet ne mange plus le suffixe (k/N) ----------------
+
+describe('J11-a — titre de projet et suffixe (k/N)', () => {
+    it('« X.dxf (3/4) » donne « X (3/4) », jamais « 4) »', async () => {
+        const { titleFromFileName } = await import('../utils/projectTitle')
+        expect(titleFromFileName('c16__marine.dxf (3/4)')).toBe('c16__marine (3/4)')
+        expect(titleFromFileName(String.raw`C:\jobs\mon.dxf`)).toBe('mon')
+        expect(titleFromFileName('Piece_Trou.DXF')).toBe('Piece_Trou')
+    })
+})

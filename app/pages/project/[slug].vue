@@ -486,9 +486,23 @@ const preflightReport = computed(() => {
 })
 const partsFilesLine = computed(() => {
     const nParts = unref(filesCount)
-    const nFiles = unref(projectFilesCount)
     if (!nParts) return ''
-    return `${tp('unit.part', nParts)} · ${tp('unit.file', nFiles)}`
+    // Lot J11-a (A3) : le compte de « fichiers » est celui des FICHIERS
+    // DÉPOSÉS, pas des fiches — un `.job` à quatre sections reste UN
+    // fichier déposé. Sur un projet local, on regroupe par `.job` ; les
+    // fiches sans `.job` comptent pour leur fichier.
+    const files = projectFiles.value || []
+    const jobNames = new Set()
+    let nFiles = 0
+    for (const f of files) {
+        if (f.sheetcamJobName) {
+            if (!jobNames.has(f.sheetcamJobName)) { jobNames.add(f.sheetcamJobName); nFiles += 1 }
+            continue
+        }
+        nFiles += 1
+    }
+    if (nFiles === files.length) return `${tp('unit.part', nParts)} · ${tp('unit.file', nFiles)}`
+    return `${tp('unit.part', nParts)} · ${tp('unit.depositedFile', nFiles)}`
 })
 // U2 : carte pré-vol — réponse avant le calcul, recalculée à chaque réglage.
 // Pluriel accordé ; l'aire est omise si inconnue (jamais « — m² »).

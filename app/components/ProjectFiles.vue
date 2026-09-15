@@ -14,31 +14,47 @@
         />
         <p v-if="rejectError" class="files__error">{{ t(rejectError, rejectParams) }}</p>
         <div class="files__grid">
+            <!-- Lot J11-a (A2) : les fiches d'un même dessin issues du MÊME
+                 `.job` se rendent sous UNE carte groupée dépliable — le
+                 modèle reste une fiche par section (ses points de départ),
+                 c'est la présentation qui regroupe. Une fiche seule reste
+                 une carte ordinaire ; la recette ×4 (deux dessins) donne
+                 toujours deux cartes. -->
             <template
-                v-for="(file, fileIndex) in projectFiles"
-                :key="file.slug"
+                v-for="(entry, fileIndex) in groupedFiles"
+                :key="entry.file.slug"
             >
-                <FileDone
-                    :file="file"
-                    :fileIndex="fileIndex"
-                    :canEdit="!readonly && !file.expired"
-                    @openModal="openModal(file)"
-                    @scale="onScale(file)"
-                    @resetScale="onResetScale(file)"
-                    @explode="explodeTarget = file"
-                    v-if="fileIsDone(file.processingStatus)"
+                <FileGroup
+                    v-if="entry.group"
+                    :items="entry.group"
+                    :drawing-name="entry.group[0].file.sheetcamDrawingName || entry.group[0].file.name"
+                    :job-name="entry.group[0].file.sheetcamJobName"
                     class="files__item file"
+                    data-testid="file-grouped-card"
                 />
-                <FileInProgress
-                    :file="file"
-                    v-if="fileIsProcessing(file.processingStatus)"
-                    class="files__item file"
-                />
-                <FileError
-                    :file="file"
-                    v-if="fileIsError(file.processingStatus)"
-                    class="files__item file"
-                />
+                <template v-else>
+                    <FileDone
+                        :file="entry.file"
+                        :fileIndex="entry.index"
+                        :canEdit="!readonly && !entry.file.expired"
+                        @openModal="openModal(entry.file)"
+                        @scale="onScale(entry.file)"
+                        @resetScale="onResetScale(entry.file)"
+                        @explode="explodeTarget = entry.file"
+                        v-if="fileIsDone(entry.file.processingStatus)"
+                        class="files__item file"
+                    />
+                    <FileInProgress
+                        :file="entry.file"
+                        v-if="fileIsProcessing(entry.file.processingStatus)"
+                        class="files__item file"
+                    />
+                    <FileError
+                        :file="entry.file"
+                        v-if="fileIsError(entry.file.processingStatus)"
+                        class="files__item file"
+                    />
+                </template>
             </template>
         </div>
         <FileModal v-model:isModalOpen="fileDialog" />
@@ -116,6 +132,39 @@ const rejectParams = ref({})
 // Lot E4-b/E4-c : les actions de fiche passent par le store — lui seul sait
 // si la fiche est locale (IndexedDB) ou serveur (routes + worker).
 const { actions: filesActions } = filesStore
+
+// Lot J11-a (A2) : le regroupement PRÉSENTATIONNEL. Fiches partageant le
+// même `.job` ET le même nom de dessin → une carte groupée. Le groupement
+// ne s'applique qu'aux fiches ISSUES DU BINAIRE (sheetcamJobName) : un
+// DXF déposé à côté reste sa propre carte, même nom ou non.
+const groupedFiles = computed(() => {
+    const out = []
+    const groups = new Map()
+    ;(props.projectFiles || []).forEach((file, index) => {
+        const sc = file.sheetcamJobName ? file : null
+        const key = sc
+            ? `${file.sheetcamJobName}::${file.sheetcamDrawingName || file.name}`
+            : null
+        if (key && groups.has(key)) {
+            groups.get(key).push({ file, index })
+            return
+        }
+        if (key) {
+            groups.set(key, [{ file, index }])
+            // Placeholder : remplacé par le groupe une fois la liste finie.
+            out.push({ file, index, groupKey: key, group: null })
+            return
+        }
+        out.push({ file, index, group: null })
+    })
+    for (const entry of out) {
+        if (entry.groupKey) {
+            const members = groups.get(entry.groupKey) || []
+            entry.group = members.length > 1 ? members : null
+        }
+    }
+    return out
+})
 
 const addFiles = (files) => {
     rejectError.value = ''

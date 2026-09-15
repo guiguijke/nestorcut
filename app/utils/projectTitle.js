@@ -5,11 +5,20 @@
  * device on that path).
  */
 export function titleFromFileName(name) {
-    const base = String(name || '')
-        .replace(/^.*[/\\]/, '')
+    // Lot J11-a (A1) : ne traiter comme CHEMIN qu'un séparateur AVANT le
+    // nom, jamais DANS une parenthèse finale. Les fiches `.job` portent des
+    // suffixes « nom (3/4) » depuis le lot J9 : l'ancienne expression
+    // `^.*[/\\]/` voyait le « / » du suffixe et jetait tout ce qui précède —
+    // le projet du fichier à quatre pièces s'appelait « 4) ».
+    const slashed = String(name || '').replace(/^.*[/\\](?=[^()]*$)/, '')
+    // L'extension s'ôte AVANT le suffixe « (k/N) » : « X.dxf (3/4) » doit
+    // donner « X (3/4) », pas « X ».
+    const suffix = /(\s\(\d+\/\d+\))$/.exec(slashed)
+    const stem = suffix ? slashed.slice(0, suffix.index) : slashed
+    const base = stem
         .replace(/\.[^.]+$/, '')
         .replace(/[\u0000-\u001f<>:"|?*]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim()
-    return base.slice(0, 80)
+    return (base + (suffix ? suffix[1] : '')).slice(0, 80)
 }

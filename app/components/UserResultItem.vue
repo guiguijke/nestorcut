@@ -340,7 +340,12 @@ const resultTitle = computed(() => {
     // C05 (lot 3) : job calculé dans le navigateur d'un AUTRE appareil —
     // la géométrie n'existe pas ici : message explicite, pas « 0 tôles ».
     if (props.result?.localElsewhere) {
-        return t('results.otherDevice')
+        // Lot J11-a (B2) : le NOM DU PROJET distingue les cartes — le mur de
+        // « autre appareil » identiques ne disait rien. La raison reste en
+        // sous-titre (statusLabel la porte déjà).
+        return projectName.value
+            ? `${projectName.value} · ${t('results.otherDevice')}`
+            : t('results.otherDevice')
     }
     // Plan 2026-09-05 §1.2c : un résultat unfit (hors tôle mesuré) est
     // étiqueté « ne tient pas » — jamais « Results · 1 sheet ».

@@ -164,6 +164,8 @@ const dict = {
         'unit.part.other': '{n} parts',
         'unit.file.one': '{n} file',
         'unit.file.other': '{n} files',
+        'unit.depositedFile.one': '{n} deposited file',
+        'unit.depositedFile.other': '{n} deposited files',
         'unit.sheet.one': '{n} sheet',
         'unit.sheet.other': '{n} sheets',
         'project.preflightSheets.one': '≈ {n} sheet at this spacing',
@@ -458,7 +460,7 @@ const dict = {
         'live.finishing': 'Finishing the last sheet',
         'live.elapsed': 'elapsed',
         'live.elapsedTitle': 'Elapsed time',
-        'live.score': 'density',
+        'live.score': 'strip density',
         'live.scoreTitle': 'Sheet utilization of the current best layout',
         'live.waiting': 'Searching for a first layout…',
         // C10/C28 (lot 3) : ligne d'état pendant le calcul local.
@@ -571,6 +573,14 @@ const dict = {
         'home.jobSwitched': 'SheetCam .job detected — switched to "This device", the mode that nests them.',
         'home.jobPlusDwg': 'A SheetCam .job needs "This device"; a DWG needs "Our servers". Drop them in two separate projects.',
         'jobImport.keepoutDeclared': 'This job file declares an exclusion zone on the sheet (Work/keepout) that NestorCut cannot honour yet — nesting may place parts inside it.',
+        'jobImport.userPoint': 'Start point you placed by hand — kept as-is.',
+        'jobImport.legendCut': 'cut contour',
+        'jobImport.legendLead': 'lead-in / lead-out path',
+        'jobImport.legendZone': 'possible tangent position (zone)',
+        'jobImport.legendPierce': 'pierce point',
+        'common.new': 'New',
+        'changelog.current': 'Current version:',
+        'jobImport.userPointShort': 'your point',
         // Lot J8-c : le sélecteur accepte les .job en mode appareil — la
         // légende le dit (jamais en mode serveur avant J5).
         // Lot J8-e (§9.73 point 30) : le compte disparaît — plus personne
@@ -819,6 +829,7 @@ const dict = {
         'auth.googleError.no_email': 'Your Google account exposes no email address.',
         'auth.googleError.generic': 'Google sign-in failed — please try another method.',
         // U1 : pied compact (layout auth).
+        'footer.whatsNew': "What's new",
         'footer.legal': 'Legal notice',
         'footer.privacy': 'Privacy',
 
@@ -1023,6 +1034,8 @@ const dict = {
         'unit.part.other': '{n} pièces',
         'unit.file.one': '{n} fichier',
         'unit.file.other': '{n} fichiers',
+        'unit.depositedFile.one': '{n} fichier déposé',
+        'unit.depositedFile.other': '{n} fichiers déposés',
         'unit.sheet.one': '{n} tôle',
         'unit.sheet.other': '{n} tôles',
         'project.preflightSheets.one': '≈ {n} tôle à cet espacement',
@@ -1303,7 +1316,7 @@ const dict = {
         'live.finishing': 'Finition de la dernière tôle',
         'live.elapsed': 'écoulé',
         'live.elapsedTitle': 'Temps écoulé',
-        'live.score': 'densité',
+        'live.score': 'densité de la bande',
         'live.scoreTitle': "Utilisation de la tôle du meilleur agencement actuel",
         'live.waiting': "Recherche d'un premier agencement…",
         // C10/C28 (lot 3) : ligne d'état pendant le calcul local.
@@ -1412,6 +1425,14 @@ const dict = {
         'home.jobSwitched': "Fichier .job SheetCam détecté — passage en « Cet appareil », le mode qui les neste.",
         'home.jobPlusDwg': "Un .job SheetCam demande « Cet appareil », un DWG demande « Nos serveurs ». Déposez-les dans deux projets séparés.",
         'jobImport.keepoutDeclared': "Ce fichier de travail déclare une zone d'exclusion sur la tôle (Work/keepout) que NestorCut ne sait pas encore respecter — le nesting peut poser des pièces dedans.",
+        'jobImport.userPoint': "Point de départ posé à la main — conservé tel quel.",
+        'jobImport.legendCut': "contour de coupe",
+        'jobImport.legendLead': "trajet d'amorce",
+        'jobImport.legendZone': "position tangente possible (zone)",
+        'jobImport.legendPierce': "point de perçage",
+        'common.new': "Nouveau",
+        'changelog.current': "Version actuelle :",
+        'jobImport.userPointShort': "votre point",
         'upload.limitDevice': "DXF, SVG ou .job SheetCam — 5 Mo max par fichier",
         'upload.unsupported': "Type de fichier non supporté — DXF, SVG ou DWG.",
         'upload.tooLarge': "Chaque fichier doit faire 5 Mo ou moins.",
@@ -1656,6 +1677,7 @@ const dict = {
         'auth.googleError.no_email': "Votre compte Google n'expose pas d'adresse e-mail.",
         'auth.googleError.generic': 'La connexion Google a échoué — essayez une autre méthode.',
         // U1 : pied compact (layout auth).
+        'footer.whatsNew': "Nouveautés",
         'footer.legal': 'Mentions légales',
         'footer.privacy': 'Confidentialité',
 

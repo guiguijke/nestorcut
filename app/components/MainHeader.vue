@@ -12,6 +12,10 @@
                 class="logo__mark"
             />
             <span class="logo__label"> Nestor<span class="logo__label--light">Cut</span> </span>
+            <!-- Lot J11-b : la version PRODUIT à côté du titre —
+                 MAJEUR.MINEUR seulement (V0.9), discret. Le numéro complet
+                 vit au pied de page et dans le journal. -->
+            <span class="logo__version" data-testid="header-version">V{{ majorMinor }}</span>
         </component>
         <!-- U1 : lien « Espace de travail » en texte simple — plus de
              pilule centrée, l'en-tête tient sur une ligne à 56 px. -->
@@ -128,6 +132,9 @@
     const { githubIssues } = useSiteConfig()
 
     const { t } = useLocale()
+// Lot J11-b : version produit de package.json (runtimeConfig).
+const appVersion = String(useRuntimeConfig().public.appVersion || '')
+const majorMinor = appVersion.split('.').slice(0, 2).join('.')
 
     const loginDialog = useLoginDialog()
 
@@ -381,7 +388,17 @@
             object-fit: contain;
         }
 
-        &__label {
+                    // Lot J11-b : la version d'en-tête, discrète mais lisible sur les
+            // deux thèmes (piège #21).
+            &__version {
+                margin-left: 6px;
+                font-size: var(--fs-12, 12px);
+                font-weight: 500;
+                color: var(--label-tertiary);
+                letter-spacing: 0.02em;
+            }
+
+&__label {
             display: block;
             font-size: var(--fs-22);
             font-weight: 700;

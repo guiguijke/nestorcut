@@ -36,12 +36,18 @@ export async function overlayLocalProjectTitles(projects) {
         const { listLocalFiles } = await import('./localFilesStore')
         const files = await listLocalFiles()
         const firstByProject = new Map()
+        const firstJobNameByProject = new Map()
         for (const rec of files) {
             if (!firstByProject.has(rec.projectSlug)) firstByProject.set(rec.projectSlug, rec.name)
+            if (rec.sheetcam?.jobName && !firstJobNameByProject.has(rec.projectSlug)) {
+                firstJobNameByProject.set(rec.projectSlug, rec.sheetcam.jobName)
+            }
         }
         return projects.map((p) => {
             if (!p?.local) return p
-            const fromFile = titleFromFileName(firstByProject.get(p.slug))
+            // Lot J11-a (A1) : le titre préfère le nom du `.job` déposé.
+            const jobName = (firstJobNameByProject.get(p.slug)) || null
+            const fromFile = titleFromFileName(jobName || firstByProject.get(p.slug))
             return fromFile ? { ...p, name: fromFile } : p
         })
     } catch {

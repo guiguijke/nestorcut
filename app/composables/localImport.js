@@ -894,5 +894,15 @@ export function localRecordToUiFile(record) {
         // secondaire de la carte — l'atelier doit dire d'un coup d'œil
         // quelle fiche vient de quel `.job` quand il en dépose cinq.
         sheetcamJobName: record.sheetcam?.jobName || null,
+        sheetcamDrawingName: record.sheetcam?.drawingName || null,
+        // Lot J11-a (A5) : la vue agrandie de la fiche `.job` montre
+        // l'aperçu ENRICHI (amorce, perçage) — présent dès que les amorces
+        // y sont dessinées, absent pour une fiche ordinaire.
+        ...(record.source === 'job' && record.previewSvg
+            ? { enrichedSvg: record.previewSvg }
+            : {}),
+        // Lot J11-a : l'exemplaire porte-t-il des points déplacés à la main ?
+        // (booléen nu — la fiche détaillée reste au modal)
+        sheetcamUserPoints: (record.sheetcam?.starts || []).some((s) => s?.moved === true),
     }
 }

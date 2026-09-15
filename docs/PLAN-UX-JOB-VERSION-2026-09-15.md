@@ -163,3 +163,66 @@ et la documentation l'explique.
 **Note** : la première version de cette consigne n'avait pas été transmise à
 l'implémenteur ; celle-ci en tient lieu, avec le plan documentation qui
 l'accompagne.
+
+---
+
+## Rapport du lot J11 (implémenteur, 15/09)
+
+**J11-a — les correctifs de l'audit.**
+1. **A1 (le nom « 4) »)** : `titleFromFileName` ne traite comme chemin
+   qu'un séparateur AVANT une fin sans parenthèse (`(?=[^()]*$)`), et
+   l'extension s'ôte AVANT le suffixe — « X.dxf (3/4) » donne « X (3/4) ».
+   Le nom du projet local préfère le NOM DU `.job` déposé
+   (`sheetcam.jobName`, fichiers.js et projects.js) : le projet issu de
+   j9-1 s'appelle « c16__marine_lpl_005 x4 parts », vérifié au navigateur.
+2. **A2 (la carte groupée)** : nouveau composant `FileGroup.vue` —
+   les fiches partageant `sheetcamJobName` ET `sheetcamDrawingName` se
+   rendent sous UNE carte « nom · ×N » dépliable (exemplaires numérotés,
+   vignettes, marque « votre point » pour celles déplacées à la main).
+   La quantité vit sur le GROUPE (répartie 1 par exemplaire, l'excédent
+   en copies du dernier). Vérifié au navigateur : j9-1 seul ⇒ **une**
+   carte « c16__marine_lpl_005.dxf ×4 », dépliée ⇒ 4 vignettes ;
+   la recette ×4 (deux dessins) donne deux cartes ordinaires (verrou du
+   harnais D4/A1 repassés verts). **Aucun bouton « Éclater »** — c'est
+   la présentation qui groupe, jamais le modèle.
+3. **A3** : l'en-tête compte les FICHIERS DÉPOSÉS (regroupés par
+   `.job`), plus les fiches : « 4 pièces · 1 fichier déposé » sur j9-1.
+4. **A4** : la vue live étiquette « densité de la bande » /
+   « strip density », le résultat garde « densité matière » — deux mots
+   pour deux grandeurs, EN et FR.
+5. **A5** : la vue agrandie d'une fiche `.job` montre l'aperçu ENRICHI
+   (amorce, zone tangente, perçage) avec une légende de quatre entrées ;
+   une fiche ordinaire garde sa vue DXF.
+6. **B2-B3** : les cartes « autre appareil » portent le nom du projet ;
+   l'en-tête du modal montre le nom du projet, le slug part en détails
+   techniques. **B1 non localisé** : aucun bouton flottant « Support »
+   n'existe dans le code (le lien Support est dans le pied de page) —
+   le recouvrement à 390 px vient probablement d'un widget tiers
+   (Clarity n'en est pas un) : à clarifier avec le vérificateur, DIT
+   ici plutôt que corrigé à l'aveugle.
+
+**J11-b — la version.** `package.json` porte `0.9.0` ;
+`runtimeConfig.public.appVersion` l'injecte au build ; l'en-tête affiche
+« V0.9 » (MAJEUR.MINEUR, discret, vérifié servi), le pied de page le
+numéro complet avec le lien « Nouveautés » vers `/changelog`. Le journal
+est UNIQUE : `CHANGELOG.md` à la racine, lu par la page (parseur
+`changelogParser.js`, blocs FR/EN), première entrée **V0.9** rédigée en
+langage d'atelier (FR puis EN) — le propriétaire la relit, c'est sa
+voix. Verrous : version = package.json, entrées FR+EN dans CHAQUE
+version, parseur ≥ 4 puces par langue.
+
+**J11-c — le badge.** `app/utils/whatsNew.js` (registre daté) +
+`NewBadge.vue` (rend tant que aujourd'hui < livréLe + 7 jours, aucune
+conservation, « Nouveau »/« New » toujours en toutes lettres, couleurs
+explicites). Verrous : J+6 rend, J+8 ne rend plus ; clé inconnue jamais
+nouvelle ; registre sans entrée de plus de 30 jours.
+
+**Chiffres** : vitest **794/794, exit 0** ; `nuxt build` 0 erreur ;
+harnais complet repassé TOUS VERTS ; en-tête « V0.9 » servi vérifié ;
+page `/changelog` rend « Current version: V0.9.0 » avec les puces du
+journal.
+
+**Non-dits** : B1 (ci-dessus) ; le verrou CI « promotion sans entrée de
+journal ni incrément » demande de toucher `build-images.yml` (GitHub
+Actions) — fait au déploiement, avec le GO ; D1 documentation démarré
+en parallèle selon le plan.

@@ -7,42 +7,32 @@
             </p>
         </header>
 
+        <!-- Lot J11-b : le journal UNIQUE (CHANGELOG.md, la seule source) —
+             la version courante en tête, la langue de l'utilisateur. -->
+        <p class="changelog__current" data-testid="changelog-current">
+            {{ t('changelog.current') }} <strong>V{{ fullVersion }}</strong>
+        </p>
         <article
-            v-for="(post, postIndex) in posts"
-            :key="postIndex"
+            v-for="(post, postIndex) in versions"
+            :key="post.title"
             class="changelog__entry entry"
         >
-            <header class="entry__header">
-                <time :datetime="post.datetime" class="entry__date">
-                    {{ formatDate(post.datetime) }}
-                </time>
-                <h2 class="entry__title">{{ post.title }}</h2>
-            </header>
-            <div
-                v-for="(section, sectionIndex) in post.sections"
-                :key="sectionIndex"
-                class="entry__section"
-            >
-                <h3 v-if="section.title" class="entry__section-title">
-                    {{ section.title }}
-                </h3>
-                <ul v-if="Array.isArray(section.content)" class="entry__list">
-                    <li
-                        v-for="(item, itemIndex) in section.content"
-                        :key="itemIndex"
-                        class="entry__item"
-                    >
-                        {{ item }}
-                    </li>
-                </ul>
-                <p v-else class="entry__text">{{ section.content }}</p>
-            </div>
+            <h2 class="entry__title">{{ post.title }}</h2>
+            <ul class="entry__list">
+                <li
+                    v-for="(item, itemIndex) in bulletsOf(post)"
+                    :key="itemIndex"
+                    class="entry__item"
+                >
+                    {{ item }}
+                </li>
+            </ul>
         </article>
     </div>
 </template>
 
 <script setup>
-import { useChangelog } from "~~/data/changelog";
+import { useAppChangelog } from '~/utils/changelogParser';
 
 definePageMeta({
     layout: "doc",
@@ -50,15 +40,15 @@ definePageMeta({
     middleware: "auth-optional",
 });
 
-const posts = useChangelog();
-
-const formatDate = (iso) => {
-    return new Date(iso).toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-    });
+const versions = useAppChangelog();
+const { t } = useLocale();
+const fullVersion = String(useRuntimeConfig().public.appVersion || '');
+const bulletsOf = (post) => {
+    const { locale } = useLocale();
+    const lang = unref(locale) === 'fr' ? 'fr' : 'en';
+    return post[lang]?.length ? post[lang] : post.en;
 };
+
 
 onMounted(() => {
     trackEvent('page_view', { page: 'changelog' })

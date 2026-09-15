@@ -298,8 +298,12 @@ async function getProject(path, fetchOpts = {}) {
             const { titleFromFileName } = await import('../utils/projectTitle')
             const records = await listLocalFiles(data.slug)
             setProjectFiles(records.map(localRecordToUiFile), path)
-            // Display name from the first file, IndexedDB only — never PATCH.
-            const fromFile = titleFromFileName(records[0]?.name)
+            // Display name, IndexedDB only — never PATCH. Lot J11-a (A1) :
+            // un projet issu d'un `.job` porte le NOM DU FICHIER `.job`
+            // (c'est ce que l'atelier reconnaît), pas celui d'une fiche
+            // « dessin (2/4) ». Repli : premier fichier, comme avant.
+            const jobName = records.map((r) => r.sheetcam?.jobName).find(Boolean) || null
+            const fromFile = titleFromFileName(jobName || records[0]?.name)
             setProjectName(fromFile || data.name || '')
         } else {
             if (data.name) setProjectName(data.name)

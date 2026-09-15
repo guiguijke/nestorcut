@@ -57,7 +57,7 @@ import { capacityPanelModel } from '~/utils/capacityPanel'
 // partiel — écoutées par UserResults (ajout tôle / réduction espacement).
 const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing'])
 
-const { getters } = globalStore
+const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
 const { t, fmtPercent, fmtNumber } = useLocale()
 const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
@@ -347,7 +347,11 @@ const fmtAreaStacked = (mm2) => {
 
 const buildReportText = () => {
     const totals = unref(reportTotals)
-    const name = `${unref(resultModalData).slug} · ${t('result.option', { n: unref(activeAlt) + 1 })}`
+    // Lot J11-a (B3) : le NOM DU PROJET d'abord, le slug technique en
+    // « Détails techniques » — l'atelier lit un nom, pas un identifiant.
+    const projectLabel = (globalGetters.projectsList || [])
+        .find((p) => p.slug === unref(resultModalData).projectSlug)?.name
+    const name = `${projectLabel || unref(resultModalData).slug} · ${t('result.option', { n: unref(activeAlt) + 1 })} · ${unref(resultModalData).slug}`
     const lines = [
         t('report.text.title', { name }),
         t('report.text.material', { formats: unref(materialFormats) }),
