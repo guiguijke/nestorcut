@@ -255,32 +255,58 @@ export function previewSvgWithLeads(record) {
  */
 export function readSheetCamJob(bytes) {
     const job = parseSheetCamJob(bytes)
-    const byName = new Map()
+    // Lot J9 (§9.76) — UNE ENTRÉE PAR SECTION ORIGINALE, plus une par nom.
+    //
+    // Le modèle de SheetCam porte un jeu de points de départ PAR PIÈCE, le
+    // nôtre les portait PAR DESSIN : sur un `.job` à plusieurs originaux du
+    // même dessin (j9-1 : 4 originaux, 4 blocs, 1 nom), les points
+    // « supplémentaires » étaient perdus et le lien bloc↔dessin cassait.
+    // Désormais CHAQUE originale donne sa fiche, de quantité 1 + le nombre
+    // de SES copies (`copyOf` = rang de l'originale). Sur les 53 fichiers
+    // du verrou J6 (une originale par dessin), les entrées sont
+    // INDISCERNABLES d'avant : même nom, même quantité — non-régression.
+    // Le `label` ajoute le rang quand plusieurs fiches partagent un nom
+    // (« nom (2/4) », comme l'éclatement E4-c) ; `name` reste le NOM NU,
+    // celui qui apparie le DXF déposé.
+    const originals = job.parts.filter((p) => p.copyOf < 0)
+    const copiesOf = new Map()
     for (const part of job.parts) {
-        const name = jobDrawingName(part.drawingFile)
-        if (!byName.has(name)) {
-            byName.set(name, {
-                name,
-                quantity: 0,
-                parts: [],
-                leadIn: null,
-                leadInType: null,
-                leadOut: null,
-                leadOutType: null,
-                startPosition: null,
-                starts: [],
-                origin: null,
-                operations: [],
-            })
+        if (part.copyOf >= 0) {
+            copiesOf.set(part.copyOf, (copiesOf.get(part.copyOf) || 0) + 1)
         }
-        const entry = byName.get(name)
-        entry.quantity += 1
-        entry.parts.push(part.index)
+    }
+    const nameCounts = new Map()
+    for (const part of originals) {
+        const name = jobDrawingName(part.drawingFile)
+        nameCounts.set(name, (nameCounts.get(name) || 0) + 1)
+    }
+    const seenOfName = new Map()
+    const drawings = originals.map((part, originalRank) => {
+        const name = jobDrawingName(part.drawingFile)
+        const nth = (seenOfName.get(name) || 0) + 1
+        seenOfName.set(name, nth)
+        const entry = {
+            name,
+            label: nameCounts.get(name) > 1 ? `${name} (${nth}/${nameCounts.get(name)})` : name,
+            // Le rang de CETTE originale parmi les originales — le lien au
+            // k-ième bloc du cache binaire (lot J9, §9.76 point 1).
+            originalRank,
+            partIndex: part.index,
+            quantity: 1 + (copiesOf.get(part.index) || 0),
+            parts: [part.index, ...job.parts.filter((p) => p.copyOf === part.index).map((p) => p.index)],
+            leadIn: null,
+            leadInType: null,
+            leadOut: null,
+            leadOutType: null,
+            startPosition: null,
+            starts: [],
+            origin: null,
+            operations: [],
+        }
         // Les opérations ne vivent que sur les ORIGINAUX : une copie `copyOf`
         // n'a ni section `Operation`, ni géométrie propre — elle rejoue celle
-        // de son original (règle 4). On prend donc la première opération
-        // ACTIVE du premier original rencontré.
-        if (part.copyOf < 0 && entry.operations.length === 0 && part.operations.length) {
+        // de son original (règle 4).
+        if (part.operations.length) {
             entry.operations = part.operations
             const op = part.operations.find((o) => o.enabled) || part.operations[0]
             entry.leadIn = op.leadIn
@@ -289,7 +315,8 @@ export function readSheetCamJob(bytes) {
             entry.leadOutType = op.leadOutType
             entry.startPosition = op.startPosition
         }
-    }
+        return entry
+    })
     // Les points de départ, LUS dans le bloc binaire (lot J4-bis-2, §9.42).
     //
     // LES BLOCS NE SONT PAS APPARIÉS ICI, ET C'EST LE CORRECTIF DU LOT
@@ -323,9 +350,10 @@ export function readSheetCamJob(bytes) {
         blocks: blocks || [],
         // Vrai quand AUCUN point de départ n'a pu être lu : l'appelant doit le
         // dire, pas le taire — sans point, aucun trou n'est nesté (voir
-        // `partWithReserve`).
-        startsUnread: !blocks || blocks.length !== byName.size,
-        drawings: [...byName.values()],
+        // `partWithReserve`). Lot J9 : la cohérence se mesure en SECTIONS
+        // ORIGINALES (le lien du cache), plus en noms distincts.
+        startsUnread: !blocks || blocks.length !== originals.length,
+        drawings,
     }
 }
 

@@ -368,6 +368,29 @@ export function parseSheetCamJob(bytes) {
     }
 }
 
+/**
+ * Lot J10-a (§9.77 point 11) — la section `[Work/keepout]` (zone
+ * d'exclusion sur la tôle) est--elle ACTIVE ? Présente dans les 50 `.job`
+ * du poste, mais à coins ZÉRO sur tous (« à zéro », mesure du §9.77) :
+ * tant qu'elle n'est pas comprise, un fichier qui la porte NON NULLE doit
+ * être DIT au dépôt — elle peut coûter de la matière en silence. Rend la
+ * liste des coins non nuls (vide = inactive ou absente).
+ */
+export function jobKeepoutCorners(job) {
+    const corners = []
+    let inside = false
+    for (const line of job.lines || []) {
+        if (line.kind === 'section') { inside = line.name === 'Work/keepout'; continue }
+        if (!inside || line.kind !== 'entry') continue
+        const m = /^Corner (d)([XY])$/.exec(line.key)
+        if (m) {
+            const v = Number(line.value)
+            if (Number.isFinite(v) && v !== 0) corners.push({ corner: m[1], axis: m[2], value: v })
+        }
+    }
+    return corners
+}
+
 /** Largeur et hauteur de la tôle lues dans `[Work]`. */
 export function jobSheet(job) {
     return {
@@ -900,6 +923,32 @@ export function jobDrawings(binary) {
 
     // Assemblage : validation par groupe, puis appariement k-ième
     // enregistrement ↔ k-ième groupe, dans le repère du dessin.
+    // Lot J9 (§9.76) — LA SENTINELLE D'ORIGINE. Quand plusieurs sections
+    // partagent un dessin (plusieurs ORIGINAUX du même nom), SheetCam
+    // n'écrit l'origine 0x25 réelle que sur le PREMIER bloc ; les suivants
+    // portent ≈ 3×10³⁸ sur les deux coordonnées : « même origine que le
+    // bloc précédent ». L'additionner rendrait des coordonnées à 10³⁸ —
+    // on PROPAGE la dernière origine réelle, et une sentinelle sans
+    // origine réelle précédente est un refus nommé du dessin, jamais une
+    // géométrie fabuleuse. Mesuré sur j9-1 : blocs 2 à 4 sentinelle,
+    // origine réelle (60 ; 60) propagée, les POINTS DE DÉPART restent
+    // réels dans chaque bloc.
+    const SENTINEL_ORIGIN = 1e30
+    let lastRealOrigin = null
+    for (const d of drawings) {
+        const isSentinel = Math.abs(Number(d.origin[0])) > SENTINEL_ORIGIN
+            || Math.abs(Number(d.origin[1])) > SENTINEL_ORIGIN
+        if (isSentinel) {
+            if (lastRealOrigin) d.origin = [...lastRealOrigin]
+            else {
+                d.error = d.error || { code: 'sheetcamJobDrawing.sentinelOrigin', params: {} }
+                d.origin = [0, 0]
+            }
+        } else {
+            lastRealOrigin = [...d.origin]
+        }
+    }
+
     for (const d of drawings) {
         const ox = Number(d.origin[0]) || 0
         const oy = Number(d.origin[1]) || 0
@@ -967,7 +1016,12 @@ export function jobDrawings(binary) {
             paths.push({
                 segments,
                 closed,
+                // `start` : origine RÉSOLUE appliquée (monde). `startRaw` :
+                // le point TEL QU'ÉCRIT dans le cache, relatif à l'origine —
+                // c'est lui que l'écrivain doit réécrire, et lui que la
+                // fiche porte en `offset` (relatif, jamais monde).
                 start: rec?.start ? [rec.start[0] + ox, rec.start[1] + oy] : null,
+                startRaw: rec?.start ? [rec.start[0], rec.start[1]] : null,
                 leadIn: rec?.leadIn ?? null,
                 leadOut: rec?.leadOut ?? null,
                 order: rec?.order ?? null,

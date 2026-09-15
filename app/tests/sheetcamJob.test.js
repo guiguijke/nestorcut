@@ -25,6 +25,7 @@ import {
     formatJobNumber,
     isSheetCamJob,
     jobDrawingName,
+    jobPathRecords,
     jobSheet,
     parseSheetCamJob,
     serializeSheetCamJob,
@@ -139,24 +140,37 @@ describe('J1 — lire puis écrire ne change pas un octet', () => {
         }
     })
 
-    it('sur les .job réels du propriétaire (s’ils sont là)', () => {
-        const dir = path.resolve(__dirname, '../../.testparts')
-        const jobs = fs.existsSync(dir)
-            ? fs.readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.job'))
-            : []
-        // Dossier privé et gitignoré : en CI il n'existe pas. On ne fait pas
-        // passer un verrou pour vert alors qu'il n'a rien mesuré.
+    it('sur les .job réels du propriétaire (s’ils sont là) — TOUS dossiers', () => {
+        // Lot J10-a (§9.77 point 1) : le verrou d'aller-retour devient
+        // TOTAL — racine, job-tests, rétro-ingénierie et série j7/j9 — et
+        // DIT combien il a mesuré (un verrou muet qui n'a rien vu ne vaut
+        // rien). En CI sans `.testparts`, la suite reste verte en le disant.
+        const dirs = ['', '/job-tests', '/retro-eng-job', '/job-tests-new']
+            .map((d) => path.resolve(__dirname, '../../.testparts' + d))
+            .filter((d) => fs.existsSync(d))
+        const jobs = dirs.flatMap((d) =>
+            fs.readdirSync(d).filter((f) => f.toLowerCase().endsWith('.job'))
+                .map((f) => path.join(d, f)))
         if (!jobs.length) {
+            console.warn('[J10-a] .testparts absent — aller-retour non mesuré')
             expect(jobs).toEqual([])
             return
         }
-        const rebuilt = jobs.filter((f) => {
-            const bytes = read(path.join(dir, f))
+        const bad = []
+        for (const p of jobs) {
+            const bytes = read(p)
             const out = serializeSheetCamJob(parseSheetCamJob(bytes))
-            return Buffer.compare(Buffer.from(out), Buffer.from(bytes)) === 0
-        })
-        expect(rebuilt.length).toBe(jobs.length)
-        expect(jobs.length).toBeGreaterThanOrEqual(14)
+            if (out.length !== bytes.length
+                || Buffer.compare(Buffer.from(out), Buffer.from(bytes)) !== 0) {
+                bad.push(path.basename(p))
+            }
+        }
+        expect(bad).toEqual([])
+        // 50 `.job` présents sur CE poste (54 comptés par le vérificateur :
+        // son archive en portait 4 de plus, déplacés depuis). Le plancher
+        // garantit que le verrou ne passe pas pour vert sur trois fichiers.
+        expect(jobs.length).toBeGreaterThanOrEqual(50)
+        console.warn(`[J10-a] aller-retour identique à l'octet : ${jobs.length}/${jobs.length}`)
     })
 })
 
@@ -334,5 +348,70 @@ describe('J4 — reconnaître un `.job` par sa SIGNATURE, jamais par l’extensi
         for (const f of fs.readdirSync(root).filter((x) => x.toLowerCase().endsWith('.dxf'))) {
             expect(isSheetCamJob(read(path.join(root, f)))).toBe(false)
         }
+    })
+})
+
+// --- J10-a (§9.77) : le diff d'écriture est universel et à liste blanche ---
+
+/**
+ * La LISTE BLANCHE DÉCLARÉE des octets qu'un nesting a le droit de changer
+ * dans le bloc binaire : les champs de point de départ (x, y) et leur
+ * drapeau « déplacé à la main ». TOUT autre octet changé est un défaut —
+ * c'est ce que l'atelier ouvrirait dans SheetCam sans le savoir. (Les
+ * sections TEXTE ne sont pas dans ce diff : elles sont réécrites
+ * explicitement par writeNestedSheetCamJob, poses et Count et OpOrder.)
+ */
+export function binaryWriteWhitelist(sourceBinary) {
+    const offsets = new Set()
+    for (const d of jobPathRecords(sourceBinary) || []) {
+        for (const p of d.paths) {
+            if (Number.isInteger(p.at?.moved)) offsets.add(p.at.moved)
+            for (let k = 0; k < 8; k++) {
+                if (Number.isInteger(p.at?.x)) offsets.add(p.at.x + k)
+                if (Number.isInteger(p.at?.y)) offsets.add(p.at.y + k)
+            }
+        }
+    }
+    return offsets
+}
+
+describe('J10-a — le diff binaire du rendu est inclus dans la liste blanche déclarée', () => {
+    it('sur le moulinet ×4 (la référence du 11/09) : zéro octet hors liste', () => {
+        const written = writeNestedSheetCamJob(parseSheetCamJob(SOURCE), {
+            placements: X4_PLACEMENTS,
+            order: X4_ORDER,
+            maskPaths: false,
+        })
+        const bin = (b) => b.subarray(Buffer.from(b).toString('latin1').indexOf('[BinaryDataStart]'))
+        const a = bin(SOURCE)
+        const b = bin(written)
+        expect(a.length).toBe(b.length)
+        const allowed = binaryWriteWhitelist(a)
+        const out = []
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i] && !allowed.has(i)) out.push(i)
+        }
+        expect(out).toEqual([])
+    })
+
+    it('contrôle négatif : un octet PILE hors liste fait échouer le verrou', () => {
+        const written = writeNestedSheetCamJob(parseSheetCamJob(SOURCE), {
+            placements: X4_PLACEMENTS,
+            order: X4_ORDER,
+            maskPaths: false,
+        })
+        const allowed = binaryWriteWhitelist(parseSheetCamJob(SOURCE).binary)
+        const bin = Buffer.from(written)
+        const at = Buffer.from(bin).toString('latin1').indexOf('[BinaryDataStart]') + 40
+        // Un octet de GEOMÉTRIE (40 octets après le marqueur : dans le
+        // premier enregistrement d'origine) : hors liste par construction.
+        expect(allowed.has(at)).toBe(false)
+        bin[at] ^= 0x01
+        const src = Buffer.from(parseSheetCamJob(SOURCE).binary)
+        const out = []
+        for (let i = 0; i < Math.min(src.length, bin.length); i++) {
+            if (src[i] !== bin[i] && !allowed.has(i)) out.push(i)
+        }
+        expect(out.length).toBeGreaterThan(0)
     })
 })

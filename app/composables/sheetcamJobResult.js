@@ -119,24 +119,34 @@ export function buildNestedJobs(job, {
     startsByFileSlug = null,
     baseName = 'nestorcut',
     maskPaths = true,
+    // Lot J9 (§9.76 point 5) : rang `[Part N]` PROPRE à chaque fiche (sa
+    // section ORIGINALE). Présent ⇒ il fait FOI (quatre originales du même
+    // dessin rendent leurs QUATRE sections, pas une + trois copies
+    // ajoutées) ; absent ⇒ repli par nom de dessin (un original par dessin,
+    // le comportement d'avant J9, inchangé sur les 53 fichiers du verrou).
+    partIndexByFileSlug = null,
 } = {}) {
     if (!Array.isArray(sheets) || sheets.length === 0) {
         throw new SheetCamJobError('sheetcamNest.noSheets')
     }
     const ranks = jobRanksByDrawing(job)
+    const rankOf = (fileSlug, name, sheetIndex) => {
+        const own = partIndexByFileSlug?.[fileSlug]
+        if (Number.isInteger(own)) return own
+        const byName = ranks.get(name)
+        if (byName != null) return byName
+        // Piège 3 : mieux vaut refuser que livrer un `.job` amputé.
+        throw new SheetCamJobError('sheetcamNest.drawingNotInJob', {
+            drawing: String(name || fileSlug),
+            sheet: String(sheetIndex + 1),
+        })
+    }
 
     // Traduction vers la forme du lot J2 : `part` y est le RANG `[Part N]` du
     // dessin dans le `.job` d'origine.
     const j2Sheets = sheets.map((items, sheetIndex) => items.map((item, k) => {
         const name = fileNamesBySlug[item.fileSlug]
-        const rank = ranks.get(name)
-        if (rank == null) {
-            // Piège 3 : mieux vaut refuser que livrer un `.job` amputé.
-            throw new SheetCamJobError('sheetcamNest.drawingNotInJob', {
-                drawing: String(name || item.fileSlug),
-                sheet: String(sheetIndex + 1),
-            })
-        }
+        const rank = rankOf(item.fileSlug, name, sheetIndex)
         const nested = item.nestedIn
         if (nested != null && (nested < 0 || nested >= items.length || nested === k)) {
             throw new SheetCamJobError('sheetcamNest.nestingCycle', { item: String(k) })
@@ -149,9 +159,10 @@ export function buildNestedJobs(job, {
     // pose du lot J2 (§9.42 — le lot J4 avait mesuré la boîte TOURNÉE, faux
     // de 45 mm dès qu'une rotation n'est pas un quart de tour).
     const rings = {}
-    for (const [name, rank] of ranks) {
-        const slug = Object.keys(fileNamesBySlug).find((s) => fileNamesBySlug[s] === name)
-        if (slug && ringsByFileSlug[slug]) rings[rank] = ringsByFileSlug[slug]
+    for (const slug of Object.keys(fileNamesBySlug)) {
+        const own = partIndexByFileSlug?.[slug]
+        const rank = Number.isInteger(own) ? own : ranks.get(fileNamesBySlug[slug])
+        if (rank != null && ringsByFileSlug[slug]) rings[rank] = ringsByFileSlug[slug]
     }
 
     // LOT J4-ter — ON ÉCRIT LE POINT DE DÉPART DES CONTOURS AUTOMATIQUES,

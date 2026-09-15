@@ -132,13 +132,19 @@ export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) 
     }
 
     // Les blocs du cache, DANS L'ORDRE DU FICHIER — et le lien par rang.
+    //
+    // Lot J9 (§9.76) : le lien est la SECTION ORIGINALE (copyOf < 0), dans
+    // l'ordre du fichier — JAMAIS le rang des noms distincts. Les deux
+    // coïncidaient tant qu'un dessin n'avait qu'une section originale (vrai
+    // des 53 fichiers du verrou J6) ; j9-1 les départage : 4 blocs, 4
+    // originaux, 1 seul nom. Chaque entrée `read.drawings` porte désormais
+    // `originalRank` (le rang de SON originale parmi les originales).
     const blocks = jobDrawings(read?.job?.binary || null)
-    const rankedNames = []
+    const rankedOriginals = []
     for (const part of read?.job?.parts || []) {
-        if (part.copyOf >= 0) continue
-        if (!rankedNames.includes(part.drawingName)) rankedNames.push(part.drawingName)
+        if (part.copyOf < 0) rankedOriginals.push(part)
     }
-    const linkKnown = blocks != null && blocks.length === rankedNames.length
+    const linkKnown = blocks != null && blocks.length === rankedOriginals.length
 
     const reusable = []
     const fromJob = []
@@ -150,8 +156,10 @@ export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) 
             continue
         }
         if (!linkKnown) {
-            // Flux illisible, ou autant de blocs que de noms non garanti :
-            // AUCUNE géométrie n'est attribuée — on ne devine jamais.
+            // Flux illisible, ou autant de blocs que d'originales non
+            // garanti : AUCUNE géométrie n'est attribuée — on ne devine
+            // jamais (le garde a évité le pire sur j9-1 : aucune géométrie
+            // à 10³⁸ n'est jamais sortie).
             refused.push({
                 drawing,
                 code: blocks == null ? 'sheetcamJobDrawing.undecodable' : 'sheetcamJobDrawing.linkUnknown',
@@ -159,8 +167,13 @@ export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) 
             })
             continue
         }
-        const block = blocks[rankedNames.indexOf(drawing.name)]
-        if (block?.error) {
+        const rank = Number.isInteger(drawing.originalRank) ? drawing.originalRank : -1
+        const block = rank >= 0 && rank < blocks.length ? blocks[rank] : null
+        if (!block) {
+            refused.push({ drawing, code: 'sheetcamJobDrawing.linkUnknown', params: {} })
+            continue
+        }
+        if (block.error) {
             refused.push({ drawing, code: block.error.code, params: block.error.params })
             continue
         }
@@ -173,9 +186,10 @@ export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) 
         refused,
         // Le bloc de chaque dessin par NOM, pour les replis de l'appelant
         // (une fiche « déjà dans le projet » disparue entre-temps retombe
-        // sur la géométrie du `.job` au lieu d'échouer).
+        // sur la géométrie du `.job` au lieu d'échouer). Premier original
+        // du nom — les fiches multi-originales passent par `originalRank`.
         blockByName: linkKnown
-            ? new Map(rankedNames.map((name, k) => [name, blocks[k]]))
+            ? new Map(rankedOriginals.map((part, k) => [part.drawingName, blocks[k]]))
             : new Map(),
     }
 }
@@ -240,6 +254,13 @@ export function cutSettingsFor(drawing, {
 } = {}) {
     return {
         drawingName: drawing.name,
+        // Lot J9 : le rang de la SECTION ORIGINALE de cette fiche — le lien
+        // au bloc du cache binaire ET au rang `[Part N]` du `.job` rendu
+        // (une fiche par originale, §9.76 point 3). `label` est le nom de
+        // fiche (« nom (2/4) » quand plusieurs originales partagent un nom).
+        partIndex: Number.isInteger(drawing.partIndex) ? drawing.partIndex : null,
+        originalRank: Number.isInteger(drawing.originalRank) ? drawing.originalRank : null,
+        ...(drawing.label && drawing.label !== drawing.name ? { drawingLabel: drawing.label } : {}),
         // Nom du `.job` déposé : il donne son préfixe aux fichiers rendus
         // (`<nom>_tole1.job`), pour que l'utilisateur retrouve son job.
         ...(jobName ? { jobName } : {}),

@@ -570,6 +570,7 @@ const dict = {
         'upload.oversizeNamed': 'Ignored — {names}: each file must be 5 MB or less.',
         'home.jobSwitched': 'SheetCam .job detected — switched to "This device", the mode that nests them.',
         'home.jobPlusDwg': 'A SheetCam .job needs "This device"; a DWG needs "Our servers". Drop them in two separate projects.',
+        'jobImport.keepoutDeclared': 'This job file declares an exclusion zone on the sheet (Work/keepout) that NestorCut cannot honour yet — nesting may place parts inside it.',
         // Lot J8-c : le sélecteur accepte les .job en mode appareil — la
         // légende le dit (jamais en mode serveur avant J5).
         // Lot J8-e (§9.73 point 30) : le compte disparaît — plus personne
@@ -1410,6 +1411,7 @@ const dict = {
         'upload.oversizeNamed': "Ignorés — {names} : chaque fichier doit faire 5 Mo ou moins.",
         'home.jobSwitched': "Fichier .job SheetCam détecté — passage en « Cet appareil », le mode qui les neste.",
         'home.jobPlusDwg': "Un .job SheetCam demande « Cet appareil », un DWG demande « Nos serveurs ». Déposez-les dans deux projets séparés.",
+        'jobImport.keepoutDeclared': "Ce fichier de travail déclare une zone d'exclusion sur la tôle (Work/keepout) que NestorCut ne sait pas encore respecter — le nesting peut poser des pièces dedans.",
         'upload.limitDevice': "DXF, SVG ou .job SheetCam — 5 Mo max par fichier",
         'upload.unsupported': "Type de fichier non supporté — DXF, SVG ou DWG.",
         'upload.tooLarge': "Chaque fichier doit faire 5 Mo ou moins.",

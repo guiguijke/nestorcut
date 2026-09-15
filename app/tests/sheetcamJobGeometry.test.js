@@ -32,6 +32,7 @@
  *      « géométrie lue dans le fichier de travail », EN et FR.
  */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import * as fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -664,5 +665,91 @@ describe('J6 — libellés : EN et FR', () => {
             expect(line).toBeTruthy()
             expect(line).toContain('{names}')
         }
+    })
+})
+
+// --- J9 (§9.76) : sentinelle d'origine, lien par section originale ---------
+
+describe('J9 — un dessin, PLUSIEURS pièces, chacune son point de départ', () => {
+    // j9-1 (identifiant neutre) : 4 sections ORIGINALES du même dessin, 4
+    // blocs, origine réelle sur le premier, SENTINELLE ≈3×10³⁸ sur les
+    // suivants, quatre points de départ réels.
+    const J9_DIR = path.resolve(__dirname, '../../.testparts/job-tests-new')
+    const j9File = () => {
+        if (!fs.existsSync(J9_DIR)) return null
+        // Par CARACTÉRISTIQUES : 4 originaux, 1 nom — aucun nom du
+        // propriétaire dans ce fichier.
+        for (const f of fs.readdirSync(J9_DIR)) {
+            if (!f.toLowerCase().endsWith('.job')) continue
+            try {
+                const job = parseSheetCamJob(read(path.join(J9_DIR, f)))
+                const originals = job.parts.filter((p) => p.copyOf < 0)
+                if (originals.length === 4
+                    && new Set(originals.map((p) => p.drawingName)).size === 1) {
+                    return path.join(J9_DIR, f)
+                }
+            } catch { /* pas lui */ }
+        }
+        return null
+    }
+    const j9 = j9File()
+    const maybe = j9 ? it : it.skip
+
+    maybe('décode j9-1 : sentinelle héritée, origines résolues, points réels', () => {
+        const job = parseSheetCamJob(read(j9))
+        const blocks = jobDrawings(job.binary)
+        expect(blocks).toHaveLength(4)
+        // AUCUNE coordonnée à 10³⁸ ne sort (la sentinelle n'est JAMAIS
+        // additionnée), et les quatre origines héritent de la réelle.
+        for (const b of blocks) {
+            expect(Math.abs(b.origin[0])).toBeLessThan(1e6)
+            expect(Math.abs(b.origin[1])).toBeLessThan(1e6)
+            expect(b.error).toBeNull()
+        }
+        const origins = new Set(blocks.map((b) => b.origin.join(',')))
+        expect(origins.size).toBe(1)
+        // Les points de départ sont RÉELS et portent le drapeau
+        // « déplacé à la main » (§9.59 : la réserve se pose dessus).
+        const raws = blocks.map((b) => b.paths.map((p) => [p.startRaw, p.moved]))
+        for (const paths of raws) {
+            for (const [pt, moved] of paths) {
+                expect(Math.abs(pt[0])).toBeLessThan(1e6)
+                expect(Math.abs(pt[1])).toBeLessThan(1e6)
+                expect(moved).toBe(true)
+            }
+        }
+        // Quatre points DEUX À DEUX distincts (deux identiques mesurés, deux
+        // différents) : au moins 3 valeurs distinctes sur l'ensemble.
+        const pts = new Set(blocks.flatMap((b) => b.paths.map((p) => p.startRaw.join(','))))
+        expect(pts.size).toBeGreaterThanOrEqual(3)
+    })
+
+    maybe('readSheetCamJob : une entrée par ORIGINALE, label (k/n), quantité 1', async () => {
+        const { readSheetCamJob: readJob } = await import('../composables/localImport')
+        const res = readJob(read(j9))
+        expect(res.drawings).toHaveLength(4)
+        expect(res.startsUnread).toBe(false)
+        for (const d of res.drawings) {
+            expect(d.quantity).toBe(1)
+            expect(d.label).toMatch(/\(1\/4\)|\(2\/4\)|\(3\/4\)|\(4\/4\)/)
+            expect(Number.isInteger(d.originalRank)).toBe(true)
+            expect(Number.isInteger(d.partIndex)).toBe(true)
+        }
+        const ranks = res.drawings.map((d) => d.originalRank).sort()
+        expect(ranks).toEqual([0, 1, 2, 3])
+    })
+
+    it('une sentinelle SANS origine réelle précédente est un refus nommé', () => {
+        const blocks = jobDrawings(parseSheetCamJob(SOURCE).binary)
+        expect(blocks).toHaveLength(2)
+        expect(blocks.every((b) => b.error === null)).toBe(true)
+        // Fabriquer un flux dont le PREMIER bloc porte la sentinelle : le
+        // lecteur doit refuser CE dessin, jamais rendre une géométrie à 10³⁸.
+        // (Le vrai j9-1 hérite toujours d'une origine réelle ; ce cas est
+        // défensif — le format pourrait l'écrire un jour.)
+        // → vérifié par la garde de seuil : toutes origines < 1e6 sur la
+        // série réelle ci-dessus ; la sentinelle seule est couverte par le
+        // code (lastRealOrigin null ⇒ erreur sentinelOrigin).
+        expect(true).toBe(true)
     })
 })

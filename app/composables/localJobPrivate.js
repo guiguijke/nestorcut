@@ -393,6 +393,10 @@ function jobContextFromRecords(records) {
     const ringsByFileSlug = {}
     const fileNamesBySlug = {}
     const startsByFileSlug = {}
+    // Lot J9 : le rang `[Part N]` DE LA SECTION ORIGINALE de chaque fiche —
+    // le `.job` rendu réutilise les sections existantes au lieu d'en
+    // ajouter (quatre originales entrent, quatre sections sortent).
+    const partIndexByFileSlug = {}
     let jobBytes = null
     let baseName = null
     for (const rec of records) {
@@ -402,6 +406,9 @@ function jobContextFromRecords(records) {
             baseName = rec.sheetcam.jobName || null
         }
         fileNamesBySlug[rec.slug] = rec.sheetcam.drawingName || rec.name
+        if (Number.isInteger(rec.sheetcam.partIndex)) {
+            partIndexByFileSlug[rec.slug] = rec.sheetcam.partIndex
+        }
         // Lot J4-ter : les points de départ APPARIÉS de ce dessin, avec le
         // rang de son bloc — c'est ce que l'écrivain réécrit dans le cache.
         if (Array.isArray(rec.sheetcam.starts) && rec.sheetcam.starts.length) {
@@ -415,7 +422,10 @@ function jobContextFromRecords(records) {
             .filter((ring) => Array.isArray(ring) && ring.length >= 3)
     }
     if (!jobBytes) return null
-    return { jobBytes, ringsByFileSlug, fileNamesBySlug, startsByFileSlug, baseName }
+    return {
+        jobBytes, ringsByFileSlug, fileNamesBySlug, startsByFileSlug, baseName,
+        ...(Object.keys(partIndexByFileSlug).length ? { partIndexByFileSlug } : {}),
+    }
 }
 
 
@@ -765,6 +775,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                     fileNamesBySlug: sheetcamContext.fileNamesBySlug,
                     startsByFileSlug: sheetcamContext.startsByFileSlug,
                     baseName: base,
+                    // Lot J9 : le rang `[Part N]` PROPRE à chaque fiche (sa
+                    // section originale) — quatre originales du même dessin
+                    // rendent quatre sections, pas une + trois copies.
+                    partIndexByFileSlug: sheetcamContext.partIndexByFileSlug || null,
                 })
                 alternatives[k] = {
                     ...alternatives[k],

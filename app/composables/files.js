@@ -129,6 +129,10 @@ const state = reactive({
     // Clé i18n de la dernière erreur d'import navigateur (affichée en page).
     localImportError: '',
     localImportErrorParams: {},
+    // Lot J10-a : INFORMATION de dépôt (zone d'exclusion déclarée) —
+    // distincte de l'erreur : le travail se fait, l'atelier est PRÉVENU.
+    localImportNotice: '',
+    localImportNoticeParams: {},
     lastParams: '',
     // Set when a demo nesting hits the monthly demo quota — shown on the
     // project page instead of the paywall (demo 402s are reason=demo_quota).
@@ -569,6 +573,8 @@ async function addFiles(files, slug) {
         // byte ne transite par le serveur.
         state.localImportError = ''
         state.localImportErrorParams = {}
+        state.localImportNotice = ''
+        state.localImportNoticeParams = {}
         // Lot J4 — un `.job` SheetCam dans la dépose. Il passe AVANT tout :
         // un `.job` porte déjà sa tôle, son espacement et ses quantités.
         // Reconnu par SIGNATURE (piège #31) ; sans `.job` dans la dépose,
@@ -749,11 +755,23 @@ async function addSheetCamJobDrop(drop, slug) {
     const jobName = drop.jobFile?.name || null
     const wanted = new Map()
     let imported = 0
-    // Les fiches importées, gardées pour l'appariement des blocs du cache
-    // binaire — il se fait par la GÉOMÉTRIE, donc APRÈS l'import (§9.45).
-    // Aucune lecture de plus : ce sont les mêmes objets.
-    const importedByName = new Map()
+    // Les fiches importées, gardées pour l'attachement des POINTS DE DÉPART
+    // — par RANG D'ORIGINALE depuis le lot J9 (le lien du cache binaire,
+    // §9.76 point 1 ; l'ancien appariement par géométrie ne peut pas
+    // départager quatre originales du MÊME dessin). Aucune lecture de plus :
+    // ce sont les mêmes objets.
+    const importedByRank = new Map()
     const refused = [...sources.refused]
+    // Lot J9 : le nom de FICHE — « nom (2/4) » quand plusieurs originales
+    // partagent un dessin, le nom nu sinon (indistinguable d'avant).
+    const labelOf = (drawing) => drawing.label || drawing.name
+    const remember = (drawing, records) => {
+        importedByRank.set(drawing.originalRank ?? drawing.name, records)
+        imported += records?.length || 1
+        for (const rec of records || []) {
+            wanted.set(rec.slug, Number(drawing.quantity) || 1)
+        }
+    }
 
     // a) le DXF déposé : la géométrie source exacte gagne. Lot J6-bis : si
     //    la fiche de ce nom dans le projet vient du BINAIRE (dépôt `.job`
@@ -764,16 +782,7 @@ async function addSheetCamJobDrop(drop, slug) {
                 sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
                 sheetcamJobBytes: drop.jobBytes,
             })
-            if (records?.length) importedByName.set(drawing.name, records)
-            imported += records?.length || 0
-            // La QUANTITÉ vient du `.job` : c'est le nombre d'exemplaires
-            // qu'il pose, copies `copyOf` comprises (règle 4). Elle ne peut
-            // pas être posée ICI : `state.projectFiles` n'est rechargé qu'au
-            // `getProject` qui suit la dépose. On la rend à l'appelant, qui
-            // l'applique une fois la liste à jour.
-            for (const rec of records || []) {
-                wanted.set(rec.slug, Number(drawing.quantity) || 1)
-            }
+            if (records?.length) remember(drawing, records)
         } catch (err) {
             state.localImportError = err?.message || 'localImport.parseError'
             state.localImportErrorParams = err?.params || {}
@@ -798,8 +807,7 @@ async function addSheetCamJobDrop(drop, slug) {
         record.sheetcam = cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth })
         record.sheetcamJobBytes = drop.jobBytes.slice().buffer
         await saveLocalFile(record)
-        importedByName.set(drawing.name, [record])
-        wanted.set(record.slug, Number(drawing.quantity) || 1)
+        remember(drawing, [record])
     }
 
     // c) le bloc binaire : DXF canonique LINE/ARC PUIS IMPORT ORDINAIRE —
@@ -812,7 +820,7 @@ async function addSheetCamJobDrop(drop, slug) {
                 refused.push({ drawing, code: 'sheetcamJobDrawing.noGeometry', params: {} })
                 continue
             }
-            records = await importLocalBytes(dxf, drawing.name, slug, {
+            records = await importLocalBytes(dxf, labelOf(drawing), slug, {
                 sheetcam: cutSettingsFor(drawing, { jobName, kerfWidth: read.kerfWidth }),
                 sheetcamJobBytes: drop.jobBytes,
                 sheetcamSource: 'job',
@@ -822,70 +830,67 @@ async function addSheetCamJobDrop(drop, slug) {
             state.localImportErrorParams = err?.params || {}
             continue
         }
-        if (records?.length) {
-            importedByName.set(drawing.name, records)
-            imported += records.length
-            for (const rec of records) {
-                wanted.set(rec.slug, Number(drawing.quantity) || 1)
-            }
-        }
+        if (records?.length) remember(drawing, records)
     }
 
-    // 2-bis. LES POINTS DE DÉPART, APPARIÉS PAR LA GÉOMÉTRIE (lot J4-bis-3).
+    // 2-bis. LES POINTS DE DÉPART, APPARIÉS PAR RANG D'ORIGINALE (lot J9).
     //
-    // Le cache binaire du `.job` ne dit pas à quel dessin appartient chacun de
-    // ses blocs ; le lot précédent l'a supposé par le RANG des sections, et
-    // cela casse dès qu'un `.job` déclare ses dessins dans un autre ordre que
-    // son cache (§9.45). C'est la géométrie qui tranche : un point de départ
-    // est SUR son contour à 0,01 mm près et à des dizaines de millimètres de
-    // ceux de l'autre dessin.
-    //
-    // On ne peut donc le faire qu'ICI, une fois les dessins importés — et
-    // sans rien relire : `importLocalFiles`/`importLocalBytes` ont déjà rendu
-    // les fiches, on y ajoute les points et on ré-enregistre. Un `.job` dont
-    // l'affectation n'est pas tranchable laisse les fiches SANS points : c'est
-    // le comportement « point non lu », qui retire les trous du nesting et
-    // l'affiche, plutôt que de parier.
-    if (importedByName.size) {
-        const ringsByName = {}
-        for (const [name, records] of importedByName) {
-            const rings = []
+    // Le lien du cache binaire EST la section originale (§9.76 point 1,
+    // mesuré sur j9-1 : 4 blocs, 4 originales, 1 nom) — l'ancien
+    // appariement par GÉOMÉTRIE (lot J4-bis-3, gardé pour les fichiers où
+    // les sections ne suivent pas le cache) ne peut pas départager quatre
+    // originales du MÊME dessin : leurs anneaux sont identiques. Chaque
+    // fiche porte le rang de SON originale, donc SON bloc — et SES points,
+    // avec leur drapeau « déplacé » (§9.59 fiche par fiche).
+    if (importedByRank.size) {
+        const { jobDrawings: blocksOf, previewSvgWithLeads } = await import('./localImport')
+            .then(() => import('~~/shared/sheetcamJob.js'))
+        const blocks = blocksOf(read.job.binary) || []
+        for (const [rankKey, records] of importedByRank) {
+            // `rankKey` : le rang d'originale (entier, lot J9) ou le nom
+            // (fiches héritées d'un ancien dépôt).
+            const drawingEntry = read.drawings.find((d) =>
+                (Number.isInteger(d.originalRank) ? d.originalRank : d.name) === rankKey)
+            const blockIndex = Number.isInteger(drawingEntry?.originalRank)
+                ? drawingEntry.originalRank
+                : null
+            const block = Number.isInteger(blockIndex) ? blocks[blockIndex] : null
+            if (!block || block.error) continue
+            const starts = (block.paths || []).map((p, pathIndex) => ({
+                pathIndex,
+                // Relatif à l'origine RÉSOLUE du bloc (sentinelle comprise) :
+                // le point TEL QU'ÉCRIT dans le cache — l'écrivain le
+                // réécrit tel quel, et les consommateurs (réserve, aperçu)
+                // ajoutent l'origine une seule fois.
+                offset: p.startRaw ?? p.start,
+                leadIn: p.leadIn ?? drawingEntry?.leadIn,
+                leadOut: p.leadOut ?? drawingEntry?.leadOut,
+                leadInType: drawingEntry?.leadInType,
+                leadOutType: drawingEntry?.leadOutType,
+                order: p.order,
+                moved: p.moved,
+            }))
             for (const record of records) {
-                for (const part of record.parts || []) {
-                    if (Array.isArray(part.coordinates)) rings.push(part.coordinates)
-                    for (const hole of part.holes || []) rings.push(hole)
+                if (!record.sheetcam) continue
+                record.sheetcam = {
+                    ...record.sheetcam,
+                    starts,
+                    origin: block.origin,
+                    // Lot J4-ter : le rang du dessin dans le cache binaire,
+                    // pour pouvoir y RÉÉCRIRE les points de départ.
+                    blockIndex,
                 }
-            }
-            ringsByName[name] = rings
-        }
-        const assigned = assignJobStarts(read, ringsByName)
-        if (!assigned.ambiguous) {
-            const { previewSvgWithLeads } = await import('./localImport')
-            for (const [name, records] of importedByName) {
-                const found = assigned.byName[name]
-                if (!found) continue
-                for (const record of records) {
-                    if (!record.sheetcam) continue
-                    record.sheetcam = {
-                        ...record.sheetcam,
-                        starts: found.starts,
-                        origin: found.origin,
-                        // Lot J4-ter : le rang du dessin dans le cache binaire,
-                        // pour pouvoir y RÉÉCRIRE les points de départ.
-                        blockIndex: found.blockIndex,
-                    }
-                    // Lot J8-b : l'aperçu se RECONSTRUIT avec les amorces —
-                    // c'est ici que l'atelier voit ses points de départ et le
-                    // disque de perçage AVANT de lancer le nesting (§9.73
-                    // point 7). Sans point posable, aperçu identique.
-                    try {
-                        record.previewSvg = previewSvgWithLeads(record)
-                    } catch {
-                        // L'aperçu d'origine reste : une amorce ratée ne
-                        // doit jamais casser la fiche.
-                    }
-                    await saveLocalFile(record)
+                // Lot J8-b : l'aperçu se RECONSTRUIT avec les amorces —
+                // c'est ici que l'atelier voit ses points de départ et le
+                // disque de perçage AVANT de lancer le nesting (§9.73
+                // point 7). Sans point posable, aperçu identique.
+                try {
+                    record.previewSvg = previewSvgWithLeads(record)
+                } catch {
+                    // L'aperçu d'origine reste : une amorce ratée ne
+                    // doit jamais casser la fiche.
                 }
+                await saveLocalFile(record)
             }
         }
     }
@@ -894,6 +899,20 @@ async function addSheetCamJobDrop(drop, slug) {
     //    le DXF manquant » n'existe plus, la fiche issue du binaire porte
     //    son constat d'information (« géométrie lue dans le fichier de
     //    travail ») et le reste du travail est fait.
+    //
+    // Lot J10-a (§9.77 point 11) : une ZONE D'EXCLUSION déclarée et non
+    // nulle sur la tôle est DITE au dépôt — tant que `[Work/keepout]`
+    // n'est pas comprise, elle ne doit pas pouvoir coûter de la matière
+    // en silence. (Les 50 `.job` du poste la portent à ZÉRO : ce message
+    // ne s'affiche que pour un fichier qui l'exerce VRAIMENT.)
+    const { jobKeepoutCorners } = await import('~~/shared/sheetcamJob.js')
+    const keepout = jobKeepoutCorners(read.job)
+    if (keepout.length) {
+        state.localImportNotice = 'jobImport.keepoutDeclared'
+        state.localImportNoticeParams = {
+            n: new Set(keepout.map((k) => k.corner)).size,
+        }
+    }
     if (refused.length) {
         state.localImportError = 'jobImport.drawingRefused'
         state.localImportErrorParams = {
@@ -1183,6 +1202,8 @@ export const filesStore = readonly({
         projectDemo: computed(() => state.projectDemo),
         projectLocal: computed(() => state.projectLocal),
         localImportError: computed(() => state.localImportError),
+        localImportNotice: computed(() => state.localImportNotice),
+        localImportNoticeParams: computed(() => state.localImportNoticeParams),
         localImportErrorParams: computed(() => state.localImportErrorParams),
         filesCount: computed(() =>
             state.filesStatusDone.reduce((acc, curr) => acc + curr.count, 0)

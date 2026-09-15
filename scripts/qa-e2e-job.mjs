@@ -133,6 +133,9 @@ if (!fs.existsSync(JOB)) {
 // Le `.job` nomme ses dessins : on ne devine pas lesquels déposer, on les
 // lit (règle 9 — le fichier ne porte qu'un chemin, seul le nom a un sens).
 const source = parseSheetCamJob(new Uint8Array(fs.readFileSync(JOB)))
+// Lot J9 : la FICHE se compte par SECTION ORIGINALE (une fiche par
+// originale, quantité 1 + ses copies — §9.76 point 3). Les noms restent la
+// clé de l'appariement DXF.
 const wanted = new Map()
 for (const part of source.parts) {
     if (part.copyOf >= 0) {
@@ -142,7 +145,15 @@ for (const part of source.parts) {
     }
     wanted.set(part.drawingName, (wanted.get(part.drawingName) || 0) + 1)
 }
-log('le .job réclame :', [...wanted].map(([n, q]) => `${n} ×${q}`).join(', '))
+const originals = source.parts.filter((p) => p.copyOf < 0)
+const perOriginalQty = (job) => job.parts.filter((p) => p.copyOf < 0)
+    .map((p) => 1 + job.parts.filter((c) => c.copyOf === p.index).length)
+const originalsByName = new Map()
+for (const part of originals) {
+    originalsByName.set(part.drawingName, (originalsByName.get(part.drawingName) || 0) + 1)
+}
+log('le .job réclame :', [...wanted].map(([n, q]) => `${n} ×${q}`).join(', '),
+    '—', originals.length, 'originale(s)')
 
 const drawings = []
 if (!ALONE || TWO_DROPS) {
@@ -388,8 +399,8 @@ try {
         }))
     }, slug)
     log('fiches IndexedDB :', JSON.stringify(cards))
-    check('A1 une fiche par dessin', cards.length === wanted.size,
-        `${cards.length} fiches pour ${wanted.size} dessins`)
+    check('A1 une fiche par section ORIGINALE (lot J9)', cards.length === originals.length,
+        `${cards.length} fiches pour ${originals.length} originale(s)`)
     check('A2 réglages de coupe attachés', cards.every((c) => c.hasCut && c.leadIn > 0),
         `amorces : ${cards.map((c) => c.leadIn).join(', ')}`)
     check('A3 le .job est conservé pour la réécriture', cards.every((c) => c.hasJobBytes))
@@ -399,7 +410,7 @@ try {
     // gagné — c'est le contrôle négatif de la priorité des sources.
     if (ALONE || TWO_DROPS) {
         check('J6-A la géométrie de chaque fiche vient du `.job` et le dit',
-            cards.length === wanted.size
+            cards.length === originals.length
             && cards.every((c) => c.source === 'job' && c.finding && c.parts > 0),
             JSON.stringify(cards.map((c) => ({ n: c.name, src: c.source, parts: c.parts }))))
     } else {
@@ -499,8 +510,8 @@ try {
             .map((i) => Number(i.value)))
     log('quantités à l’écran :', JSON.stringify(qtyOk))
     check('B2 quantités venues du .job',
-        qtyOk.length > 0 && qtyOk.some((n) => n === Math.max(...wanted.values())),
-        `attendu au moins une fiche à ×${Math.max(...wanted.values())}, lu ${qtyOk.join(', ')}`)
+        qtyOk.length > 0 && qtyOk.some((n) => n === Math.max(...perOriginalQty(source))),
+        `attendu au moins une fiche à ×${Math.max(...perOriginalQty(source))}, lu ${qtyOk.join(', ')}`)
 
     // ---------- C. nesting ----------
     if (ALLOW_OVERLAP) {
@@ -851,8 +862,8 @@ try {
         String(out.optimisation))
     const copies = out.parts.filter((p) => p.copyOf >= 0).length
     check('D4 les exemplaires supplémentaires sont des copyOf',
-        copies === out.parts.length - wanted.size,
-        `${copies} copies pour ${out.parts.length} sections et ${wanted.size} dessins`)
+        copies === out.parts.length - originals.length,
+        `${copies} copies pour ${out.parts.length} sections et ${originals.length} originale(s)`)
     check('D5 chemins absolus masqués',
         out.parts.every((p) => !/[\\/]/.test(p.drawingFile)),
         out.parts.map((p) => p.drawingFile).join(', '))

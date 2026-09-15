@@ -127,6 +127,11 @@
         <div v-if="jobSwitchedInfo" class="content__notice">
             {{ t('home.jobSwitched') }}
         </div>
+        <!-- Lot J10-a (§9.77 point 11) : zone d'exclusion déclarée dans
+             le `.job` et non nulle — non honorée, DITE au dépôt. -->
+        <div v-if="localImportNotice" class="content__notice content__notice--warn">
+            {{ localImportNoticeText }}
+        </div>
         <div v-if="localComputeError && !capacityPanel" class="content__error">
             {{ localErrorText }}
         </div>
@@ -518,6 +523,18 @@ const nestRequestError = computed(() => filesGetters.nestRequestError);
 const nestSubmitError = computed(() => filesGetters.nestError);
 const nestBusy = computed(() => filesGetters.nestBusy);
 const localImportError = computed(() => filesGetters.localImportError);
+
+// Lot J10-a : information de dépôt (zone d'exclusion Work/keepout).
+const localImportNotice = computed(() => filesGetters.localImportNotice);
+const localImportNoticeText = computed(() => {
+    const key = localImportNotice.value;
+    if (!key) return '';
+    const raw = filesGetters.localImportNoticeParams || {};
+    const params = Object.fromEntries(
+        Object.entries(raw).map(([k, v]) => [k, typeof v === 'number' ? fmtNumber(v, 0) : v]),
+    );
+    return t(key, params);
+});
 // Lot J8-bis (point 22) : information de bascule « .job détecté → Cet
 // appareil », posée par l'écran de création (sessionStorage), une fois.
 const jobSwitchedInfo = ref(false);
@@ -914,6 +931,13 @@ const startsNest = () => {
     // neutre-bleue, couleurs EXPLICITES lisibles sur les deux thèmes
     // (piège #21 : jamais les vars de thème seules pour un texte qui doit
     // rester lisible).
+    // Lot J10-a : la variante AVERTISSEMENT de l'information (zone
+    // d'exclusion) — ambre, distincte du neutre-bleu de la bascule.
+    &__notice--warn {
+        background-color: rgba(217, 119, 6, 0.10);
+        border-color: rgba(217, 119, 6, 0.45);
+    }
+
     &__notice {
         margin-top: 16px;
         padding: 12px;

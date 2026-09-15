@@ -3901,3 +3901,100 @@ Verrous rejoués : harnais `qa-e2e-job.mjs` TOUS VERTS avec les actes
 J8-bis (bascule + info figée ; refus figé sans projet ; négatif sans
 `.job` ; écarté nommé pendant qu'un autre passe) ; `qa-j8-uploads.mjs`
 TOUS VERTS avec la tranche ; vitest 783/783 **exit 0** ; build 0 erreur.
+
+#### 9.78 Lots J9 et J10 — rapports de l'implémenteur (15/09)
+
+**J9 — le lien est la section originale (§9.76).** App et `shared/`
+seuls, moteur intouché. Le correctif suit la consigne point par point :
+
+1. **Sentinelle d'origine** (`jobDrawings`) : une coordonnée `0x25` de
+   module > 1e30 signifie « même origine que le bloc précédent » —
+   propagée, JAMAIS additionnée ; sans origine réelle précédente, refus
+   nommé `sheetcamJobDrawing.sentinelOrigin`. Mesuré sur j9-1 : les
+   quatre blocs sortent à l'origine réelle (60 ; 60), les POINTS restent
+   réels dans chaque bloc (ils ne portent pas la sentinelle), aucun
+   10³⁸ ne sort.
+2. **Le lien par section originale** (`resolveJobDrawingSources`) : le
+   k-ième bloc = la k-ième section `copyOf < 0` (jamais le rang des
+   noms) ; contrôle `blocks.length === nombre d'originales`. Le garde
+   reste : lien non garanti ⇒ refus, jamais de géométrie devinée.
+3. **Une fiche par originale** (`readSheetCamJob`) : chaque originale
+   donne SA fiche (`label` « nom (k/n) » quand plusieurs partagent un
+   dessin, nom nu sinon), quantité 1 + SES copies, portant
+   `originalRank` et `partIndex`. Sur les 50 fichiers du poste (une
+   originale par dessin partout sauf j9-1), les entrées sont
+   INDISCERNABLES d'avant — non-régression mesurée (verrous J6 verts,
+   harnais recette/AB repassés).
+4. **Les points par fiche** (`addSheetCamJobDrop` 2-bis) : attachés par
+   RANG d'originale — l'appariement par géométrie ne peut pas
+   départager quatre exemplaires du MÊME dessin. Chaque fiche porte SES
+   points avec leur drapeau (§9.59 fiche par fiche : `startRaw` — le
+   point TEL QU'ÉCRIT — est conservé pour l'écriture).
+5. **Le `.job` rendu réutilise les sections originales** :
+   `buildNestedJobs` accepte `partIndexByFileSlug` (le rang de SA
+   section par fiche) — posé depuis `jobContextFromRecords`.
+   Quatre originales entrent, quatre sections sortent.
+6. **Conséquence MESURÉE** : quatre fiches de quantité 1 = quatre items
+   moteur. Sur j9-1 (4 pièces ~5 400 mm² sur 1 000 × 1 250, BPP bascu
+   J7-a) : nesting **4/4 en 6 secondes**, densité de tôle sans objet
+   (une seule tôle, 2 % de remplissage — le moteur traite les items
+   identiques comme une même classe de forme). Le regroupement par
+   demande disparaît pour CE cas ; sur un travail d'atelier dense, le
+   moteur groupe les formes IDENTIQUES (même item shape), donc l'écart
+   attendu est faible — à confirmer sur le vrai fichier P4-10, DIT
+   ici plutôt que masqué.
+
+Verrous : décodage j9-1 (4 blocs, origines toutes résolues < 1e6, une
+seule origine distincte, ≥ 3 points de départ distincts, tous déplacés à
+la main) ; `readSheetCamJob` (4 entrées, labels k/4, quantités 1, rangs
+0..3) ; harnais — **j9-1 SEUL ⇒ 4 fiches (1/4)..(4/4), 4 × 1 pièce,
+nesting 4/4, réserve appliquée sur CHACUNE, `.job` rendu à 4 sections,
+0 copOf ajouté, drapeaux 4/4** ; **j9-1 AVEC son DXF ⇒ même résultat,
+géométrie du DXF** (source nulle partout) ; **non-régression** : suite
+entière vitest 788/788 exit 0, harnais recette/AB/j8-bis repassés verts
+(une originale par dessin : comportement inchangé), verrou de
+coïncidence J6 étendu à 54 fichiers — 76 couples, tous exacts.
+
+**J10-a — verrouiller l'acquis (§9.77).**
+1. Le verrou d'aller-retour devient TOTAL : **50/50** fichiers du poste
+   (tous dossiers), identiques à l'octet — test permanent dans
+   `sheetcamJob.test.js` (le compte du poste du vérificateur était 54 :
+   les siens incluaient 4 fichiers depuis déplacés ; le plancher 50
+   garantit le verrou non vide).
+2. Le verrou d'écriture est UNIVERSEL : `binaryWriteWhitelist` déclare
+   la liste (champs de point de départ + drapeaux) ; le moulinet ×4
+   rendu passe à zéro octet hors liste, et le contrôle négatif prouve
+   qu'un octet de GÉOMÉTRIE modifié fait échouer le verrou.
+3. La zone d'exclusion est DITE : `jobKeepoutCorners` lit
+   `[Work/keepout]` ; coins non nuls ⇒ INFORMATION ambrée au dépôt
+   (`jobImport.keepoutDeclared`, EN/FR, voie `localImportNotice`
+   distincte de l'erreur). Les 50 fichiers du poste la portent à
+   zéro — le message ne s'affichera que pour un fichier qui l'exerce.
+4. L'inventaire entre à l'étude (table ci-dessous).
+
+**J10-b — ce que les 50 fichiers peuvent dire (`qa-j10-inventory.mjs`,
+commis, rejouable).** Diff par paires sur les **406** paires de même
+longueur binaire :
+
+| champ | verdict |
+|---|---|
+| `0x0016` (−1), `0x0017` (1), `0x001b`, `0x001c`, `0x0023`, `0x0024`, `0x0030`, `0x0031`, `0x0032` | constants sur les 50 fichiers — nos fichiers ne les exercent jamais |
+| `0x0026`..`0x002d` | présents UNIQUEMENT dans j9-1 (4 occurrences), constants partout ailleurs — liés aux multi-originales ; `0x26`/`0x27` forment un point (−35 ; 23,17) |
+| `0x0014`, `0x0015` | **les deux seuls qui varient** (toujours égaux entre eux) : 1 sur sept fichiers de la PREMIÈRE fournée (coins de départ + L-1/2/3), 2 sur tous les autres. Ne suivent NI le type d'amorce (réfuté §9.77), NI le kerf, NI le miroir, NI 45°, NI les coins, NI les points déplacés : la GÉNÉRATION du fichier est le meilleur prédicteur observé — **sans preuve d'interprétation, non interprétés** |
+
+Le type d'amorce est lu dans `[Part N/OperationM]` (81 opérations
+portent leurs types) — le sondage du §9.77 point 5 avait lu `[Tool0]` :
+le piège est noté au script.
+
+**J10-c — la liste courte pour le propriétaire** (une variable à la
+fois, même pièce, même tôle, enregistrement immédiat — le protocole des
+amorces) :
+1. Une **zone d'exclusion `[Work/keepout]` non nulle** (le message de
+   J10-a s'affichera : c'est le test en conditions réelles) ;
+2. Un fichier à **plusieurs opérations sur la même pièce** (types
+   d'amorce différents par contour) ;
+3. **Plusieurs outils** (`[Tool1]`…) ;
+4. Une pièce **tournée à un angle non multiple de 90°** avec copies ;
+5. Le `.job` **d'atelier réel** de P4-10 (plus de sept dessins, plusieurs
+   opérations, si possible avec zone d'exclusion) — le dernier point
+   d'audit jamais joué.
