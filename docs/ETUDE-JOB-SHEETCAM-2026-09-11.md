@@ -3300,7 +3300,7 @@ seul défaut :
     mode serveur ; contrôle négatif : une fiche DXF ordinaire n'a ni puce ni
     ligne secondaire, sa carte est inchangée au pixel.
 
-### 8.3-ter J8-d — que l'outil DISE qu'il accepte les `.job` SheetCam
+### 8.3-ter J8-d — l'outil DIT qu'il neste les `.job`, et il y conduit
 
 **Capture du propriétaire (15/09)**, l'écran de création. Le choix du mode
 annonce aujourd'hui :
@@ -3313,47 +3313,149 @@ annonce aujourd'hui :
 **Le constat est plus sérieux qu'un libellé manquant : l'écran dit le
 CONTRAIRE de la réalité pour un atelier SheetCam.** La carte « Cet appareil »
 ne parle que de ce qu'elle ne sait pas faire, alors qu'elle est le SEUL mode
-qui accepte un `.job` — la fonction que le propriétaire a fait construire
-pendant deux semaines (lots J1 à J7, en production). Et la carte « Nos
-serveurs » se vend comme la plus capable (« DWG compris »), alors que pour
-ce même atelier c'est la seule des deux qui REFUSE son fichier de travail
-(message `jobImport.serverUnsupported`, lot J6). Un utilisateur qui lit ces
-deux cartes choisit rationnellement le mauvais mode, puis découvre le refus
-au dépôt.
+qui accepte un `.job` — la fonction construite pendant deux semaines (lots J1
+à J7, en production). Et la carte « Nos serveurs » se vend comme la plus
+capable (« DWG compris »), alors que pour ce même atelier c'est la seule des
+deux qui REFUSE son fichier de travail (`jobImport.serverUnsupported`, lot
+J6). Un utilisateur qui lit ces deux cartes choisit rationnellement le
+mauvais mode, puis découvre le refus au dépôt.
 
-17. **La carte « Cet appareil » nomme le `.job` SheetCam** comme une capacité
-    de ce mode, au même rang que la phrase de confidentialité. Proposition de
-    texte, que le propriétaire peut réécrire — le produit est à lui, le FAIT
-    est à nous : « Vos pièces restent ici. Fichiers de travail SheetCam
-    (`.job`) acceptés. Pas d'autre appareil, pas de DWG. »
-18. **La carte « Nos serveurs » dit que le `.job` n'y est pas encore
-    traité**, pour que le refus ne soit plus une découverte au dépôt :
-    « … DWG compris. Fichiers `.job` SheetCam : pas encore ici. » À retirer
-    le jour où J5 livre le miroir serveur.
-19. La légende de la zone de dépôt nomme le `.job` (point 13) — les deux
-    doivent être cohérents : ce que la carte promet, la zone le confirme.
-20. **Périmètre : l'application seulement.** Le site de présentation
-    (dépôt frère `../nestorcut-website`) et `docs/STRATEGY.md` portent des
-    PROMESSES PUBLIQUES : les toucher est une décision du propriétaire, pas
-    de l'implémenteur. Je la lui signale (voir ci-dessous), je ne l'ouvre
-    pas.
-21. Verrous : parité EN/FR sur les trois textes ; captures des deux cartes
-    dans les deux langues ; le harnais vérifie que le mot « .job » est
-    présent dans la carte appareil ET dans la légende en mode appareil, et
-    ABSENT de la légende en mode serveur.
+**Volonté du propriétaire (15/09), mot pour mot** : « je veux nester des
+`.job`, il faut donc que ça soit visible lors de l'import sur le site et il
+faut que ça fonctionne ». Il m'a délégué le texte exact. Le voici, figé —
+l'implémenteur l'applique tel quel, aucune reformulation.
 
-**Pour le propriétaire, deux décisions qui ne sont pas les miennes** : (a) le
-texte exact des deux cartes ; (b) si « accepte les fichiers de travail
-SheetCam » doit rejoindre `docs/STRATEGY.md` et le site — c'est livré et en
-production depuis le 14/09, donc légitimement annonçable en `[prod]`
-(AGENTS §7 : jamais de `[prod]` sur du non-livré), mais une promesse publique
-se décide en haut.
+#### Les textes (à poser tels quels dans `app/utils/i18n.js`)
+
+| clé | EN | FR |
+|---|---|---|
+| `privacy.device.body` | `Your parts stay here, and SheetCam .job files nest here. No other computer, no DWG.` | `Vos pièces restent ici, et les fichiers .job SheetCam s'y nestent. Pas d'autre appareil, pas de DWG.` |
+| `privacy.cloud.body` | `Any of your devices, including DWG. SheetCam .job: not here yet. Without the vault: stored in the clear, deleted 24 h after nesting.` | `Tous vos appareils, DWG compris. Fichiers .job SheetCam : pas encore ici. Sans coffre : en clair, effacé après 24 h.` |
+| `upload.limitDevice` | `Up to 20 files (DXF, SVG or SheetCam .job), max 5 MB each` | `Jusqu'à 20 fichiers (DXF, SVG ou .job SheetCam), 5 Mo max chacun` |
+| `upload.limit` (serveur) | INCHANGÉ | INCHANGÉ |
+
+La mention « pas encore ici » de la carte serveur DISPARAÎT le jour où J5
+livre le miroir — le rappeler dans la consigne de J5.
+
+#### « Il faut que ça fonctionne » — le dépôt conduit au bon mode
+
+Nommer la capacité ne suffit pas : un `.job` déposé alors que « Nos
+serveurs » est sélectionné reste un refus, c'est-à-dire un échec pour
+quelqu'un qui voulait juste nester son travail. **Décision : le dépôt d'un
+`.job` bascule le projet en « Cet appareil » et le DIT.** L'utilisateur n'a
+pas à connaître notre découpage interne pour que son fichier passe.
+
+22. Sur l'écran de création, si la dépose contient un `.job` (reconnu par
+    SIGNATURE, piège #31, jamais par l'extension) et que le mode choisi est
+    « Nos serveurs », **sélectionner « Cet appareil »** et afficher, en
+    information et non en erreur :
+    - EN `SheetCam .job detected — switched to "This device", the mode that nests them.`
+    - FR `Fichier .job SheetCam détecté — passage en « Cet appareil », le mode qui les neste.`
+23. **Le seul cas contradictoire est `.job` + `.dwg` dans la MÊME dépose** :
+    le `.job` exige l'appareil, le DWG exige le serveur. Refus explicite qui
+    nomme les deux, sans rien importer :
+    - EN `A SheetCam .job needs "This device"; a DWG needs "Our servers". Drop them in two separate projects.`
+    - FR `Un .job SheetCam demande « Cet appareil », un DWG demande « Nos serveurs ». Déposez-les dans deux projets séparés.`
+24. **Sur un projet SERVEUR DÉJÀ CRÉÉ**, on ne bascule rien — le mode d'un
+    projet existant est une donnée, pas une préférence d'écran. Le message
+    `jobImport.serverUnsupported` du lot J6 reste, inchangé.
+25. Verrous : parité EN/FR des cinq textes ; captures des deux cartes dans
+    les deux langues ; harnais — (a) un `.job` déposé en mode serveur depuis
+    l'écran de création crée un projet « Cet appareil » et affiche
+    l'information, (b) `.job` + `.dwg` ⇒ refus nommant les deux, zéro fiche
+    créée, (c) contrôle négatif : une dépose sans `.job` ne change jamais le
+    mode choisi, (d) le mot « .job » est présent dans la carte appareil et
+    dans la légende en mode appareil, ABSENT de la légende serveur.
+
+#### La promesse publique
+
+Le propriétaire a tranché : c'est visible et c'est annoncé. C'est livré et
+vérifié en production depuis le 14/09, donc annonçable en `[prod]` sans
+mentir (AGENTS §7).
+
+26. Ajouter à `docs/STRATEGY.md`, dans la section des formats d'entrée, une
+    ligne `[prod]` : **« Fichiers de travail SheetCam (`.job`) : lus,
+    nestés et réécrits — mode "Cet appareil". Le miroir serveur est en
+    cours (J5). »** Rien d'autre dans ce fichier.
+27. **Le site de présentation (`../nestorcut-website`) n'est PAS dans ce
+    lot** : c'est un dépôt frère avec son propre cycle. À ouvrir en lot
+    séparé une fois J8 en production — annoncer sur le site une capacité que
+    l'application n'affiche pas encore serait l'ordre inverse du bon.
+
+### 8.3-quater J8-e — « et si mon client a plus de 20 fichiers ? »
+
+**Question du propriétaire (15/09).** Je suis allé lire le code plutôt que
+de répondre de mémoire, et la réponse est plus embarrassante que la
+question : **la limite affichée n'existe pas là où elle est affichée, et
+elle échoue en silence là où elle existe.**
+
+Trois faits, tous vérifiés :
+
+1. **En mode « Cet appareil », il N'Y A AUCUNE limite de nombre.**
+   `MAX_UPLOAD_FILES` (20) n'est référencé QUE dans
+   `server/core/project/dxf.js` ; le composant de dépôt
+   (`app/components/DxfUpload.vue`, `setFiles`) ne filtre QUE l'extension et
+   la taille unitaire, jamais le compte. Un atelier peut déposer cent `.job`
+   sur cet appareil. **La légende annonce donc un plafond qui n'existe pas
+   sur ce chemin.**
+2. **En mode « Nos serveurs », le plafond est PAR REQUÊTE, pas par projet.**
+   Il protège la taille du corps HTTP
+   (`MAX_BODY_BYTES = 5 Mo × 20 + 1 Mo`). Cinquante fichiers passent donc
+   très bien en trois dépôts — mais rien à l'écran ne le dit.
+3. **Et un dépôt de plus de 20 échoue SANS RIEN DIRE.** `uploadToServer`
+   (`app/composables/files.js`) enveloppe tout dans un
+   `catch { console.error(...) }` : le serveur répond 400 « Too many
+   files — at most 20 per upload », et l'utilisateur ne voit RIEN. Ni
+   message, ni fiche, ni explication — le projet reste vide et il ne sait
+   pas pourquoi. **Le même silence avale toutes les autres erreurs
+   d'envoi** : coffre verrouillé (403), quota, panne réseau.
+
+Le point 3 est un défaut muet, la catégorie que ce projet s'interdit
+(AGENTS §2 #23, #60 : jamais de refus silencieux). La question du
+propriétaire l'a mis au jour.
+
+**Ce qu'il faut faire — que l'utilisateur n'ait JAMAIS à compter ses
+fichiers.**
+
+28. **Le client envoie par LOTS, automatiquement.** `uploadToServer`
+    découpe la liste en paquets de `MAX_UPLOAD_FILES` et les envoie à la
+    suite, en rafraîchissant le projet à la fin. Cinquante fichiers = trois
+    requêtes, zéro action de l'utilisateur, zéro plafond visible. Le
+    plafond serveur reste EN PLACE (c'est une garde de taille de corps, pas
+    une règle produit) — simplement, plus personne ne le rencontre.
+29. **Les erreurs d'envoi s'affichent.** Remplacer le `console.error` par le
+    même chemin que les autres refus (`state.localImportError` +
+    paramètres), avec le message du serveur quand il en porte un. Si un lot
+    échoue au milieu, le dire ET nommer les fichiers concernés — jamais un
+    projet à moitié rempli sans explication.
+30. **La légende dit la vérité, et elle diffère par mode.** Le compte
+    disparaît des deux côtés puisque plus personne ne le rencontre ; ce qui
+    reste vrai, c'est la taille par fichier et les formats :
+    - `upload.limitDevice` — EN `DXF, SVG or SheetCam .job — max 5 MB per file` / FR `DXF, SVG ou .job SheetCam — 5 Mo max par fichier`
+    - `upload.limit` (serveur) — EN `DXF, SVG or DWG — max 5 MB per file` / FR `DXF, SVG ou DWG — 5 Mo max par fichier`
+    Ces deux textes REMPLACENT ceux du §8.3-ter, point 30 — c'est la
+    version à poser.
+31. **Ne pas inventer de plafond en mode appareil.** Il n'y en a pas, on
+    n'en ajoute pas. Mais on ne l'affirme pas sans preuve : le harnais
+    dépose **trente fichiers** sur un projet appareil et vérifie que les
+    trente fiches existent et que le nesting aboutit. Si une limite de fait
+    apparaît (mémoire, durée), elle sera MESURÉE et dite, pas devinée.
+32. Verrous : (a) 25 fichiers en mode serveur ⇒ deux requêtes, 25 fiches,
+    aucun message d'erreur ; (b) une requête refusée par le serveur ⇒ le
+    message est À L'ÉCRAN, avec les noms ; (c) 30 fichiers en mode appareil
+    ⇒ 30 fiches et nesting abouti ; (d) parité EN/FR des deux légendes.
+
+**Réponse courte à la question posée** : aujourd'hui, en mode appareil il en
+dépose autant qu'il veut ; en mode serveur il doit les déposer par paquets
+de vingt, et s'il dépasse il ne voit rien du tout. Après ce lot : il les
+dépose tous, d'un coup, dans les deux modes.
 
 ### 8.4 Ordre et portée
 
 App seule (`app/`, `shared/`), aucun diff sous `workers/`, `public/` ni le
-moteur — donc ni wasm, ni homelab, ni benchmarks. Ordre : **J8-a, J8-c et J8-d
-d'abord** (des heures, pas des jours — ce sont deux gênes quotidiennes et
+moteur — donc ni wasm, ni homelab, ni benchmarks. Ordre : **J8-e d'abord** (il contient un défaut MUET en
+production : un dépôt serveur de plus de vingt fichiers ne dit rien du tout),
+puis **J8-a, J8-c et J8-d** (des heures, pas des jours — ce sont deux gênes quotidiennes et
 elles se répondent : l'une rend le `.job` en sortie, l'autre le fait voir en
 entrée), **puis J8-b** (les amorces). Rapport, vérification, GO,
 déploiement.
