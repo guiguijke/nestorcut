@@ -3157,3 +3157,209 @@ app/workers non touchés, retour sain). Le runbook privé passe aux pulls
 CIBLÉS (`docker compose pull app nesting-worker`, ajustés à la portée du
 lot — jamais de pull nu). Désormais, mettre à jour Mongo est un geste
 décidé : changer le tag, lire les notes d'amont, puis déployer.
+
+#### 9.73 Lot J8 — le `.job` est la sortie attendue, et les amorces se voient (consigne fermée, 15/09)
+
+**Demande du propriétaire (15/09)**, deux points : « si je mets des fichiers
+`.job` dans l'outil, je m'attends à télécharger un fichier `.job` en sortie »,
+et « je veux prévisualiser les lead in et lead out dans l'outil (liste des
+parts et aussi pendant le nesting) ».
+
+Les deux sont fondées, et j'ai relevé une troisième asymétrie en vérifiant.
+Aucun des trois ne touche le calcul : **rien ne change au résultat du
+nesting**, ce lot est de l'affichage et de l'ordre des boutons. Il peut donc
+avancer PENDANT la recette du propriétaire, contrairement à tout ce qui
+toucherait au placement.
+
+### 8.1 J8-a — le `.job` redevient la sortie principale
+
+**Constat, lu dans `app/components/ResultReport.vue`** : sur un projet issu
+d'un `.job`, le bouton « Télécharger » (le DXF) est en thème PRIMAIRE et
+vient EN PREMIER ; « Télécharger le `.job` » est SECONDAIRE et vient après.
+L'outil propose donc en premier ce que l'utilisateur n'a pas demandé.
+
+1. Quand `resultModalData.hasJobs` est vrai, **le `.job` devient l'action
+   primaire et passe en tête** ; le DXF devient secondaire.
+2. Le libellé du DXF devient explicite — « Télécharger le DXF » — dès que
+   deux téléchargements coexistent. « Télécharger » seul est ambigu quand il
+   y a deux sorties. EN et FR, parité verrouillée.
+3. **Asymétrie multi-tôles, relevée par le vérificateur** :
+   `downloadLocalJob(record, altId, sheetIndex)` ne rend QUE la tôle
+   affichée, alors que le DXF propose « tout télécharger ». Sur un job à
+   trois tôles, l'atelier doit changer d'onglet et recliquer trois fois.
+   Donner au `.job` le même « tout télécharger » qu'au DXF.
+4. Rien ne change pour un projet ordinaire : sans `.job` déposé, aucun des
+   trois points ne s'applique.
+5. Verrous : harnais `qa-e2e-job.mjs`, l'ordre ET le thème des boutons sont
+   mesurés (le `.job` en premier, primaire) ; multi-tôles ⇒ autant de `.job`
+   téléchargés que de tôles, chacun relu et valide ; contrôle négatif sur un
+   projet sans `.job`.
+
+### 8.2 J8-b — voir les amorces AVANT et PENDANT le nesting
+
+**La géométrie existe déjà**, ce n'est pas à redécouvrir :
+`shared/sheetcamReserve.js` porte `leadPathLocal(type, length, side)` qui
+rend la trajectoire d'amorce échantillonnée (arc, perpendiculaire,
+tangentielle), et `biteAtStart` calcule le repère (tangente, normale) en
+chaque point de départ. Ce qui manque est une sortie MONDE et son rendu.
+
+6. **Exposer** dans `shared/sheetcamReserve.js` une fonction
+   `leadWorldPaths({ point, startFrame, endFrame, leadIn, leadInType,
+   leadOut, leadOutType, kerf })` qui rend, en coordonnées du dessin :
+   `{ inPath, outPath, pierce }` — deux polylignes et le disque de perçage
+   (rayon `2 × kerf`, §9.51). C'est la même arithmétique que
+   `leadEnvelopePoints`, sans l'enveloppe convexe : mettre le calcul commun
+   en facteur plutôt que le dupliquer.
+7. **Liste des fiches** (`buildPreviewSvg`, `app/composables/localImport.js`) :
+   pour une fiche issue d'un `.job`, dessiner les amorces et le disque de
+   perçage par-dessus le contour. C'est là que l'atelier vérifie ses points
+   de départ AVANT de lancer quoi que ce soit — la surface la plus utile du
+   lot.
+8. **Vue live pendant le nesting** (`app/components/LiveNestingView.vue`) :
+   mêmes tracés, transformés comme les pièces. Attention au piège #20b : le
+   rendu SVG applique `translate(x, H−y) scale(1,−1) rotate(θ)` — les
+   amorces passent par la MÊME transformation que l'anneau, jamais par une
+   autre, sinon elles dériveront à chaque rotation.
+9. **Convention de dessin, non négociable** : une amorce N'EST PAS de la
+   matière. Trait fin, couleur distincte du contour de coupe, jamais de
+   remplissage plein qui la ferait lire comme une pièce ; le disque de
+   perçage en trait pointillé ou en aplat translucide. Le tout lisible sur
+   les deux thèmes (piège #21 : ne pas compter sur les variables de thème).
+10. **L'amorce TANGENTIELLE ne se dessine PAS comme une ligne certaine.** Le
+    code le dit lui-même : « la règle exacte n'étant pas mesurée », il ne
+    retient que les deux positions extrêmes (0° et 22,5°). Dessiner une seule
+    droite serait affirmer une mesure que nous n'avons pas. La dessiner en
+    ZONE translucide entre les deux extrêmes — c'est honnête, et c'est plus
+    utile : l'atelier voit l'incertitude là où elle est. Arc, perpendiculaire
+    et « aucune » sont certains : trait plein.
+11. **Ne jamais inventer une amorce.** Une fiche ordinaire (sans `.job`) n'en
+    a pas : on n'affiche rien. Un point de départ non lu n'en a pas non plus.
+12. Verrous : unitaire sur `leadWorldPaths` (un arc rendu commence au point
+    de départ décalé de `kerf/2` vers la chute et finit au bout libre, à
+    1e-9 ; parité avec l'enveloppe existante — l'enveloppe convexe des
+    chemins rendus est incluse dans `leadEnvelopePoints`, sinon la réserve et
+    l'affichage se contrediraient) ; captures FR et EN de la liste des fiches
+    et de la vue live sur un `.job` de la série ; contrôle négatif : un
+    projet sans `.job` rend un aperçu bit-identique à aujourd'hui.
+
+### 8.3 Ce qui n'est PAS dans ce lot
+
+- **L'aperçu couleur du RÉSULTAT** (`SheetSvgPreview`) : ce n'est pas un
+  rendu de composant, c'est un fichier SVG PRODUIT par le pipeline, avec un
+  miroir Python à tenir en parité (`test_svg_colored.py`). Les amorces y
+  arriveront, mais c'est un lot à part — à ouvrir après celui-ci, et à
+  mesurer des deux côtés.
+- La vue DXF du résultat : le DXF de coupe ne contient pas les amorces, et
+  ce n'est pas à ce lot de les y écrire.
+
+### 8.3-bis J8-c — « je n'ai déposé que des `.job` et je vois des `.dxf` »
+
+**Capture du propriétaire (15/09)** : cinq `.job` déposés, cinq fiches
+nommées `…dxf`, et la zone de dépôt qui annonce « DXF ou SVG ». Rien à
+l'écran ne dit que ces fiches viennent de ses fichiers de travail.
+
+**Trois causes distinctes, toutes vérifiées dans le code** — ce n'est pas un
+seul défaut :
+
+1. **Le libellé de la zone de dépôt ment par omission.** `uploadExtensions`
+   vaut bien `['.dxf', '.svg', '.job']` sur un projet « Cet appareil » — le
+   sélecteur de fichiers accepte donc les `.job` — mais la légende affichée
+   est `upload.limitDevice`, « Jusqu'à 20 fichiers (DXF ou SVG) ». L'outil
+   accepte un format qu'il n'annonce pas.
+2. **La fiche porte le nom du DESSIN, pas celui du fichier déposé.** C'est
+   exact : `c12__marine_lpl_001.job` déclare un dessin
+   `c12__marine_lpl_001.dxf`, et c'est ce nom-là que SheetCam rouvrira dans
+   le `.job` rendu. **Décision : on garde ce nom comme titre** — le changer
+   casserait le lien mental avec ce que l'atelier voit dans SheetCam, et
+   avec ce que NestorCut réécrit. Ce qui manque n'est pas un autre nom, c'est
+   la PROVENANCE à côté.
+3. **La provenance existe en base mais n'atteint jamais la carte.** La fiche
+   porte `source: 'job'` et le constat `sheetcam.jobGeometry`, mais
+   `CARD_CODES` (`app/composables/importFindings.js`) ne contient pas ce
+   code : le constat n'apparaît que dans la fenêtre de détail du fichier.
+   Sur la carte, rien.
+
+**À faire :**
+
+13. La légende de la zone de dépôt nomme le `.job` quand il est accepté —
+    une clé distincte pour le mode « Cet appareil », EN et FR. Ne jamais
+    annoncer `.job` là où il n'est pas accepté (projet serveur, tant que J5
+    n'est pas fait).
+14. La carte d'une fiche issue d'un `.job` porte une **marque de provenance
+    compacte** : une puce « .job » et, en ligne secondaire, le **nom du
+    fichier déposé** (`sheetcam.jobName`, déjà stocké). Le titre reste le nom
+    du dessin. L'atelier doit pouvoir dire d'un coup d'œil quelle fiche vient
+    de quel `.job` quand il en dépose cinq d'un coup.
+15. La phrase complète (« géométrie lue dans le fichier de travail — le DXF
+    d'origine n'a pas été fourni ») reste dans la fenêtre de détail : c'est
+    sa place, elle est trop longue pour une carte. La puce, elle, est
+    toujours visible.
+16. Verrous : harnais sur un dépôt de PLUSIEURS `.job` d'un coup — autant de
+    fiches que de fichiers, chacune portant sa puce et le nom de SON `.job` ;
+    la légende de la zone cite `.job` en mode appareil et ne le cite pas en
+    mode serveur ; contrôle négatif : une fiche DXF ordinaire n'a ni puce ni
+    ligne secondaire, sa carte est inchangée au pixel.
+
+### 8.3-ter J8-d — que l'outil DISE qu'il accepte les `.job` SheetCam
+
+**Capture du propriétaire (15/09)**, l'écran de création. Le choix du mode
+annonce aujourd'hui :
+
+| carte | texte actuel |
+|---|---|
+| « Cet appareil » | « Vos pièces restent ici. Pas d'autre appareil, **pas de DWG**. » |
+| « Nos serveurs » | « Tous vos appareils, **DWG compris**. Sans coffre : en clair, effacé après 24 h. » |
+
+**Le constat est plus sérieux qu'un libellé manquant : l'écran dit le
+CONTRAIRE de la réalité pour un atelier SheetCam.** La carte « Cet appareil »
+ne parle que de ce qu'elle ne sait pas faire, alors qu'elle est le SEUL mode
+qui accepte un `.job` — la fonction que le propriétaire a fait construire
+pendant deux semaines (lots J1 à J7, en production). Et la carte « Nos
+serveurs » se vend comme la plus capable (« DWG compris »), alors que pour
+ce même atelier c'est la seule des deux qui REFUSE son fichier de travail
+(message `jobImport.serverUnsupported`, lot J6). Un utilisateur qui lit ces
+deux cartes choisit rationnellement le mauvais mode, puis découvre le refus
+au dépôt.
+
+17. **La carte « Cet appareil » nomme le `.job` SheetCam** comme une capacité
+    de ce mode, au même rang que la phrase de confidentialité. Proposition de
+    texte, que le propriétaire peut réécrire — le produit est à lui, le FAIT
+    est à nous : « Vos pièces restent ici. Fichiers de travail SheetCam
+    (`.job`) acceptés. Pas d'autre appareil, pas de DWG. »
+18. **La carte « Nos serveurs » dit que le `.job` n'y est pas encore
+    traité**, pour que le refus ne soit plus une découverte au dépôt :
+    « … DWG compris. Fichiers `.job` SheetCam : pas encore ici. » À retirer
+    le jour où J5 livre le miroir serveur.
+19. La légende de la zone de dépôt nomme le `.job` (point 13) — les deux
+    doivent être cohérents : ce que la carte promet, la zone le confirme.
+20. **Périmètre : l'application seulement.** Le site de présentation
+    (dépôt frère `../nestorcut-website`) et `docs/STRATEGY.md` portent des
+    PROMESSES PUBLIQUES : les toucher est une décision du propriétaire, pas
+    de l'implémenteur. Je la lui signale (voir ci-dessous), je ne l'ouvre
+    pas.
+21. Verrous : parité EN/FR sur les trois textes ; captures des deux cartes
+    dans les deux langues ; le harnais vérifie que le mot « .job » est
+    présent dans la carte appareil ET dans la légende en mode appareil, et
+    ABSENT de la légende en mode serveur.
+
+**Pour le propriétaire, deux décisions qui ne sont pas les miennes** : (a) le
+texte exact des deux cartes ; (b) si « accepte les fichiers de travail
+SheetCam » doit rejoindre `docs/STRATEGY.md` et le site — c'est livré et en
+production depuis le 14/09, donc légitimement annonçable en `[prod]`
+(AGENTS §7 : jamais de `[prod]` sur du non-livré), mais une promesse publique
+se décide en haut.
+
+### 8.4 Ordre et portée
+
+App seule (`app/`, `shared/`), aucun diff sous `workers/`, `public/` ni le
+moteur — donc ni wasm, ni homelab, ni benchmarks. Ordre : **J8-a, J8-c et J8-d
+d'abord** (des heures, pas des jours — ce sont deux gênes quotidiennes et
+elles se répondent : l'une rend le `.job` en sortie, l'autre le fait voir en
+entrée), **puis J8-b** (les amorces). Rapport, vérification, GO,
+déploiement.
+
+**Le gel reste en vigueur pour tout ce qui change un RÉSULTAT** : la recette
+du propriétaire (tableaux A, B, C, C-bis) et P4-10 — le `.job` d'atelier réel
+avec plus de sept dessins, plusieurs opérations, et si possible une zone
+d'exclusion `[Work/keepout]` non nulle — restent la porte d'entrée des
+nouveautés de calcul. Ce lot-ci passe parce qu'il n'en est pas une.
