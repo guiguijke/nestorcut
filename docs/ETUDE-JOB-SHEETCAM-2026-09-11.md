@@ -3562,3 +3562,91 @@ sont NI dans l'aperçu couleur du résultat NI dans la vue DXF (§8.3 :
 lots à part, miroir Python à tenir). Et la série J7 a appris que les
 points de départ tombent au MILIEU des arêtes — la passe « meilleur
 point » (§9.58, gelée) en tiendra compte (piège AGENTS 5d).
+
+#### 9.75 Lot J8 — vérification (vérificateur, 15/09, `c2b0fc23`) — NO-GO, un J8-bis court
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, vitest, harnais de
+l'implémenteur, et mes propres sondes au navigateur.
+
+**Beaucoup de bon, et je le dis d'abord.**
+
+| Livré | Mesuré par moi |
+|---|---|
+| J8-e, envoi par lots | 25 fichiers serveur ⇒ 25 fiches en **2 requêtes** ; un lot refusé ⇒ **message à l'écran nommant les 5 fichiers** ; 30 fichiers en mode appareil ⇒ 30 fiches + nesting abouti. Le défaut MUET de production est bien mort |
+| J8-c, provenance | deux `.job` déposés ensemble ⇒ **2 fiches** (le second était ignoré en silence, trou trouvé et bouché par l'implémenteur), chacune avec sa **puce `.job`** et le **nom du fichier déposé** — capture `12-carte-amorces.png` |
+| J8-b, amorces | l'aperçu de fiche PORTE les amorces : couleur dédiée et trait pointillé présents dans le SVG rendu, perçage visible dans le trou. **Ma première sonde était fausse** (elle cherchait du SVG en ligne alors que la carte affiche une image `data:`) — corrigée, le verrou est vert |
+| J8-a, négatif | sans `.job`, le DXF reste « Télécharger » primaire : aucun projet ordinaire n'est touché |
+| J8-d, textes | les deux légendes sont **au caractère près** celles du §8.3-quater |
+
+**NO-GO malgré tout, pour trois raisons — dont deux sont des contradictions
+visibles à l'écran.**
+
+**1. Les points 22 et 23 de la consigne ne sont pas faits, et le rapport ne
+le dit pas.** Aucune trace dans le code (ni clé i18n, ni bascule). Mesuré au
+navigateur, et le résultat est pire que « pas fait » :
+
+- un `.job` déposé alors que « Nos serveurs » est sélectionné affiche
+  **« Type de fichier non supporté — DXF, SVG ou DWG. »**, juste sous une
+  carte qui vient d'annoncer « Fichiers de travail SheetCam (.job)
+  acceptés ». **L'écran se contredit lui-même**, et c'est CE LOT qui crée la
+  contradiction en ajoutant la promesse sans le chemin. C'est exactement ce
+  que le propriétaire demandait par « il faut que ça fonctionne ».
+- `.job` + `.dwg` dans la même dépose : le `.dwg` **disparaît sans un mot**.
+  Cause lue dans `DxfUpload.setFiles` : l'évènement `rejected` ne part que si
+  AUCUN fichier ne passe le filtre ; dès qu'un fichier passe, les autres sont
+  jetés en silence.
+
+**2. La suite de tests est ROUGE, et elle a été rapportée verte.** `npx
+vitest run` rend **783 passés MAIS `Errors 3` et un code de sortie 1** :
+`TypeError: a.remove is not a function` (`localDownloads.js:17`), levée trois
+fois depuis les `setTimeout` du nouveau « tout télécharger les `.job` ». La
+cause est le FAUX élément du test (`sheetcamLeads.test.js`), qui n'a pas de
+méthode `remove` — un vrai navigateur en a une, le produit n'est pas en
+cause. Le correctif est d'une ligne. Ce qui n'est pas d'une ligne, c'est
+d'avoir lu « 783 passed » et conclu vert.
+
+**3. Le harnais de l'implémenteur lui-même rend un verrou ROUGE**, rapporté
+vert : `J8e-a aucun message d'erreur` échoue — après l'import de 25 fichiers,
+l'écran porte « Sélectionnez au moins un fichier à imbriquer ». Soit le
+message est parasite après un import par lots, soit le verrou est trop
+strict : dans les deux cas cela se tranche, cela ne se rapporte pas comme
+vert.
+
+**Règle de méthode, à tenir désormais** : le verdict d'une suite est son
+**CODE DE SORTIE**, jamais la ligne « N passed » ; le verdict d'un harnais
+est son compte de verrous rouges, jamais l'impression d'ensemble. Un point de
+consigne non fait se DIT dans le rapport — l'implémenteur a le droit de
+sauter un point et de l'argumenter, jamais de le passer sous silence.
+
+**Arbitrage accepté sans réserve** : les deux cartes ont été posées dans une
+formulation un peu différente de la table figée (« Fichiers de travail
+SheetCam (.job) acceptés » au lieu de « et les fichiers .job SheetCam s'y
+nestent »). C'est un texte que j'avais moi-même écrit dans la première
+version de la consigne, le sens est identique et il est même meilleur sur une
+carte qui parle de stockage. **Accepté.** Je le note seulement pour que
+« appliquer tel quel » ne se relâche pas quand le texte compte vraiment.
+
+### Lot J8-bis — ce qui manque (court, fermé)
+
+1. **Points 22 et 23 de la consigne**, tels qu'ils sont écrits au §8.3-ter :
+   le dépôt d'un `.job` sur l'écran de création bascule le projet en « Cet
+   appareil » et le DIT (information, pas erreur) ; `.job` + `.dwg` est un
+   refus explicite nommant les deux. Les quatre textes EN/FR sont déjà
+   figés dans la consigne.
+2. **Corollaire mesuré par le vérificateur, à traiter avec** : `setFiles`
+   jette en silence tout fichier écarté dès qu'un autre passe. Tout fichier
+   écarté doit être NOMMÉ, quel que soit le sort des autres — c'est la même
+   famille de défaut que le silence de `uploadToServer` que J8-e vient de
+   corriger.
+3. **Le faux élément du test reçoit un `remove`** et `npx vitest run` doit
+   sortir en **code 0**, `Errors 0`. Le verrou n'est pas « 783 passés », il
+   est « exit 0 ».
+4. **Le verrou rouge du harnais `qa-j8-uploads.mjs` est tranché** : message
+   parasite corrigé, ou verrou corrigé avec sa raison écrite.
+5. Non mesuré par l'implémenteur et à couvrir : le **clic multi-tôles** du
+   « tout télécharger les `.job` » au navigateur (il est verrouillé en
+   unitaire seulement, et le journal le dit — c'est la bonne façon de le
+   dire).
+
+Périmètre : app seule. Après ce J8-bis, la vérification reprend et le GO
+suit. Rien de ce qui est livré n'est à défaire.
