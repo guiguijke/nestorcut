@@ -2707,3 +2707,59 @@ Chiffres : vitest **768/768** (le verrou unitaire J6-bis en plus),
 (seul le service app a bougé), page de prod à ce SHA, app.nestorcut.com
 et nestorcut.com en 200. Homelab et benchmarks publics sans objet (aucun
 diff moteur/worker). La recette C1 peut se jouer « `.job` seul ».
+
+#### 9.66 Lot J6-bis — vérification (vérificateur, 15/09, `777b48a8`) — GO a posteriori, réserve levée
+
+Rejoué sur le poste : image `app` reconstruite à HEAD (le démon Docker était
+arrêté au matin, relancé), pile locale debout, vitest, puis un **rejeu
+navigateur indépendant** du cas que j'avais mesuré en défaut, écrit sans
+regarder le harnais de l'implémenteur (sorties hors dépôt,
+`~/qa-out/verif-j6bis/`).
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **768 / 768** (64 fichiers, le verrou unitaire J6-bis en plus) |
+| périmètre | `app/` + `shared/` + `docs/` + `scripts/` uniquement ; **aucun diff sous `workers/` ni `public/` depuis A1** — homelab et benchmarks publics bien sans objet, vérifié par `git diff ef8068ba..HEAD` |
+| CI et promotion | build `777b48a8` vert PUIS `promote-latest` sur ce SHA (ordre correct, discipline D1) ; le build de `ff013cbb` qui suit n'a pas bougé `:latest` |
+| production | la page expose `gitCommitSha 777b48a8…`, `app.nestorcut.com` et `nestorcut.com` en 200 |
+| **1. `.job` seul** | 2 fiches, toutes deux `source: 'job'` avec leur constat, 1 pièce chacune ; **quantités 1 et 4 posées à l'écran** |
+| **2. `.job` + ses 2 DXF, même projet** | **2 fiches** (et non 4) ; **plus aucune** `source: 'job'` ni constat ; **mêmes slugs**, **mêmes rangs** (`addedAt` à la milliseconde) ; réglages de coupe et octets du `.job` conservés ; **quantités toujours 1 et 4** |
+| **3. inter-projets** (piège #47) | depuis un projet dont les fiches viennent du binaire, créer un projet NEUF en déposant le même nom de DXF : le projet neuf reçoit sa propre fiche, l'ancien garde ses deux fiches **aux mêmes slugs** — la liste du projet est un singleton, mais `getProject` s'exécute avant l'import des fichiers en attente, le remplacement ne peut pas traverser les projets |
+| **4. `.job` renommé du nom d'un dessin** | reconnu par SIGNATURE en amont (piège #31) : traité comme le `.job` qu'il est, réglages ré-attachés, **aucun doublon** — le chemin de remplacement n'est jamais atteint |
+| hygiène | `QA_P3_ECRIN` / `qa-p3-collegue.dxf` → `QA_P3_MULTI` / `qa-p3-multi.dxf` ; verrou « série réelle » : `≤ 4` croisements, tous « ordre », détail journalisé. Aucun nom de fichier du corpus dans le dépôt |
+
+**La réserve du §9.64 est levée**, sur les deux chemins et avec ses effets de
+bord : le remplacement est bien EN PLACE, la quantité réglée ne bouge pas et
+l'ordre de la liste non plus.
+
+**Un constat neuf, non bloquant (mesuré, pas déduit).** Le chemin de
+remplacement appelle `importLocalBytes` DIRECTEMENT : les refus d'entrée de
+`importLocalFiles` (extension `.dwg`, type non accepté, taille maximale) ne
+s'exécutent plus. Mesuré avec un MÊME contenu DWG déposé sous deux noms, sur
+un projet dont les fiches viennent du binaire :
+
+| nom du fichier déposé | chemin | message |
+|---|---|---|
+| `autre.dwg` | ordinaire | « Les fichiers DWG sont convertis sur nos serveurs — choisis « Nos serveurs » pour ce fichier. » |
+| `Piece_Trou.DXF` (nom d'une fiche du binaire) | remplacement | « Aucune pièce fermée trouvée dans ce fichier. » |
+
+Contre-épreuve avec un VRAI fichier DWG (la fixture du worker fichiers,
+7 537 octets) : mêmes deux messages, à l'identique — le message générique
+ne vient pas d'un fichier fabriqué, il vient du chemin emprunté.
+
+Aucune donnée n'est abîmée dans les deux cas (les fiches restent intactes,
+rien n'est remplacé) : c'est une perte de MESSAGE, contraire au piège #33
+(« rejet propre avec message actionnable, jamais d'import partiel
+silencieux »), et le plafond de taille tombe avec. Portée étroite — il faut
+déposer un fichier portant exactement le nom d'un dessin du `.job`.
+
+**Correctif demandé (lot J6-ter, une ligne de chaque côté)** : ne pas
+court-circuiter `importLocalFiles`. Lui passer `replace` dans ses `options`
+et le laisser le transmettre à `importLocalBytes` après ses gardes ; le
+chemin de remplacement garde alors extension, taille et signature. Verrou :
+un `.dwg` déposé sous le nom d'une fiche `source: 'job'` rend
+`localImport.dwgRejected`, et la fiche n'est pas touchée.
+
+**GO a posteriori pour `777b48a8`** (déploiement couvert par le GO du §9.64,
+qui autorisait J6 et J6-bis dans la même promotion). La recette C1 du
+propriétaire se joue désormais avec le `.job` **seul**.
