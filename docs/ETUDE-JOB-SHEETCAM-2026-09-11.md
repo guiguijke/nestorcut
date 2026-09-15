@@ -3998,3 +3998,80 @@ amorces) :
 5. Le `.job` **d'atelier réel** de P4-10 (plus de sept dessins, plusieurs
    opérations, si possible avec zone d'exclusion) — le dernier point
    d'audit jamais joué.
+
+#### 9.79 Lots J8-bis, J9 et J10 — vérification (vérificateur, 15/09, `5cffa2f6`) — GO, avec un J9-bis obligatoire
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, suite complète avec son
+CODE DE SORTIE, décodage indépendant du fichier à quatre originales, et mes
+propres sondes au navigateur.
+
+**Ce qui est acquis, mesuré par moi.**
+
+| Verrou | Résultat |
+|---|---|
+| `npx vitest run` | **code de sortie 0**, 788 passés, **`Errors 0`** — le faux vert du lot précédent est mort |
+| **J9, sentinelle** | les quatre blocs de j9-1 sortent à l'origine RÉELLE (60 ; 60), géométrie saine (0…120 sur les deux axes), **quatre points de départ réels** : (0 ; 85,704), (0 ; 85,704), (25 ; 84,961), (25 ; 58,152) — trois distincts, tous « déplacés à la main » |
+| **J9, au navigateur** | j9-1 déposé seul ⇒ **4 fiches** nommées « (1/4) … (4/4) », **une pièce et ses points chacune** |
+| **J8-bis point 22** | un `.job` déposé en mode « Nos serveurs » crée bien un projet « Cet appareil » avec ses fiches, et le DIT — plus de « type de fichier non supporté ». La contradiction d'écran est levée |
+| **J8-bis point 23, en mode SERVEUR** | refus exact, texte figé au mot près, **aucun projet créé** |
+| J10-a | le verrou d'aller-retour existe et annonce **50/50 identiques à l'octet** |
+
+**Deux défauts, tous deux petits, tous deux à corriger.**
+
+**1. Le point 23 ne tient qu'en mode serveur.** Mesuré, même dépose
+(`.job` + `.dwg`), les deux modes :
+
+| mode | message | projet |
+|---|---|---|
+| Nos serveurs | le refus figé, mot pour mot | **aucun** |
+| **Cet appareil** | **AUCUN message, ni à 1 s ni à 8 s** | **CRÉÉ** |
+
+En mode appareil, le `.dwg` **disparaît sans un mot** et le projet se crée
+avec le seul `.job`. La cause est lue dans le code : `uploadExtensions`
+n'inclut pas `.dwg` en mode appareil, donc `setFiles` l'écarte AVANT
+`handleSubmit`, `dwgNames` reste vide et le conflit n'est jamais détecté ; le
+`rejected` qui part est effacé par le `error.value = ''` de `handleSubmit`,
+puis la navigation emporte le reste.
+
+C'est aussi la promesse de J8-bis — « tout fichier écarté est NOMMÉ, quel que
+soit le sort des autres » — **qui n'est pas tenue dans le cas précis pour
+lequel elle a été écrite**. Correctif : le filtre du sélecteur prend l'UNION
+des formats dans les deux modes sur l'écran de création (c'est déjà ce qui a
+été fait pour le `.job`), et `handleSubmit` tranche ; ou la détection du
+conflit passe AVANT le filtre.
+
+**2. Le verrou d'aller-retour ne couvre pas les fichiers du DÉPÔT.** Il
+balaie `.testparts` et ses trois sous-dossiers — **50 fichiers, tous
+gitignorés** — et laisse de côté les **4 `.job` de
+`app/tests/fixtures/sheetcam`**, qui sont les SEULS présents en intégration
+continue. En CI le verrou ne mesure donc **rien** et passe vert en le disant.
+Un verrou permanent qui ne tourne jamais là où il devrait protéger n'est pas
+un verrou. Ajouter le dossier de fixtures et exiger un plancher ≥ 4 qui tient
+sans `.testparts`.
+
+**GO malgré ces deux points, et voici pourquoi je ne bloque pas cette fois.**
+Le défaut 1 exige de déposer délibérément un DWG à côté d'un `.job` sur un
+projet appareil — un mode dont la carte annonce « pas de DWG ». Il ne touche
+AUCUNE ligne de la recette du propriétaire ni aucun de ses fichiers. En face,
+J9 fait marcher son fichier réel à quatre pièces, aujourd'hui cassé en
+production, et J8-bis lève une contradiction d'écran que j'avais moi-même
+jugée bloquante. Retenir tout cela pour un cas de bord serait mal servir
+l'atelier. La différence avec le NO-GO précédent est nette : là, l'écran se
+contredisait sur le chemin NORMAL ; ici, il faut sortir du chemin pour
+tomber dessus.
+
+**J9-bis, obligatoire avant le prochain déploiement** : les deux points
+ci-dessus, avec leurs verrous — `.job` + `.dwg` refusé dans les DEUX modes,
+sans projet créé ; un fichier écarté nommé même quand d'autres passent, avec
+un verrou navigateur qui lit le message APRÈS la navigation ; et le verrou
+d'aller-retour étendu aux fixtures du dépôt, plancher ≥ 4.
+
+**Sur J10, le fond est bon** : l'inventaire par paires est commis et
+rejouable, 17 champs inconnus déclarés « ne bougent sur aucune paire
+disponible » plutôt que devinés, et `0x14`/`0x15` laissés NON interprétés
+faute de preuve. C'est la bonne discipline : on préfère écrire « nous ne
+savons pas » plutôt que d'inventer une sémantique. La liste d'expériences
+pour le propriétaire est en place, zone d'exclusion en tête.
+
+**Déploiement** : app seule (aucun diff sous `workers/`, `public/` ni le
+moteur), par SHA puis `promote-latest`. Ni homelab, ni benchmarks.
