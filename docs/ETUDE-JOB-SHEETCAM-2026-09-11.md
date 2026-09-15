@@ -3103,3 +3103,46 @@ objet — aucun fichier moteur ni wasm n'a changé depuis la production
 touche déjà ces fichiers, pas dans un lot dédié. La recette du
 propriétaire reprend avec le tableau C-bis (les six fichiers déposés
 seuls, jumeau manuel / jumeau automatique, post-traitement SheetCam).
+
+#### 9.72 Déploiement J7 + J6-ter — contrôle du vérificateur (15/09) — conforme
+
+Contrôlé sans rien écrire nulle part : registre, production, homelab.
+
+| Contrôle | Résultat |
+|---|---|
+| page de production | `gitCommitSha efa0e37e…`, `app.nestorcut.com` et `nestorcut.com` en **200** |
+| `:latest` de l'app | digest **identique** à celui de `:efa0e37e…` — la promotion a bien porté sur le SHA qui a reçu le GO |
+| `:latest` du worker nesting | digest **identique** à celui de `:efa0e37e…` |
+| **homelab, mesuré par moi** | les trois conteneurs de débordement tournent, image au digest `a0c98d6a…` = **exactement** celui de `:efa0e37e…` ; **`md5(core/main.py)` dans le conteneur = `md5` de HEAD** au caractère près ; binaire moteur daté du 15/09 (reconstruit avec l'image, contenu inchangé — aucun diff moteur) |
+| benchmarks publics | sans objet, `git diff` vide sous le moteur, la géométrie wasm et `public/` |
+
+**Une alerte levée puis écartée, notée pour la mémoire de l'équipe.** Le
+journal des exécutions montre `promote-latest` sur le commit `0d4ad725` (le
+commit de documents), pas sur `efa0e37e`. Ce n'est PAS une erreur : le SHA
+promu est une ENTRÉE du workflow, tandis que GitHub enregistre comme
+`headSha` la tête de la branche au moment du lancement. Les digests le
+prouvent (`:latest` ≡ `:efa0e37e`). À retenir pour les contrôles futurs :
+**sur un déclenchement manuel, le `headSha` du journal ne dit pas ce qui a
+été promu** — seul le digest fait foi.
+
+**Un point d'infrastructure à trancher par le propriétaire.** Ce déploiement
+a recréé le conteneur **Mongo de production**, sans que personne l'ait voulu :
+`docker-compose.yml` déclare `image: mongo:7` (deux fois), une étiquette
+FLOTTANTE. Un `docker compose pull` de routine tire donc aussi le moteur de
+base de données dès qu'amont publie un correctif, pendant un déploiement
+d'application. Cette fois tout s'est bien passé — volume intact, workers
+reconnectés seuls — mais le jour où une version amont se comporte autrement,
+la panne arrivera au pire moment et sans rapport avec le lot déployé.
+
+Deux gestes, indépendants et cumulables :
+
+1. **Épingler** : `mongo:7.0.x` exact, ou mieux `mongo@sha256:…`, dans le
+   `docker-compose.yml` du dépôt ET celui de la production. La mise à jour
+   du moteur de base devient alors un geste décidé, pas un effet de bord.
+2. **Ne tirer que ce qu'on déploie** : `docker compose pull app
+   nesting-worker` au lieu du `pull` nu, dans le runbook privé
+   `specs/infra/DEPLOY-HETZNER.md`.
+
+Ce n'est pas un lot : c'est une ligne de compose et une ligne de runbook, à
+faire au prochain passage sur l'infrastructure. Je le signale parce qu'un
+déploiement d'application ne devrait jamais pouvoir changer la base.
