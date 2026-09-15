@@ -2738,6 +2738,18 @@ remplacement appelle `importLocalBytes` DIRECTEMENT : les refus d'entrée de
 s'exécutent plus. Mesuré avec un MÊME contenu DWG déposé sous deux noms, sur
 un projet dont les fiches viennent du binaire :
 
+> **RECTIFICATIF (vérificateur, 15/09, §9.68).** Le tableau ci-dessous
+> est une MAUVAISE EXPÉRIENCE : ses deux lignes changent DEUX variables à la
+> fois, le chemin ET l'extension du fichier déposé. Mesuré depuis : un DWG
+> nommé `sans-rapport.DXF` déposé sur le chemin ORDINAIRE rend le même
+> « Aucune pièce fermée trouvée dans ce fichier. » — l'écart de message
+> venait du NOM (`.dwg` déclenche le garde d'extension, `.DXF` non), pas du
+> chemin emprunté. Le défaut de fond était réel (le chemin de remplacement
+> sautait bien les gardes) et le correctif J6-ter est juste, mais son cas
+> REACHABLE est le PLAFOND DE TAILLE — et un dessin que le `.job` nomme
+> `.dwg`. La démonstration ci-dessous ne l'établissait pas ; la preuve est
+> au §9.68.
+
 | nom du fichier déposé | chemin | message |
 |---|---|---|
 | `autre.dwg` | ordinaire | « Les fichiers DWG sont convertis sur nos serveurs — choisis « Nos serveurs » pour ce fichier. » |
@@ -2789,3 +2801,154 @@ bout en bout — 2 fiches, sources nulles, mêmes slugs et rangs).
 
 Périmètre : deux fichiers (`files.js`, test) — app seule. Déploiement
 après GO, ou groupé avec le prochain lot.
+
+#### 9.68 Lot J6-ter — vérification (vérificateur, 15/09, `3256f706`) — GO déploiement app seule, et rectificatif du §9.66
+
+Rejoué sur le poste : image `app` reconstruite à HEAD, pile debout, vitest,
+puis la mesure navigateur refaite **à variable unique** — ce que ma mesure du
+§9.66 n'était pas.
+
+**D'abord, ma propre erreur, corrigée.** Le tableau du §9.66 comparait
+`autre.dwg` (chemin ordinaire) à `Piece_Trou.DXF` (chemin de remplacement) :
+deux chemins, mais aussi deux EXTENSIONS. Mesuré depuis :
+
+| dépôt | chemin | message |
+|---|---|---|
+| DWG nommé `sans-rapport.DXF` (aucune fiche de ce nom) | **ordinaire** | « Aucune pièce fermée trouvée dans ce fichier. » |
+| DWG nommé `reel.dwg` | ordinaire | « Les fichiers DWG sont convertis sur nos serveurs… » |
+
+Le message générique tombe donc AUSSI sur le chemin ordinaire dès que le nom
+ne finit pas par `.dwg` : l'écart que j'avais publié venait du NOM, pas du
+chemin. Le garde d'extension travaille sur le nom, jamais sur le contenu —
+c'est le comportement historique, hors périmètre de J6.
+
+**Le défaut de fond était réel pour autant**, et le correctif est juste : le
+chemin de remplacement appelait bien `importLocalBytes` directement, donc
+sans les refus d'entrée. Ses conséquences ATTEIGNABLES sont le **plafond de
+taille** (quel que soit le nom du dessin) et un dessin que le `.job` nomme
+`.dwg`. C'est sur ce cas-là qu'il fallait mesurer.
+
+| Verrou | Résultat |
+|---|---|
+| vitest | **769 / 769** (64 fichiers, le verrou J6-ter en plus) |
+| périmètre | `app/composables/files.js`, un test, l'étude — rien d'autre ; aucun diff sous `workers/` ni `public/` |
+| forme du correctif | `importDxfReplacingJobFiche` passe le File à `importLocalFiles` avec `replace` dans les options ; `importLocalFiles` transmettait déjà ses options à `importLocalBytes` APRÈS ses gardes — la correction est un changement d'appelant, pas une duplication de règles |
+| **plafond de taille sur le chemin de remplacement** | un DXF VALIDE de **6,3 Mio** nommé `Piece_Trou.DXF`, déposé sur un projet dont cette fiche vient du binaire ⇒ **« Chaque fichier doit faire 5 Mo ou moins. »** — le garde s'exécute désormais sur ce chemin ; **la fiche n'est pas touchée** (toujours 2 fiches, toutes deux `source: 'job'`) |
+| non-régression J6-bis | le remplacement VALIDE marche toujours : `.job` seul puis `.job` + les deux DXF ⇒ 2 fiches, plus aucune issue du binaire, **mêmes slugs, mêmes rangs**, réglages conservés, **quantités 1 et 4 intactes** |
+| verrou unitaire | un `.dwg` avec `replace` rend `localImport.dwgRejected`, le plafond rend `upload.tooLarge`, rien n'est stocké, et un dépôt valide avec `replace` remplace bien en place |
+
+**GO déploiement app seule** pour `3256f706` — ou groupé avec le prochain
+lot, la portée étant étroite et la production (`777b48a8`) déjà correcte sur
+tout ce que le propriétaire recette. Homelab et benchmarks sans objet.
+
+**Leçon de méthode, pour moi comme pour l'agent** : une comparaison de deux
+chemins ne vaut que si TOUT le reste est identique — même fichier, même nom,
+même projet. J'ai publié un tableau qui n'isolait pas sa variable ; le
+rectificatif est planté au §9.66 pour qu'aucun lecteur ne s'y trompe.
+
+#### 9.69 Série « points de départ » du propriétaire (15/09) — mesures, et lot J7 (consigne fermée)
+
+Le propriétaire a déposé **six `.job`** dans `.testparts/job-tests-new/`
+(quatre dessins du corpus, plus deux fois la pièce L), **avec une capture
+d'écran SheetCam par pièce** montrant les points de départ. Ils ne sont
+jamais nommés ici : identifiants neutres **j7-1 à j7-6**, et leurs lignes
+`DrawingFile` portent le chemin absolu du poste — à ne jamais citer.
+
+**Ce que j'ai mesuré** (décodage indépendant, aires et étendues recalculées
+hors du writer et de l'import wasm ; puis le harnais, image reconstruite à
+HEAD) :
+
+| Constat | Chiffre |
+|---|---|
+| décodage | **6 / 6** lus, **11 contours**, 0 erreur, 0 contour ouvert |
+| coïncidence avec les DXF d'origine | **6 / 6** : aires à 0,1 %, **étendues à 0,00000 mm** (le verrou J6 passe de 47 à 53 fichiers) |
+| points de départ | **5 déplacés à la main**, 6 automatiques |
+| **où tombent les points** | **9 contours sur 11** ont leur départ **À L'INTÉRIEUR d'une arête**, pas sur un sommet — automatiques COMME manuels, et jusque sur un arc (un départ à 49 % d'une hypoténuse, à 62,8 mm du sommet le plus proche) |
+| points manuels respectés | j7-1 (trois points déplacés) et j7-6 (un point déplacé) : **0 octet changé** dans le bloc binaire — §9.59 tient, y compris au milieu d'une arête |
+| points automatiques | j7-2 : **3 octets changés**, les trois drapeaux et rien d'autre ; j7-4 : 2 octets. Le contraste est exactement celui qu'on attend |
+| réserve d'amorce | tous les trous conservés, aucune morsure refusée |
+
+**Conséquence à consigner** : l'idée qu'un point de départ vit sur un sommet
+est FAUSSE, et elle l'est déjà pour les points que SheetCam pose tout seul.
+Toute passe « meilleur point » (§9.58, gelée) doit partir de là.
+
+---
+
+**MAIS deux des six fichiers ne se nestent pas du tout.** C'est le vrai
+sujet de ce lot, et il est antérieur à J6.
+
+Le garde #2b (`localPayloadBuilder.js`, miroir `main.py`) refuse la tâche
+quand `aire_enveloppe / hauteur_tôle ≤ espacement`, sur le chemin BANDE
+(SPP). Sur la tôle du propriétaire (1 000 × 1 250, kerf 1,5 ⇒ espacement
+4 mm), cela refuse **toute pièce seule de moins de 5 000 mm²**. Mesuré, six
+fichiers sur six conformes à la règle :
+
+| fichier | aire | aire / hauteur | verdict |
+|---|---|---|---|
+| j7-3 | 3 450 mm² | 2,76 mm | **REFUS** |
+| j7-5 | 4 050 mm² | 3,24 mm | **REFUS** |
+| j7-6 | 5 375 mm² | 4,30 mm | passe |
+| j7-4 | 13 500 mm² | 10,8 mm | passe |
+| j7-1 / j7-2 | 8 472 mm² net | 6,8 mm | passe |
+
+Le message dit « réduisez l'espacement ou ajoutez des pièces/tôles ». **Les
+deux conseils sont faux ici** : l'espacement est la règle du propriétaire
+(2 × kerf + sécurité), et **ajouter du stock ne change rien** — mesuré au
+navigateur, stock porté à 2 sur j7-3 : même refus, parce que `isSpp` reste
+vrai tant que la direction est « gauche seule » (`totalStock === 1 ||
+leftOnly`). Un atelier qui coupe UNE pièce sur UNE tôle — le cas le plus
+ordinaire qui soit — se voit refuser son travail avec un conseil
+inapplicable.
+
+### Lot J7 — consigne fermée
+
+**J7-a — la petite pièce seule doit se nester (correctif, priorité).**
+
+1. Quand la bande initiale serait dégénérée, **ne plus refuser**. Deux voies,
+   dans cet ordre de préférence :
+   a) **basculer la tâche en multi-tôles (BPP)** — le constructif place dans
+      des tôles entières et n'a pas ce problème d'initialisation. C'est une
+      décision de PAYLOAD : `app/composables/localPayloadBuilder.js` et son
+      miroir `workers/nesting/core/main.py`, **sans toucher au moteur, au
+      wasm ni aux benchmarks**.
+   b) si (a) ne rend pas un résultat correct sur une pièce unique, plancher
+      la largeur initiale de la bande **dans le moteur** — mais c'est alors
+      un lot moteur complet (wasm dans la même PR, homelab, benchmarks
+      publics régénérés) : **me le dire AVANT de s'y lancer**, pas de lot
+      moteur sous le gel sans accord.
+2. **Rien de ce qui aboutit aujourd'hui ne doit changer.** La bascule ne se
+   déclenche QUE sur la condition qui refuse actuellement. Verrous :
+   `determinism_lock.py` inchangé, et un A/B sur le corpus montrant des
+   sorties identiques pour tous les jobs qui passaient déjà.
+3. Le message ne subsiste que pour les cas VRAIMENT infaisables, et ne
+   conseille plus « ajoutez du stock » tant que ce conseil est sans effet.
+4. Verrous : j7-3 et j7-5 déposés seuls se nestent (1/1 posée, `.job` rendu
+   complet) ; parité JS ≡ Python sur la même instance ; le cas « 21 × 27 mm
+   sur 600 × 300 » de l'audit P3-6d devient lui aussi un succès, et son
+   verrou de refus est remplacé par un verrou de résultat.
+
+**J7-b — les verrous de la série (aucun correctif attendu).**
+
+5. Étendre le verrou de décodage J6 aux six fichiers (47 → 53) : mêmes
+   seuils, aires 0,1 %, étendues 0,01 mm. Mesuré vert ici.
+6. Ajouter le **couple A/B des points de départ** (j7-1 tous manuels /
+   j7-2 tous automatiques, MÊME dessin) au harnais : côté manuel **0 octet
+   changé**, côté automatique **seuls les drapeaux** changent, même compte de
+   pièces et de trous des deux côtés. C'est le verrou naturel de §9.59.
+7. Consigner au §2 d'`AGENTS.md` le fait mesuré : **un point de départ
+   SheetCam tombe le plus souvent à l'intérieur d'une arête**, automatique
+   comme manuel, y compris sur un arc.
+8. Hygiène : les six fichiers arrivent par **variables d'environnement**
+   (`QA_J7_*`), défauts neutres, identifiants j7-1..j7-6 dans les rapports ;
+   aucun nom de fichier ni chemin du propriétaire dans `docs/` ou le dépôt.
+
+**Ce que la série NE couvre PAS — P4-10 reste ouvert.** Ces six fichiers ont
+chacun **un** dessin, **une** pièce, **une** opération. Il manque toujours un
+`.job` d'atelier réel : plus de sept dessins, plusieurs pièces et copies,
+plusieurs opérations. Noté au passage, à vérifier sur ce fichier-là : la
+section **`[Work/keepout]`** existe dans le format (présente ici, mais à
+zéro) — si un fichier réel porte une zone d'exclusion non nulle, NestorCut
+nesterait dedans sans le savoir.
+
+Ordre : **J7-a d'abord** (c'est un blocage de la priorité 4, donc dans le
+gel, pas une nouveauté), puis J7-b. Rapport, vérification, GO, déploiement.
