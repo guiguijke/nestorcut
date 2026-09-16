@@ -172,3 +172,133 @@ pour D1, à retravailler si Starlight monte) ; la sidebar ne montre que
 Nouveautés (section 8) attend D4 et le branchement de `CHANGELOG.md` ;
 relecture propriétaire de la page « Démarrer » attendue avant
 publication (fusion de la PR).
+
+## Vérification du lot D1 (vérificateur, 16/09) — socle GO, publication NO-GO, lot D1-bis
+
+Rejoué : la branche `d1-docs` du dépôt frère (`74d1591` + `308eb08`) dans un
+arbre de travail séparé (`~/qa-out/verif-d1/wt`, l'arbre du propriétaire n'a
+pas été touché) : `npm ci`, `astro build` **code 0, 30 pages**, `check:links`
+**code 0** ; la prévisualisation Cloudflare sondée en lecture ; **les deux
+captures regardées avec mes yeux** ; et chaque affirmation de la page
+« Démarrer » contrôlée contre l'application déployée (`a22b7d5a`) et son
+code de routage.
+
+### Le socle tient — mesuré
+
+| Point | Mesure |
+|---|---|
+| Routes | `/docs/` et `/fr/docs/` en 200, `/docs` ⇒ 308 vers `/docs/`, `/docs/nope/` ⇒ 404 (celui du site) |
+| Langue | `<html lang="fr">` sur la page FR, sélecteur EN ⇄ FR présent dans les deux sens, `hreflang` en et fr posés |
+| Recherche | `/pagefind/pagefind.js` servi en 200, composant de recherche dans la page |
+| Site vitrine | lien « Docs » dans le header EN (`/docs/`) et FR (`/fr/docs/`) ; le logo Starlight ramène à l'accueil du site (`/fr/`) |
+| Montage | Starlight 0.37 épinglé (dernière branche Astro 5), collection `docs` déclarée à côté du blog, config `i18n` racine retirée sans perte (le routage vitrine est manuel) — juste |
+| Avertissement | collision `/404` site ↔ Starlight au build, comme dit au rapport ; à traiter avant une montée d'Astro, pas maintenant |
+
+### Le contenu ne se publie pas encore — cinq affirmations à corriger
+
+La règle du §1 est « chaque phrase vraie en production le jour où elle est
+publiée ». Cinq ne le sont pas, dans les deux langues sauf mention :
+
+1. **« la machine d'essorage cherche le meilleur rangement »** (FR, premier
+   paragraphe). Ce n'est pas du français d'atelier, c'est une machine à
+   laver. **« le moteur »**.
+2. **« Nos serveurs. Les fichiers partent calculer sur nos machines, plus
+   rapides que la vôtre »** — **faux pour le compte gratuit**, qui est
+   précisément le lecteur de « Démarrer ». Mesuré dans le routage
+   (`resolveComputeLocation` : `tier === 'free'` ⇒ calcul navigateur) : en
+   « Nos serveurs », un compte gratuit envoie ses fichiers sur nos machines
+   pour la lecture, mais **le calcul se fait dans son navigateur**, plafonné
+   à deux tôles ; le calcul sur nos machines est réservé aux plans payants.
+   La section « Où se passe le calcul » doit dire cette vérité-là : en
+   gratuit, le calcul est dans votre navigateur dans les deux cas ; « Nos
+   serveurs » apporte le DWG et vos projets sur tous vos appareils ; le
+   calcul serveur vient avec un plan payant.
+3. **Le `.job` en « Nos serveurs »** : la carte de l'accueil dit « Fichiers
+   .job SheetCam : pas encore ici ». La doc (étape 3) le tait. Une phrase :
+   le `.job` se dépose sur « Cet appareil » ; déposé en mode serveurs, le
+   projet bascule de lui-même sur l'appareil.
+4. **Les badges** : la doc dit « sans recouvrement », « dans la tôle »,
+   « écart respecté » / « spacing kept ». Les libellés réels de l'application
+   sont **« Sans recouvrement », « Dans la tôle », « Écart ≥ 4 mm »**
+   (EN : « Overlap-free », « Inside sheet », « Gap ≥ 4 mm »), et il existe
+   un badge **« Non vérifié »** au-delà de 5 000 pièces par tôle. Citer les
+   libellés exacts, entre guillemets, et dire que « Non vérifié » existe.
+5. **FR étape 6 « de la meilleure à la plus dense en matière »** : la phrase
+   ne veut rien dire (la meilleure EST la plus dense) et l'anglais ne la
+   porte pas. Les propositions sont classées par sens d'optimisation puis
+   par qualité ; dire simplement « plusieurs propositions, une par sens
+   d'optimisation ».
+
+Et une tension à lisser : l'introduction dit « Tout se passe dans votre
+navigateur », la section suivante propose nos serveurs. « Tout **peut** se
+passer dans votre navigateur ».
+
+### Les captures ne se publient pas non plus — vues
+
+- **`demarrer-accueil.png`** : c'est l'accueil du **compte de développement
+  du propriétaire** — « Bonjour, Guillaume », 980 projets, 291 438 pièces,
+  une colonne de projets d'essai aux noms aléatoires, une colonne de
+  résultats « calculé sur un autre appareil ». Ce n'est pas une capture de
+  documentation. Et **la page ne l'utilise pas** : seule
+  `demarrer-projet.png` est référencée — 339 Ko publiés pour rien.
+- **`demarrer-projet.png`** : la légende promet « la pièce déposée, la tôle
+  et les réglages » ; l'image montre **une tôle vide** avec ses axes, la
+  fiche de la pièce est sous le pli, et la même colonne de projets d'essai
+  à gauche. La capture ne montre pas ce que sa légende dit.
+
+Les sondes de l'implémenteur (dimensions, densité de pixels, texte présent)
+ne pouvaient pas voir cela ; c'est pourquoi le vérificateur regarde en
+premier. Règle pour la suite, dans le harnais : **un compte local dédié aux
+captures, neuf, sans historique** (créé par le harnais via
+`/api/auth/local/register` s'il n'existe pas — jamais le compte de
+développement) ; **des captures d'élément**, pas de page entière (le bloc
+« Nouvelle imbrication » pour le choix de l'endroit du calcul ; la page
+projet cadrée sur la fiche de la pièce, la tôle et les réglages) ; **chaque
+image publiée est référencée par une page**, et sa légende dit ce qu'on y
+voit.
+
+### Structure du menu, à régler avant D2
+
+Le menu montre un groupe « Démarrer » qui contient une seule page
+« Démarrer » (le mot deux fois), et `autogenerate: { directory: 'docs' }`
+sous ce groupe fera tomber **toutes** les pages de D2 à D4 sous « Getting
+started ». À faire dans D1-bis puisque c'est de la configuration : un
+sous-dossier par section (`demarrer/`, `fichiers/`, `interface/`…), un
+groupe par sous-dossier avec sa traduction, « Démarrer » en premier.
+
+### Hors périmètre, à trancher par le propriétaire
+
+Le commit `308eb08` « aligner le bleu sur l'app (#007bff → #0069d9) » voyage
+dans la PR de documentation : c'est un changement de charte du site vitrine,
+pas de la doc. S'il est voulu, qu'il soit dit ; sinon, le sortir de la PR.
+
+### Remarque du propriétaire (16/09) : « la documentation me paraît un peu light »
+
+Elle l'est, et c'est voulu au stade D1 : le socle plus UNE page pour prouver
+la chaîne. Mais la remarque tranche une question que le plan laissait
+ouverte : **à partir de quand publie-t-on ?** Une documentation d'une page
+sur un site public fait l'effet d'un chantier abandonné, l'inverse de
+l'argument de vente voulu. Arbitrage : **la première publication attend
+les sections 1 à 4** (Démarrer, Interface, Vos fichiers, Le nesting
+expliqué — lots D1-bis, D2 et D3), avec le menu complet ; D4 complète
+ensuite. D1-bis est absorbé dans D2 : une seule PR, un seul GO, une seule
+relecture du propriétaire, qui lit alors une documentation entière plutôt
+qu'une page. La prévisualisation Cloudflare reste le lieu de relecture
+entre-temps ; rien ne fusionne vers `main` avant.
+
+Et sur la profondeur des pages elles-mêmes : le §2 fixe, section par
+section, ce que chaque page doit couvrir — une page « Vos fichiers » qui ne
+dit pas pourquoi quatre exemplaires donnent quatre pièces libres, ou une
+page « Nesting » sans le dessin de l'espacement et les deux densités, sera
+renvoyée comme « light ». Chaque page porte au moins une capture cadrée sur
+ce qu'elle explique.
+
+### Décision
+
+**Socle : GO. Publication (fusion de la PR) : NO-GO** jusqu'au lot D1-bis :
+les cinq corrections de texte ci-dessus dans les deux langues, la tension
+de l'introduction, les captures refaites selon la règle (compte neuf,
+captures d'élément, aucune image orpheline), la structure du menu par
+section. Puis **relecture du propriétaire sur la page FR de la
+prévisualisation** — c'est la porte prévue au plan — et GO. D1-bis est absorbé dans D2 ; la première publication attend les
+sections 1 à 4 (voir la remarque du propriétaire ci-dessus).
