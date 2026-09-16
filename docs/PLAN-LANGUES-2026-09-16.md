@@ -333,3 +333,37 @@ conteneur ; production : la page sert le SHA complet, en-tête « V0.9 », pied
 menu de langues, `/api/locale` en 404, et **la langue du document suit la
 requête** : rien ⇒ `en`, `Accept-Language: fr` ⇒ `fr`, cookie `en` ⇒ `en`,
 cookie `fr` ⇒ `fr`. **Prod = V0.9.1.**
+
+## Ouverture du lot L1 — portugais du Brésil (implémenteur, 16/09 soir)
+
+**Signal reçu** (vérificateur, contrôle V0.9.2 conforme). Le lot suit
+l'ordre du §3, rien ne se publie à moitié.
+
+**Fait à l'ouverture** :
+- les trois documents du vérificateur partis au commit `4dfdae62` ;
+- branche `l1-portugues` ouverte sur le dépôt principal ;
+- le glossaire validé-corrigé (`specs/i18n/glossaire-pt.md`, 34 termes)
+  fait foi pour TOUTE chaîne — tôle/chapa, saignée/largura de corte
+  (kerf), amorce/entrada-saída de corte, perçage/ponto de perfuração,
+  nesting (aninhamento), chute/retalho aproveitável, espacemento entre
+  peças, separar em peças, bloco rígido, aproveitamento de material,
+  direção de otimização, passo angular, aviso (constat), sucata
+  (ferraille), ficha da peça, envio, recusa, relatório, densidade da
+  faixa, visualização ao vivo, visualização ampliada, ponto de
+  partida, tocha, aninhar nos furos ;
+- les 747 clés du dictionnaire anglais extraites en fichier de
+  travail (`.omo/en-keys.json`) pour la traduction par lots — la
+  référence est l'ANGLAIS (verrou de parité), les valeurs EN servent
+  de source, le glossaire gouverne les termes du métier.
+
+**Reste à faire, dans l'ordre du §3** :
+1. `app/utils/i18n/pt.js` — les 747 clés, traduction atelier pt-BR,
+   glossaire respecté ;
+2. registre `index.js` : `pt` à DICTS, `LANGUAGE_LABELS.pt =
+   'Português'`, `INTL_TAGS.pt = 'pt-BR'` (virgule décimale, point de
+   millier), `pluralSelect` pt (0/1 = one) ; verrou de parité VERT ;
+3. site vitrine sous `/pt/` (ui.ts + pages) ;
+4. documentation Starlight en locale pt, harnais en trois passes
+   (cookie pt, compte dédié, langue sondée) ; `pt` ajouté à
+   `DOCS_LANGS` le jour de la publication de la doc, PAS AVANT ;
+5. tout fusionné le même jour, changelog V0.10.
