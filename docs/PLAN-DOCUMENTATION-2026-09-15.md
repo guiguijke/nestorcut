@@ -398,3 +398,88 @@ même branche — la première publication attend les sections 1 à 4 ; la
 page Nouveautés (D4) branchera `CHANGELOG.md` ; relecture propriétaire
 de la page FR `.job` particulièrement attendue (c'est sa demande
 d'origine qui a ouvert ce chantier).
+
+## Vérification du lot D2 (vérificateur, 16/09) — contenu solide, huit corrections avant publication, à faire dans D3
+
+Rejoué : `3b6948e` dans un arbre séparé, `astro build` **code 0, 39 pages**,
+`check:links` **code 0** ; les douze routes de la prévisualisation en 200 ;
+les huit images publiées **toutes référencées** par une page (l'ancienne
+`demarrer-accueil.png` répond 404 : retirée) ; **les huit captures regardées
+avec mes yeux** ; les onze pages lues en entier dans les deux langues, et
+chaque affirmation contrôlée contre l'application (`a22b7d5a`) ou son code.
+
+### Ce qui tient
+
+- **Les cinq corrections de D1 sont faites**, et justes : « le moteur »,
+  « Tout peut se passer », la vérité du calcul gratuit (contrôlée :
+  `FREE_SHEET_CAP = 2`, `tier === 'free'` ⇒ calcul navigateur), le `.job`
+  qui bascule le projet sur l'appareil, les libellés exacts des badges.
+- **Les captures sont enfin des captures de documentation** : compte neuf,
+  chaque image cadrée sur son sujet — le bloc « Nouvelle imbrication », la
+  carte de dépôt, l'atelier avec tôle et réglages, la fiche DXF, la fiche
+  SVG à 20,1 mm (le pixel à 96 dpi, calcul juste), la carte groupée à quatre
+  exemplaires « votre point », la vue agrandie avec ses perçages, le refus
+  DWG nommé. Rien du compte de développement.
+- **La page `.job` est exacte** sur ce qu'elle promet : contours du cache,
+  points par section originale, marque « votre point », un fichier par tôle,
+  points déplacés à l'octet, non-lus nommés. C'est la page à relire par le
+  propriétaire.
+- Le tableau des formats par mode, le 5 Mo, le SVG (96 dpi, repère
+  retourné, segments droits), les unités DXF (converties / supposées, avec
+  leurs constats réels), les blocs résolus, le bloc rigide et « Éclater »
+  irréversible (texte de confirmation contrôlé) : vrais.
+
+### Huit corrections — vues ou mesurées
+
+1. **Le menu liste chaque page deux fois, dont une sous un libellé brut
+   « files ».** Le rapport dit « le groupe Démarrer ne descend pas dans les
+   sous-dossiers » ; la prévisualisation dit le contraire : sous
+   « Démarrer » apparaît un sous-groupe **« files »** avec les cinq pages,
+   puis le groupe « Vos fichiers » avec les cinq mêmes (`autogenerate` est
+   récursif). Correctif : « Démarrer » devient un **lien simple** vers
+   `/docs/` (pas un groupe autogénéré) ; et les pages de « Vos fichiers »
+   prennent un ordre de lecture par `sidebar.order` (index, DXF, SVG, DWG,
+   `.job`) au lieu de l'alphabet (DWG, DXF, .job, SVG).
+2. **« Plusieurs propositions, une par sens d'optimisation »** est faux
+   pour l'offre gratuite, le lecteur de « Démarrer » : la capture
+   `demarrer-projet.png` le montre elle-même — « Votre offre inclut 1 sens
+   par imbrication ». En gratuit, **une** proposition, dans le sens choisi ;
+   une par sens avec un plan. Et « la meilleure en tête » ne décrit pas
+   l'ordre réel (les sens dans un ordre fixe) : le retirer.
+3. **« Écart ≥ 4 mm »** : le badge porte l'espacement du projet, pas 4 mm.
+   « le badge « Écart ≥ » suivi de votre espacement ».
+4. **Contour ouvert** (page DXF) : « la pièce est imbriquée sur son contour
+   fermé le plus probable » est faux. Le constat réel dit : « N tracés
+   ouverts ne seront pas découpés — refermez-les dans votre CAO ». Écrire
+   cela, mot pour mot.
+5. **« Une fiche se détaille d'un clic : aperçu agrandi, constats complets,
+   échelle, éclatement »** (index de section) : l'échelle et l'éclatement
+   sont des actions **sur la carte**, pas dans la vue agrandie (`FileModal`
+   n'en porte aucune). Corriger la phrase.
+6. **« dimensions et épaisseur de la zone de travail deviennent la tôle »**
+   (page `.job`) : l'épaisseur est lue par le parseur mais **rien ne
+   l'utilise** — le projet n'a pas d'épaisseur. Retirer le mot.
+7. **DWG** : (a) « aucun projet ne se crée » n'est vrai que pour un DWG
+   déposé seul — mêlé à des DXF, le projet se crée sans lui, le message dit
+   « Ignorés — nom : … » (capture) : écrire « le fichier est écarté, nommé ».
+   (b) « refusé avec un message qui dit quoi faire… si la conversion échoue,
+   la fiche n'est pas créée » : en réalité la fiche **existe, en erreur**,
+   avec « Échec de l'import » et un bouton pour nous signaler le fichier ; le
+   conseil du convertisseur (« exportez en DXF R2000+ ») n'est **pas
+   affiché**. Décrire ce que l'utilisateur voit, et donner le conseil dans
+   la doc puisque l'écran ne le donne pas. (Défaut produit à noter pour
+   plus tard : remonter ce message jusqu'à la fiche.)
+8. **Trois retouches de surface** : la légende de la fiche DXF promet des
+   « constats » que la pièce propre n'affiche pas (« aperçu, quantité,
+   échelle ») ; le fichier synthétique s'appelle `piece-l-x4-synth.job` à
+   l'écran — le nommer `piece-l-x4.job` ; « l'atelier est déjà monté » n'est
+   pas une expression : « la mise en tôle est déjà faite ».
+
+### Décision
+
+**D2 : le socle et les captures tiennent, le contenu est bon à 90 %, huit
+corrections avant publication — absorbées dans D3**, une seule PR, comme
+pour D1-bis. La publication attend toujours les sections 1 à 4. **Relecture
+du propriétaire** : la page FR `.job` de la prévisualisation dès maintenant
+(`/fr/docs/files/sheetcam-job/`), c'est sa demande d'origine et elle est
+prête à être lue.
