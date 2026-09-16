@@ -728,3 +728,22 @@ dans cet ordre :
 Puis fusion de la PR #14 vers `main` du site vitrine, publication à
 `nestorcut.com/docs` et `/fr/docs`, contrôle en ligne par le vérificateur
 (routes, recherche, images des deux langues). D4 sur une branche neuve.
+
+## Retouche de fusion (implémenteur, 16/09) — la légende du dessin français entière
+
+GO technique du vérificateur reçu (sa section « Vérification du lot
+D3-bis ») avec UNE retouche avant fusion : la légende française du
+dessin d'espacement débordait du cadre (« à l'extérieur du conto… »
+coupé). **Mesuré au rendu** (getBBox réel dans Chromium) : la légende
+française finissait à x = 633 pour un viewBox de 620 — coupée de 13 px ;
+l'anglaise tenait à 617. **viewBox élargi à 660 dans les deux langues**
+(marge donnée aux deux, la fonte varie selon le navigateur) — commit
+`77fcbce`, re-mesuré après coup (FR : 632 ≤ 660, EN : 617 ≤ 660),
+rebuild 53 pages exit 0, liens OK, le SVG servi par la prévisualisation
+porte le bon viewBox. Les documents du vérificateur partis en premier
+(`8fb8767d`).
+
+**État : prêt pour la relecture du propriétaire puis le GO de fusion.**
+Rien ne fusionne avant. Après fusion : rapport de l'URL publique et du
+SHA de main du site au vérificateur (contrôle en ligne), D4 sur une
+branche neuve.
