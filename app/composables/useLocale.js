@@ -3,45 +3,47 @@ import { translate, DEFAULT_LOCALE, LOCALES, formatNumber, formatPercent, plural
 /**
  * Locale state for the whole app.
  *
- * Strategy:
- *  1. If the user has a 'locale' cookie, use it (explicit choice wins).
- *  2. Otherwise, on first visit, the server route /api/locale maps the
- *     Cloudflare cf-ipcountry header to a locale ('FR' -> 'fr', else 'en').
- *     The result is stored in the cookie so it is stable across navigations.
- *  3. The switcher in MainHeader writes the cookie, which re-renders
- *     everything reactively.
+ * Lot L0 (docs/PLAN-LANGUES-2026-09-16.md §2.4) — la détection du premier
+ * passage lit ACCEPT-LANGUAGE, côté SERVEUR, parmi les langues livrées :
+ * plus d'éclair, plus d'appel client, et la langue du navigateur est
+ * honorée même sans JavaScript. Ordre : cookie explicite > Accept-Language
+ * > anglais. Le commutateur écrit le cookie, qui prime ensuite toujours.
  *
- * Lot J11-bis (R9) — LE SERVEUR HONORE LE COOKIE DE LANGUE AU RENDU.
- * Ancien comportement : l'état démarrait à DEFAULT_LOCALE ('en') et le
- * cookie n'était lu que côté client dans detectLocale() — le serveur
- * rendait donc l'anglais même avec `Cookie: locale=fr`, et l'utilisateur
- * français voyait un éclair d'anglais à chaque chargement (mesuré par
- * curl sur la PRODUCTION). Le correctif : `useState` de Nuxt (étât PAR
- * REQUÊTE, jamais partagé entre visiteurs) lu du cookie AVANT le premier
- * rendu, sur le serveur comme sur le client. L'appel asynchrone
- * /api/locale ne reste que pour la première visite sans cookie, côté
- * client seulement.
+ * (Historique R9/J11-bis : le cookie est lu SYNCHRONÉMENT avant le
+ * premier rendu, des deux côtés — c'est ce qui supprimait l'éclair
+ * d'anglais. L'appel asynchrone /api/locale (pays Cloudflare) est
+ * retiré : Accept-Language le remporte — la langue du navigateur dit
+ * mieux la langue que l'adresse IP.)
  */
 export function useLocale() {
     // useState = PAR REQUÊTE en SSR (jamais partagé), hydraté en client.
     const localeState = useState('locale', () => DEFAULT_LOCALE)
 
-    // Le cookie est lu SYNCHRONÈMENT, AVANT tout rendu — les deux côtés.
+    // Le cookie est lu SYNCHRONÉMENT, AVANT tout rendu — les deux côtés.
     const cookie = useCookie('locale', { maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
     if (cookie.value && LOCALES.includes(cookie.value)) {
         localeState.value = cookie.value
-    }
-
-    // Détection pays : uniquement côté client, et seulement sans cookie.
-    if (import.meta.client && !cookie.value) {
-        $fetch('/api/locale').then((detected) => {
-            if (detected?.locale && LOCALES.includes(detected.locale)) {
-                localeState.value = detected.locale
-                cookie.value = detected.locale
-            }
-        }).catch(() => {
-            // Server route unavailable — fall back to default.
-        })
+    } else if (import.meta.server) {
+        // Premier passage sans cookie : la langue du NAVIGATEUR, parmi
+        // les langues livrées, par ordre de préférence (q). Repli anglais.
+        // Côté CLIENT on ne re-détecte PAS : l'état servi (Accept-Language
+        // = la liste du navigateur) est hydraté tel quel — le re-détecter
+        // ici rouvrirait le mismatch d'hydratation que R9 avait fermé.
+        const headers = useRequestHeaders(['accept-language'])
+        const header = headers?.['accept-language'] || ''
+        const preferred = header
+            .split(',')
+            .map((part) => {
+                const [tag, ...params] = part.trim().split(';')
+                const q = Number((params.find((p) => p.trim().startsWith('q=')) || 'q=1').split('=')[1])
+                return { tag: tag.trim().toLowerCase(), q: Number.isFinite(q) ? q : 1 }
+            })
+            .sort((a, b) => b.q - a.q)
+        for (const { tag } of preferred) {
+            const base = tag.split('-')[0]
+            const hit = LOCALES.find((l) => tag === l || base === l)
+            if (hit) { localeState.value = hit; break }
+        }
     }
 
     const locale = computed({

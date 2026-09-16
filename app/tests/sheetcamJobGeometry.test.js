@@ -633,9 +633,9 @@ describe('J6 — la fiche issue du binaire le DIT', () => {
 
 // --- libellés EN/FR ----------------------------------------------------------
 
-const src = readFileSync(fileURLToPath(new URL('../utils/i18n.js', import.meta.url)), 'utf8')
-const enBlock = src.split('    en: {')[1].split('    fr: {')[0]
-const frBlock = src.split('    fr: {')[1]
+// Lot L0 : les dictionnaires vivent dans un fichier PAR LANGUE.
+const enBlock = readFileSync(fileURLToPath(new URL('../utils/i18n/en.js', import.meta.url)), 'utf8').split('export default {')[1]
+const frBlock = readFileSync(fileURLToPath(new URL('../utils/i18n/fr.js', import.meta.url)), 'utf8').split('export default {')[1]
 
 describe('J6 — libellés : EN et FR', () => {
     const KEYS = [

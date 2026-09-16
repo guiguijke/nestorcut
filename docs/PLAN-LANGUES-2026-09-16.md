@@ -105,3 +105,58 @@ agrandie → calcul → résultat → téléchargement), rendu serveur dans la l
 (`curl` avec cookie et avec `Accept-Language`), formats de nombres, site
 vitrine et doc complets dans la langue, captures de la doc regardées, et le
 mot du relecteur natif joint au rapport.
+
+## Rapport du lot L0 — le socle technique de l'application (implémenteur, 16/09)
+
+Préparé en parallèle de D4 sans toucher aux fichiers de la documentation,
+comme demandé. Aucune langue traduite : le socle porte EN + FR, prêt
+pour les suivantes.
+
+1. **Un fichier par langue** : l'ancien `app/utils/i18n.js` monolithique
+   (1 790 lignes) est découpé en `app/utils/i18n/en.js` et `fr.js`
+   (extraction par comptage d'accolades, CRLF préservé) autour d'un
+   REGISTRE `app/utils/i18n/index.js` : `DICTS` (ajout d'une langue =
+   un fichier + une ligne), `LOCALES` DÉRIVÉ (jamais saisi à la main),
+   `LANGUAGE_LABELS` (le nom de chaque langue DANS SA LANGUE), et la
+   balise `Intl` par code — une langue nouvelle hérite de sa virgule
+   décimale en ajoutant une ligne. Les consommateurs n'ont rien vu :
+   l'API (`translate`, `formatNumber`…) est inchangée.
+2. **Le verrou de parité** (`app/tests/i18nParity.test.js`, 5 verrous) :
+   chaque clé de l'anglais existe dans chaque langue livrée (et
+   réciproquement — une clé orpheline est une clé morte), aucune valeur
+   vide, aucune valeur strictement égale à l'anglais HORS liste blanche
+   documentée (sigles, noms propres, empruns communs — Support,
+   Rotations, Total… — et les noms de TIERS, marques produit selon
+   `docs/STRATEGY.md` : Free/Unlimited/Pro/Standard), le repli de
+   traduction rend l'anglais jamais une clé brute. **Mesuré au passage :
+   EN 728 clés, FR 722 lignes-de-valeurs — parité PARFAITE des clés**
+   (l'écart de lignes venait de valeurs multi-lignes, aucune clé
+   manquante). Plus le verrou des formats : `1,5` FR / `1.5` EN,
+   pourcents avec l'espace insécable française.
+3. **La détection du premier passage lit Accept-Language, côté
+   serveur** (l'ancien appel client `/api/locale` par pays Cloudflare
+   est retiré — la langue du navigateur dit mieux la langue que
+   l'adresse IP, et le premier rendu est juste même sans JavaScript).
+   Vérifié sur l'image reconstruite : sans cookie + `Accept-Language:
+   fr` ⇒ français ; `pt-BR` (non livrée) ⇒ repli anglais ; le cookie
+   prime toujours ; rien ⇒ anglais. Côté client on ne re-détecte PAS à
+   l'hydratation — l'état servi est hydraté tel quel (rouvrir le
+   re-détecterait, c'est le mismatch d'hydratation que R9 avait fermé).
+4. **Le menu de langues** : le commutateur segmenté EN|FR devient un
+   MENU déroulant — chaque langue porte son nom dans sa langue
+   (English, Français…), coche sur la courante, fermeture au clic
+   extérieur et à Échap, `aria-haspopup`/`listbox`. Vérifié au
+   navigateur : ouverture, choix, bascule, cookie écrit. La liste vient
+   du registre : une langue nouvelle y apparaît avec son dictionnaire —
+   et le verrou de parité doit être VERT avant qu'elle existe (le lot
+   d'une langue incomplète ne passe pas la CI).
+
+**Chiffres** : vitest **801/801, exit 0** (796 + les 5 verrous de
+parité) ; les quatre tests qui lisaient l'ANCIEN fichier source par
+chemin (textes figés J8-e) adaptés aux fichiers par langue ; image app
+reconstruite, sonde du menu au navigateur.
+
+**Non-dits** : le socle SITE VITRINE (ui.ts par langue, routage /pt/…,
+hreflang, sitemap) et DOC (locale Starlight par langue, harnais par
+liste de langues) se livrent avec L1 — la première langue, quand D4
+est publiée et le glossaire validé par le relecteur natif.
