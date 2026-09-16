@@ -768,3 +768,63 @@ questions fréquentes, Nouveautés) sur une branche neuve, même méthode :
 captures par langue, chaque phrase vraie en production, Confidentialité
 strictement alignée sur les promesses privées (piège #35), Nouveautés
 branchée sur `CHANGELOG.md`.
+
+## Publication des sections 1 à 4 (16/09) puis rapport du lot D4 (implémenteur)
+
+**PUBLIÉ.** PR #14 fusionnée (merge `fe776219331f68537c4a72efe610f03546dfbf1`)
+après le GO du vérificateur et la relecture du propriétaire ;
+nestorcut.com/docs et /fr/docs servent les sections 1 à 4 — vérifié en
+production (routes 200, explication corrigée de l'espacement servie,
+captures 200, sidebar complète). SHA de main rapporté au vérificateur
+pour son contrôle en ligne.
+
+**D4 livré en PR #15, branche `d4-docs` (`77d71d8`)** — sections 5 à 8
+du plan §2, EN+FR, même méthode :
+
+1. **Vos résultats** (2 pages) — le rapport tôle par tôle (aire vraie
+   des pièces, trous déduits — jamais un rectangle englobant), la chute
+   réutilisable et ce que « au moins » veut dire (le plus grand
+   rectangle VIDE GARANTI ; la place réelle ne peut qu'être plus
+   grande ; réutilisable dès 100 mm de plus petit côté, « rognure »
+   en dessous), les alternatives ; les téléchargements et la vue DXF
+   (DXF, `.job` un par tôle, CSV = plan AVEC ses cadenas, tout
+   télécharger, vue DXF page par page).
+2. **Confidentialité** — strictement alignée sur `specs/THREAT-MODEL.md`
+   (privé, jamais publié) : Cet appareil (géométrie et noms de fichiers
+   jamais envoyés ; « PAS hors-ligne » et « PAS multi-appareils » dits
+   expressément ; la limite assumée du poste déverrouillé), Nos serveurs
+   sans coffre (en clair, TLS, effacé à 24 h, « expiré », suppression
+   libre-service), le coffre (chiffré à l'écriture, illisible au repos
+   sans la clé, sessions ~2 h, opt-in TOUS les plans), et le « nous ne
+   pouvons pas vous lire » REFUSÉ explicitement — chaque mode dit sa
+   vérité (piège #35).
+3. **Limites et questions fréquentes** — 5 Mo par fichier côté
+   serveurs, la pièce seule qui s'imbrique depuis V0.9, la pièce
+   refusée et ses deux causes avec les conseils, ce que le mode appareil
+   ne fait pas, nous signaler un fichier (refus nommé côté appareil,
+   fiche d'erreur + « Signaler un problème » côté serveurs, email).
+4. **Nouveautés GÉNÉRÉE** depuis `Nestorcut/CHANGELOG.md` par
+   `scripts/sync-changelog.mjs` (nouveau) : une seule source produit,
+   deux pages écrites par le script, à RELANCER à chaque version (la
+   sortie est commitée — Cloudflare ne voit pas le dépôt frère), avec
+   la capture du journal de l'application.
+
+**Harnais GO exit 0** : deux passes, **18 images par langue** (+ rapport,
+exports, journal), langue sondée à la prise, zéro orpheline. **Menu** :
+quatre groupes de plus, ordre prouvé dans le HTML bâti (l'index de
+section AVANT ses pages — un ordre mal choisi dans le frontmatter
+l'inversait, corrigé avant poussée). **Build exit 0, check:links OK.**
+
+**Tenue du compte dédié, dite au harnais** : chaque passe consomme un
+nesting gratuit (10/mois) — remettre `freeNestingUsed` à 0 en base quand
+il est épuisé ; une passe interrompue laisse un job `awaiting_local`
+orphelin qui bloque le compte en 409 `concurrent_limit` — à purger ;
+et JAMAIS de grant de tier : les captures doivent montrer l'état
+GRATUIT (cadenas « Export »), un grant standard les ferait disparaître.
+**Abandonné en route, dit** : la fiche d'erreur d'import côté serveurs
+n'a pas pu être produite en local (le dépôt serveur du DXF tronqué ne
+persiste rien dans ce bac) — la page Limites décrit les DEUX chemins
+(refus nommé appareil — capturé ; fiche d'erreur serveur — décrite).
+
+**Suite** : vérification D4, relecture propriétaire, GO, fusion ; D5
+(les liens « ? » depuis l'application vers les ancres de doc) ensuite.

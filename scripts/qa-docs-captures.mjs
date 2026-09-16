@@ -142,9 +142,16 @@ function buildX4Job(sourcePath, targetPath) {
  *  IP (anti-brute-force), un compte neuf à chaque exécution est donc
  *  impossible — et l'historique n'apparaît nulle part puisque CHAQUE
  *  capture est cadrée sur son élément (jamais la colonne des projets).
- *  PRÉPARATION UNIQUE en dev : créer via ce harnais puis vérifier l'email
+ *  PRÉPARATION UNIQUE en dev : créer via ce harnais, vérifier l'email
  *  en base (db.users.updateOne({email}, {$set: {emailVerified: true}})) —
- *  sans quoi le premier nesting bascule sur /auth/check-email. */
+ *  en base, et REMETTRE le compteur gratuit quand il est épuisé (chaque
+ *  passe consomme un nesting ; l'offre est de 10/mois — les captures
+ *  doivent montrer l'état GRATUIT, jamais un grant de tier qui retirerait
+ *  les cadenas) : db.users.updateOne({email}, {$set: {freeNestingUsed: 0}}), et purger les jobs
+ *  orphelins awaiting_local (une passe interrompue en laisse un, il
+ *  bloque le compte en 409 concurrent_limit) :
+ *  db.nesting_jobs.deleteMany({ownerId: 'local:docs-captures@local.dev',
+ *  status: {$in: ['pending','processing','awaiting_local']}}). */
 const ACCOUNT = { email: 'docs-captures@local.dev', password: 'docs-captures-2026' }
 const ensureAccount = async (request) => {
     const res = await request.post(BASE + '/api/auth/local/register', {
@@ -259,8 +266,10 @@ async function runPass(browser, pass, creds) {
     await page.waitForTimeout(3500)
     check(pass, 'résultat ouvert', true)
     await shot('interface-resultat.png', '[data-testid="result-space"]')
+    await shot('resultats-rapport.png', '.result-space__report')
     await page.evaluate(() => { const t = document.querySelector('[data-testid="report-tech"]'); if (t) t.open = true })
     await shot('nesting-badges.png', '[data-testid="report-badges"]')
+    await shot('resultats-exports.png', '[data-testid="report-actions"]')
     await page.keyboard.press('Escape')
     await page.waitForTimeout(500)
 
@@ -307,6 +316,13 @@ async function runPass(browser, pass, creds) {
     })
     check(pass, 'refus DWG appareil affiché, nommé', Boolean(refusal))
     await shot('fichiers-dwg.png', '.create__error')
+
+    // ---------- le journal des nouveautés de l'application ----------
+    await page.goto(BASE + '/changelog', { waitUntil: 'domcontentloaded', timeout: 60000 })
+    await page.waitForTimeout(2500)
+    const cl = await page.evaluate(() => Boolean(document.querySelector('.changelog__title')))
+    check(pass, 'journal de l\'application ouvert', cl)
+    await shot('nouveautes.png', '.changelog')
 
     await ctx.close()
 }
