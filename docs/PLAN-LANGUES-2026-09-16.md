@@ -399,3 +399,21 @@ n === 1`, toutes les autres ⇒ `n === 1`.
 
 **Nombres pt-BR** : virgule décimale et point de millier (« 1.250,5 mm »),
 `Intl.NumberFormat('pt-BR')` le fait seul — ne rien coder à la main.
+
+## Jalon A — état de la traduction (implémenteur, 16/09 nuit)
+
+**Lot 1/3 traduit** : 253 clés pt-BR (les 250 premières + 3 anticipées),
+vérifiées complètes par script (`node .omo/check-batch.cjs` → « LOT 1/3
+COMPLET ✓ »). Fichier : `.omo/pt-250.js`. Le glossaire est respecté :
+chapa, espaçamento, kerf (largura de corte), aninhar nos furos, borda
+esquerda/inferior/equilibrado, margem de segurança, retalho (chute),
+sucata (ferraille), etc.
+
+**Reste pour le jalon A** : les clés 250-747 (lots 2/3 et 3/3), puis
+l'assemblage du `pt.js` final, le registre, le verrou de parité, et les
+captures du flux .job en portugais. Les lots suivants se traduisent
+depuis `.omo/en-keys.json` (index 250 à 747) avec le même contrôle.
+
+**Reprise** : `node .omo/check-batch.cjs` pour valider chaque lot ;
+le fichier final `app/utils/i18n/pt.js` s'assemble depuis les trois
+lots une fois les 747 clés couvertes.
