@@ -3,7 +3,7 @@
         <div class="settings__content content">
             <div class="content__size size">
                 <section class="settings__section" data-testid="settings-sheets">
-                    <h3 class="settings__h">{{ t('settings.section.sheets') }}</h3>
+                    <h3 class="settings__h">{{ t('settings.section.sheets') }}<HelpDot topic="sheets" /></h3>
                 <div
                     v-for="(sheet, index) in sheets"
                     :key="index"
@@ -73,7 +73,7 @@
                      pièce). L'espacement effectif (clé moteur `space`) vaut
                      toujours kerf + 2 × sécurité, règle affichée dessous. -->
                 <section class="settings__section" data-testid="settings-spacing">
-                    <h3 class="settings__h">{{ t('settings.section.spacing') }}</h3>
+                    <h3 class="settings__h">{{ t('settings.section.spacing') }}<HelpDot topic="spacing" /></h3>
                 <InputField
                     :prefix="t('settings.kerf')"
                     :suffix="unitLabel"
@@ -107,7 +107,7 @@
                 </div>
                 </section>
                 <section class="settings__section" data-testid="settings-rotations">
-                    <h3 class="settings__h">{{ t('settings.section.rotations') }}</h3>
+                    <h3 class="settings__h">{{ t('settings.section.rotations') }}<HelpDot topic="rotations" /></h3>
                 <div class="size__rotations rotations">
                     <UiSegmented
                         v-model="rotationSeg"
@@ -126,7 +126,7 @@
                 </div>
                 </section>
                 <section class="settings__section" data-testid="settings-directions">
-                    <h3 class="settings__h">{{ t('settings.section.directions') }}</h3>
+                    <h3 class="settings__h">{{ t('settings.section.directions') }}<HelpDot topic="directions" /></h3>
                 <div class="size__compute compute">
                     <span class="compute__label">
                         {{ t('settings.directions') }}
@@ -193,7 +193,9 @@
                     class="size__checkbox"
                     :title="t('settings.fillHolesHint')"
                     :label="t('settings.fillHoles')"
-                />
+                >
+                    <template #default>{{ t('settings.fillHoles') }}<HelpDot topic="holes" /></template>
+                </UiSwitch>
                 </section>
             </div>
         </div>

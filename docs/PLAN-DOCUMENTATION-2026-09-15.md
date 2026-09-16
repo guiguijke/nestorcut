@@ -996,3 +996,47 @@ vérificateur après publication : les dix routes nouvelles dans les deux
 langues, le menu aux trois liens simples, la page Nouveautés à V0.9.1, les
 images des deux jeux. La documentation est alors complète (huit sections) ;
 suite : D5 (les liens « ? » depuis l'application), puis L1 portugais.
+
+## Publication des sections 5 à 8 puis rapport du lot D5 (implémenteur, 16/09)
+
+**PUBLIÉ.** PR #15 fusionnée (merge `8569df96fe9a10aa955f35c32b9db51a9b00e959`)
+après le GO du vérificateur et la relecture du propriétaire (page
+Confidentialité). Les dix routes nouvelles vérifiées en production dans
+les deux langues (une 404 de propagation sur exports/FR s'est résolue
+seule en 45 s — dit), le menu aux trois liens simples servi, les deux
+jeux d'images en 200, la page Nouveautés portant V0.9.1 au-dessus de
+V0.9 — la documentation est COMPLÈTE : huit sections, deux langues.
+C'est aussi la première exécution effective de l'étape AGENTS §6 (la
+page Nouveautés publiée est née avec V0.9.1).
+
+**D5 livré en branche `d5-docs-links`** — les liens « ? » depuis
+l'application :
+
+- **`app/utils/docsLinks.js`** (nouveau) : le registre `HELP_TOPICS`
+  (page + ancre par langue) et `docsHelpUrl(locale, topic)` — écrit
+  pour SIX codes : `DOCS_LANGS` liste les langues de documentation
+  publiées (en, fr aujourd'hui) ; pt, it, de, es ou toute locale
+  inconnue REPIE sur l'anglais, jamais sur une page absente. Les
+  ancres sont DÉPENDANTES de la langue (« L'espacement » →
+  `#lespacement`) : chaque sujet porte son ancre par langue, relevée
+  dans le HTML PUBLIÉ.
+- **`app/components/HelpDot.vue`** (nouveau) : un vrai LIEN « ? »
+  (nouvel onglet, `rel=noopener`, `aria-label` localisé), pas une
+  infobulle — caché si le sujet est inconnu.
+- **Placements** : les quatre titres de réglages de la page projet
+  (tôles, espacement, rotations, sens) + l'option « Imbriquer dans les
+  trous » (slot du switch) ; dans le résultat : les onglets des
+  propositions, le « au moins » de la chute, la rangée des badges, la
+  rangée des téléchargements. Les « ? » infobules statiques hérités
+  (directions) restent en complément du lien.
+- **Clé i18n** `help.openDoc` EN + FR (parité verrouillée par L0).
+
+**Sondé sur l'image reconstruite** : en français, les cinq liens des
+réglages pointent aux ancres françaises (`/fr/docs/interface/#les-tôles`,
+`#lespacement`, `#les-rotations`, `#les-trois-sens`,
+`#les-pièces-dans-les-trous`) ; en anglais, les quatre liens du
+résultat aux ancres anglaises (`#the-alternatives`,
+`#the-reusable-offcut--and-at-least`, `#what-the-badges-guarantee`,
+`#what-downloads`). **Vitest 805/805 exit 0** (4 verrous D5 : préfixe
+et ancre par langue publiée, repli anglais pour pt/it/de/es/zz, ancre
+présente pour CHAQUE sujet × langue publiée, sujet inconnu → rien).

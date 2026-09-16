@@ -105,7 +105,7 @@
                         >
                             {{ activeReportOffcut.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap') }}
                         </span>
-                        <span class="report__hint">&nbsp;({{ t('report.offcut.atLeast') }})</span>
+                        <span class="report__hint">&nbsp;({{ t('report.offcut.atLeast') }})<HelpDot topic="offcut" /></span>
                     </span>
                     <span v-else-if="activeOffcut">{{ t('report.offcut', { w: fmtLengthValue(activeOffcut.width), h: fmtLengthValue(activeOffcut.height), unit: unitLabel }) }}</span>
                 </div>
@@ -237,7 +237,7 @@
                 >
                     {{ thinPartsLine }}
                 </p>
-                <div class="report__badges" data-testid="report-badges">
+                <div class="report__badges" data-testid="report-badges"><HelpDot topic="badges" />
                     <span
                         v-for="badge in reportBadges"
                         :key="badge.label"
@@ -279,7 +279,7 @@
                     </p>
                 </details>
             </div>
-            <div class="controls" data-testid="report-actions">
+            <div class="controls" data-testid="report-actions"><HelpDot topic="downloads" />
                 <MainButton
                     v-if="reportSheets.length"
                     :label="exportLocked ? t('report.exportLocked') : (copied ? t('report.copied') : t('report.copy'))"
