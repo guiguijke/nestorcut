@@ -417,3 +417,42 @@ depuis `.omo/en-keys.json` (index 250 à 747) avec le même contrôle.
 **Reprise** : `node .omo/check-batch.cjs` pour valider chaque lot ;
 le fichier final `app/utils/i18n/pt.js` s'assemble depuis les trois
 lots une fois les 747 clés couvertes.
+
+## Relecture linguistique du lot 1/3 de L1 (vérificateur, 16/09) — 253 chaînes lues, bonne base, quinze corrections dont trois systématiques
+
+Lu en entier `.omo/pt-250.js`. Le portugais est naturel, le « você » est
+tenu, l'impératif d'atelier (« Envie », « Aninhar ») est juste, les
+pluriels suivent la règle corrigée. Trois écarts au glossaire, à corriger
+d'abord parce qu'ils se répéteraient dans les lots 2 et 3 :
+
+**Systématiques (glossaire)**
+
+| Clé(s) | Lu | Retenu | Pourquoi |
+|---|---|---|---|
+| `settings.directions`, `plans.unlimited.f2`, `plans.compare.altLayouts`, `settings.directions.paidHint` | direções de layout | **direção de otimização** | glossaire ligne 11 ; « layout » n'y est pas |
+| `settings.safety`, `settings.spacingRule` | margem de segurança / margem | **folga de segurança** / folga | glossaire ligne 19 ; « folga » est le mot d'atelier (jeu, tolérance) |
+| `privacy.cloud.body` | armazenados em claro | **armazenados sem criptografia** | « em claro » est un calque du français |
+
+**Ponctuelles**
+
+| Clé | Lu | Retenu |
+|---|---|---|
+| `nav.workspace`, `nav.openWorkspace` | Workspace | **Meu espaço** / **Abrir meu espaço de trabalho** (le français dit « Espace ») |
+| `nav.menu` | alternador de menu | **Abrir/fechar o menu** |
+| `home.jobSwitched` | mudado para | **o projeto passou para** |
+| `home.jobPlusDwg` | — separe-os. | **— envie-os em dois projetos separados.** (l'anglais dit deux projets) |
+| `sub.grantActive`, `sub.grantDesc` | Unlimited (teste) / Um grant de administrador | **Unlimited (acesso de teste concedido)** / **Um acesso de teste concedido pelo administrador** — l'anglais dit « test grant » ; « grant » seul n'existe pas en portugais |
+| `sub.freeLeft` | {n} operação(ões)… gratuita(s) restante(s) | **Nestings gratuitos restantes este mês: {n}** (pas de pluriels entre parenthèses) |
+| `plans.pro.f2` | entrega mais rápida ainda | **entrega ainda mais rápida** |
+| `plans.compare.heterogeneous` | Tipos de chapa heterogêneos | **Chapas de formatos diferentes** |
+| `settings.spacingKerf` | micro-sobrepôr | **micro-sobrepor** (infinitif, sans accent) |
+| `demo.projectName` | Chapa marítima | **Caldeiraria naval** (la tôlerie marine, le métier) |
+| `privacy.device.body` | Nenhum outro computador | **Sem outro dispositivo** |
+| `privacy.cloud.body` | ainda não aqui | **ainda não disponíveis aqui** |
+| `localImport.missingGeometry` | no outro navegador | **em outro navegador** |
+| `import.spursRemoved` | vaivéns de largura zero limpos | **traços de ida e volta de largura zero removidos** |
+| `import.scaleApplied` | Desenho escalado por ×{value} | **Desenho redimensionado ×{value} na importação** (« escalado » est un calque) |
+
+Validé tel quel : tout le reste, dont « Boa madrugada » (familier, mais
+brésilien et juste), « falar por si mesma », « Excluir », « Salvar ».
+Réserve habituelle : l'idiome d'un atelier précis n'est pas garanti.
