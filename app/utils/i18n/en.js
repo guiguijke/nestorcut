@@ -17,6 +17,7 @@ export default {
     'nav.menu': 'menu toggler',
     'nav.toggleTheme': 'Toggle theme',
     'nav.language': 'Language',
+    'help.openDoc': 'Open the guide',
 
     'common.openProjects': 'Open projects',
     'common.openResults': 'Open results',

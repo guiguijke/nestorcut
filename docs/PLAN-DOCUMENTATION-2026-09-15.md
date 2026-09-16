@@ -996,3 +996,155 @@ vérificateur après publication : les dix routes nouvelles dans les deux
 langues, le menu aux trois liens simples, la page Nouveautés à V0.9.1, les
 images des deux jeux. La documentation est alors complète (huit sections) ;
 suite : D5 (les liens « ? » depuis l'application), puis L1 portugais.
+
+## Publication des sections 5 à 8 puis rapport du lot D5 (implémenteur, 16/09)
+
+**PUBLIÉ.** PR #15 fusionnée (merge `8569df96fe9a10aa955f35c32b9db51a9b00e959`)
+après le GO du vérificateur et la relecture du propriétaire (page
+Confidentialité). Les dix routes nouvelles vérifiées en production dans
+les deux langues (une 404 de propagation sur exports/FR s'est résolue
+seule en 45 s — dit), le menu aux trois liens simples servi, les deux
+jeux d'images en 200, la page Nouveautés portant V0.9.1 au-dessus de
+V0.9 — la documentation est COMPLÈTE : huit sections, deux langues.
+C'est aussi la première exécution effective de l'étape AGENTS §6 (la
+page Nouveautés publiée est née avec V0.9.1).
+
+**D5 livré en branche `d5-docs-links`** — les liens « ? » depuis
+l'application :
+
+- **`app/utils/docsLinks.js`** (nouveau) : le registre `HELP_TOPICS`
+  (page + ancre par langue) et `docsHelpUrl(locale, topic)` — écrit
+  pour SIX codes : `DOCS_LANGS` liste les langues de documentation
+  publiées (en, fr aujourd'hui) ; pt, it, de, es ou toute locale
+  inconnue REPIE sur l'anglais, jamais sur une page absente. Les
+  ancres sont DÉPENDANTES de la langue (« L'espacement » →
+  `#lespacement`) : chaque sujet porte son ancre par langue, relevée
+  dans le HTML PUBLIÉ.
+- **`app/components/HelpDot.vue`** (nouveau) : un vrai LIEN « ? »
+  (nouvel onglet, `rel=noopener`, `aria-label` localisé), pas une
+  infobulle — caché si le sujet est inconnu.
+- **Placements** : les quatre titres de réglages de la page projet
+  (tôles, espacement, rotations, sens) + l'option « Imbriquer dans les
+  trous » (slot du switch) ; dans le résultat : les onglets des
+  propositions, le « au moins » de la chute, la rangée des badges, la
+  rangée des téléchargements. Les « ? » infobules statiques hérités
+  (directions) restent en complément du lien.
+- **Clé i18n** `help.openDoc` EN + FR (parité verrouillée par L0).
+
+**Sondé sur l'image reconstruite** : en français, les cinq liens des
+réglages pointent aux ancres françaises (`/fr/docs/interface/#les-tôles`,
+`#lespacement`, `#les-rotations`, `#les-trois-sens`,
+`#les-pièces-dans-les-trous`) ; en anglais, les quatre liens du
+résultat aux ancres anglaises (`#the-alternatives`,
+`#the-reusable-offcut--and-at-least`, `#what-the-badges-guarantee`,
+`#what-downloads`). **Vitest 805/805 exit 0** (4 verrous D5 : préfixe
+et ancre par langue publiée, repli anglais pour pt/it/de/es/zz, ancre
+présente pour CHAQUE sujet × langue publiée, sujet inconnu → rien).
+
+### Contrôle en ligne de la publication complète (vérificateur, 16/09) — conforme
+
+`main` du site à `8569df9` ; les dix routes des sections 5 à 8 en 200 dans les
+deux langues, images des deux jeux servies, menu publié avec les trois liens
+simples, page Nouveautés publiée à **V0.9.1** au-dessus de V0.9 (première
+exécution effective de l'étape AGENTS §6), la promesse de la clé perdue en
+toutes lettres sur la page Confidentialité publiée. **La documentation est
+complète : huit sections, deux langues.**
+
+## Vérification du lot D5 (vérificateur, 16/09) — mécanique juste, trois retouches d'écran (D5-bis) avant déploiement
+
+Rejoué sur l'image `app` reconstruite à `1f8e8fae` (arbre sur la branche) :
+vitest **805, code 0** ; **les dix-huit ancres (neuf sujets × deux langues)
+confrontées à la documentation PUBLIÉE** : toutes présentes dans le HTML de
+`nestorcut.com` ; repli anglais vérifié pour `pt`, `it`, `de`, `es` et un
+code inconnu ; au navigateur, en français puis en anglais : les cinq « ? »
+des réglages et les quatre du résultat portent l'adresse de leur langue, à
+l'ancre exacte, nouvel onglet, `rel="noopener"`, libellé d'accessibilité
+« Ouvrir le guide » / « Open the guide » ; aucune erreur de page. Le registre
+`docsLinks.js` est bien écrit pour six codes : publier le portugais dans la
+documentation sera une ligne.
+
+**Regardé à l'écran — trois défauts :**
+
+1. **Deux « ? » dans le bloc du sens.** Le titre « SENS » reçoit le nouveau
+   lien rond, et juste dessous « SENS D'OPTIMISATION » garde son ancien
+   « ? » carré à infobulle : deux marques identiques à cinq millimètres,
+   l'une ouvre un onglet, l'autre une bulle. **Une seule** : le lien vers la
+   doc, qui reprend le texte de l'ancienne infobulle en `title` (la réponse
+   courte au survol, la longue au clic) ; l'ancien `compute__help` du sens
+   disparaît (celui de la démo reste, il n'a pas de page).
+2. **Un « ? » orphelin sur une ligne vide** : quand il n'y a qu'une
+   proposition (offre gratuite, ou un seul sens), `ResultAlternatives` ne
+   rend rien mais le « ? » des alternatives reste seul sur toute la largeur
+   (capture `alternatives-fr.png`). Le lien ne se montre que s'il y a au
+   moins deux propositions.
+3. **La forme** : le nouveau « ? » est un rond (`border-radius: 50 %`) là où
+   l'ancien est un carré arrondi de 4 px — et la règle d'interface du
+   propriétaire est « 4 px partout, 50 % pour les avatars seulement ».
+   `var(--radius)`, comme l'ancien.
+
+Retouche de goût, au choix de l'implémenteur : le « ? » de la rangée des
+téléchargements précède « Copier le rapport » et se lit comme un bouton
+égaré ; en fin de rangée il gênerait moins.
+
+### Décision
+
+**D5-bis, trois retouches, puis GO et déploiement app seule** (V0.9.2 ou
+entrée V0.9.1 complétée, au choix, avec une entrée de changelog : « un “?”
+près de chaque réglage ouvre le guide à la bonne page, dans votre langue »).
+Ensuite L1 portugais.
+
+## Rapport du lot D5-bis (implémenteur, 16/09) — les trois retouches d'écran
+
+Même branche `d5-docs-links`. Les trois constats de la vérification D5 :
+
+1. **Un seul « ? » dans le bloc du sens** : l'infobule statique héritée
+   (« compute__help » sous « Sens d'imbrication ») est retirée ; le
+   LIEN du bloc reprend son texte en `title` (prop `hint` de HelpDot).
+   Le lien du titre de section part, celui du label reste —
+   **un seul « ? » par bloc**, et la bulle survit au survol du lien.
+   Sondé : le bloc du sens rend EXACTEMENT un « ? », classe helpdot,
+   title « Chaque sens tasse les pièces vers un bord de la tôle
+   (repère…) » en FR et « Each direction packs the parts towards one
+   edge of the sheet » en EN.
+2. **Le « ? » des alternatives ne se montre qu'à partir de deux
+   propositions** : `v-if="alternatives.length >= 2"`. Sondé sur le
+   compte gratuit (une proposition) : ZÉRO lien alternatives au
+   résultat, trois liens (chute, badges, téléchargements).
+3. **`border-radius: var(--radius)`** sur HelpDot — le carré 4 px de
+   la charte, le rond reste aux avatars.
+
+**Captures jointes** (`docs/qa/d5bis/`) : réglages et résultat, FR et
+EN. Lues par sondes (méthode constante, dite) : un seul « ? » au bloc
+du sens avec l'infobule en title, zéro lien alternatives à une
+proposition, trois autres liens au résultat.
+
+**Entrée de changelog** `V0.9.2` (FR + EN — le « ? » qui ouvre le
+guide au bon endroit, dans votre langue) et version 0.9.2 ; les dates
+whatsNew, déjà au 2026-09-16, seront revérifiées au jour du
+déploiement. **Vitest 805/805 exit 0.** Les trois documents du
+véificateur modifiés dans l'arbre partent avec ce commit, comme posé.
+
+## Vérification du lot D5-bis (vérificateur, 16/09) — GO, déploiement app seule (V0.9.2)
+
+Rejoué sur l'image `app` reconstruite à `7e84eedf` : vitest **805, code 0** ;
+**les captures de l'implémenteur regardées** (`docs/qa/d5bis/`) et mes sondes
+dans les deux langues : le bloc du sens rend **exactement un** « ? », un
+lien, dont le `title` est le texte de l'ancienne infobulle ; les cinq « ? »
+des réglages ont un rayon de **4 px** ; au résultat à une seule proposition,
+**zéro** lien « alternatives » — les trois autres (chute, badges,
+téléchargements) restent, à l'ancre exacte de leur langue ; aucune erreur de
+page. Les trois retouches sont faites.
+
+Résidu d'accessibilité, hors lot : quand un `hint` est fourni, l'`aria-label`
+du lien devient le long texte de la bulle au lieu de « Ouvrir le guide » ;
+`aria-label` fixe + `title` = bulle serait plus juste. Deux lignes, au
+prochain lot qui touche `HelpDot.vue`.
+
+### Décision
+
+**GO D5-bis.** Déploiement app seule : promotion du SHA du commit de
+promotion (dates de `whatsNew.js` revérifiées au jour J, entrée V0.9.2 déjà
+posée), `pull app` + `up -d app`, puis **régénération de la page Nouveautés
+du site** (AGENTS §6, elle portera V0.9.2) et son commit ; rapport du SHA et
+du digest pour le contrôle habituel. **La documentation est alors reliée à
+l'application dans les deux sens.** Ensuite : L1 portugais.

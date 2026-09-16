@@ -5,11 +5,14 @@
          les deux volets s'empilent, visionneuse d'abord. -->
     <DialogWrapper trackingTag="result" fullscreen>
         <div class="modal result-space" data-testid="result-space">
-            <ResultAlternatives
-                class="result-space__alts"
-                :d="bundle"
-                @select="selectAlt"
-            />
+            <span class="result-space__alts-wrap">
+                <ResultAlternatives
+                    class="result-space__alts"
+                    :d="bundle"
+                    @select="selectAlt"
+                />
+                <HelpDot v-if="(alternatives || []).length >= 2" topic="alternatives" />
+            </span>
             <div class="result-space__panes">
                 <ResultViewer
                     class="result-space__viewer"

@@ -4,6 +4,20 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.2
+
+*FR*
+
+- Un « ? » près de chaque réglage et du résultat ouvre le guide au bon
+  endroit, dans votre langue : tôles, espacement, rotations, sens,
+  options, propositions, chute, badges, téléchargements.
+
+*EN*
+
+- A “?” next to each setting and on the result opens the guide at the
+  right place, in your language: sheets, spacing, rotations,
+  directions, options, proposals, offcut, badges, downloads.
+
 ## V0.9.1
 
 *FR*

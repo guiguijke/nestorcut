@@ -17,6 +17,7 @@ export default {
     'nav.menu': 'menu',
     'nav.toggleTheme': 'Changer le thème',
     'nav.language': 'Langue',
+    'help.openDoc': 'Ouvrir le guide',
 
     'common.openProjects': 'Ouvrir les projets',
     'common.openResults': 'Ouvrir les résultats',
