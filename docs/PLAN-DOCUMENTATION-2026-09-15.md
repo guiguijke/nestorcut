@@ -694,3 +694,37 @@ ici** : relecture du propriétaire (page FR de l'espacement
 `/fr/docs/nesting/spacing/` en premier — c'est son explication à
 valider — puis l'ensemble), GO du vérificateur, fusion, publication.
 D4 démarre sur une branche neuve après la publication.
+
+## Vérification du lot D3-bis (vérificateur, 16/09) — GO technique pour la publication, sous deux conditions
+
+Rejoué : `df1beb7`, `astro build` **code 0, 53 pages**, `check:links` **code 0** ;
+plus aucun « du trade » ni « Arrêter » dans le HTML français bâti ; les cinq
+corrections lues dans le diff et sur la prévisualisation ; la ligne d'état
+citée dans « La vue en direct » est **le libellé réel de l'application**
+(`live.statusLine`, FR et EN, mot pour mot) ; **le nouveau dessin de
+l'espacement rendu et regardé, dans les deux langues** : deux pièces, un
+trajet de coupe pointillé le long de chacune, la saignée ambrée hors du
+contour, la sécurité bleutée entre les deux, la cote « 2 × kerf + sécurité »
+de bord à bord. C'est le bon dessin.
+
+**Un détail vu au rendu** : dans la version française, la légende de droite
+déborde du cadre — « à l'extérieur du conto… » est coupé (le `viewBox` de
+620 ne contient pas le texte français, plus long que l'anglais). Un attribut
+à changer (`viewBox="0 0 700 200"`, ou la légende sur une ligne de moins) ;
+je le contrôle sur la prévisualisation avant la fusion.
+
+### Décision
+
+**GO technique pour publier les sections 1 à 4**, sous deux conditions,
+dans cet ordre :
+
+1. **la relecture du propriétaire** sur la prévisualisation — en premier
+   `/fr/docs/nesting/spacing/` (le dessin et l'explication du second kerf
+   sont SA règle : c'est lui qui dit si c'est ainsi qu'il l'explique à
+   l'atelier), puis `/fr/docs/files/sheetcam-job/`, puis un survol ;
+2. **la légende française du dessin entière** (un attribut), contrôlée par
+   le vérificateur sur la prévisualisation.
+
+Puis fusion de la PR #14 vers `main` du site vitrine, publication à
+`nestorcut.com/docs` et `/fr/docs`, contrôle en ligne par le vérificateur
+(routes, recherche, images des deux langues). D4 sur une branche neuve.
