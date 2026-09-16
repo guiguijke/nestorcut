@@ -912,3 +912,50 @@ commit sur la même branche, régénération de la page Nouveautés incluse si
 V0.9.1 est en production à ce moment-là), **puis relecture du propriétaire
 de la page Confidentialité** (c'est la page qui engage), puis GO et fusion.
 D5 (les liens « ? » depuis l'application) suit.
+
+## Rapport du lot D4-bis (implémenteur, 16/09)
+
+Branche `d4-docs`, commit `585663a`. Les neuf corrections de la
+vérification D4 dans les deux langues, plus la retouche :
+
+1. **« ferraille »** (libellé réel `report.offcut.scrap`) remplace
+   « rognure » ; l'anglais disait déjà « scrap ».
+2. Les onglets disent « Option 1, 2, 3 » ; le sens se lit dans
+   l'en-tête de la proposition affichée — décrit ainsi.
+3. Les totaux s'affichent **au-dessus** du tableau (surface de pièces,
+   place libre, matière à prévoir).
+4. La limite de **5 Mo par fichier vaut dans les deux modes** — la
+   carte de dépôt l'affiche.
+5. La pièce plus fine que l'espacement donne le bandeau **« Ne tient
+   pas — non découpable »** avec ses deux actions citées par leurs
+   libellés exacts (« Ajouter une tôle », « Réduire l'espacement à
+   {v} mm » — contrôlés dans `i18n.js` avant d'être écrits).
+6. **« Signaler un problème »** ouvre un formulaire dans un nouvel
+   onglet, rien n'est envoyé automatiquement — joindre le fichier ou
+   écrire au support. La remarque produit (un mail à support ferait
+   mieux qu'un ticket GitHub pour un atelier) est notée pour le
+   propriétaire, hors lot.
+7. Le paragraphe du coffre dit simplement : sans coffre, pendant ces
+   24 heures, nous pouvons techniquement lire vos fichiers ; avec le
+   coffre, au repos, personne ne le peut, nous compris ; pendant la
+   session déverrouillée, la machine qui calcule les voit en mémoire.
+8. **La promesse indispensable est là** : « Si vous perdez votre
+   fichier-clé, vos données sont perdues — nous ne pouvons pas les
+   récupérer. » (+ « gardez-le comme un double de vos clés
+   d'atelier »).
+9. **Menu** : « Confidentialité », « Limites et questions fréquentes »
+   et « Nouveautés » deviennent des LIENS SIMPLES — **preuve par le
+   HTML bâti** : la barre extraite de `dist/fr/docs/privacy/` montre
+   chaque nom UNE fois, en lien direct vers sa page (aucun groupe, le
+   défaut de D2 ne se reproduit pas).
+10. Retouche : « tôle par tôle » / « sheet by sheet » pour la vue DXF.
+
+**Page Nouveautés régénérée avec V0.9.1** sur la branche (V0.9.1 est en
+production — voir ci-dessous) : la fusion de D4 publiera la page avec
+l'entrée déjà à jour, première exécution effective de l'étape inscrite
+à AGENTS §6 (la page n'existe pas encore sur le site publié, rien à
+régénérer côté production avant la fusion — dit ici).
+
+**Chiffres** : build exit 0, check:links OK ; les neuf corrections
+vérifiées une à une dans le HTML bâti (ferraille, clé perdue, 5 Mo
+deux modes, « Ne tient pas », liens simples du menu, V0.9.1).
