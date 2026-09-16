@@ -651,3 +651,46 @@ limite d'inscription 5/h par IP) — acceptable puisque chaque capture est
 cadrée sur son élément ; la préparation « email vérifié en base » est locale
 et dite. La prévisualisation Cloudflare sert encore les anciennes images à la
 racine (cache) : elles n'existent plus dans le build, rien à faire.
+
+## Rapport du lot D3-bis (implémenteur, 16/09) — les cinq corrections courtes
+
+Branche `d1-docs`, commit `df1beb7`. Les documents du vérificateur partis
+en premier au dépôt principal (`dc9d6168`). Rien d'autre touché.
+
+1. **Le dessin de l'espacement, refait dans les deux langues** : deux
+   pièces, CHACUNE son trajet de coupe pointillé, la saignée ambrée HORS
+   du contour de chaque pièce, la sécurité bleutée entre les deux, la
+   cote « espacement = 2 × kerf + sécurité » sous l'ensemble, et la
+   légende « trajet de coupe — torche compensée, à l'extérieur du
+   contour ». Le texte explique d'où vient le second kerf : chaque
+   pièce est coupée sur son PROPRE trajet, la torche compensée passe à
+   l'extérieur du contour, la saignée entière est mangée HORS de la
+   pièce ; deux pièces face à face, deux saignées entières, plus la
+   sécurité. **Cette explication attend la validation du propriétaire
+   avant publication — c'est sa règle, dit au commit.**
+2. **Les exports verrouillés en gratuit**, dits dans « Démarrer »
+   (étape 6 : le DXF de découpe et le `.job` se téléchargent, le CSV
+   demande un plan, les cadenas « Export » à l'écran le disent) et dans
+   « Le résultat » (les cadenas « Export — Unlimited » comme la capture
+   le montre). Vérifié dans le HTML bâti des deux pages.
+3. **« Annuler »** remplace « Arrêter » dans La page projet et La vue en
+   direct (EN : « Cancel ») ; la ligne d'état est citée VERBATIM telle
+   que la capture la montre — sondée dans l'application dans les deux
+   langues avant d'être écrite : « Recherche · 2 s · meilleur 2,3 % ·
+   1 recherche(s) en parallèle · arrêt automatique dès stagnation » /
+   “Searching · 2 s · best 2.3% · 1 search(es) in parallel ·
+   auto-stops at stagnation”, avec le remplissage des trous annoncé
+   pour le résultat final.
+4. **La condition de la bande complète** : « quand vous déclarez UNE
+   SEULE tôle (une quantité d'un seul format) — ou que vous demandez le
+   seul sens bord gauche — et que tout peut y tenir ». Trois tôles du
+   même format ne donnent pas une bande.
+5. **« Formats standard du commerce »** (EN : “standard industry
+   sizes”).
+
+**Chiffres** : build exit 0, 53 pages ; `check:links` OK ; les cinq
+corrections vérifiées une à une dans le HTML bâti. **Le lot s'arrête
+ici** : relecture du propriétaire (page FR de l'espacement
+`/fr/docs/nesting/spacing/` en premier — c'est son explication à
+valider — puis l'ensemble), GO du vérificateur, fusion, publication.
+D4 démarre sur une branche neuve après la publication.
