@@ -573,3 +573,81 @@ préparation une fois en dev : vérifier l'email en base
 la première publication attend toujours le GO sur les sections 1 à 4,
 qui SONT là désormais — relecture propriétaire sur la prévisualisation
 (page FR de `.job` demandée, puis le reste) avant toute fusion.
+
+## Vérification du lot D3 (vérificateur, 16/09) — sections 1 à 4 complètes, cinq corrections courtes (D3-bis) puis relecture et publication
+
+Rejoué : `444e64f` dans un arbre séparé, `astro build` **code 0, 53 pages**,
+`check:links` **code 0** ; **la barre latérale lue dans le HTML bâti**, en
+français et en anglais : « Démarrer » en lien simple, puis les trois groupes,
+chaque page une seule fois, dans l'ordre de lecture, aucun sous-groupe brut —
+la correction 1 est vraie cette fois, et prouvée comme demandé ; les quatorze
+nouvelles routes de la prévisualisation en 200 ; **16 images par langue, toutes
+référencées, chaque page ne référence que le jeu de sa langue** (vérifié dans
+les sources et dans le HTML servi) ; **les 15 captures anglaises et les
+nouvelles françaises regardées** : tout en anglais côté anglais, tout en
+français côté français — la neuvième correction est faite. Les huit autres
+corrections de D2 sont dans le diff, mot pour mot.
+
+Les onze nouvelles pages ont été lues en entier dans les deux langues et
+leurs affirmations contrôlées : quantité de 0 à 999 (`max="999"`), « Réinitialiser
+l'échelle » existe, avertissement d'espacement sous 0,05 mm (texte exact
+présent), trous désactivés au-delà de 2,4 mm, « Tracer le contour de la tôle »,
+« densité de la bande » pendant le calcul (libellé réel), densité matière trous
+déduits, plateau calibré par la taille du chantier, ordre des propositions par
+sens puis qualité, plafond de 2 tôles et un sens en gratuit, « Non vérifié »
+au-delà de 5 000 pièces : **tous vrais**.
+
+### Cinq corrections, courtes
+
+1. **Le dessin de l'espacement et son explication sont faux, et c'est LA page
+   du sujet.** Le SVG montre UN trait de coupe entre les deux pièces avec
+   « ½ kerf » de chaque côté : cela fait **un** kerf, pas deux, et la cote
+   en dessous annonce pourtant « 2 × kerf + sécurité ». Le texte reprend la
+   même idée (« chaque pièce garde sa moitié de saignée de chaque côté du
+   trait »), qui ne produit jamais le facteur 2. D'où vient le second kerf :
+   chaque pièce est coupée sur **son propre** trajet, la torche compensée
+   passe **à l'extérieur** du contour, donc chaque pièce consomme une
+   saignée entière hors de son bord ; deux pièces face à face, c'est deux
+   saignées, plus la sécurité. Le dessin doit montrer deux trajets de coupe,
+   un le long de chaque pièce, le kerf à l'extérieur de chacune, la sécurité
+   entre les deux, dans les deux langues. **Le propriétaire, qui a posé la
+   règle, valide cette explication** avant qu'elle ne soit publiée.
+2. **Les exports du rapport sont verrouillés en gratuit.** La capture du
+   résultat le montre : deux boutons « Export — Unlimited » cadenassés — le
+   CSV et la copie du rapport (`ResultReport.vue`, `exportLocked`). Or
+   « Démarrer » (étape 6) et « Le résultat » disent « téléchargez le DXF de
+   découpe, le rapport (CSV)… » sans distinction. Écrire la vérité : en
+   gratuit, le DXF de découpe (et le `.job`) ; le rapport CSV et sa copie
+   avec un plan.
+3. **« Le bouton Imbriquer devient Arrêter »** (La page projet, La vue en
+   direct) : aucun libellé « Arrêter » n'existe. Pendant le calcul, un bouton
+   **« Annuler »** apparaît (`results.cancel`), et la carte du projet dit
+   « calcul en cours ». Écrire « Annuler ». Au passage, la ligne d'état de la
+   vue en direct montre, comme la capture : densité de la bande, nombre de
+   tôles, cœurs — et le temps écoulé et les combinaisons pendant la
+   recherche ; « l'arrêt automatique » n'y est pas affiché, il se constate.
+4. **La condition de la bande est incomplète** (Bande ou multi-tôles) : « quand
+   un seul format de tôle suffit à tout tenir » laisse croire que trois tôles
+   du même format donnent une bande. La règle réelle : un seul format, les
+   pièces tiennent dans une tôle (aire ≤ 80 %), **et** une seule tôle
+   déclarée ou le seul sens « bord gauche ». Une phrase de plus.
+5. **Surface** : « formats standard du trade » n'est pas du français
+   (« du commerce ») ; et la page « Le résultat » promet une section « Vos
+   résultats » à venir — acceptable jusqu'à D4, à remplacer par le lien dès
+   qu'elle existe.
+
+### Décision
+
+**Sections 1 à 4 : complètes, justes à ces cinq points près. Publication :
+après D3-bis** (les cinq corrections, un commit sur la même branche, preuve
+par le HTML bâti pour rien de plus que le SVG et les textes) **puis la
+relecture du propriétaire** — la page FR `.job`, la page FR de l'espacement
+avec son nouveau dessin, et un survol du reste — **puis GO et fusion**. D4
+(résultats, confidentialité, limites, nouveautés) suit sur une nouvelle
+branche, après publication.
+
+Note pour le harnais : compte dédié persistant (`docs-captures@local.dev`,
+limite d'inscription 5/h par IP) — acceptable puisque chaque capture est
+cadrée sur son élément ; la préparation « email vérifié en base » est locale
+et dite. La prévisualisation Cloudflare sert encore les anciennes images à la
+racine (cache) : elles n'existent plus dans le build, rien à faire.
