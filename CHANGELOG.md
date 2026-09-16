@@ -4,6 +4,22 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.1
+
+*FR*
+
+- La langue de votre navigateur est reconnue dès la première visite : la
+  page arrive dans votre langue, sans éclair ni réglage préalable. Le
+  bouton EN/FR devient un menu de langues — chaque langue y porte son
+  propre nom.
+
+*EN*
+
+- Your browser language is recognized on your very first visit: the page
+  arrives in your language, with no flash and no prior setting. The
+  EN/FR button becomes a language menu — each language shown under its
+  own name.
+
 ## V0.9
 
 *FR*

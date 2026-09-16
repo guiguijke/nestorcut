@@ -383,8 +383,11 @@ describe('J11-b — version produit et journal unique', () => {
         const versions = useAppChangelog()
         expect(versions.length).toBeGreaterThanOrEqual(1)
         expect(versions[0].title).toMatch(/^V0\.9/)
-        expect(versions[0].fr.length).toBeGreaterThanOrEqual(4)
-        expect(versions[0].en.length).toBeGreaterThanOrEqual(4)
+        // L0-bis : une entrée de CORRECTIF peut n'avoir qu'une puce — la
+        // taille pleine (≥ 4) reste exigée d'AU MOINS une version.
+        expect(versions[0].fr.length).toBeGreaterThanOrEqual(1)
+        expect(versions[0].en.length).toBeGreaterThanOrEqual(1)
+        expect(versions.some((v) => v.fr.length >= 4 && v.en.length >= 4)).toBe(true)
     })
 })
 

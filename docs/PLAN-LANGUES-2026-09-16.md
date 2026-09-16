@@ -232,3 +232,34 @@ L0-bis se déploient ensemble, app seule, avec une entrée de changelog
 (« la langue de votre navigateur est reconnue au premier passage ; un menu
 de langues remplace le bouton »). Rien d'autre ne change : L1 portugais
 attend D4 publié, le glossaire validé et un relecteur natif.
+
+## Rapport du lot L0-bis (implémenteur, 16/09) — les trois lignes
+
+Les trois résidus de la vérification L0, rien d'autre :
+
+1. **La langue du document suit la locale, réactivement** : l'attribut
+   figé « fr » de `nuxt.config.js` (antérieur à L0, mais c'est le socle
+   qui le porte) devient le repli sans JS à `en` (= DEFAULT_LOCALE),
+   et `app.vue` rend `useHead({ htmlAttrs: { lang: locale } })` avec le
+   ref calculé — **vérifié sur l'image reconstruite** : cookie `en` ⇒
+   `<html lang="en">`, cookie `fr` ⇒ `fr`, `Accept-Language: fr` sans
+   cookie ⇒ `fr`, et la bascule au menu change l'attribut SANS
+   rechargement (sondé au navigateur).
+2. **Le point d'entrée de détection par pays est retiré** :
+   `server/api/api/locale.get.js` supprimé — plus aucun appelant
+   (l'unique mention restante est le commentaire historique de
+   `useLocale`, qui dit précisément sa retraite). `/api/locale`
+   répond 404 sur l'image reconstruite.
+3. **Le salut de l'accueil se calcule après montage, côté client** :
+   plus de `new Date()` au rendu serveur (UTC) — une ref posée dans
+   `onMounted`, le rendu serveur et la première passe client montrent
+   le nom seul (zéro mismatch d'hydratation), l'heure locale arrive au
+   montage. Sondé en `Europe/Paris` : « Bon après-midi » à 14 h locale.
+
+**Entrée de changelog** : `V0.9.1` (FR + EN) — la langue du navigateur
+reconnue au premier passage, le menu de langues à la place du bouton ;
+`package.json` porté à `0.9.1` (l'en-tête garde V0.9, le pied dit
+V0.9.1). Le verrou du parseur s'ajuste : une entrée de CORRECTIF peut
+n'avoir qu'une puce — la taille pleine (≥ 4) reste exigée d'au moins
+une version. **Vitest 801/801, exit 0.** L0 et L0-bis se déploient
+ensemble, app seule, whatsNew daté au déploiement (leçon J11-bis).

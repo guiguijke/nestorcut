@@ -9,7 +9,7 @@
              d'emoji ; le lien de compte reste en discret. -->
         <section class="home__welcome welcome">
             <div class="welcome__body">
-                <h1 class="welcome__title">{{ greeting }}, {{ userName }}</h1>
+                <h1 class="welcome__title"><template v-if="greeting">{{ greeting }}, </template>{{ userName }}</h1>
                 <p class="welcome__text">
                     <NuxtLink
                         to="/profile"
@@ -100,9 +100,16 @@
 
     const userName = computed(() => unref(user)?.name || '')
 
-    // Time-of-day greeting — small touch that makes the dashboard feel personal.
+    // L0-bis : le salut se calcule APRÈS MONTAGE, côté client — le serveur
+    // rend en UTC et disait « Good morning » à midi de Paris (mesuré par le
+    // vérificateur). Rendu serveur et première passe client identiques (pas
+    // de salut), l'heure locale arrive au montage : zéro mismatch
+    // d'hydratation, l'heure est toujours celle de l'utilisateur.
+    const localHour = ref(null)
+    onMounted(() => { localHour.value = new Date().getHours() })
     const greeting = computed(() => {
-        const h = new Date().getHours()
+        if (localHour.value === null) return ''
+        const h = localHour.value
         if (h < 6) return t('home.greeting.night')
         if (h < 12) return t('home.greeting.morning')
         if (h < 18) return t('home.greeting.afternoon')

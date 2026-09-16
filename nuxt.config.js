@@ -135,10 +135,11 @@ export default defineNuxtConfig({
     app: {
         head: {
             title: 'NestorCut — State-of-the-art nesting for laser, plasma & CNC cutting',
-            // U1 passe 2 (a11y) : axe html-has-lang — la langue par défaut
-            // de l'app est le français (sélecteur EN | FR dans l'en-tête).
+            // L0-bis : la langue du document est PORTÉE PAR LE REGISTRE —
+            // app.vue la rend réactive (useHead) selon la locale ; cette valeur
+            // n'est que le repli sans JS, = DEFAULT_LOCALE.
             htmlAttrs: {
-                lang: 'fr',
+                lang: 'en',
             },
             meta: [
                 { charset: 'utf-8' },
