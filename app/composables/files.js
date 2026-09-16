@@ -847,8 +847,16 @@ async function addSheetCamJobDrop(drop, slug) {
     // fiche porte le rang de SON originale, donc SON bloc — et SES points,
     // avec leur drapeau « déplacé » (§9.59 fiche par fiche).
     if (importedByRank.size) {
-        const { jobDrawings: blocksOf, previewSvgWithLeads } = await import('./localImport')
-            .then(() => import('~~/shared/sheetcamJob.js'))
+        // Lot J11-ter : la chaîne `.then(() => import(…))` REMPLAÇAIT le
+        // module résolu — `previewSvgWithLeads` était lu sur le MAUVAIS
+        // module (undefined), l'appel jetait, et le catch « une amorce
+        // ratée ne doit jamais casser la fiche » gardait l'aperçu SANS
+        // amorces : la vue enrichie montrait une silhouette nue (NO-GO
+        // J11-bis, R10). Deux imports distincts, résolus ensemble.
+        const [{ previewSvgWithLeads }, { jobDrawings: blocksOf }] = await Promise.all([
+            import('./localImport'),
+            import('~~/shared/sheetcamJob.js'),
+        ])
         const blocks = blocksOf(read.job.binary) || []
         for (const [rankKey, records] of importedByRank) {
             // `rankKey` : le rang d'originale (entier, lot J9) ou le nom

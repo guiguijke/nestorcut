@@ -16,7 +16,7 @@
                     class="modal__display modal__enriched"
                 >
                     <SvgDisplay  :src="fileModalData.enrichedSvg" preserve-colors class="modal__enriched-svg" />
-                    <NewBadge feature="lead-enlarged-view" />
+                    <NewBadge feature="lead-enlarged-view" class="modal__enriched-badge" />
                     <ul class="modal__legend">
                         <li><span class="modal__swatch modal__swatch--cut" />{{ t('jobImport.legendCut') }}</li>
                         <li><span class="modal__swatch modal__swatch--lead" />{{ t('jobImport.legendLead') }}</li>
@@ -164,16 +164,34 @@ const partsClasses = computed(() => ({
 </style><style lang="scss" scoped>
 // Lot J11-a (A5) : la vue agrandie enrichie — même source que la vignette,
 // à taille lisible, avec sa légende. Couleurs explicites (piège #21).
+// Lot J11-ter : le bloc sort de la hauteur FIXE de `__display` (320 px) —
+// dessin + badge + légende empilés la dépassaient de 71 px et la légende
+// s'imprimait sur le nom et les constats (NO-GO J11-bis, R10).
 .modal__enriched {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     gap: 8px;
     padding: 8px;
+    height: auto;
+
+    // La variante plein écran de `__display` fixe une hauteur calc() —
+    // le bloc enrichi la refuse aussi : sa colonne doit pouvoir GRANDIR.
+    &.modal__display--is-fullscreen {
+        height: auto;
+    }
 }
 
 .modal__enriched-svg {
     width: 100%;
-    max-height: 320px;
+    max-height: 280px;
+}
+
+// Le badge reste un BADGE : aligné au début de la colonne, jamais étiré
+// sur la largeur par le flex (la barre bleue pleine largeur du NO-GO).
+.modal__enriched-badge {
+    align-self: flex-start;
+    margin-left: 0;
 }
 
 .modal__legend {

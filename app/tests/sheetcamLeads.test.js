@@ -225,6 +225,38 @@ describe('J8-b — l\'aperçu des fiches porte les amorces (et rien sans .job)',
         expect(a).toBe(b) // aucun leads ⇒ même sortie exacte
         expect(a).not.toContain('#D97706')
     })
+
+    // Lot J11-ter (verrou exigé par la vérification §5.2) : les tracés
+    // d'amorce se COMPTENT dans le SVG de la vue (> 0 dès que la fiche
+    // porte des points), et le viewBox les COUVRE — une amorce part du
+    // contour vers l'EXTÉRIEUR, un viewBox calé sur la seule pièce les
+    // coupait en moitié (capturé au NO-GO J11-bis).
+    it('verrou J11-ter : > 0 tracés d\'amorce comptés, viewBox les couvrant', () => {
+        const record = {
+            parts: [part('#2563EB')],
+            sheetcam: {
+                starts: [{ offset: [15, 0], leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC }],
+                origin: [0, 0],
+                kerfWidth: 1.5,
+                leadIn: 5, leadInType: LEAD_ARC, leadOut: 10, leadOutType: LEAD_ARC,
+            },
+        }
+        const svg = decodeURIComponent(previewSvgWithLeads(record))
+        const leadTraces = (svg.match(/#D97706/g) || []).length
+        expect(leadTraces).toBeGreaterThan(0)
+        // Le start [15,0] est sur le bord BAS (y=0 en entrée, flip y en
+        // sortie) : l'amorce plonge SOUS le bord — le viewBox doit démarrer
+        // AVANT 0 pour la couvrir entière.
+        const vb = svg.match(/viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/)
+        expect(vb).not.toBeNull()
+        const [, x, y, w, h] = vb.map(Number)
+        // l'amorce (au plus 15 mm sous le bord) vit DANS le viewBox
+        expect(y).toBeLessThan(0)
+        expect(h).toBeGreaterThanOrEqual(30)
+        // la pièce reste entière
+        expect(x).toBeLessThanOrEqual(0)
+        expect(x + w).toBeGreaterThanOrEqual(30)
+    })
 })
 
 // --- les textes FIGÉS du lot J8-e (point 30) ---------------------------------

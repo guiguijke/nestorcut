@@ -488,3 +488,93 @@ au lieu de prétendre. C'est exactement l'honnêteté demandée, et elle a
 permis de savoir quoi regarder. La règle devient donc : **quand
 l'implémenteur ne peut pas regarder, il le dit et le vérificateur regarde
 avant tout le reste** — ce qui s'est passé ici.
+
+## 6. Rapport du lot J11-ter (implémenteur, 16/09) — option RÉPARER
+
+**Méthode, dite d'abord** : pas plus de vision d'image que la veille —
+chaque constat vient de sondes (texte rendu, géométrie DOM sur les BONS
+nœuds, décodage pixel du PNG, et désormais un harnais qui rejoue le flux).
+Le vérificateur regarde les captures en premier, la règle du §5 le dit.
+
+**La cause racine, mesurée avant le correctif.** Les trois défauts de
+l'écran venaient d'UN seul branchements cassé. Dans `files.js`, la chaîne
+d'imports dynamiques résolvait le MAUVAIS module :
+
+```js
+const { jobDrawings: blocksOf, previewSvgWithLeads } = await import('./localImport')
+    .then(() => import('~~/shared/sheetcamJob.js'))
+```
+
+`.then(() => import(…))` REMPLACE la valeur résolue : tout est lu sur le
+module `sheetcamJob.js`. `jobDrawings` y vit (les blocs se découvrent,
+les points s'attachent — « votre point » s'affichait bien), mais
+`previewSvgWithLeads` y est **undefined** : l'appel jette, et le catch
+« une amorce ratée ne doit jamais casser la fiche » garde l'aperçu NU.
+Mesuré sur le dépôt réel : enregistrement IndexedDB avec `starts`
+complets (moved=true, leadIn 5) et `previewSvg` à **0** tracé ambré —
+la silhouette seule. Les deux autres défauts découlaient de la mise en
+page : le bloc enrichi héritait de la hauteur FIXE de `.modal__display`
+(320 px) — dessin 280 px + badge + légende la dépassaient de 71 px, la
+légende s'imprimait sur le nom et les constats — et le badge, enfant
+d'une colonne flex, s'étirait sur 298 px.
+
+**Les correctifs.**
+
+1. **Le branchement** (`files.js`) : deux imports résolus ENSEMBLE,
+   `Promise.all([import('./localImport'), import('~~/shared/sheetcamJob.js')])`
+   — `previewSvgWithLeads` vient du bon module.
+2. **La mise en page** (`FileModal.vue`) : le bloc enrichi sort des
+   hauteurs fixes (`height: auto`, y compris la variante plein écran) —
+   dessin, badge et légende empilés GRANDISSENT, le nom et les constats
+   descendent dessous ; le badge est `align-self: flex-start`
+   (**64 px** mesuré, contre la barre de 298 px).
+3. **Les formes entières** (`localImport.js`) : une amorce part du
+   contour vers l'EXTÉRIEUR — le viewBox, calé sur la seule pièce, la
+   coupait en moitié. Il s'étend maintenant jusqu'à l'étendue des
+   amorces (marge = gap/4) ; mesuré : `viewBox="-9.550 0.000 129.550
+   120.000"` sur la vue du fichier à quatre exemplaires. Sans amorce,
+   la sortie est IDENTIQUE à l'octet (verrou existant « aucun leads ⇒
+   même sortie exacte », repassé vert).
+4. **« se nest »** ⇒ « **se nestE** désormais » dans `CHANGELOG.md`.
+
+**Les verrous.**
+
+- **Harnais navigateur `scripts/qa-job-leadview.mjs`** (nouveau, exigé
+  par la vérification) : dépose le `.job` réel (quatre exemplaires
+  « votre point »), ouvre la vue agrandie du premier, DÉCODE le SVG de
+  la vue et COMPTE les tracés d'amorce — **4 tracés ambrés, 1 disque de
+  perçage** (0 avant le correctif) — puis vérifie la géométrie : légende
+  dans son bloc, sans chevauchement avec le nom NI les constats, à
+  **1440 comme à 390 px**, badge ≤ 90 px, légende à quatre entrées.
+  **12 sondes PASS, GO, exit 0** sur l'image reconstruite. C'est lui qui
+  aurait attrapé le défaut : il rejoue le flux utilisateur exact.
+- **Verrou unitaire** (`sheetcamLeads.test.js`, J11-ter) : une fiche à
+  point posable rend **> 0 tracés d'amorce** et un viewBox qui COUVRE
+  l'amorce (bord négatif), la pièce restant entière.
+- **Suites** : vitest **796/796, exit 0** ; harnais
+  `qa-e2e-result-dxfview.mjs` **GO, exit 0** sur la même image.
+
+**Captures (`docs/qa/j11ter/`), et ce qu'on y voit.**
+
+- `01-vue-enrichie-1440-fr.png` (1440×900) — la vue agrandie en
+  français : la pièce L avec SON trajet d'amorce ambré et son disque de
+  perçage ENTIERS (le viewBox les couvre), la légende quatre entrées
+  (« contour de coupe — trajet d'amorce — position tangente possible
+  (zone) — point de perçage ») dans son propre bloc SOUS le dessin, le
+  badge « Nouveau » en badge (64 px), le nom et le constat « Géométrie
+  lue dans le fichier de travail… » chacun sur sa ligne, rien par-dessus
+  rien.
+- `02-vue-enrichie-390-fr.png` (390×844) — le même écran à 390 px : la
+  légende passe à la ligne SANS toucher le nom ni les constats, le badge
+  reste un badge.
+- `03-fiche-enrichie-fr.png` — la fiche détaillée entière en français,
+  pour la lecture d'ensemble (dessin + légende + nom + constat).
+
+**Non-dits** : la vignette de la carte profite du même correctif (c'est
+le MÊME SVG reconstruit) — sa vérification visuelle reste au
+vérificateur, je n'ai pas de vue directe cette session non plus ; le
+`leadInType` du fichier de test est line/arc sans zone tangentielle, la
+légende « zone » s'y applique donc à vide (aucune promesse de zone
+dessinée pour CE fichier) — l'entrée de légende reste légitime pour les
+amorces tangentielles ; rien d'autre touché (registre, version, cartes,
+CHANGELOG hormis la coquille).

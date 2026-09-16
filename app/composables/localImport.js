@@ -128,6 +128,9 @@ function buildPreviewSvg(parts, ringLeads = null) {
 
     let cursor = 0
     const paths = []
+    // Lot J11-ter : étendue des amorces (contour → extérieur) — le viewBox
+    // final les COUVRE, sinon elles sont coupées au bord de la pièce.
+    let leadMinX = Infinity, leadMinY = Infinity, leadMaxX = -Infinity, leadMaxY = -Infinity
     for (let eIndex = 0; eIndex < entries.length; eIndex++) {
         const e = entries[eIndex]
         const ty = (maxH - e.h) / 2 // centrage vertical dans la rangée
@@ -149,9 +152,24 @@ function buildPreviewSvg(parts, ringLeads = null) {
             for (const lead of ringLeads) {
                 const owner = ringOwner.get(lead.ringIndex)
                 if (!owner || owner.part !== eIndex) continue
+                // Lot J11-ter : une amorce part DU contour VERS L'EXTÉRIEUR —
+                // son étendue est comptée pour le viewBox, sinon la vue la
+                // COUPE au bord de la pièce (amorce et perçage amputés de
+                // leur moitié externe, capturé au NO-GO J11-bis).
+                const trackExtent = (c) => {
+                    const [x, y] = mapPt(c)
+                    leadMinX = Math.min(leadMinX, x)
+                    leadMinY = Math.min(leadMinY, y)
+                    leadMaxX = Math.max(leadMaxX, x)
+                    leadMaxY = Math.max(leadMaxY, y)
+                }
                 const toD = (pts) => pts
                     .map((c, i) => {
                         const [x, y] = mapPt(c)
+                        leadMinX = Math.min(leadMinX, x)
+                        leadMinY = Math.min(leadMinY, y)
+                        leadMaxX = Math.max(leadMaxX, x)
+                        leadMaxY = Math.max(leadMaxY, y)
                         return `${i === 0 ? 'M' : 'L'}${x.toFixed(3)} ${y.toFixed(3)}`
                     })
                     .join('')
@@ -168,14 +186,27 @@ function buildPreviewSvg(parts, ringLeads = null) {
                 }
                 if (lead.pierce) {
                     const [cx, cy] = mapPt(lead.pierce.c)
-                    paths.push(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${lead.pierce.r.toFixed(3)}" fill="${LEAD_COLOR}" fill-opacity="0.10" stroke="${LEAD_COLOR}" stroke-width="${thin}" stroke-dasharray="${(lead.pierce.r / 2).toFixed(3)} ${(lead.pierce.r / 3).toFixed(3)}"/>`)
+                    const r = lead.pierce.r
+                    trackExtent([cx - r, cy - r]); trackExtent([cx + r, cy + r])
+                    paths.push(`<circle cx="${cx.toFixed(3)}" cy="${cy.toFixed(3)}" r="${r.toFixed(3)}" fill="${LEAD_COLOR}" fill-opacity="0.10" stroke="${LEAD_COLOR}" stroke-width="${thin}" stroke-dasharray="${(r / 2).toFixed(3)} ${(r / 3).toFixed(3)}"/>`)
                 }
             }
         }
         cursor += e.w + gap
     }
+    // Lot J11-ter : s'il y a des amorces, le viewBox s'étend jusqu'à elles
+    // (marge = un quart de gap) ; sans amorce, identique à avant — les
+    // aperçus ordinaires ne bougent PAS d'un pixel.
+    let vbX = 0, vbY = 0, vbW = totalW, vbH = maxH
+    if (leadMinX !== Infinity) {
+        const m = gap / 4
+        vbX = Math.min(0, leadMinX - m)
+        vbY = Math.min(0, leadMinY - m)
+        vbW = Math.max(totalW, leadMaxX + m) - vbX
+        vbH = Math.max(maxH, leadMaxY + m) - vbY
+    }
     const svg =
-        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalW.toFixed(3)} ${maxH.toFixed(3)}">` +
+        `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vbX.toFixed(3)} ${vbY.toFixed(3)} ${vbW.toFixed(3)} ${vbH.toFixed(3)}">` +
         paths.join('') +
         '</svg>'
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
