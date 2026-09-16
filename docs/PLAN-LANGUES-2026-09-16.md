@@ -320,3 +320,16 @@ bonne ; corrections à appliquer avant la première chaîne :
 Tout le reste est validé tel quel. Réserve dite : l'idiome d'un atelier
 précis d'une région précise n'est pas garanti ; les glossaires restent
 ouverts aux retours des premiers utilisateurs de chaque langue.
+
+## Contrôle du déploiement L0 + L0-bis (`949f4f5e`, V0.9.1) — vérificateur, 16/09 — conforme
+
+Lecture seule : le commit de promotion ne porte que l'étape nouvelle
+d'`AGENTS.md` §6 (page Nouveautés régénérée après chaque promotion), les
+dates de `whatsNew.js` sont au 2026-09-16, aucun diff sous `workers/` ni
+`public/engine` depuis `a22b7d5a` ; registre : `:latest` et `:949f4f5e…`
+portent le **même digest** `sha256:82d7be71…6073c`, celui rapporté pour le
+conteneur ; production : la page sert le SHA complet, en-tête « V0.9 », pied
+« V0.9.1 », page Nouveautés « Version actuelle : V0.9.1 » avec l'entrée du
+menu de langues, `/api/locale` en 404, et **la langue du document suit la
+requête** : rien ⇒ `en`, `Accept-Language: fr` ⇒ `fr`, cookie `en` ⇒ `en`,
+cookie `fr` ⇒ `fr`. **Prod = V0.9.1.**

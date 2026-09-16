@@ -959,3 +959,40 @@ régénérer côté production avant la fusion — dit ici).
 **Chiffres** : build exit 0, check:links OK ; les neuf corrections
 vérifiées une à une dans le HTML bâti (ferraille, clé perdue, 5 Mo
 deux modes, « Ne tient pas », liens simples du menu, V0.9.1).
+
+## Vérification du lot D4-bis (vérificateur, 16/09) — GO technique, fusion après relecture du propriétaire
+
+Rejoué : `585663a` dans un arbre séparé, `astro build` **code 0, 63 pages**,
+`check:links` **code 0** ; **la barre latérale lue dans le HTML bâti, FR et
+EN** : Confidentialité, Limites et questions fréquentes, Nouveautés sont des
+liens simples, chaque nom une seule fois, les autres groupes intacts ; le
+mot « rognure » n'apparaît plus dans aucune page bâtie ; les neuf
+corrections relues dans le diff et **confirmées sur la prévisualisation
+servie** : « ferraille », « Option 1, 2… » avec le sens dans l'en-tête,
+totaux au-dessus du tableau, 5 Mo dans les deux modes, bandeau « Ne tient
+pas — non découpable » et ses deux actions, signalement véridique (« rien
+n'est envoyé automatiquement »), coffre dit simplement (« Sans coffre,
+pendant ces 24 heures, nous pouvons techniquement lire vos fichiers »),
+**la promesse de la clé perdue** en toutes lettres, « tôle par tôle » ; la
+page Nouveautés porte déjà **V0.9.1** au-dessus de V0.9, conforme à la
+production du jour.
+
+### Décision
+
+**GO technique.** Une condition avant la fusion : **la relecture du
+propriétaire de la page Confidentialité** (`/fr/docs/privacy/` sur
+`d4-docs.nestorcut-website.pages.dev`) — c'est la page qui engage
+NestorCut ; elle est conforme aux promesses privées, mais c'est à lui de
+dire si c'est ainsi qu'il veut les dire. Sur son accord : fusion de la
+PR #15, contrôle en ligne, puis D5 (les liens « ? » depuis l'application),
+puis le portugais.
+
+### GO de fusion D4 (16/09) — relecture du propriétaire de la page Confidentialité : « Ok »
+
+Condition levée. **GO de fusion de la PR nestorcut-website#15 (`585663a`)
+vers `main`** : publication des sections 5 à 8 et de la page Nouveautés
+(V0.9.1) sur `nestorcut.com/docs` et `/fr/docs`. Contrôle en ligne par le
+vérificateur après publication : les dix routes nouvelles dans les deux
+langues, le menu aux trois liens simples, la page Nouveautés à V0.9.1, les
+images des deux jeux. La documentation est alors complète (huit sections) ;
+suite : D5 (les liens « ? » depuis l'application), puis L1 portugais.
