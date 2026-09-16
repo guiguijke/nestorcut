@@ -966,6 +966,21 @@ le `.env` Hetzner. Sans cela, une partie des jobs de production est
 calculée avec l'ancien moteur et l'ancien post-pass (constaté : image du
 31/08 pendant que six lots étaient déployés sur Hetzner).
 
+### Page « Nouveautés » de la documentation (étape systématique, L0-bis)
+
+La page Nouveautés de la documentation est PRODUITE depuis le
+`CHANGELOG.md` de l'application (une seule source, lot D4). Après
+CHAQUE promotion de l'application, la régénérer sinon le site reste à
+la version précédente :
+
+```bash
+cd ../nestorcut-website && node scripts/sync-changelog.mjs
+```
+
+La sortie (les deux pages whats-new EN+FR) est commitée avec le site
+vitrine et poussée — Cloudflare publie. Vérifier que la page servie
+porte la nouvelle entrée avant de rendre le rapport.
+
 ### Benchmarks publics (AF4, L3-bis)
 
 Après un GO de vérification, AVANT le déploiement d'une livraison qui
