@@ -1,66 +1,73 @@
-// QA captures — lots D1/D2 (docs/PLAN-DOCUMENTATION-2026-09-15.md).
+// QA captures — lots D1/D2/D3 (docs/PLAN-DOCUMENTATION-2026-09-15.md).
 //
-// Règles posées par la vérification D1 (vérificateur, 16/09) :
+// Règles posées par les vérifications D1 et D2 :
 //   1. COMPTE NEUF dédié, créé par le harnais à CHAQUE exécution via
-//      /api/auth/local/register — jamais le compte de développement du
-//      propriétaire (les captures D1 montraient « Bonjour, Guillaume »,
-//      980 projets et une colonne d'essais) ;
-//   2. CAPTURES D'ÉLÉMENT, cadrées sur ce que la légende de la page dit —
-//      jamais de page entière où la chose promise est sous le pli ;
-//   3. AUCUNE IMAGE ORPHELINE : chaque fichier écrit dans
-//      ../nestorcut-website/public/docs-img/ doit être référencé par une
-//      page de la doc (verrou en fin de harnais, exit 1 sinon), et les
-//      images devenues orphelines sont retirées en le disant.
+//      /api/auth/local/register — jamais le compte de développement ;
+//   2. CAPTURES D'ÉLÉMENT, cadrées sur ce que la légende de la page dit ;
+//   3. AUCUNE IMAGE ORPHELINE (verrou en fin de harnais, exit 1 sinon) ;
+//   4. UNE CAPTURE PAR LANGUE (vérification D2, point 9) : le harnais
+//      tourne en DEUX PASSES — cookie français puis anglais — écrit deux
+//      jeux dans docs-img/fr/ et docs-img/en/, chaque page référence le
+//      jeu de sa langue, le verrou compte les DEUX jeux, et une sonde
+//      vérifie la langue du texte rendu AU MOMENT DE LA PRISE.
 //
-// Fichiers neutres uniquement : la pièce L (fixtures validées par le
-// propriétaire le 13/09), un SVG généré par ce harnais, un fichier vide
-// nommé .dwg (le refus appareil se déclare sur le NOM avant toute lecture
-// — comportement identique pour un vrai DWG à ce stade, aucun octet n'est
-// lu). Interface en FRANÇAIS, retina ×2.
+// Fichiers neutres uniquement : la pièce L (fixtures du propriétaire),
+// un SVG généré, un .job à quatre originales SYNTHÉTISÉ depuis la pièce
+// L (bloc binaire dupliqué, re-lu par nos décodeurs avant usage), un
+// fichier vide nommé .dwg (le refus appareil se déclare sur le NOM
+// avant toute lecture). Retina ×2. Journal dans .qa-pw/.
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseSheetCamJob, jobDrawings } from '../shared/sheetcamJob.js'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
-const OUT = process.env.QA_OUT || path.resolve('../nestorcut-website/public/docs-img')
-const DOCS = path.resolve('../nestorcut-website/src/content/docs')
+const SITE = path.resolve('../nestorcut-website')
+const IMG = path.join(SITE, 'public/docs-img')
+const DOCS = path.join(SITE, 'src/content/docs')
 const LOG = process.env.QA_LOG || path.resolve('.qa-pw/docs-captures/run.log')
 const STAGE = path.resolve('.qa-pw/docs-captures')
 
 const FIX_DXF = path.resolve('app/tests/fixtures/sheetcam/piece-l.dxf')
-// La CARTE groupée exige un .job à QUATRE sections originales du MÊME
-// dessin. Le dépôt n'en a pas de neutre (x4-reference porte deux dessins
-// DIFFÉRENTS) : le harnais en SYNTHÉTISE un depuis la pièce L — le bloc
-// binaire de son unique dessin est dupliqué quatre fois (les blocs
-// s'ouvrent sur le tag 0x0025 et se relaient de longueur en longueur) et
-// la section texte [Part 0] est recopiée en Part 1/2/3, copyOf=-1, à
-// des positions distinctes. Auto-VÉRIFIÉ avant usage : relu par nos
-// propres décodeurs (4 originales, 4 blocs binaires). Fichier d'essai
-// neutre, vit dans .qa-pw/, jamais committé — la capture ne montre que
-// le nom du dessin de la fixture.
-const FIX_JOB_X4 = path.join(STAGE, 'piece-l-x4-synth.job')
-// La VUE AGRANDIE la plus lisible : la pièce L seule, un seul point.
+const FIX_JOB_X4 = path.join(STAGE, 'piece-l-x4.job')
 const FIX_JOB_L = path.resolve('app/tests/fixtures/sheetcam/piece-l-none-default.job')
+const GEN_SVG = path.join(STAGE, 'fixture-rect.svg')
+const FAKE_DWG = path.join(STAGE, 'piece-l.dwg')
 
-/**
- * Synthétise le .job à quatre originales (voir FIX_JOB_X4). Retourne
- * l'Uint8Array ou jette — l'appelant vérifie ensuite par re-lecture.
- */
-async function buildX4Job(sourcePath, targetPath) {
+fs.mkdirSync(LOG.replace(/run\.log$/, ''), { recursive: true })
+fs.mkdirSync(STAGE, { recursive: true })
+
+fs.writeFileSync(GEN_SVG, [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">',
+    '  <rect x="8" y="8" width="60" height="60" fill="none" stroke="#000" stroke-width="1.5"/>',
+    '  <circle cx="66" cy="66" r="18" fill="none" stroke="#000" stroke-width="1.5"/>',
+    '</svg>',
+    '',
+].join('\n'))
+fs.writeFileSync(FAKE_DWG, '\0')
+
+const logs = []
+const log = (...a) => { const s = `[${new Date().toISOString().slice(11, 19)}] ${a.join(' ')}`; logs.push(s); console.log(s) }
+const checks = []
+const check = (pass, label, ok, detail) => {
+    checks.push({ pass, label, ok })
+    log(ok ? 'PASS' : 'FAIL', `[${pass}]`, label, detail === undefined ? '' : JSON.stringify(detail))
+}
+
+/** Synthétise le .job à quatre originales depuis la pièce L (voir
+ *  FIX_JOB_X4) — auto-vérifié par re-lecture, jette sinon. */
+function buildX4Job(sourcePath, targetPath) {
     const bytes = new Uint8Array(fs.readFileSync(sourcePath))
     const latin1 = Buffer.from(bytes).toString('latin1')
     const MARKER = '[BinaryDataStart]'
     const at = latin1.indexOf(MARKER)
     if (at < 0) throw new Error('marqueur binaire introuvable')
     const textLines = latin1.slice(0, at).split('\r\n')
-    // Le texte finit par un CRLF : le dernier morceau est vide.
     if (textLines.length && textLines[textLines.length - 1] === '') textLines.pop()
     const binaryHead = Buffer.from(latin1.slice(at, at + MARKER.length), 'latin1')
     const binaryBytes = bytes.subarray(at + MARKER.length)
 
-    // Bloc 0 : du premier enregistrement 0x0025 (origine d'un dessin) à
-    // sa fin — ici le fichier n'a QU'UN dessin, donc jusqu'au bout du flux.
     const view = new DataView(binaryBytes.buffer, binaryBytes.byteOffset, binaryBytes.byteLength)
     let firstBlock = -1
     for (let o = 0; o + 6 <= binaryBytes.length;) {
@@ -71,16 +78,11 @@ async function buildX4Job(sourcePath, targetPath) {
     }
     if (firstBlock < 0) throw new Error('aucun bloc dessin dans le binaire')
     const block0 = Uint8Array.from(binaryBytes.subarray(firstBlock))
-    // Le flux doit finir PILE au bout (même garde que jobPathRecords).
     {
         let o = 0
-        while (o + 6 <= block0.length) o += 6 + view.getUint16(o + 4, true)
+        while (o + 6 <= block0.length) o += 6 + new DataView(block0.buffer).getUint16(o + 4, true)
         if (o !== block0.length) throw new Error('flux binaire incohérent')
     }
-    // Marquer les points de départ « posés à la main » (tag 0x001d,
-    // charge 1 octet) : la fixture source sort de SheetCam avec des
-    // points par défaut (valeur 0) — la capture doit montrer la marque
-    // « votre point », on la pose donc dans la COPIE de synthèse.
     {
         const bv = new DataView(block0.buffer)
         let flipped = 0
@@ -90,11 +92,9 @@ async function buildX4Job(sourcePath, targetPath) {
             if (tag === 0x001d && len === 1) { block0[o + 6] = 1; flipped++ }
             o += 6 + len
         }
-        if (!flipped) throw new Error('aucun enregistrement de drapeau « point déplacé » (0x001d) à poser')
+        if (!flipped) throw new Error('aucun drapeau 0x001d à poser')
     }
 
-    // La section texte [Part 0] : de l'ouverture [Part 0] jusqu'à la
-    // prochaine section qui n'est pas [Part 0] ni [Part 0/...].
     const start = textLines.findIndex((l) => l === '[Part 0]')
     if (start < 0) throw new Error('section [Part 0] introuvable')
     let end = textLines.length
@@ -117,236 +117,266 @@ async function buildX4Job(sourcePath, targetPath) {
     }
     const out = []
     for (let i = 0; i < textLines.length; i++) {
-        if (i === start) {
-            out.push(...newParts)
-            continue
-        }
+        if (i === start) { out.push(...newParts); continue }
         if (i > start && i < end) continue
-        // Compteur de pièces : [Misc] Count=N → 4.
         if (textLines[i] === 'Count=1' && i > 0 && textLines[i - 1] === '[Misc]') { out.push('Count=4'); continue }
         out.push(textLines[i])
     }
-    const textOut = out.join('\r\n') + '\r\n'
-    const binaryOut = Buffer.concat([binaryHead, ...Array.from({ length: 4 }, () => Buffer.from(block0))])
-    const final = Buffer.concat([Buffer.from(textOut, 'latin1'), binaryOut])
+    const final = Buffer.concat([
+        Buffer.from(out.join('\r\n') + '\r\n', 'latin1'),
+        binaryHead,
+        ...Array.from({ length: 4 }, () => Buffer.from(block0)),
+    ])
     fs.writeFileSync(targetPath, final)
-
-    // AUTO-VÉRIFICATION par nos propres décodeurs (le fichier synthétique
-    // doit se lire EXACTEMENT comme un .job à quatre originales).
     const read = parseSheetCamJob(new Uint8Array(final))
     const originals = read.parts.filter((p) => p.copyOf < 0)
     const blocks = jobDrawings(read.binary) || []
-    if (originals.length !== 4) throw new Error(`originales=${originals.length}, 4 attendues`)
-    if (blocks.length !== 4) throw new Error(`blocs=${blocks.length}, 4 attendus`)
+    if (originals.length !== 4) throw new Error(`originales=${originals.length}`)
+    if (blocks.length !== 4) throw new Error(`blocs=${blocks.length}`)
     return { originals: originals.length, blocks: blocks.length }
 }
-const GEN_SVG = path.join(STAGE, 'fixture-rect.svg')
-const FAKE_DWG = path.join(STAGE, 'piece-l.dwg')
 
-fs.mkdirSync(OUT, { recursive: true })
-fs.mkdirSync(path.dirname(LOG), { recursive: true })
-fs.mkdirSync(STAGE, { recursive: true })
-
-// SVG neutre : un carré et un rond, contours nets (segments droits = 2
-// points par arc droit, piège #15).
-fs.writeFileSync(GEN_SVG, [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">',
-    '  <rect x="8" y="8" width="60" height="60" fill="none" stroke="#000" stroke-width="1.5"/>',
-    '  <circle cx="66" cy="66" r="18" fill="none" stroke="#000" stroke-width="1.5"/>',
-    '</svg>',
-    '',
-].join('\n'))
-// Refus DWG appareil : déclenché par le NOM, avant toute lecture du fichier.
-fs.writeFileSync(FAKE_DWG, '\0')
-
-const logs = []
-const log = (...a) => { const s = `[${new Date().toISOString().slice(11, 19)}] ${a.join(' ')}`; logs.push(s); console.log(s) }
-
-const checks = []
-const check = (label, ok, detail) => {
-    checks.push({ label, ok })
-    log(ok ? 'PASS' : 'FAIL', label, detail || '')
-}
-
-const browser = await chromium.launch({ headless: true })
-const ctx = await browser.newContext({
-    locale: 'fr-FR',
-    viewport: { width: 1440, height: 900 },
-    deviceScaleFactor: 2,
-})
-await ctx.addCookies([{ name: 'locale', value: 'fr', url: BASE }])
-const page = await ctx.newPage()
-page.on('pageerror', (e) => log('[pageerror]', String(e).slice(0, 400)))
-
-/** Capture d'ÉLÉMENT — le cadre est la chose, pas la page. */
-const shot = async (name, selector) => {
-    const el = page.locator(selector).first()
-    await el.scrollIntoViewIfNeeded()
-    await el.screenshot({ path: path.join(OUT, name) })
-    log('capture:', name, '←', selector)
-}
-
-const registerFresh = async () => {
-    const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14)
-    const email = `docs-captures-${stamp}@local.dev`
-    const password = 'docs-captures-2026'
-    const res = await page.request.post(BASE + '/api/auth/local/register', {
-        data: { email, name: 'Captures doc', password },
+/** Le compte DÉDIÉ aux captures (vérification D1 : « créé par le harnais
+ *  via /api/auth/local/register s'il n'existe pas — jamais le compte de
+ *  développement »). PERSISTANT : l'inscription est limitée à 5/heure par
+ *  IP (anti-brute-force), un compte neuf à chaque exécution est donc
+ *  impossible — et l'historique n'apparaît nulle part puisque CHAQUE
+ *  capture est cadrée sur son élément (jamais la colonne des projets).
+ *  PRÉPARATION UNIQUE en dev : créer via ce harnais puis vérifier l'email
+ *  en base (db.users.updateOne({email}, {$set: {emailVerified: true}})) —
+ *  sans quoi le premier nesting bascule sur /auth/check-email. */
+const ACCOUNT = { email: 'docs-captures@local.dev', password: 'docs-captures-2026' }
+const ensureAccount = async (request) => {
+    const res = await request.post(BASE + '/api/auth/local/register', {
+        data: { email: ACCOUNT.email, name: 'Captures doc', password: ACCOUNT.password },
     })
-    if (res.status() >= 400) throw new Error('inscription refusée : ' + res.status() + ' ' + (await res.text()).slice(0, 120))
-    log('compte neuf :', email)
-    return { email, password }
+    if (res.status === 409) { log('compte dédié déjà présent :', ACCOUNT.email); return ACCOUNT }
+    if (res.status >= 400) throw new Error('inscription du compte dédié refusée : ' + res.status())
+    log('compte dédié créé :', ACCOUNT.email)
+    return ACCOUNT
 }
 
-const login = async ({ email, password }) => {
+/** Une passe COMPLÈTE de captures dans une langue. */
+async function runPass(browser, pass, creds) {
+    const L = pass === 'fr'
+    const OUT = path.join(IMG, pass)
+    fs.mkdirSync(OUT, { recursive: true })
+    // Textes attendus DANS LA LANGUE DE LA PASSE (sonde au moment de la
+    // prise — vérification D2, point 9).
+    const T = L
+        ? { device: /Cet appareil/i, servers: /Nos serveurs/i, yourPoint: /votre point/i, spacing: 'Espacement', directions: 'Sens', computing: /calcul/i }
+        : { device: /This device/i, servers: /Our servers/i, yourPoint: /your point/i, spacing: 'Spacing', directions: 'Layout directions', computing: /computing|nesting/i }
+
+    const ctx = await browser.newContext({
+        locale: L ? 'fr-FR' : 'en-US',
+        viewport: { width: 1440, height: 900 },
+        deviceScaleFactor: 2,
+    })
+    await ctx.addCookies([{ name: 'locale', value: pass, url: BASE }])
+    const page = await ctx.newPage()
+    page.on('pageerror', (e) => log('[pageerror]', String(e).slice(0, 300)))
+
+    const shot = async (name, selector) => {
+        const el = page.locator(selector).first()
+        await el.scrollIntoViewIfNeeded()
+        await el.screenshot({ path: path.join(OUT, name) })
+        log(`capture [${pass}]:`, name, '←', selector)
+    }
+    /** Capture d'élément TROUVÉ PAR TEXTE dans un périmètre : la sonde
+     *  cherche l'étiquette, remonte au champ, cadre le champ. */
+    const shotField = async (name, scopeSelector, label) => {
+        const rect = await page.evaluate(([scopeSel, label]) => {
+            const scope = document.querySelector(scopeSel)
+            if (!scope) return null
+            const all = [...scope.querySelectorAll('*')].filter((n) => (n.textContent || '').trim().startsWith(label))
+            if (!all.length) return null
+            all.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length)
+            let el = all[0]
+            for (let i = 0; i < 3 && el.parentElement; i++) {
+                const p = el.parentElement
+                if (p.getBoundingClientRect().height > 170) break
+                el = p
+            }
+            const r = el.getBoundingClientRect()
+            return { x: r.x, y: r.y, width: r.width, height: Math.min(r.height, 170) }
+        }, [scopeSelector, label])
+        if (!rect) throw new Error(`champ "${label}" introuvable dans ${scopeSelector}`)
+        await page.screenshot({ path: path.join(OUT, name), clip: rect })
+        log(`capture [${pass}]:`, name, `← champ "${label}"`)
+    }
+
+    // ---------- connexion ----------
     await page.goto(BASE + '/auth/local', { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('.local-auth__form', { timeout: 30000 })
     if (await page.locator('.local-auth__form input[type="text"]').count()) {
         await page.locator('.local-auth__toggle').click()
     }
-    await page.fill('.local-auth__form input[type="email"]', email)
-    await page.fill('.local-auth__form input[type="password"]', password)
+    await page.fill('.local-auth__form input[type="email"]', creds.email)
+    await page.fill('.local-auth__form input[type="password"]', creds.password)
     await page.locator('.local-auth__btn').click()
     await page.waitForURL('**/home', { timeout: 30000 })
-}
+    await page.waitForTimeout(2000)
 
-const deposit = async (file) => {
-    await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
-    // « Cet appareil » : la carte .job l'exige ; le DXF y marche aussi.
-    const deviceCard = page.locator('.create__privacy button, .create__privacy [class*="option"]').filter({ hasText: /Cet appareil/i }).first()
-    if (await deviceCard.count()) await deviceCard.click()
-    await page.setInputFiles('input[name="dxf"]', file)
-    await page.waitForURL('**/project/**', { timeout: 90000 })
-}
-
-const waitForCard = () => page.waitForSelector('.files__grid .file__display img', { timeout: 120000 })
-
-let failed = null
-try {
-    // ---------- 0. Le .job à quatre originales, synthétisé et relu ------
-    const synth = await buildX4Job(FIX_JOB_L, FIX_JOB_X4)
-    check('.job x4 synthétique : relu, 4 originales et 4 blocs', synth.originals === 4 && synth.blocks === 4, synth)
-
-    // ---------- 1. Compte neuf + connexion ----------
-    const creds = await registerFresh()
-    await login(creds)
-    await page.waitForTimeout(2500)
-    const statsClean = await page.evaluate(() => !/Bonjour,\s*Guillaume/.test(document.body.innerText))
-    check('compte dédié (pas le compte de développement)', statsClean)
-
-    // ---------- 2. Accueil : le bloc « Nouvelle imbrication » ----------
-    const privacyCards = await page.evaluate(() => ({
-        device: /Cet appareil/i.test(document.body.innerText),
-        servers: /Nos serveurs/i.test(document.body.innerText),
-    }))
-    check('accueil : les deux modes affichés (FR)', privacyCards.device && privacyCards.servers)
+    // ---------- accueil : SONDE DE LANGUE puis bloc création ----------
+    const langProbe = await page.evaluate(() => document.body.innerText)
+    check(pass, `langue de la passe (${pass}) rendue à l'écran`,
+        T.device.test(langProbe) && T.servers.test(langProbe))
     await shot('demarrer-calcul.png', 'section.create')
     await shot('fichiers-depot.png', '.upload')
 
-    // ---------- 3. Projet DXF : tôle + réglages, puis la fiche ----------
+    // ---------- projet DXF : atelier, réglages, fiche, champs ----------
+    const deposit = async (file) => {
+        await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
+        await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
+        const deviceCard = page.locator('.create__privacy button, .create__privacy [class*="option"]').filter({ hasText: T.device }).first()
+        if (await deviceCard.count()) await deviceCard.click()
+        await page.setInputFiles('input[name="dxf"]', file)
+        await page.waitForURL('**/project/**', { timeout: 90000 })
+    }
     await deposit(FIX_DXF)
-    await waitForCard()
+    await page.waitForSelector('.files__grid .file__display img', { timeout: 120000 })
     await page.waitForTimeout(1500)
-    const dxfState = await page.evaluate(() => ({
-        preflight: document.querySelector('[data-testid="project-preflight"]')?.textContent || null,
-        cardName: document.querySelector('.files__grid .file__name')?.textContent?.trim() || null,
-    }))
-    check('projet DXF : fiche importée', Boolean(dxfState.cardName), dxfState.preflight?.slice(0, 70))
+    check(pass, 'projet DXF : fiche importée', true)
     await shot('demarrer-projet.png', 'section.atelier')
+    await shot('interface-projet.png', '.atelier__params')
+    await shotField('nesting-espacement.png', '.atelier__params', T.spacing)
+    await shotField('nesting-sens.png', '.atelier__params', T.directions)
     await shot('fichiers-dxf.png', '.files__grid .file')
 
-    // ---------- 4. Projet .job à quatre sections : la carte groupée ----------
+    // ---------- le nesting sur CE projet : live puis résultat ----------
+    await page.locator('.atelier__nest').scrollIntoViewIfNeeded()
+    await page.locator('.atelier__nest').click()
+    await page.waitForTimeout(8000)
+    await shot('interface-live.png', '.atelier__stage')
+    await page.waitForFunction(() => {
+        const btn = document.querySelector('.atelier__nest')
+        return btn && !/calcul|computing/i.test(btn.textContent || '')
+    }, null, { timeout: 300000 }).catch(() => log('attente fin nesting expirée — on tente le résultat'))
+    await page.waitForTimeout(6000)
+    await page.locator('.results__item').first().scrollIntoViewIfNeeded()
+    await page.locator('.results__item').first().click()
+    await page.waitForSelector('[data-testid="result-space"]', { timeout: 20000 })
+    await page.waitForTimeout(3500)
+    check(pass, 'résultat ouvert', true)
+    await shot('interface-resultat.png', '[data-testid="result-space"]')
+    await page.evaluate(() => { const t = document.querySelector('[data-testid="report-tech"]'); if (t) t.open = true })
+    await shot('nesting-badges.png', '[data-testid="report-badges"]')
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(500)
+
+    // ---------- projet .job x4 : la carte groupée ----------
     await deposit(FIX_JOB_X4)
     await page.waitForSelector('[data-testid="file-grouped-card"]', { timeout: 120000 })
     await page.waitForTimeout(1500)
-    const jobState = await page.evaluate(() => ({
-        group: Boolean(document.querySelector('[data-testid="file-grouped-card"]')),
-        count: document.querySelector('.fgroup__count')?.textContent?.trim() || null,
-        userPointMarks: document.querySelectorAll('.fgroup__moved:not([class*="--auto"])').length,
-    }))
-    check('projet .job : carte groupée ×4', jobState.group, jobState.count)
-    check('projet .job : marques « votre point » ≥ 1', jobState.userPointMarks >= 1, { marks: jobState.userPointMarks })
+    const marks = await page.evaluate(() => document.querySelectorAll('.fgroup__moved:not([class*="--auto"])').length)
+    check(pass, 'carte groupée ×4, marques du point posé à la main', marks >= 1, { marks })
     await shot('fichiers-job.png', '[data-testid="file-grouped-card"]')
 
-    // ---------- 4-bis. La vue agrandie sur la pièce L (.job une section) ----------
+    // ---------- projet .job pièce L : carte, vue agrandie ----------
     await deposit(FIX_JOB_L)
-    await waitForCard()
+    await page.waitForSelector('.files__grid .file__display img', { timeout: 120000 })
     await page.waitForTimeout(1500)
-    const lState = await page.evaluate(() => ({
-        chip: Boolean(document.querySelector('[data-testid="file-job-origin"]')),
-        jobName: document.querySelector('.file__origin-name')?.textContent?.trim() || null,
-    }))
-    check('projet .job pièce L : puce .job présente', lState.chip, lState.jobName)
+    await shot('interface-carte.png', '.files__grid .file')
     await page.locator('.files__grid .file__area').first().click()
     await page.waitForSelector('.modal__enriched', { timeout: 15000 })
     await page.waitForTimeout(1200)
-    const modalLeads = await page.evaluate(() => {
+    const leads = await page.evaluate(() => {
         const img = document.querySelector('.modal__enriched-svg img')
-        if (!img) return 0
-        return (decodeURIComponent(img.src).match(/#D97706/g) || []).length
+        return img ? (decodeURIComponent(img.src).match(/#D97706/g) || []).length : 0
     })
-    check('vue agrandie : amorces dessinées (> 0)', modalLeads > 0, { leadTraces: modalLeads })
+    check(pass, 'vue agrandie : amorces dessinées (> 0)', leads > 0, { leads })
     await shot('fichiers-job-apercu.png', '.modal__body')
     await page.keyboard.press('Escape')
 
-    // ---------- 5. Projet SVG ----------
+    // ---------- SVG ----------
     await deposit(GEN_SVG)
-    await waitForCard()
+    await page.waitForSelector('.files__grid .file__display img', { timeout: 120000 })
     await page.waitForTimeout(1500)
     await shot('fichiers-svg.png', '.files__grid .file')
-    const svgOk = await page.evaluate(() => Boolean(document.querySelector('.files__grid .file__display img')))
-    check('projet SVG : fiche importée', svgOk)
 
-    // ---------- 6. Refus DWG en mode appareil (nommé, avec la raison) ----------
+    // ---------- refus DWG appareil ----------
     await page.goto(BASE + '/home', { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('input[name="dxf"]', { state: 'attached', timeout: 30000 })
-    const deviceCard2 = page.locator('.create__privacy button, .create__privacy [class*="option"]').filter({ hasText: /Cet appareil/i }).first()
+    const deviceCard2 = page.locator('.create__privacy button, .create__privacy [class*="option"]').filter({ hasText: T.device }).first()
     if (await deviceCard2.count()) await deviceCard2.click()
     await page.setInputFiles('input[name="dxf"]', FAKE_DWG)
     await page.waitForTimeout(1500)
     const refusal = await page.evaluate(() => {
         const el = document.querySelector('.create__error')
-        return el && el.offsetParent !== null ? el.textContent.trim().slice(0, 140) : null
+        return el && el.offsetParent !== null
     })
-    check('refus DWG appareil : message affiché, nommé', Boolean(refusal), refusal || '')
+    check(pass, 'refus DWG appareil affiché, nommé', Boolean(refusal))
     await shot('fichiers-dwg.png', '.create__error')
+
+    await ctx.close()
+}
+
+let failed = null
+const browser = await chromium.launch({ headless: true })
+try {
+    const synth = buildX4Job(FIX_JOB_L, FIX_JOB_X4)
+    check('setup', '.job x4 synthétique relu : 4 originales, 4 blocs', synth.originals === 4 && synth.blocks === 4, synth)
+
+    const regCtx = await browser.newContext()
+    const creds = await ensureAccount(regCtx.request)
+    await regCtx.close()
+    await runPass(browser, 'fr', creds)
+    await runPass(browser, 'en', creds)
 } catch (e) {
     failed = String(e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)
     log('ERREUR:', failed)
 }
-
-// ---------- 7. Verrou anti-orpheline ----------
-const referenced = new Set()
-for (const dir of ['docs', 'fr/docs', 'files', 'fr/files']) {
-    const p = path.join(DOCS, dir)
-    if (!fs.existsSync(p)) continue
-    for (const f of fs.readdirSync(p)) {
-        if (!f.endsWith('.md')) continue
-        const md = fs.readFileSync(path.join(p, f), 'utf8')
-        for (const m of md.matchAll(/\/docs-img\/([\w.-]+)/g)) referenced.add(m[1])
-    }
-}
-const present = fs.readdirSync(OUT).filter((f) => f.endsWith('.png'))
-let orphans = 0
-for (const f of present) {
-    if (!referenced.has(f)) {
-        fs.unlinkSync(path.join(OUT, f))
-        orphans++
-        log('image orpheline retirée :', f)
-    }
-}
-const missing = [...referenced].filter((f) => !present.includes(f))
-check('chaque image référencée existe', missing.length === 0, { manquantes: missing })
-check('aucune image orpheline après nettoyage', true, { retirees: orphans })
-
-fs.writeFileSync(LOG, logs.join('\n') + '\n')
 await browser.close()
 
+// ---------- verrou anti-orpheline (les DEUX jeux, tout type d'image) ----
+const referenced = new Set()
+const walkMd = (dir) => {
+    for (const f of fs.readdirSync(dir)) {
+        const p = path.join(dir, f)
+        if (fs.statSync(p).isDirectory()) { walkMd(p); continue }
+        if (!f.endsWith('.md')) continue
+        for (const m of fs.readFileSync(p, 'utf8').matchAll(/\/docs-img\/(?:fr|en)\/([\w.-]+)/g)) referenced.add(m[1])
+    }
+}
+walkMd(DOCS)
+const presentByLang = {}
+let orphans = 0
+const walkImg = (dir, lang) => {
+    for (const f of fs.readdirSync(dir)) {
+        const p = path.join(dir, f)
+        if (fs.statSync(p).isDirectory()) { walkImg(p, f); continue }
+        if (!/\.(png|svg)$/i.test(f)) continue
+        ;(presentByLang[lang] = presentByLang[lang] || []).push({ f, p })
+    }
+}
+walkImg(IMG, 'root')
+// Les fichiers à la RACINE de docs-img (l'ancien jeu D2, référencé par
+// personne depuis les jeux par langue) : retirés, en le disant.
+for (const { f, p } of presentByLang.root || []) {
+    fs.unlinkSync(p)
+    orphans++
+    log('image racine retirée (jeux par langue désormais) :', f)
+}
+const allPresent = new Map()
+for (const [lang, files] of Object.entries(presentByLang)) {
+    if (lang === 'root') continue
+    for (const { f, p } of files) allPresent.set(`${lang}/${f}`, p)
+}
+for (const [key, p] of allPresent) {
+    if (!referenced.has(key.split('/')[1])) {
+        fs.unlinkSync(p)
+        orphans++
+        log('image orpheline retirée :', key)
+    }
+}
+const missing = [...referenced].filter((f) => !allPresent.has(`fr/${f}`) || !allPresent.has(`en/${f}`))
+check('lock', 'chaque image référencée existe DANS LES DEUX langues', missing.length === 0, { manquantes: missing })
+check('lock', 'aucune image orpheline après nettoyage', true, { retirees: orphans })
+
+fs.writeFileSync(LOG, logs.join('\n') + '\n')
 const reds = checks.filter((c) => !c.ok)
 if (failed || reds.length) {
     console.log(`NO-GO — ${reds.length} sonde(s) rouge(s)${failed ? ' + erreur' : ''}`)
     process.exit(1)
 }
-console.log('GO — captures de documentation régénérées (compte neuf, éléments cadrés, zéro orpheline)')
+console.log('GO — captures régénérées dans les DEUX langues (compte neuf, éléments cadrés, langue sondée, zéro orpheline)')

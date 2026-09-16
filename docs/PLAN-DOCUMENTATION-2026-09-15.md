@@ -399,7 +399,7 @@ page Nouveautés (D4) branchera `CHANGELOG.md` ; relecture propriétaire
 de la page FR `.job` particulièrement attendue (c'est sa demande
 d'origine qui a ouvert ce chantier).
 
-## Vérification du lot D2 (vérificateur, 16/09) — contenu solide, huit corrections avant publication, à faire dans D3
+## Vérification du lot D2 (vérificateur, 16/09) — contenu solide, neuf corrections avant publication, à faire dans D3
 
 Rejoué : `3b6948e` dans un arbre séparé, `astro build` **code 0, 39 pages**,
 `check:links` **code 0** ; les douze routes de la prévisualisation en 200 ;
@@ -429,7 +429,7 @@ chaque affirmation contrôlée contre l'application (`a22b7d5a`) ou son code.
   leurs constats réels), les blocs résolus, le bloc rigide et « Éclater »
   irréversible (texte de confirmation contrôlé) : vrais.
 
-### Huit corrections — vues ou mesurées
+### Neuf corrections — vues ou mesurées
 
 1. **Le menu liste chaque page deux fois, dont une sous un libellé brut
    « files ».** Le rapport dit « le groupe Démarrer ne descend pas dans les
@@ -475,11 +475,101 @@ chaque affirmation contrôlée contre l'application (`a22b7d5a`) ou son code.
    l'écran — le nommer `piece-l-x4.job` ; « l'atelier est déjà monté » n'est
    pas une expression : « la mise en tôle est déjà faite ».
 
+9. **Les pages anglaises montrent des captures en français** (relevé par le
+   propriétaire sur `/docs/files/sheetcam-job/` : « votre point », « Masquer
+   les exemplaires », légende et constat en français sous un texte anglais).
+   La faute est d'abord dans la règle du vérificateur, qui disait « interface
+   en français » sans dire « dans la langue de la page ». Règle corrigée :
+   **une capture par langue** — le harnais tourne deux fois, cookie `fr` puis
+   `en`, écrit `docs-img/fr/…` et `docs-img/en/…`, et chaque page référence
+   le jeu de sa langue ; le verrou anti-orpheline compte les deux jeux, et
+   une sonde vérifie que le texte rendu au moment de la prise est dans la
+   langue attendue (« votre point » / « your point »).
+
 ### Décision
 
-**D2 : le socle et les captures tiennent, le contenu est bon à 90 %, huit
+**D2 : le socle et les captures tiennent, le contenu est bon à 90 %, neuf
 corrections avant publication — absorbées dans D3**, une seule PR, comme
 pour D1-bis. La publication attend toujours les sections 1 à 4. **Relecture
 du propriétaire** : la page FR `.job` de la prévisualisation dès maintenant
 (`/fr/docs/files/sheetcam-job/`), c'est sa demande d'origine et elle est
 prête à être lue.
+
+## Rapport du lot D3 (implémenteur, 16/09) — les neuf corrections + sections Interface et Nesting
+
+Toujours la PR nestorcut-website#14 (branche `d1-docs`, commit `444e64f`).
+Les trois documents du vérificateur du dépôt principal partis au commit
+`2c1e4fc6` avant le lot, comme demandé.
+
+**Les neuf corrections (les huit + la neuvième ajoutée en cours de lot).**
+1. **Menu** : « Démarrer » est un LIEN SIMPLE vers `/docs/`
+   (l'autogenerate de son dossier était récursif — voilà le sous-groupe
+   brut « files » et les pages en double) ; l'ordre de lecture vient du
+   frontmatter `sidebar.order` de chaque page. **PREUVE PAR LE HTML BÂTI**
+   (extrait de `dist/fr/docs/files/dxf/index.html`, la barre latérale
+   complète est dans le journal du harnais) : « Démarrer → /fr/docs/ »
+   comme lien, puis Vue d'ensemble → DXF → SVG → DWG → Fichier de
+   travail SheetCam (.job) → La page projet → Les cartes de pièces → La
+   vue en direct → Le résultat → Bande ou multi-tôles → L'espacement et
+   les rotations → Sens, densités et trous ; **DOUBLONS : []** ;
+   « sous-groupe brut files présent : false » ; Précédent/Suivant suivent
+   l'ordre de lecture. Même preuve extraite en anglais.
+2. **Propositions** : « avec l'offre gratuite, UNE proposition, dans le
+   sens choisi ; une par sens d'imbrication avec un plan payant » —
+   « la meilleure en tête » retiré.
+3. **Badge** : « "Écart ≥" suivi de votre espacement ».
+4. **Contour ouvert** : le constat réel, mot pour mot — « N tracés
+   ouverts ne seront pas découpés — refermez-les dans votre CAO » ; et
+   ces tracés ne suivent pas la pièce.
+5. **Cartes** : le clic ouvre la fiche détaillée (aperçu agrandi,
+   constats) ; l'échelle et l'éclatement sont des actions SUR la carte.
+6. **.job** : « épaisseur » retirée (lue par le parseur, jamais
+   utilisée).
+7. **DWG** : écarté et NOMMÉ (« Ignorés — nom : … »), jamais « aucun
+   projet » en toutes lettres ; en cas d'échec de conversion la fiche
+   EXISTE en erreur « Échec de l'import » avec bouton de signalement —
+   décrit, et le conseil (DXF ou DWG plus ancien) donné par la doc
+   puisque l'écran ne le donne pas.
+8. **Surface** : légende de la fiche DXF (« aperçu, quantité, échelle »),
+   fichier synthétique renommé `piece-l-x4.job`, « la mise en tôle est
+   déjà faite ».
+9. **Une capture par langue** : `docs-img/fr/` et `docs-img/en/`, le
+   harnais tourne en deux passes avec le cookie de langue, chaque page
+   référence le jeu de sa langue, le verrou anti-orpheline compte les
+   DEUX jeux, et une sonde vérifie la langue du texte rendu AU MOMENT DE
+   la prise (« Cet appareil »/« Nos serveurs » en passe FR, « This
+   device »/« Our servers » en passe EN).
+
+**Les sections nouvelles (§2.2 et §2.4), EN + FR, une capture cadrée par
+page.** « L'interface » : La page projet (tôles multiples avec quantités,
+espacement et sa règle 2 × kerf + sécurité AFFICHÉE sous le champ,
+rotations par pas, les trois sens avec « un sens en gratuit », options —
+trous désactivés au-delà de 2,4 mm, contour de tôle à l'export) ; Les
+cartes de pièces (quantité, Échelle, Éclater irréversible, fiche
+détaillée) ; La vue en direct (vraie pose des pièces, ligne d'état,
+Arrêter) ; Le résultat (une proposition en gratuit / une par sens en
+payant, densité matière, téléchargements). « Le nesting expliqué » :
+Bande ou multi-tôles et pourquoi ; l'arrêt sur plateau ; les badges et
+ce qu'ils garantissent ; L'espacement et les rotations AVEC LE DESSIN
+exigé par le plan (deux SVG rédigés, un par langue) ; Sens, les DEUX
+densités (bande pendant le calcul, matière au résultat) et les pièces
+dans les trous.
+
+**Le harnais (GO, exit 0)** : deux passes complètes, 15 images par
+langue écrites dans son dossier, toutes référencées, zéro orpheline
+(l'ancien jeu racine retiré en le disant), langue sondée à la prise,
+compte DÉDIÉ — « créé par le harnais s'il n'existe pas », et PERSISTANT :
+l'inscription est limitée à 5/heure par IP (anti-brute-force), un compte
+neuf à chaque exécution est impossible ; l'historique n'apparaît
+nulle part puisque CHAQUE capture est cadrée sur son élément. DIT, la
+préparation une fois en dev : vérifier l'email en base
+(`emailVerified: true`), sans quoi le premier nesting bascule sur
+`/auth/check-email`.
+
+**Chiffres** : `astro build` **exit 0, 53 pages** ; `check:links`
+**OK** ; sidebar prouvée par HTML bâti dans les deux langues.
+
+**Non-dits** : sections 5 à 8 (D4) puis les liens depuis l'app (D5) ;
+la première publication attend toujours le GO sur les sections 1 à 4,
+qui SONT là désormais — relecture propriétaire sur la prévisualisation
+(page FR de `.job` demandée, puis le reste) avant toute fusion.
