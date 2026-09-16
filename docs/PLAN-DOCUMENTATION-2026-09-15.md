@@ -108,3 +108,67 @@ Dépôt frère `../nestorcut-website` pour D1 à D4 ; l'application (`app/`)
 pour D5 et pour `CHANGELOG.md`. Aucun moteur, aucun worker. D1 peut
 commencer tout de suite ; D2 attend que J11-a (carte groupée) soit livré,
 pour documenter l'écran final et non l'intermédiaire.
+
+## Rapport du lot D1 (implémenteur, 16/09) — le socle
+
+**Starlight vit DANS le site vitrine, branche `d1-docs` du dépôt frère**
+(PR ouverte, URL de prévisualisation pour la relecture — la fusion vers
+`main` publie, elle attend le GO). Ce qui a été fait, et mesuré :
+
+1. **Le montage** : `@astrojs/starlight` **épinglé à 0.37** — c'est la
+   dernière branche qui accepte Astro 5 (le site vitrine est en 5.18 ;
+   la dernière Starlight exige Astro 7 : monter serait un lot à part,
+   dit ici). Le contenu vit sous `src/content/docs/<locale>/docs/` : le
+   sous-dossier `docs` + la locale `root` (anglais sans préfixe)
+   donnent **`/docs/` en anglais et `/fr/docs/` en français** — la
+   convention du site vitrine, vérifiée dans `dist/`. Deux débroussaillages
+   nécessaires, consignés : la config racine `i18n` d'Astro a été
+   RETIRÉE (Starlight refuse la cohabitation ; rien ne l'importait, le
+   routage vitrine est fait main via `localePath()`), et la collection
+   `docs` se déclare dans `src/content.config.ts` par les helpers
+   officiels (`docsLoader`/`docsSchema`) puisque le site a déjà son blog.
+2. **La page « Démarrer » complète dans les deux langues** :
+   ce qu'est NestorCut, où se passe le calcul (cet appareil / nos
+   serveurs, et lequel choisir), le premier nesting en cinq minutes
+   (étapes réelles du flux V0.9.0), et ce que NestorCut n'est pas.
+   Voix d'atelier, aucune promesse hors production : chaque phrase est
+   vraie à la version déployée ce jour (dix nestings offerts, `.job`
+   lu seul, badges du résultat, suppression à 24 h côté serveurs).
+3. **La recherche et le menu** : Pagefind indexé au build
+   (`dist/pagefind/` présent), sidebar par locale (« Getting started » /
+   « Démarrer »), sélecteur de langue vérifié dans les deux pages
+   (EN → `/fr/docs/`, FR → `/docs/`), thème sombre d'origine, favicon
+   du site (celui de Starlight par défaut était cassé — lien 404, corrigé).
+4. **Le lien « Docs » dans la navigation du site vitrine** : ajouté au
+   header EN (`/docs/`) et FR (`/fr/docs/`), vérifié dans les pages
+   bâties.
+5. **L'harnais de captures** (`scripts/qa-docs-captures.mjs` du dépôt
+   principal) : dépose la **pièce L** (fixture validée par le
+   propriétaire le 13/09 — fichier neutre, aucun nom de client),
+   interface en **français**, captures retina ×2 vers
+   `nestorcut-website/public/docs-img/` : `demarrer-accueil.png`
+   (le choix de l'endroit du calcul) et `demarrer-projet.png` (la page
+   projet : pièce déposée, tôles, réglages — celle de la page
+   « Démarrer »). **GO, exit 0**, 4 sondes vertes (modes affichés, fiche
+   déposée, bouton nesting, interface FR). Le journal va dans `.qa-pw/`,
+   rien hors images n'est publié. À relancer à chaque version dont la
+   page projet change d'allure.
+
+**Chiffres** : `astro build` **exit 0**, 30 pages ; `check:links` **OK**
+(29 pages HTML + sitemap, aucun lien cassé après le correctif favicon) ;
+sitemap contenant `/docs/` et `/fr/docs/` vérifié.
+
+**Captures, lues par sondes** (pas de vision d'image cette session, la
+méthode est dite) : dimensions 2880×1800 (retina ×2), densité de contenu
+34 % (accueil) et 8 % (page projet, fond clair de l'atelier), texte rendu
+vérifié au moment de la prise (« Cet appareil », « Nos serveurs », le
+résumé de prévol « 1 pièce · 1 fichier »).
+
+**Non-dits** : le 404 du site vitrine gagne sur celui de Starlight
+(warning de collision à la construction — deviendra une erreur dans une
+future version d'Astro ; le 404 marqué reste celui du site, acceptable
+pour D1, à retravailler si Starlight monte) ; la sidebar ne montre que
+« Démarrer » — les sections suivantes arrivent avec D2-D4 ; la page
+Nouveautés (section 8) attend D4 et le branchement de `CHANGELOG.md` ;
+relecture propriétaire de la page « Démarrer » attendue avant
+publication (fusion de la PR).

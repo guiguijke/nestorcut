@@ -654,3 +654,24 @@ donc dès le 21-22/09, quelques jours seulement après la mise en ligne : **à
 la promotion, l'implémenteur remet les quatre dates à la date du
 déploiement** (c'est la règle du registre : « date de PREMIÈRE mise en
 production »), dans le même commit que la promotion.
+
+## 8. Contrôle du déploiement J11-ter (`a22b7d5a`) — vérificateur, 16/09 — conforme
+
+Lecture seule, depuis mon poste :
+
+- **Commit de promotion `a22b7d5a`** sur `origin/main` : les quatre fichiers
+  annoncés (mon caractère de `CHANGELOG.md`, plan §7, REPRISE, MASTERPLAN),
+  plus `whatsNew.js` (quatre dates au 2026-09-16) et son verrou qui lit
+  désormais la date du registre. Aucun autre fichier. `git diff
+  711f4b44..a22b7d5a -- workers/ public/engine` **vide** : ni worker, ni
+  homelab, ni benchmarks à toucher.
+- **Registre** : `:latest` et `:a22b7d5a…` portent le **même digest**
+  `sha256:163d6725…b3158`, celui rapporté pour le conteneur Hetzner — la
+  promotion a retagué sans reconstruire.
+- **Production (`app.nestorcut.com`)** : HTTP 200, la page sert le SHA
+  complet `a22b7d5a…ba14`, en-tête « V0.9 » et pied « V0.9.0 » ; la page
+  Nouveautés en français rend « Version actuelle V0.9.0 » et **« se neste
+  désormais »**, en anglais « Current version » et « now nests ».
+
+Premier déploiement portant V0.9.0. Prochaine étape : recette propriétaire
+C1–C11 en production (`docs/RECETTE-PROPRIETAIRE-2026-09-14.md`).
