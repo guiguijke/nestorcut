@@ -367,3 +367,35 @@ l'ordre du §3, rien ne se publie à moitié.
    (cookie pt, compte dédié, langue sondée) ; `pt` ajouté à
    `DOCS_LANGS` le jour de la publication de la doc, PAS AVANT ;
 5. tout fusionné le même jour, changelog V0.10.
+
+## Jalons de relecture d'une langue (vérificateur, 16/09) — la règle « complète ou rien » vaut pour la PUBLICATION, pas pour la relecture
+
+Une langue est un lot de plusieurs sessions (747 clés, une vingtaine de
+pages, le site, le harnais). La relire d'un bloc à la fin serait le pire
+moment pour découvrir un contresens du glossaire répété 300 fois. Trois
+jalons, chacun relu par le vérificateur avant le suivant, sur la branche de
+la langue, sans rien publier :
+
+1. **Jalon A — l'application** : `pt.js` complet, `pt` au registre, verrou de
+   parité vert, image reconstruite, captures du flux `.job` complet en
+   portugais (accueil, dépôt, carte, vue agrandie, calcul, résultat,
+   téléchargement) jointes au rapport. Le vérificateur relit les 747 chaînes
+   et les captures ; les corrections rentrent avant le jalon B. Tant que le
+   jalon A n'est pas relu, `pt` peut rester HORS de `DICTS` sur la branche
+   (le verrou ne juge que les langues enregistrées) — on n'y met la langue
+   que quand le fichier est complet.
+2. **Jalon B — le site vitrine** : `ui.ts` portugais, `/pt/`, `hreflang`,
+   sitemap ; relecture des pages du site.
+3. **Jalon C — la documentation** : locale Starlight `pt`, toutes les pages,
+   captures par le harnais en trois passes, verrou de complétude ;
+   relecture page à page. Puis `pt` dans `DOCS_LANGS`, et publication des
+   trois ensemble : GO unique, app + site + doc le même jour.
+
+**Pluriels — correction avant la première ligne de code** : en portugais,
+italien, allemand et espagnol, **zéro est pluriel** (« 0 peças », « 0 pezzi »,
+« 0 Teile », « 0 piezas ») ; seul 1 est singulier. La règle « 0 ou 1 =
+singulier » est **française** uniquement. `pluralSelect` : `fr` ⇒ `n === 0 ||
+n === 1`, toutes les autres ⇒ `n === 1`.
+
+**Nombres pt-BR** : virgule décimale et point de millier (« 1.250,5 mm »),
+`Intl.NumberFormat('pt-BR')` le fait seul — ne rien coder à la main.
