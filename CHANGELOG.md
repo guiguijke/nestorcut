@@ -23,7 +23,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
   que vous voyez.
 - Déposez tous vos fichiers d'un coup — même plus de vingt : l'envoi
   se fait par lots automatiques, et un fichier refusé est toujours nommé.
-- Une pièce seule sur une grande tôle se nestE désormais (elle passait
+- Une pièce seule sur une grande tôle se neste désormais (elle passait
   en erreur si elle était petite devant la tôle).
 
 *EN*

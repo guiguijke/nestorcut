@@ -392,10 +392,11 @@ describe('J11-b — version produit et journal unique', () => {
 
 describe('J11-c — le badge « Nouveau » expire à 7 jours', () => {
     it("à J+6 il est nouveau, à J+8 il ne l'est plus", async () => {
-        const { isNewFeature } = await import('../utils/whatsNew')
-        // Une clé réelle du registre.
+        const { isNewFeature, WHATS_NEW } = await import('../utils/whatsNew')
+        // Une clé réelle du registre — le verrou suit sa DATE (promue au
+        // déploiement), jamais une date copiée qui dériverait.
         const key = 'job-download-primary'
-        const released = new Date('2026-09-14')
+        const released = new Date(WHATS_NEW['job-download-primary'])
         const at = (days) => new Date(released.getTime() + days * 86400000)
         expect(isNewFeature(key, at(6))).toBe(true)
         expect(isNewFeature(key, at(8))).toBe(false)

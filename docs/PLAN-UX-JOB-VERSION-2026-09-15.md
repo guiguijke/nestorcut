@@ -578,3 +578,79 @@ légende « zone » s'y applique donc à vide (aucune promesse de zone
 dessinée pour CE fichier) — l'entrée de légende reste légitime pour les
 amorces tangentielles ; rien d'autre touché (registre, version, cartes,
 CHANGELOG hormis la coquille).
+
+## 7. Vérification du lot J11-ter (`bc5eca67`) — vérificateur, 16/09 — GO app seule
+
+Rejoué sur l'image `app` reconstruite à HEAD : `npx vitest run` **796 passés,
+code de sortie 0** ; harnais de l'implémenteur `scripts/qa-job-leadview.mjs`
+**12 sondes PASS, GO, code 0** (4 tracés d'amorce et 1 disque de perçage
+comptés dans le SVG de la vue, badge 64 px, aucun chevauchement à 1440 ni à
+390 px) ; ma sonde complémentaire (vignettes de la carte, variante plein
+écran, page Nouveautés) ; et — la règle du §5 — **les trois captures
+committées regardées avec mes yeux, plus les miennes**
+(`~/qa-out/verif-j11ter/`).
+
+### 7.1 Ce que je vois
+
+- **`01-vue-enrichie-1440-fr.png`** : le dessin en haut, le badge « Nouveau »
+  redevenu un petit badge sous le dessin, la légende à quatre entrées dans son
+  propre bloc, puis le nom du dessin, puis la ligne « Géométrie lue dans le
+  fichier de travail… », **chacun sur sa ligne, rien par-dessus rien**. Sur le
+  bord gauche du L, à la hauteur du point posé à la main, **un trajet
+  d'amorce ambré et le disque de perçage pointillé sont dessinés, entiers**,
+  hors du contour (le viewBox déborde à gauche : `-9.55 0 129.55 120`). Ils
+  sont petits — 5 mm d'amorce sur une pièce de 120 mm, c'est l'échelle vraie.
+- **`02-vue-enrichie-390-fr.png`** : la légende passe à la ligne (« position
+  tangente possible (zone) » sur deux lignes), sans toucher le nom ni le
+  constat ; badge intact.
+- **`03-fiche-enrichie-fr.png`** : la fiche entière, cohérente avec la
+  première.
+- **Carte groupée** (ma capture) : quatre vignettes « votre point », chacune
+  avec son petit repère ambré au point de départ ; deux vignettes ont le
+  viewBox étendu (point sur un bord externe), deux le viewBox d'origine
+  (amorce logée dans le creux du L) — cohérent avec quatre points différents.
+- **Nouveautés** : la ligne rendue lisait « se nest**E** désormais » — la
+  correction demandée avait été faite avec un E majuscule (voir 7.2).
+
+La cause racine avancée par l'implémenteur est juste et vérifiable dans le
+diff : `.then(() => import(…))` remplaçait le module résolu, donc
+`previewSvgWithLeads` était lu sur `sheetcamJob.js` où il n'existe pas ;
+le catch de sécurité avalait l'erreur. `Promise.all` des deux imports corrige
+le branchement ; le verrou unitaire J11-ter et le harnais le tiennent.
+
+### 7.2 Un caractère corrigé par le vérificateur
+
+`CHANGELOG.md` portait « se nestE désormais » (majuscule d'emphase restée
+dans le texte livré). Arbitrage : un caractère, dans un fichier de contenu,
+je l'ai corrigé moi-même dans l'arbre de travail (« se neste »), reconstruit
+l'image et relu la page : elle rend « se neste désormais ». **Le commit qui
+porte cette correction, avec les documents du vérificateur, est le SHA à
+promouvoir** — son seul écart de runtime avec `bc5eca67` est ce caractère
+dans un Markdown rendu par `changelogParser.js`, relu.
+
+### 7.3 Résidus, hors lot (aucun n'arrête)
+
+- **Plein écran de la vue enrichie** (ma sonde, `03-vue-plein-ecran.png`) :
+  aucun chevauchement, mais le dessin reste plafonné à 280 px de haut dans
+  une fenêtre de 900 px et une bande vide d'environ 230 px sépare la légende
+  du nom — le bloc s'étire à la hauteur du plein écran sans que le dessin en
+  profite. Cosmétique ; à prendre au prochain passage sur cette fiche : en
+  plein écran, laisser le SVG occuper la hauteur disponible.
+- **Page projet avec une longue liste de résultats** (ma pile locale, une
+  vingtaine de projets d'essai) : les vignettes de résultats appellent
+  `/api/files/result/svg/…` une par une et la limite anti-répétition répond
+  **429** dès la quinzième — même famille que le piège #43 (budget partagé
+  sur `/api/files`). Antérieur, non visible sur un compte neuf ; à mesurer
+  sur un compte de production chargé avant d'en faire un lot.
+- Les deux désaccords d'hydratation de `/home` (§5.1 R9) restent tels quels.
+
+### 7.4 Décision
+
+**GO, app seule** (aucun diff sous `workers/` ni `public/engine` depuis
+`711f4b44` : benchmarks publics et homelab non concernés). Premier
+déploiement portant **V0.9.0** et la page Nouveautés ; le registre
+`whatsNew.js` porte des dates au 14 et 15/09 — le badge « Nouveau » expirera
+donc dès le 21-22/09, quelques jours seulement après la mise en ligne : **à
+la promotion, l'implémenteur remet les quatre dates à la date du
+déploiement** (c'est la règle du registre : « date de PREMIÈRE mise en
+production »), dans le même commit que la promotion.
