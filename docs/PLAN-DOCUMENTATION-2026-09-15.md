@@ -747,3 +747,24 @@ porte le bon viewBox. Les documents du vérificateur partis en premier
 Rien ne fusionne avant. Après fusion : rapport de l'URL publique et du
 SHA de main du site au vérificateur (contrôle en ligne), D4 sur une
 branche neuve.
+
+### Contrôle de la retouche `77fcbce` (vérificateur, 16/09) — condition 2 levée
+
+Le SVG servi par la prévisualisation porte `viewBox="0 0 660 200"` dans les
+deux langues ; le dessin français rendu et regardé : la légende « trajet de
+coupe — torche compensée, à l'extérieur du contour » est entière. **La
+condition 2 est levée.** Reste la condition 1, la relecture du propriétaire ;
+le GO de fusion suit sa réponse.
+
+### GO de fusion (16/09) — relecture du propriétaire : « la doc me paraît OK »
+
+Les deux conditions sont levées : relecture du propriétaire faite (pages
+espacement et `.job` comprises), légende du dessin contrôlée. **GO de fusion
+de la PR nestorcut-website#14 (`77fcbce`) vers `main`** : publication à
+`nestorcut.com/docs` et `/fr/docs`. Contrôle en ligne par le vérificateur
+après publication : routes des deux langues, recherche, images des deux jeux,
+lien « Docs » du site. Puis D4 (Vos résultats, Confidentialité, Limites et
+questions fréquentes, Nouveautés) sur une branche neuve, même méthode :
+captures par langue, chaque phrase vraie en production, Confidentialité
+strictement alignée sur les promesses privées (piège #35), Nouveautés
+branchée sur `CHANGELOG.md`.
