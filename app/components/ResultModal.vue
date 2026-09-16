@@ -11,7 +11,7 @@
                     :d="bundle"
                     @select="selectAlt"
                 />
-                <HelpDot topic="alternatives" />
+                <HelpDot v-if="(alternatives || []).length >= 2" topic="alternatives" />
             </span>
             <div class="result-space__panes">
                 <ResultViewer

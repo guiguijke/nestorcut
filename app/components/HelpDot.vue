@@ -3,15 +3,19 @@
          exacte, dans la langue de l'utilisateur (repli anglais — le
          helper gère les six codes, seules les langues publiées servent).
          Un VRAI lien (nouvel onglet), pas une infobulle : la réponse est
-         dans la doc, à un clic du geste. -->
+         dans la doc, à un clic du geste.
+         D5-bis : le texte de l'ANCIENNE infobule peut voyager en title
+         (prop hint) — un seul « ? » par bloc, le lien absorbe la bulle ;
+         et la forme est le CARRÉ 4 px de la charte (le rond est pour les
+         avatars). -->
     <a
         v-if="href"
         :href="href"
         target="_blank"
         rel="noopener"
         class="helpdot"
-        :aria-label="t('help.openDoc')"
-        :title="t('help.openDoc')"
+        :aria-label="hint || t('help.openDoc')"
+        :title="hint || t('help.openDoc')"
         data-testid="help-dot"
     >?</a>
 </template>
@@ -23,6 +27,9 @@ import { translate } from '~/utils/i18n'
 
 const props = defineProps({
     topic: { type: String, required: true },
+    // Texte de l'ancienne infobule, quand le lien remplace un « ? » à
+    // bulle : il devient le title du lien.
+    hint: { type: String, default: null },
 })
 
 const { locale } = useLocale()
@@ -38,7 +45,9 @@ const t = (key) => translate(key, locale.value)
     width: 16px;
     height: 16px;
     margin-left: 6px;
-    border-radius: 50%;
+    // D5-bis : 4 px, la règle de la charte — pas le rond (réservé aux
+    // avatars).
+    border-radius: var(--radius);
     border: 1px solid var(--separator-secondary);
     background: none;
     color: var(--label-tertiary);
