@@ -413,3 +413,78 @@ faire — c'est sa voix, pas la mienne ; le pied « V0.9.0 » sur la page
 d'accueil publique (grand pied) affichait déjà la version complète, je
 n'y ai pas touché ; B1 (J11) : le bouton visé par R7 est bien celui du
 layout auth (`app/layouts/auth.vue`), rendu statique sous 480 px.
+
+## 5. Vérification du lot J11-bis (`75758c4d`) — vérificateur, 16/09 — NO-GO étroit, lot J11-ter (un écran)
+
+Rejoué : image `app` reconstruite à HEAD, `npx vitest run` **795 passés,
+code de sortie 0**, `curl` du rendu serveur, sondes au navigateur, et — la
+règle du §4.3 s'applique à moi aussi — **les sept captures committées par
+l'implémenteur relues avec mes yeux**, plus les miennes en français
+(`~/qa-out/verif-j11bis/`).
+
+### 5.1 Neuf points sur dix tiennent, mesurés
+
+| # | Mesure |
+|---|---|
+| R1 | la carte groupée mesure **864 px** de large, nom entier, **quatre vignettes** numérotées avec « votre point », badge « Nouveau », bouton « Masquer les exemplaires » — propre, en FR comme en EN |
+| R2 | page Nouveautés : titre « Nouveautés » et sous-titre en français, **puces entières**, gras et code rendus, plus de Markdown brut |
+| R3 | un badge « Nouveau » visible sur la page projet et sur le bouton « Télécharger le `.job` » ; verrou « toute clé active est montée » présent |
+| R4 | l'en-tête du modal porte **le nom du projet**, le slug technique a rejoint « Détails techniques » |
+| R5 | pied de page de l'application : « © 2026 NestorCut · V0.9.0 » |
+| R6 | en-tête et barre de résumé : « 1 fichier déposé », plus de « 4 fichiers » |
+| R7 | à 390 px, le bouton « Support » est en position statique au-dessus du pied de page, **aucun contrôle sous lui** (mon premier essai l'avait raté : contexte sans session, page de connexion — erreur de sonde, corrigée) |
+| R8 | « téléchargée » et « nesté » ont disparu — **mais « se nest désormais » reste** : ce n'est pas du français, il faut « se neste » |
+| R9 | **le serveur honore enfin le cookie** : `Cookie: locale=fr` ⇒ « Créez votre compte », `en` ou rien ⇒ « Create your account ». Le désaccord de LANGUE est mort. Il reste **deux désaccords d'hydratation antérieurs sur `/home` seulement**, mesurés par diff serveur/client : (a) le salut du matin est calculé côté serveur **en heure UTC** (« Bonne nuit ») et côté client en heure locale (« Bonjour ») ; (b) la ligne de marque « NestorCut — State-of-the-art nesting… » n'est rendue que par le client. Aucun des deux n'est de J11 ; petits, à traiter avec le prochain lot qui touche `/home` |
+
+### 5.2 Le dixième ne tient pas — vu, pas déduit
+
+**R10, la vue agrandie d'une fiche `.job`, est cassée à l'écran** (capture
+`07-vue-enrichie-fr.png`, et la capture `02-fiche-enrichie.png` de
+l'implémenteur montre EXACTEMENT la même chose — elle a été committée comme
+preuve sans qu'un œil s'y soit posé, ce que le rapport dit honnêtement) :
+
+- les trois lignes de légende (« contour de coupe — trajet d'amorce »,
+  « position tangente possible (zone) », « point de perçage ») sont
+  **imprimées par-dessus** le nom du dessin et entrelacées avec la phrase
+  « Géométrie lue dans le fichier de travail… » — du texte sur du texte ;
+- le badge « Nouveau » y est rendu en **barre bleue pleine largeur** sous le
+  dessin, pas en badge ;
+- et surtout **le dessin ne montre rien de ce que la légende annonce** : un
+  L à fond bleu et contour bleu, **aucun trajet d'amorce, aucun point de
+  perçage, aucune zone tangente** — sur un exemplaire dont le point a été
+  placé à la main. La vue « enrichie » n'est pas enrichie.
+
+Ma propre sonde géométrique disait « aucun chevauchement » : elle ne
+regardait pas les bons nœuds. **L'image avait raison, la sonde tort** —
+c'est précisément pourquoi la règle exige des yeux, y compris les miens.
+
+### 5.3 Décision
+
+**NO-GO, étroit.** Tout le reste est bon et je ne le referai pas vérifier.
+Mais on ne met pas en production une vue qui imprime du texte sur du texte
+et promet une légende que le dessin ne tient pas — l'ancienne vue agrandie,
+sobre, valait mieux que celle-ci.
+
+**Lot J11-ter — un écran, deux issues possibles, au choix de l'implémenteur :**
+
+1. **Réparer** : la légende sous le dessin, dans son propre bloc, sans
+   chevauchement à 1440 comme à 390 px ; le badge « Nouveau » redevient un
+   badge ; et le dessin AFFICHE réellement le trajet d'amorce, le disque de
+   perçage et, pour une amorce tangentielle, la zone — les mêmes formes que
+   la vignette de la carte, à taille lisible. Verrou : capture FR de la vue
+   pour un exemplaire « votre point », **regardée**, jointe au rapport, et
+   un verrou géométrique qui compte les tracés d'amorce dans le SVG de la
+   vue (> 0 quand la fiche porte des points).
+2. **Ou revenir** à la vue agrandie précédente (géométrie seule, propre)
+   pour les fiches `.job`, retirer la légende et le badge de cet écran, et
+   sortir `lead-enlarged-view` du registre des nouveautés. La vue enrichie
+   reviendra quand elle sera prête.
+
+Dans les deux cas : « se nest » ⇒ « se neste ». Rien d'autre dans ce lot.
+
+**Sur la méthode, une fois posée** : l'implémenteur a dit clairement qu'il
+n'avait pas de vision d'image cette session, et a décrit ses trois sondes
+au lieu de prétendre. C'est exactement l'honnêteté demandée, et elle a
+permis de savoir quoi regarder. La règle devient donc : **quand
+l'implémenteur ne peut pas regarder, il le dit et le vérificateur regarde
+avant tout le reste** — ce qui s'est passé ici.
