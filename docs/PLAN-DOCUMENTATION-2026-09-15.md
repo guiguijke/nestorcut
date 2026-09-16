@@ -828,3 +828,12 @@ persiste rien dans ce bac) — la page Limites décrit les DEUX chemins
 
 **Suite** : vérification D4, relecture propriétaire, GO, fusion ; D5
 (les liens « ? » depuis l'application vers les ancres de doc) ensuite.
+
+### Contrôle en ligne de la publication (vérificateur, 16/09) — conforme
+
+`nestorcut.com/docs/` et `/fr/docs/` en 200 ; le menu publié en français est
+celui prouvé dans le build (Démarrer en lien, trois groupes, ordre de
+lecture) ; images du jeu français servies, recherche Pagefind servie, lien
+« Docs » dans l'en-tête du site ; les pages de D4 (`/fr/docs/results/`,
+`/fr/docs/privacy/`) répondent 404 comme attendu : D4 est en PR #15, à
+vérifier au prochain tour.

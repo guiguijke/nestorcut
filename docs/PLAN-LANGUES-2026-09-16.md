@@ -21,10 +21,38 @@ conversion — la langue est le levier de conversion, pas de visibilité.
   densité matière…) validé par un locuteur natif du métier — un traducteur
   généraliste écrit « machine d'essorage ». Le glossaire vit dans
   `specs/i18n/glossaire-<langue>.md` (privé) et l'implémenteur s'y tient.
-- **L'implémenteur rédige, un natif relit** avant publication : le
-  propriétaire trouve un relecteur par langue (client, confrère, forum) ;
-  sans relecteur, la langue attend. Le vérificateur ne juge pas la langue,
-  il juge la complétude, la parité des clés et les captures.
+  **Amorce des glossaires (vérificateur, 16/09)**, à compléter avant L1 :
+
+  | FR | pt-BR | it | de | es |
+  |---|---|---|---|---|
+  | tôle | chapa | lamiera | Blech (Blechtafel) | chapa |
+  | saignée (kerf) | largura de corte (kerf) | larghezza di taglio (kerf) | Schnittspalt (Kerf) | sangría de corte (kerf) |
+  | amorce d'entrée / de sortie | entrada / saída de corte (lead-in/out) | attacco / uscita di taglio (lead-in/out) | Anschnitt / Ausfahrt (Lead-in/out) | entrada / salida de corte (lead-in/out) |
+  | point de perçage | ponto de perfuração | punto di sfondamento | Einstichpunkt | punto de perforación |
+  | imbrication / nesting | nesting (aninhamento) | nesting | Nesting (Verschachtelung) | anidado (nesting) |
+  | chute réutilisable | retalho aproveitável | ritaglio riutilizzabile | Restblech (nutzbar) | retal aprovechable (Espagne) / retazo (Am. latine) |
+  | espacement entre pièces | espaçamento entre peças | distanza tra i pezzi | Teileabstand | separación entre piezas |
+  | éclater (en pièces) | separar em peças | separa in pezzi | in Einzelteile zerlegen | separar en piezas |
+  | bloc rigide | bloco rígido | blocco rigido | starrer Block | bloque rígido |
+  | densité matière | aproveitamento de material | utilizzo del materiale | Materialausnutzung | aprovechamiento de material |
+  | sens d'optimisation (bord gauche…) | direção de otimização (borda esquerda…) | direzione di ottimizzazione (bordo sinistro…) | Optimierungsrichtung (linke Kante…) | dirección de optimización (borde izquierdo…) |
+
+  Termes gardés tels quels partout : DXF, SVG, DWG, SheetCam, `.job`,
+  kerf entre parenthèses la première fois.
+- **L'implémenteur rédige, le vérificateur relit la langue** (décision du
+  propriétaire, 16/09 : « je compte sur toi pour le double check sur les
+  langues »). La relecture du vérificateur couvre **100 % des chaînes de
+  l'application, 100 % des pages de la documentation et du site, et les
+  captures** : conformité au glossaire, faux amis et calques de l'anglais ou
+  du français, registre d'atelier (tutoiement/vouvoiement cohérent, verbes
+  du métier), pluriels et variables (`{n}`), longueurs qui cassent l'écran,
+  formats de nombres. Elle est écrite constat par constat dans le rapport
+  de vérification, avec la correction proposée. Un relecteur natif du métier
+  reste un plus si le propriétaire en trouve un (surtout pour l'argot
+  régional : `retal` en Espagne, `retazo` en Amérique latine) ; il n'est
+  plus une condition de publication. Ce que le vérificateur ne garantit
+  pas : l'idiome d'un atelier précis d'une région précise — c'est dit dans
+  chaque rapport.
 - **Ordre de livraison** : portugais du Brésil (la seule langue qui a déjà
   fait ses preuves dans les chiffres), puis italien, allemand, espagnol.
   Le propriétaire peut changer l'ordre ; il ne change pas la règle « complète
@@ -75,10 +103,12 @@ Chaque lot, dans cet ordre :
 3. site vitrine (accueil, tarifs, FAQ, en-tête, pied ; pas le blog) ;
 4. documentation (toutes les sections publiées à ce moment-là, captures
    par le harnais dans la langue) ;
-5. relecture native de bout en bout, corrections ;
-6. vérification (parité, complétude, captures regardées, rendu serveur
-   dans la langue, formats de nombres), GO, publication **app + site +
-   doc ensemble**, entrée CHANGELOG « NestorCut parle portugais ».
+5. relecture native de bout en bout si un relecteur existe, corrections ;
+6. vérification : **relecture linguistique complète par le vérificateur**
+   (chaînes, pages, captures — constat par constat), parité, complétude,
+   rendu serveur dans la langue, formats de nombres ; GO, publication
+   **app + site + doc ensemble**, entrée CHANGELOG « NestorCut parle
+   portugais ».
 
 Estimation honnête : L0 est un lot d'application ; chaque langue est
 ensuite un lot de rédaction dont la durée dépend surtout du relecteur.
@@ -160,3 +190,45 @@ reconstruite, sonde du menu au navigateur.
 hreflang, sitemap) et DOC (locale Starlight par langue, harnais par
 liste de langues) se livrent avec L1 — la première langue, quand D4
 est publiée et le glossaire validé par le relecteur natif.
+
+## Vérification du lot L0 (vérificateur, 16/09) — GO, avec un L0-bis de trois lignes avant L1
+
+Rejoué sur l'image `app` reconstruite à `0330795b` : `npx vitest run`
+**801 passés, code de sortie 0** (les cinq verrous de parité compris) ;
+**comparaison valeur par valeur** de l'ancien `i18n.js` (via son `translate`)
+et des nouveaux `en.js` / `fr.js` : **1 492 valeurs identiques, 0 différence,
+744 clés anciennes, 0 perdue** — le découpage est sans perte ; rendu serveur
+aux six cas (`curl` sur `/auth/local`) : rien ⇒ anglais, `Accept-Language:
+fr` ⇒ français, `pt-BR` ⇒ anglais (non livrée), `pt-BR, fr;q=0.5` ⇒ français
+(l'ordre de préférence est honoré), cookie `en` + `Accept-Language: fr` ⇒
+anglais (le cookie prime), cookie `fr` ⇒ français ; **le menu de langues
+sondé et regardé** dans les deux langues : noms natifs, coche sur la
+courante, Échap le ferme, le choix bascule la page et écrit le cookie, le
+rechargement garde le choix ; le harnais du flux `.job` français
+(`qa-job-leadview.mjs`) **12/12, GO**. Le verrou de parité est bien écrit :
+clés dans les deux sens, valeurs vides, copies de l'anglais hors liste
+blanche, repli sans clé brute.
+
+### Trois résidus — lot L0-bis, avant L1
+
+1. **`<html lang>` ne suit pas la langue.** Il est figé à `fr` dans
+   `nuxt.config.js` : dans le navigateur, `document.documentElement.lang`
+   vaut `fr` sur une page entièrement anglaise (mesuré dans les deux
+   contextes). Antérieur à L0, mais c'est le socle des langues qui doit le
+   porter : l'attribut suit la locale (`useHead` réactif dans `app.vue`),
+   d'autant que Google lit cet attribut sur les pages publiques.
+2. **`server/api/locale.get.js` est mort** (plus aucun appelant) : le retirer.
+3. **Le salut de `/home` calcule l'heure côté serveur en UTC**
+   (`home.vue:105`, `new Date().getHours()`) : à midi à Paris le serveur dit
+   « Good morning » et le client « Good afternoon » — « Hydration completed
+   but contains mismatches » mesuré en contexte anglais, silencieux en
+   français parce que « Bonjour » couvre les deux. Antérieur, nommé trois
+   fois : le salut se calcule après montage (client seul) — deux lignes.
+
+### Décision
+
+**GO L0.** L0-bis est un lot de quelques lignes, à livrer avant L1 ; L0 +
+L0-bis se déploient ensemble, app seule, avec une entrée de changelog
+(« la langue de votre navigateur est reconnue au premier passage ; un menu
+de langues remplace le bouton »). Rien d'autre ne change : L1 portugais
+attend D4 publié, le glossaire validé et un relecteur natif.
