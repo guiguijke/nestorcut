@@ -1148,3 +1148,16 @@ posée), `pull app` + `up -d app`, puis **régénération de la page Nouveautés
 du site** (AGENTS §6, elle portera V0.9.2) et son commit ; rapport du SHA et
 du digest pour le contrôle habituel. **La documentation est alors reliée à
 l'application dans les deux sens.** Ensuite : L1 portugais.
+
+### Contrôle du déploiement D5 (`12e3466e`, V0.9.2) et de la page Nouveautés (vérificateur, 16/09) — conforme
+
+Lecture seule : commit de fusion portant D5 + D5-bis + documents du
+vérificateur, dates de `whatsNew.js` au 2026-09-16, aucun diff sous
+`workers/` ni `public/engine` depuis `949f4f5e` ; registre : `:latest` et
+`:12e3466e…` au **même digest** `sha256:8e81ecac…f05a6`, celui rapporté pour
+le conteneur ; production : page au SHA complet, en-tête « V0.9 », pied
+« V0.9.2 », Nouveautés « Version actuelle : V0.9.2 » avec l'entrée du « ? » ;
+site `main` à `0112a64`, page Nouveautés publiée **V0.9.2 › V0.9.1 › V0.9**
+en français et en anglais. **Prod = V0.9.2. Chantier documentation clos :
+huit sections publiées dans deux langues, reliées à l'application depuis
+chaque réglage et le résultat.** Signal donné pour L1 portugais.
