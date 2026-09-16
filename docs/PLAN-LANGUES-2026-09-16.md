@@ -263,3 +263,60 @@ V0.9.1). Le verrou du parseur s'ajuste : une entrée de CORRECTIF peut
 n'avoir qu'une puce — la taille pleine (≥ 4) reste exigée d'au moins
 une version. **Vitest 801/801, exit 0.** L0 et L0-bis se déploient
 ensemble, app seule, whatsNew daté au déploiement (leçon J11-bis).
+
+## Vérification du lot L0-bis (vérificateur, 16/09) — GO, déploiement L0 + L0-bis autorisé
+
+Rejoué sur l'image `app` reconstruite à `c7737bc1` : vitest **801, code 0** ;
+`<html lang>` servi : rien ⇒ `en`, cookie `en` ⇒ `en`, cookie `fr` ⇒ `fr`,
+`Accept-Language: fr` ⇒ `fr` ; `/api/locale` ⇒ **404** ; `/home` en anglais
+et en français : **aucun avertissement d'hydratation**, salut « Good
+afternoon » / « Bon après-midi » à l'heure locale, attribut de langue juste
+dans le navigateur, pied de page **V0.9.1** ; page Nouveautés : « Version
+actuelle : V0.9.1 », entrée « menu de langues » rendue.
+
+**Déploiement** : app seule, `promote-latest` sur le SHA du commit de
+promotion, dates de `whatsNew.js` à la date du déploiement dans ce commit,
+`pull app` + `up -d app`, contrôle habituel. **Et une étape nouvelle, à
+inscrire dans la checklist de déploiement (`AGENTS.md` §6)** : après chaque
+promotion de l'application, relancer `scripts/sync-changelog.mjs` dans le
+dépôt du site et committer la page Nouveautés régénérée — sinon
+`nestorcut.com/docs/whats-new` reste à la version précédente (elle est
+générée à la main, Cloudflare ne voit pas le dépôt de l'application).
+Amélioration à envisager plus tard : le build du site lit `CHANGELOG.md`
+depuis GitHub au lieu du dépôt frère.
+
+## Validation des glossaires (vérificateur, 16/09) — le double check linguistique
+
+Les quatre fichiers `specs/i18n/glossaire-*.md` lus en entier. La base est
+bonne ; corrections à appliquer avant la première chaîne :
+
+**Décisions sur les deux points ouverts**
+
+- **« retal » / « retazo »** : ni l'un ni l'autre dans l'interface.
+  **« sobrante aprovechable »**, compris en Espagne comme en Amérique
+  latine ; « retal » cité entre parenthèses à la première occurrence dans
+  la documentation. Le badge court : « aprovechable ».
+- **« rognure »** : le mot n'existe pas dans l'application. Le libellé réel
+  d'une chute de moins de 100 mm est **« ferraille »** (`report.offcut.scrap`,
+  EN « scrap »). La ligne 18 des quatre glossaires devient « ferraille
+  (chute < 100 mm) » : pt-BR **sucata**, it **sfrido**, de **Schrott**,
+  es **chatarra**.
+
+**Corrections terme par terme**
+
+| Langue | Ligne | Proposé | Retenu | Pourquoi |
+|---|---|---|---|---|
+| pt-BR | 21 | passo de ângulo | **passo angular** | tournure du métier |
+| pt-BR, it, es | 27 | observação / osservazione / observación | **aviso / avviso / aviso** | un constat d'import est un avertissement, pas une remarque |
+| it | 3 | attacco / uscita di taglio | **entrata / uscita di taglio** | paire symétrique, celle des CAM italiennes |
+| it | 14 | foro / intaglio interno | **foro / ritaglio interno** | « intaglio » est la gravure |
+| it | 16, 29 | nastro | **striscia** (modalità striscia, densità della striscia) | « nastro » est un ruban |
+| de | 3 | Anschnitt / Ausfahrt | **Einfahrt / Ausfahrt** | paire symétrique ; à confirmer par un natif si disponible |
+| de | 20 | Rotationen | **Drehungen** | mot courant ; « Winkelschritt » reste |
+| de | 33 | Schneidbrenner | **Brenner (Plasmabrenner)** | le mot d'atelier |
+| es | 21 | paso de ángulo | **paso angular** | |
+| es | 25 | carga (de archivos) | **subida (de archivos)** / verbe « subir » | Espagne d'abord, compris partout |
+
+Tout le reste est validé tel quel. Réserve dite : l'idiome d'un atelier
+précis d'une région précise n'est pas garanti ; les glossaires restent
+ouverts aux retours des premiers utilisateurs de chaque langue.

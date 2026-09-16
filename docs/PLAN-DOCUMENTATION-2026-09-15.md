@@ -837,3 +837,78 @@ lecture) ; images du jeu français servies, recherche Pagefind servie, lien
 « Docs » dans l'en-tête du site ; les pages de D4 (`/fr/docs/results/`,
 `/fr/docs/privacy/`) répondent 404 comme attendu : D4 est en PR #15, à
 vérifier au prochain tour.
+
+## Vérification du lot D4 (vérificateur, 16/09) — contenu juste sur l'essentiel, neuf corrections avant fusion (D4-bis)
+
+Rejoué : `77d71d8` (PR #15) dans un arbre séparé, `astro build` **code 0,
+63 pages**, `check:links` **code 0** ; les dix routes nouvelles de la
+prévisualisation en 200 ; **19 images par langue, 38 référencées** ; les
+dix pages lues en entier dans les deux langues ; **la page Confidentialité
+confrontée ligne à ligne aux promesses privées** ; les captures nouvelles
+regardées (Nouveautés, téléchargements, rapport, dans les deux langues :
+langue juste, cadrage juste).
+
+### Ce qui tient
+
+**Confidentialité : rien n'est promis au-delà du vrai.** Les trois modes
+sont décrits dans les termes autorisés — géométrie et noms de fichiers
+jamais envoyés en mode appareil, « pas du hors-ligne », « pas
+multi-appareils », le poste déverrouillé ; en clair 24 h sans coffre,
+scalaires conservés, « expiré » ; coffre chiffré à l'écriture, illisible au
+repos, session d'environ deux heures, optionnel sur tous les plans ; DWG
+côté serveurs. **Aucune des formulations interdites n'y figure.** Le rapport
+(densité mesurée trous déduits, plus grand rectangle vide garanti, « au
+moins », seuil de 100 mm), les téléchargements (CSV verrouillé en gratuit,
+un `.job` par tôle, « tout télécharger »), la vue DXF, la page Nouveautés
+générée du changelog (identique à celle de l'application, regardée) :
+vrais.
+
+### Neuf corrections — mesurées dans l'application
+
+1. **« rognure »** (Vos résultats) : le libellé réel d'une chute de moins
+   de 100 mm est **« ferraille »** (EN « scrap »). Écrire le vrai mot.
+2. **« l'onglet de chaque proposition porte son sens »** : les onglets
+   disent « Option 1 », « Option 2 »… ; le sens est dans l'en-tête de la
+   proposition affichée (« ↑ −X · … »). Décrire cela.
+3. **« Les totaux du chantier somment en bas »** : ils sont **au-dessus**
+   du tableau (« 8 480 mm² de pièces · 1,99 m² libres », « Matière à
+   prévoir »). Retirer « en bas ».
+4. **« Sur Cet appareil, la limite est votre navigateur »** (Limites) :
+   faux — la limite de **5 Mo par fichier s'applique dans les deux modes**
+   (`localImport.js` la vérifie, la carte de dépôt l'affiche en mode
+   appareil).
+5. **« acceptez que cette pièce ne se pose pas »** (pièce plus fine que
+   l'espacement) : ce n'est pas ce qui se passe. Le résultat porte un
+   bandeau **« Ne tient pas — non découpable »** avec deux actions :
+   ajouter une tôle, ou réduire l'espacement. Décrire l'écran.
+6. **« un clic, et le fichier part à l'équipe avec son contexte »**
+   (Signaler un problème) : **faux**. Le bouton ouvre la page de création
+   d'un ticket GitHub, dans un nouvel onglet ; rien n'est envoyé, aucun
+   fichier, aucun contexte. Écrire : « le bouton ouvre un formulaire de
+   signalement ; joignez-y le fichier ou écrivez-nous ». Et remarque
+   produit au propriétaire : envoyer un atelier sur GitHub pour signaler
+   un DXF n'est pas un geste d'atelier — un mail à `support@nestorcut.com`
+   avec le fichier ferait mieux (hors lot).
+7. **Confidentialité, paragraphe « Ce que nous ne dirons pas »** : la
+   tournure « la réponse est non / la réponse est oui » oblige le lecteur
+   à inverser la question. Dire simplement : « Sans coffre, pendant ces
+   24 heures, nous pouvons techniquement lire vos fichiers. Avec le coffre,
+   au repos, personne ne le peut, nous compris ; pendant votre session
+   déverrouillée, la machine qui calcule les voit en mémoire. »
+8. **Confidentialité, coffre** : ajouter la promesse autorisée et
+   indispensable : **« Si vous perdez votre fichier-clé, vos données sont
+   perdues — nous ne pouvons pas les récupérer. »**
+9. **Menu** : « Confidentialité », « Limites et questions fréquentes » et
+   « Nouveautés » sont des groupes à une seule page, le mot deux fois —
+   le défaut de D2. Ces trois entrées deviennent des **liens simples**,
+   comme « Démarrer ».
+
+Et une retouche : « rendu page par page » (vue DXF) ⇒ « tôle par tôle ».
+
+### Décision
+
+**Fusion : après D4-bis** (les neuf corrections dans les deux langues, un
+commit sur la même branche, régénération de la page Nouveautés incluse si
+V0.9.1 est en production à ce moment-là), **puis relecture du propriétaire
+de la page Confidentialité** (c'est la page qui engage), puis GO et fusion.
+D5 (les liens « ? » depuis l'application) suit.
