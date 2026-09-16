@@ -302,3 +302,99 @@ captures d'élément, aucune image orpheline), la structure du menu par
 section. Puis **relecture du propriétaire sur la page FR de la
 prévisualisation** — c'est la porte prévue au plan — et GO. D1-bis est absorbé dans D2 ; la première publication attend les
 sections 1 à 4 (voir la remarque du propriétaire ci-dessus).
+
+## Rapport du lot D2 (implémenteur, 16/09) — absorbe D1-bis
+
+Toujours la PR nestorcut-website#14 (branche `d1-docs`, commit `3b6948e`) ;
+rien ne fusionne avant le GO, la prévisualisation reste le lieu de
+relecture. Le commit `308eb08` (bleu) n'est PAS dans la PR — il est déjà
+sur `main` du site (tête de branche publique au moment de la vérification) ;
+la décision de le garder appartient au propriétaire, la PR de doc ne
+transporte que de la documentation.
+
+**Les cinq corrections + la tension (vérification D1, §« contenu »).**
+Les deux pages « Démarrer » disent maintenant : « le **moteur** cherche
+le meilleur rangement » (fin de la machine d'essorage) ; « Tout **peut**
+se passer dans votre navigateur » ; la VÉRITÉ du calcul — en gratuit,
+le calcul se fait dans votre navigateur dans les deux modes, plafonné à
+2 tôles par tâche, le calcul sur nos machines vient avec les plans
+payants, « Nos serveurs » apporte le DWG et les projets sur tous vos
+appareils ; le `.job` déposé en mode serveurs fait basculer le projet
+sur l'appareil (vérifié dans `home.vue` : `privacyChoice = 'device'`,
+information affichée) ; les badges cités entre guillemets avec leurs
+libellés exacts — « Sans recouvrement », « Dans la tôle », « Écart ≥
+4 mm », et « Non vérifié » au-delà de 5 000 pièces par tôle (libellés
+contrôlés dans `i18n.js`) ; les propositions « une par sens
+d'optimisation, la meilleure en tête ».
+
+**Le menu par section.** Un dossier et un groupe PAR SECTION, dès
+maintenant : `docs/` (Démarrer) et `docs/files/` (Vos fichiers), URL
+`/docs/…` et `/fr/docs/…`. Vérifié dans le build : le groupe Démarrer
+ne descend PAS dans les sous-dossiers (autogenerate sans récursion),
+« Your files »/« Vos fichiers » rend dans les deux langues. D3 ajoutera
+`docs/interface/` et `docs/nesting/` par un dossier et un groupe de plus.
+
+**La section « Vos fichiers » complète (§2.3), EN + FR, cinq pages.**
+L'index (tableau des formats par mode, les deux règles DWG/`.job`), DXF
+(unités lues, blocs résolus, multi-pièces, bloc rigide par défaut et
+« Éclater » irréversible, l'encre qui suit le métal, contour ouvert
+nommé), SVG (le pixel à 96 dpi, viewBox et transformations, repère
+retourné, outil Échelle), DWG (refus nommé côté appareil, conversion
+libre côté serveurs, R2013+ expérimental dit au dépôt), et la page
+`.job` — la demande d'origine : ce qui est lu (tôle, kerf → espacement
+prérempli 2 × saignée + sécurité, quantités, contours du cache, points
+de départ y compris déplacés à la main), ce qui est rendu (un `.job`
+par tôle, points déplacés conservés à l'octet), pourquoi un dessin
+présent quatre fois donne quatre pièces libres (SheetCam traite déjà
+ainsi : une fiche par section originale), et ce qui n'est pas encore lu
+NOMMÉ (keepout, outils multiples, opérations multiples, mode serveurs).
+
+**Le harnais réécrit selon les trois règles du vérificateur.**
+1. **Compte neuf** : créé à chaque exécution par
+   `/api/auth/local/register` (`docs-captures-<horodatage>@local.dev`),
+   jamais le compte de développement — sonde « pas le compte de
+   développement » verte.
+2. **Captures d'élément cadrées sur la légende** : le bloc
+   « Nouvelle imbrication » (titre + cartes des deux modes), la carte de
+   dépôt seule, l'atelier (tôle + réglages), les fiches DXF/SVG/.job
+   (la carte groupée ×4 AVEC les marques « votre point »), la vue
+   agrandie avec ses amorces comptées dans le SVG (> 0, verrou J11-ter
+   repassé au passage), le refus DWG nommé.
+3. **Zéro orpheline** : verrou de fin de harnais — chaque image de
+   `public/docs-img/` doit être référencée par une page (sinon retirée
+   en le disant), chaque image référencée doit exister ; l'ancienne
+   `demarrer-accueil.png` (non référencée, 339 Ko publiés pour rien) a
+   été retirée par le harnais lui-même.
+   **GO, exit 0, 12 sondes vertes.**
+
+**Pièce d'ingénierie du harnais, dite** : la carte groupée exige un
+`.job` à quatre sections originales du même dessin — le dépôt n'a pas
+de fixture neutre (x4-reference porte deux dessins DIFFÉRENTS, le
+fichier à quatre originales du même dessin est privé). Le harnais en
+SYNTHÉTISE un depuis la pièce L : le bloc binaire de son unique dessin
+est dupliqué quatre fois (les blocs s'ouvrent sur le tag 0x0025, se
+relaient de longueur en longueur — flux auto-vérifié tombant pile au
+bout), la section texte `[Part 0]` est recopiée en Part 1/2/3 à des
+positions distinctes, et le drapeau « point déplacé » (0x001d) est posé
+— la capture doit montrer la marque « votre point ». Le fichier
+synthétique est RE-LU par nos propres décodeurs avant usage (4
+originales, 4 blocs, sinon le harnais refuse) ; il vit dans `.qa-pw/`,
+n'est jamais committé, et la capture ne montre que le nom du dessin de
+la fixture.
+
+**Chiffres** : `astro build` **exit 0, 39 pages** ; `check:links`
+**OK** (39 pages HTML + sitemap, aucun lien cassé) ; routes vérifiées
+`/docs/files/…` et `/fr/docs/files/…` ; `<html lang>` correct dans les
+deux langues ; les 8 captures référencées par leurs pages.
+
+**Captures, lues par sondes** (méthode inchangée, dite) : dimensions
+élément (1728×866 le bloc création, 564×334 les fiches, 1728×402 la
+carte groupée), texte rendu vérifié à la prise (les deux modes en
+français, la marque « votre point », le message de refus DWG complet,
+les amorces comptées dans le SVG de la vue agrandie).
+
+**Non-dits** : les sections Interface et Nesting (D3) suivent sur la
+même branche — la première publication attend les sections 1 à 4 ; la
+page Nouveautés (D4) branchera `CHANGELOG.md` ; relecture propriétaire
+de la page FR `.job` particulièrement attendue (c'est sa demande
+d'origine qui a ouvert ce chantier).
