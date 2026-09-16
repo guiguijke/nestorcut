@@ -1123,3 +1123,28 @@ guide au bon endroit, dans votre langue) et version 0.9.2 ; les dates
 whatsNew, déjà au 2026-09-16, seront revérifiées au jour du
 déploiement. **Vitest 805/805 exit 0.** Les trois documents du
 véificateur modifiés dans l'arbre partent avec ce commit, comme posé.
+
+## Vérification du lot D5-bis (vérificateur, 16/09) — GO, déploiement app seule (V0.9.2)
+
+Rejoué sur l'image `app` reconstruite à `7e84eedf` : vitest **805, code 0** ;
+**les captures de l'implémenteur regardées** (`docs/qa/d5bis/`) et mes sondes
+dans les deux langues : le bloc du sens rend **exactement un** « ? », un
+lien, dont le `title` est le texte de l'ancienne infobulle ; les cinq « ? »
+des réglages ont un rayon de **4 px** ; au résultat à une seule proposition,
+**zéro** lien « alternatives » — les trois autres (chute, badges,
+téléchargements) restent, à l'ancre exacte de leur langue ; aucune erreur de
+page. Les trois retouches sont faites.
+
+Résidu d'accessibilité, hors lot : quand un `hint` est fourni, l'`aria-label`
+du lien devient le long texte de la bulle au lieu de « Ouvrir le guide » ;
+`aria-label` fixe + `title` = bulle serait plus juste. Deux lignes, au
+prochain lot qui touche `HelpDot.vue`.
+
+### Décision
+
+**GO D5-bis.** Déploiement app seule : promotion du SHA du commit de
+promotion (dates de `whatsNew.js` revérifiées au jour J, entrée V0.9.2 déjà
+posée), `pull app` + `up -d app`, puis **régénération de la page Nouveautés
+du site** (AGENTS §6, elle portera V0.9.2) et son commit ; rapport du SHA et
+du digest pour le contrôle habituel. **La documentation est alors reliée à
+l'application dans les deux sens.** Ensuite : L1 portugais.
