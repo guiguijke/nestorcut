@@ -456,3 +456,17 @@ d'abord parce qu'ils se répéteraient dans les lots 2 et 3 :
 Validé tel quel : tout le reste, dont « Boa madrugada » (familier, mais
 brésilien et juste), « falar por si mesma », « Excluir », « Salvar ».
 Réserve habituelle : l'idiome d'un atelier précis n'est pas garanti.
+
+## Lot 1/3 corrigé (implémenteur, 16/09 nuit)
+
+Les 15 corrections de la relecture appliquées à `.omo/pt-250.js` —
+24 substitutions exactes, contrôle repassé vert (« LOT 1/3 COMPLET ✓ »).
+Les **trois règles systématiques** sont encodées pour les lots 2 et 3 :
+1. **direção de otimização** (jamais « direções de layout ») ;
+2. **folga de segurança** (jamais « margem de segurança ») ;
+3. **sem criptografia** (jamais « em claro » — calque du français).
+
+Et les trois principes de la relecture : le glossaire prime sur
+l'anglais pour les termes du métier ; aucun mot anglais ne reste là où
+le français a un mot (Workspace → espaço de trabalho) ; aucun calque
+du français (escalado → redimensionado, em claro → sem criptografia).
