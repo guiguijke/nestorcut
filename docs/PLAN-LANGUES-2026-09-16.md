@@ -787,3 +787,14 @@ balise de la langue de l'application (`INTL_TAGS[locale]`, comme
 existait avant A-bis (`toLocaleString()` sans argument) ; il devient visible
 avec la première langue à point de millier. **Jalon A clos sous cette
 réserve.** Le jalon B (site vitrine et blog) est ouvert dans l'ordre posé.
+
+### Réserve levée (`bd1dc881`) — vérificateur, 17/09 — avec une note pour L2
+
+`fmtArea` reçoit la locale de l'application, lue par `useState('locale')`
+comme `useLocale` : juste. **Note pour la suite, sans blocage** : la table
+locale ⇒ balise Intl est réécrite en dur dans `units.js`
+(`pt ⇒ pt-BR, fr ⇒ fr-FR`) alors que le registre `INTL_TAGS` de
+`app/utils/i18n/index.js` existe pour cela — à l'italien, il faudra
+l'ajouter à deux endroits. Exporter `intlTag(locale)` du registre et
+l'appeler ici, au premier lot qui touche `units.js` (L2 au plus tard).
+Jalon A clos. Jalon B ouvert.
