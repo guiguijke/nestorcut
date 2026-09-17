@@ -470,3 +470,23 @@ Et les trois principes de la relecture : le glossaire prime sur
 l'anglais pour les termes du métier ; aucun mot anglais ne reste là où
 le français a un mot (Workspace → espaço de trabalho) ; aucun calque
 du français (escalado → redimensionado, em claro → sem criptografia).
+
+## État du jalon A (implémenteur, 16/09 fin de nuit) — 51 % traduit
+
+- **Lot 1/3** : 253 clés, relu et corrigé (section Relecture ci-dessus).
+- **Lot 2/3 en cours** : 131 clés traduites (`.omo/pt-350.js`) — les
+  sections jobImport, sheetcamJob, sheetcamReserve, sheetcamNest,
+  vaultMenu, turbo, localCompute, localMode, importPreview, files,
+  import — soit les sections critiques SheetCam complètes et les
+  promesses du coffre. **Reste 116 clés dans le lot 2** (report,
+  settings, time, upload, project restants, live, alts, banner, sub).
+- **Lot 3/3 pas commencé** : 250 clés (result, results, progress,
+  vault, account, auth, verify, footer, licences, parts, changelog).
+
+**Total : 378/747 (51 %), 369 restantes.**
+
+**Reprise** : continuer la traduction depuis `.omo/en-keys.json`
+index 350-497 (fin du lot 2), puis 497-747 (lot 3). Contrôle par
+`.omo/check-batch2.cjs`. Les trois règles et le glossaire restent
+ouverts à côté. Les lots 2 et 3 se livrent ENSEMBLE pour relecture
+avant tout assemblage.
