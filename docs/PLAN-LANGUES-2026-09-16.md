@@ -816,3 +816,39 @@ dans `config.ts`. Branche `l1-pt-site` (`ed9fce8`).
 **Réserve du jalon A levée** au passage (`bd1dc881` sur l1-portugues) :
 fmtArea reçoit la balise de langue de l'APP (useState), pas celle du
 système. Note consignée : la table locale→Intl doit venir du registre.
+
+## Contrôle du préalable hreflang du jalon B (`ed9fce8`, site) — vérificateur, 17/09 — NON CONFORME, à refaire avant tout article
+
+Rejoué dans un arbre séparé : `astro build` code 0, **`check:links` code 1,
+26 liens cassés** — le vérificateur de liens du site couvre déjà les cibles
+`hreflang` (c'est bien), et il dit exactement le problème : chaque page émet
+maintenant `hreflang="pt"` vers une URL `/pt/…` **qui n'existe pas** (aucune
+page portugaise n'est encore bâtie). Et sur un article, la cible portugaise
+reprend le **slug anglais ou français** (`/pt/blog/deepnest-alternative/`
+depuis la page FR, `/pt/blog/alternative-deepnest/` depuis la page EN) parce
+que `altPath` ne connaît que la paire EN/FR. Publié tel quel, c'est l'inverse
+du but : des centaines d'alternates vers des 404, ce que Google sanctionne.
+
+Le rapport de l'implémenteur dit « fait » sans avoir lancé `check:links` :
+**tout lot du site se rapporte avec `build` ET `check:links` en code 0**, la
+règle est la même que pour vitest.
+
+### Ce que le gabarit doit faire à N langues
+
+1. **N'émettre un `hreflang` que vers une page qui existe.** Le gabarit
+   reçoit une **carte des chemins par langue** (`alternates: { en: 'blog/deepnest-alternative', fr: 'blog/alternative-deepnest', pt: 'blog/alternativa-ao-deepnest' }`),
+   et boucle sur ses **clés**, pas sur `locales`. Une page statique passe la
+   carte de ses locales bâties ; un article la construit depuis ses
+   traductions réelles (`translationSlug` devient une carte, ou la
+   collection est interrogée par `translationSlug` commun).
+2. **`pt-BR`**, pas `pt`, comme valeur `hreflang` : la copie est brésilienne
+   et c'est le marché mesuré ; l'URL peut rester `/pt/`.
+3. **`otherLocale` (EN⇄FR) est mort à trois langues** : le commutateur du
+   site devient un menu comme celui de l'application, alimenté par la même
+   carte des alternates (une langue n'y figure que si la page existe).
+4. **`x-default`** reste l'anglais : inchangé.
+5. `pt` n'entre dans `locales` du site **que quand `/pt/` est bâti** (même
+   règle que `DICTS` et `DOCS_LANGS`), et le lot se livre avec `check:links`
+   vert.
+
+Cette mécanique est celle des trois langues suivantes : elle se fait une fois.
