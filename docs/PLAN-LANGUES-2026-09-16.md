@@ -768,3 +768,22 @@ point 4 à la publication). **Le jalon B s'ouvre** dès A-bis commité :
    (point 4 du verdict, hors A-bis).
 
 **Vitest 806/806 exit 0** (+1 verrou de variables).
+
+### Contrôle d'A-bis (`b96c4199`) — vérificateur, 17/09 — jalon A clos, jalon B ouvert
+
+Lu dans le code : les quatre clés `localMode.*` retraduites depuis l'anglais
+exact (conseil et remboursement revenus, plus aucune accolade fantôme) ; le
+verrou « mêmes variables par clé » présent dans `i18nParity.test.js`
+(fantômes ET perdues), 6/6 verts ; plus aucun « suportad » ; les aires
+passent par `fmtNumber` (`[slug].vue:531`) et `fmtArea` (rapport), plus de
+`toFixed` nu. **Un résidu, à corriger sur la branche avant la publication
+(A-ter, trois lignes)** : `fmtArea` de `app/utils/units.js` appelle
+`Intl.NumberFormat(undefined, …)` — la locale **du système**, pas celle
+choisie dans NestorCut. Un Brésilien dont le navigateur est en anglais et
+qui a choisi « Português » verrait « 1.99 m² » et « 8,480 mm² » ; et le
+serveur Node formate dans sa propre locale. `fmtArea` doit recevoir la
+balise de la langue de l'application (`INTL_TAGS[locale]`, comme
+`formatNumber`), passée par `useUnit` depuis `useLocale`. Le même défaut
+existait avant A-bis (`toLocaleString()` sans argument) ; il devient visible
+avec la première langue à point de millier. **Jalon A clos sous cette
+réserve.** Le jalon B (site vitrine et blog) est ouvert dans l'ordre posé.
