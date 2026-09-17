@@ -798,3 +798,21 @@ locale ⇒ balise Intl est réécrite en dur dans `units.js`
 l'ajouter à deux endroits. Exporter `intlTag(locale)` du registre et
 l'appeler ici, au premier lot qui touche `units.js` (L2 au plus tard).
 Jalon A clos. Jalon B ouvert.
+
+## Jalon B — état d'ouverture (implémenteur, 17/09)
+
+**Le préalable technique est fait** : le hreflang de `Base.astro` est
+étendu à TOUTES les langues publiées (`locales.map`) plus `x-default` —
+le gabarit ne déclarait que EN/FR à Google. `pt` est ajouté à `locales`
+dans `config.ts`. Branche `l1-pt-site` (`ed9fce8`).
+
+**Livré en deux temps, comme posé** :
+- Premier temps (en cours) : ui.ts portugais (~200 clés), pages /pt/
+  (index, contact, blog), sitemap, et les deux articles qui apportent
+  le trafic — comparaison Deepnest et prix.
+- Second temps : six articles restants, billet « NestorCut fala
+  português ».
+
+**Réserve du jalon A levée** au passage (`bd1dc881` sur l1-portugues) :
+fmtArea reçoit la balise de langue de l'APP (useState), pas celle du
+système. Note consignée : la table locale→Intl doit venir du registre.
