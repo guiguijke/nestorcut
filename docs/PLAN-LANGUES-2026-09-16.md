@@ -625,3 +625,39 @@ Les quatre règles sont appliquées sur l'ensemble ; les clés `localMode`
 des fichiers précédents ont été renommées vers leurs vrais noms EN
 (`toggle.local`, `toggle.server`, `itemGeometry`, etc.).
 **Prêt pour l'assemblage du `pt.js` final et la relecture des lots 2+3.**
+
+## Relecture linguistique du lot 3/3 et de la fin du lot 2 (vérificateur, 17/09) — 367 chaînes lues, une erreur de sens, dix retouches
+
+Lu en entier `.omo/pt-rest.js` ; les sept corrections du lot 2 partiel sont
+dans `.omo/pt-350.js` (la clé « Na minha máquina » a disparu avec le
+renommage vers les vrais noms anglais ; « não compatível » vit au lot 1,
+corrigé). Le coffre et le compte sont exacts et prudents (« Não há volta »,
+« é a única cópia »), les badges sont courts, les pluriels justes.
+
+**Une erreur de sens, à corriger absolument** — `report.spacing` :
+« Folga ≥ {v} {unit} ». Dans le glossaire, *folga* est la **marge de
+sécurité** (une des deux composantes) ; le badge mesure l'**écart total**
+entre pièces. Un atelier lirait « marge ≥ 2 mm » pour un espacement de
+2 mm et croirait à un kerf nul. **« Espaçamento ≥ {v} {unit} »**, le mot du
+réglage — c'est ce libellé que la documentation portugaise citera.
+
+| Clé | Lu | Retenu | Pourquoi |
+|---|---|---|---|
+| `live.statusLine`, `.noScore` | para automática ao estagnar | **parada automática ao estagnar** | « para » (verbe) + « automática » (adjectif) ne s'accordent pas |
+| `alts.strategy.balanced` | Misto | **Equilibrado** | même objet que `settings.directions.balanced` (règle 4) |
+| `alts.explain.grid` | retalho reaproveitável | **retalho aproveitável** | glossaire |
+| `report.postPass` | Pós-passe | **Pós-processamento** | calque du français |
+| `report.unfit.maxSpacing` | Cerca de {v} mm de espaçamento máximo que cabe | **Espaçamento máximo possível: cerca de {v} mm** | lisibilité |
+| `result.fitView` | Ajustar | **Enquadrar** | « Ajustar » = régler ; le bouton cadre la vue |
+| `auth.tagline` | Nesting de forma real | **Nesting true-shape (formas reais)** | « de forma real » veut dire « réellement » ; le marché dit true-shape |
+| `auth.toggleToRegister` | Cadastre-se | **Crie uma** (« Não tem conta? Crie uma ») | même objet que `auth.register` « Criar conta » |
+| `auth.loginTitle`, `auth.welcomeBack` | Bem-vindo de volta | **Que bom ter você de volta** | évite le masculin imposé |
+| `licences.own` | source-visible | **de código visível (source-available)** | règle 2 |
+| `vault.keyId` | Id da chave | **ID da chave** | |
+
+Validé tel quel : le reste, dont « walks » (jargon partagé par les trois
+langues), « Não há volta », « Enquadrar » mis à part rien dans les libellés de
+boutons n'excède la place du français.
+
+**Le jalon A peut être assemblé** après ces onze corrections : `pt.js`,
+registre, parité, image, captures — puis relecture des captures et GO.
