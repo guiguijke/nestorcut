@@ -57,10 +57,34 @@ conversion — la langue est le levier de conversion, pas de visibilité.
   fait ses preuves dans les chiffres), puis italien, allemand, espagnol.
   Le propriétaire peut changer l'ordre ; il ne change pas la règle « complète
   ou rien ».
+- **Le blog est DANS le lot (décision du propriétaire, 17/09 : « je pense
+  surtout au SEO, il me faut ces articles dans toutes les langues »).** Le
+  blog compte huit articles en deux langues (seize fichiers, appariés par
+  `translationSlug`). Règles pour que la traduction serve le référencement
+  au lieu de le pénaliser :
+  - **hreflang à six** : le gabarit du blog (`Base.astro`) ne déclare
+    aujourd'hui que deux alternatives (`en`, `fr`) ; il doit déclarer toutes
+    les langues où l'article existe, plus `x-default`, sinon Google voit des
+    doublons. C'est un préalable du jalon B.
+  - **Traduit, pas dupliqué** : chaque article garde ses faits (dates, chiffres,
+    liens) et sa structure, mais titre, description et texte sont écrits dans
+    la langue ; les mots-clés de titre suivent ce que le marché cherche
+    (« software de nesting gratuito », « alternativa ao Deepnest ») — le
+    vérificateur relit chaque article comme les chaînes.
+  - **L'article de comparaison (Deepnest) et l'article de prix** sont les
+    deux qui apportent le trafic : traduits en premier.
+  - **Pas de contenu automatique publié tel quel** : un article traduit
+    porte la même date de publication que l'original et la mention « traduit
+    de l'anglais » en pied ; un article machine non relu est le genre de page
+    que Google déclasse depuis 2024.
+  - **Le billet d'accueil** « NestorCut fala português » est écrit en plus,
+    pour la langue, à la publication.
+  Le blog entre au **jalon B** (site vitrine), pas au jalon A : huit
+  articles par langue, relus, avec les mêmes trois règles.
 - **Ce qui reste en français et anglais** : mentions légales, CGV,
-  politique de confidentialité, factures (APlasma, cadre légal français) ;
-  le blog du site vitrine ; les e-mails transactionnels tant que le
-  propriétaire ne décide pas le contraire.
+  politique de confidentialité, factures (APlasma, cadre légal français —
+  une traduction ferait foi sans pouvoir être relue) ; les e-mails
+  transactionnels tant que le propriétaire ne décide pas le contraire.
 
 ## 2. Le socle technique (un lot avant la première langue) — lot L0
 
@@ -100,7 +124,8 @@ Chaque lot, dans cet ordre :
 1. glossaire validé par le relecteur natif ;
 2. application (dictionnaire complet, verrou de parité vert, captures du
    flux `.job` regardées dans la langue) ;
-3. site vitrine (accueil, tarifs, FAQ, en-tête, pied ; pas le blog) ;
+3. site vitrine (accueil, tarifs, FAQ, en-tête, pied) **et le blog** (huit
+   articles, comparaison et prix d'abord, hreflang à six langues) ;
 4. documentation (toutes les sections publiées à ce moment-là, captures
    par le harnais dans la langue) ;
 5. relecture native de bout en bout si un relecteur existe, corrections ;
@@ -384,8 +409,10 @@ la langue, sans rien publier :
    jalon A n'est pas relu, `pt` peut rester HORS de `DICTS` sur la branche
    (le verrou ne juge que les langues enregistrées) — on n'y met la langue
    que quand le fichier est complet.
-2. **Jalon B — le site vitrine** : `ui.ts` portugais, `/pt/`, `hreflang`,
-   sitemap ; relecture des pages du site.
+2. **Jalon B — le site vitrine et le blog** : `ui.ts` portugais, `/pt/`,
+   `hreflang` étendu à toutes les langues publiées, sitemap, les huit
+   articles traduits (comparaison et prix d'abord) ; relecture des pages du
+   site et de chaque article.
 3. **Jalon C — la documentation** : locale Starlight `pt`, toutes les pages,
    captures par le harnais en trois passes, verrou de complétude ;
    relecture page à page. Puis `pt` dans `DOCS_LANGS`, et publication des
