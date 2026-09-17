@@ -549,3 +549,65 @@ clés réparties entre les deux lots — la clé `localImport.unsupportedType`
 était dans le lot 1). **Quatrième règle encodée** pour les lots
 suivants : le même objet porte le même mot partout — « Este dispositivo
 » / « Nossos servidores » / « compatível » pour pris en charge.
+
+## Consigne complète du lot L1 (vérificateur, 17/09) — délégation du propriétaire
+
+Décision du propriétaire (17/09) : « je ne lis pas le portugais, je te fais
+confiance, tant pis si ce n'est pas 100 % OK ». Conséquences : **la relecture
+du propriétaire n'est plus une porte pour les langues qu'il ne lit pas** ; le
+vérificateur relit tout et donne seul le GO de publication ; le propriétaire
+n'intervient que pour ce qui engage (prix, promesses, légal) et pour le
+déploiement. Les langues ne visent pas la perfection : elles visent une
+interface qu'un atelier brésilien comprend sans sourire, et qui s'améliore
+aux retours. La même délégation vaut pour l'italien, l'allemand et
+l'espagnol.
+
+### L1 de bout en bout, sans attendre de signal entre les étapes
+
+**Jalon A — application** (en cours, 378/747)
+1. Passer les sept corrections de la relecture du lot 2 partiel dans
+   `.omo/pt-350.js`.
+2. Traduire les 116 clés restantes du lot 2 et les 250 du lot 3 avec les
+   quatre règles (glossaire prime, aucun mot anglais là où le français a un
+   mot, aucun calque, même objet même mot) ; badges de `report` courts.
+3. Livrer les lots 2 et 3 pour relecture ; appliquer les corrections.
+4. Assembler `app/utils/i18n/pt.js`, `pt` dans `DICTS`, « Português » dans
+   `LANGUAGE_LABELS`, `pt-BR` dans `INTL_TAGS`, `pluralSelect` : seul 1 est
+   singulier ; verrou de parité vert ; vitest code 0 ; image reconstruite.
+5. Captures du flux `.job` complet en portugais, cookie `pt`, regardées par
+   le vérificateur : accueil, dépôt, carte groupée, vue agrandie, calcul,
+   résultat, téléchargement, page Nouveautés, menu de langues à trois.
+6. Rapport ⇒ relecture des captures et GO du jalon A. **Le jalon A ne se
+   déploie pas seul** : `pt` reste sur la branche jusqu'au GO final.
+
+**Jalon B — site vitrine et blog**
+7. `hreflang` de `Base.astro` étendu à toutes les langues publiées +
+   `x-default` (préalable) ; `ui.ts` portugais ; routage `/pt/` ; sitemap.
+8. Les huit articles en portugais, Deepnest et prix d'abord : mêmes faits,
+   titre et texte écrits pour le marché, date d'origine, « traduzido do
+   inglês » en pied, `translationSlug` apparié.
+9. Le billet d'accueil « NestorCut fala português » (court : ce que fait
+   le produit, le mode appareil, dix nestings gratuits, la doc en portugais).
+10. Rapport ⇒ relecture des pages du site et des neuf articles, corrections,
+    GO du jalon B.
+
+**Jalon C — documentation**
+11. Locale Starlight `pt` ; toutes les pages des huit sections ; libellés de
+    la barre latérale ; le harnais de captures en trois passes (`pt` ajouté à
+    la liste) ; verrou de complétude ; page Nouveautés portugaise ajoutée à
+    `sync-changelog.mjs` (le CHANGELOG reçoit un bloc *PT* par version, à
+    partir de la version qui publie la langue ; les versions antérieures
+    restent FR/EN dans la page portugaise, dit en tête de page).
+12. Rapport ⇒ relecture page à page, corrections, GO du jalon C.
+
+**Publication, le même jour**
+13. `pt` dans `DOCS_LANGS` ; entrée CHANGELOG « NestorCut fala português »
+    (FR, EN et PT) ; version 0.9.3 ; fusion des deux PR (site, app) ;
+    promotion, déploiement app seule, régénération de la page Nouveautés ;
+    contrôle en ligne par le vérificateur : les trois surfaces répondent en
+    portugais, `Accept-Language: pt-BR` ⇒ portugais, menu de langues à
+    trois, `hreflang` à trois sur une page du site, un article portugais
+    indexable.
+
+Le propriétaire est informé à trois moments : GO du jalon A (avec une
+capture), GO final, contrôle du déploiement. Entre les deux, rien à décider.
