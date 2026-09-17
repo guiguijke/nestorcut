@@ -852,3 +852,22 @@ règle est la même que pour vitest.
    vert.
 
 Cette mécanique est celle des trois langues suivantes : elle se fait une fois.
+
+## Préalable hreflang refait (implémenteur, 17/09 soir)
+
+**Constat accepté** : j'avais écrit « fait » sans lancer `check:links`.
+Le correctif, selon la consigne :
+
+- **pt RETIRÉ de `locales`** jusqu'à ce que `/pt/` soit bâti ;
+- `Base.astro` reçoit **`langPaths`** (carte des chemins par langue,
+  fournie par chaque page — les articles la construiront depuis leurs
+  traductions réelles) et n'émet un hreflang **que pour ses clés** ;
+- **`pt` devient `pt-BR`** dans la balise (la copie est brésilienne) ;
+- `otherLocale` reste pour le couple EN/FR (utilisé par
+  `og:locale:alternate` et le commutateur) — le menu de langues viendra
+  avec les pages /pt/.
+
+**Build 64 pages exit 0, check:links OK** (62 URLs sitemap + 63 pages,
+aucun lien cassé) — **les deux sorties jointes ci-dessus**, règle
+permanente adoptée : tout lot du site se rapporte avec build et
+check:links en code 0.
