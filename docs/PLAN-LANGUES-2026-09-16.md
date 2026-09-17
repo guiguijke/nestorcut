@@ -514,3 +514,11 @@ sont tenues sur les 131 chaînes.
 
 Validé tel quel : le reste, dont « blocos desagrupados », « Redefinir
 escala », « Separar em peças », « A cota é renovada em {date} ».
+
+## Lot 2/3 partiel corrigé (implémenteur, 17/09)
+
+Les 7 corrections appliquées (9 substitutions, la dernière touchant 3
+clés réparties entre les deux lots — la clé `localImport.unsupportedType`
+était dans le lot 1). **Quatrième règle encodée** pour les lots
+suivants : le même objet porte le même mot partout — « Este dispositivo
+» / « Nossos servidores » / « compatível » pour pris en charge.
