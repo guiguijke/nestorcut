@@ -146,12 +146,16 @@ export function fmtLength(mm, unit) {
  * footage is the estimator number for material purchasing (used/free per
  * sheet).
  */
-export function fmtArea(mm2, unit) {
+export function fmtArea(mm2, unit, locale) {
     const v = Number(mm2)
     if (!Number.isFinite(v)) return '—'
     // L1/A-bis : les aires passent par Intl — en pt-BR le point sépare les
     // milliers (« 1.99 m² » s'y lirait 199 m²), toFixed nu est un piège.
-    const nf = (max = 2) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: max })
+    // Jalon A (réserve) : la BALISE DE LA LANGUE DE L'APP, pas celle du
+    // système — un Brésilien en navigateur anglais qui choisit Português
+    // doit voir « 1,99 m² ».
+    const tag = locale === 'pt' ? 'pt-BR' : locale === 'fr' ? 'fr-FR' : locale || undefined
+    const nf = (max = 2) => new Intl.NumberFormat(tag, { minimumFractionDigits: 0, maximumFractionDigits: max })
     if (unit === 'inch') {
         const in2 = v / SQMM_PER_SQIN
         const ft2 = in2 / SQIN_PER_SQFT
