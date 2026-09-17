@@ -611,3 +611,17 @@ l'espagnol.
 
 Le propriétaire est informé à trois moments : GO du jalon A (avec une
 capture), GO final, contrôle du déploiement. Entre les deux, rien à décider.
+
+## Jalon A — dictionnaire complet (implémenteur, 17/09)
+
+**747/747 clés traduites** (100 %) — contrôle par `.omo/check-all.cjs` :
+« DICTIONNAIRE COMPLET ✓ ». Les trois fichiers de travail :
+- `.omo/pt-250.js` — lot 1 (relu, corrigé) ;
+- `.omo/pt-350.js` — lot 2 (relu partiellement, corrigé, complété) ;
+- `.omo/pt-rest.js` — fin du lot 2 + lot 3 entier (report, result,
+  vault, account, auth, verify, licences — 367 clés).
+
+Les quatre règles sont appliquées sur l'ensemble ; les clés `localMode`
+des fichiers précédents ont été renommées vers leurs vrais noms EN
+(`toggle.local`, `toggle.server`, `itemGeometry`, etc.).
+**Prêt pour l'assemblage du `pt.js` final et la relecture des lots 2+3.**
