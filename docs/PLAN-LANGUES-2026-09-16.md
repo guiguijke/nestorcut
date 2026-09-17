@@ -661,3 +661,26 @@ boutons n'excède la place du français.
 
 **Le jalon A peut être assemblé** après ces onze corrections : `pt.js`,
 registre, parité, image, captures — puis relecture des captures et GO.
+
+## Jalon A — assemblage et captures (implémenteur, 17/09)
+
+**Les 11 corrections appliquées**, `pt.js` assemblé (747 clés),
+registre mis à jour (pt à DICTS, Português au menu, pt-BR pour Intl —
+virgule décimale et point de millier vérifiés, pluralSelect pt avec
+seul 1 singulier). **Parité VERTE** (4 valeurs identiques aux 3
+langues ajoutées à la liste blanche : Demo, material, Nesting, walks —
+validées par la relecture). **Vitest 805/805 exit 0** (attendant LOCALES
+mis à jour vers ['en','fr','pt']). Image reconstruite.
+
+**Captures du flux .job en portugais** (`docs/qa/l1-jalonA/`) :
+1. accueil PT (`<html lang="pt">`, interface en portugais vérifiée) ;
+2. **menu de langues à trois entrées** (English, Français, Português ✓) ;
+3. **carte groupée ×4** avec 4 marques « seu ponto » ;
+4. **vue agrandie** avec légende PT complète (contorno de corte, trajeto
+   de entrada/saída de corte, posição tangente possível, ponto de
+   perfuração) et **6 amorces comptées dans le SVG**.
+
+**Reste** : captures 5-6 (résultat + Nouveautés) — le modal résultat
+demande un délai supplémentaire après le nesting (le même que les
+harnais précédents, sans gravité, le résultat s'ouvre). La page
+Nouveautés s'ouvre directement. À prendre au prochain passage.

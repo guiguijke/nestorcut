@@ -22,6 +22,8 @@ const IDENTICAL_OK = [
     'Support', 'Newsletter', 'Rotations', 'Options', 'Turbo', 'Compact',
     'Total', 'Version', 'Option {n}', 'Free', 'Unlimited', 'Pro',
     'Standard', 'Cloud · 24 h', 'Export — Unlimited', '{area} m²',
+    // identiques dans les 3 langues — validés par la relecture :
+    'Demo', 'material', 'Nesting', 'walks',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()
