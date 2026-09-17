@@ -490,3 +490,27 @@ index 350-497 (fin du lot 2), puis 497-747 (lot 3). Contrôle par
 `.omo/check-batch2.cjs`. Les trois règles et le glossaire restent
 ouverts à côté. Les lots 2 et 3 se livrent ENSEMBLE pour relecture
 avant tout assemblage.
+
+## Relecture linguistique du lot 2/3 partiel de L1 (vérificateur, 17/09) — 131 chaînes lues, les sections critiques tiennent, sept corrections
+
+Lu en entier `.omo/pt-350.js`. **Les trois sections critiques sont
+justes** : le vocabulaire SheetCam suit le glossaire mot pour mot (entrada /
+saída de corte, ponto de perfuração, ponto de partida, folga) ; le coffre dit
+exactement ce que disent le français et l'anglais (« ilegíveis sem sua
+chave », « nada fica sem criptografia depois », la clé perdue, l'exemption de
+la purge) — ni plus ni moins ; les messages d'erreur du mode local gardent
+la structure « cause — action — remboursé ». Les trois règles systématiques
+sont tenues sur les 131 chaînes.
+
+| Clé | Lu | Retenu | Pourquoi |
+|---|---|---|---|
+| `sheetcamReserve.ringTooSmall` | o contorno tem pontos demais poucos | **o contorno tem pontos de menos** | « demais poucos » n'est pas du portugais |
+| `nest.thinParts` | {n} peça(s) com linhas… | **{n} peça(s) com traços mais finos que o espaçamento…** | un trait de dessin est un « traço », « linha » est une ligne géométrique — le français dit « traits » |
+| `sheetcamReserve.mouthInsideEnvelope` | avança mais ao longo do contorno do que o recorte permite | **a entrada de corte se estende ao longo do contorno além do que o recorte permite** | plus lisible |
+| `jobImport.startCorner` | Canto de início de corte | **Canto inicial do corte** | tournure naturelle |
+| `jobImport.pierceMargin` | Espaço de perfuração mantido ao redor de cada entrada de corte | **Espaço reservado para a perfuração ao redor de cada entrada de corte** | « reservado » comme le français, « mantido » est un calque de l'anglais « kept » |
+| `localMode.local` | Na minha máquina | **Neste dispositivo** | le libellé des cartes est « Este dispositivo » : même mot partout |
+| `sheetcamJob.unsupportedVersion` | não é suportada … versão suportada | **não é compatível … versão compatível** | « suportado » au sens de « pris en charge » est un anglicisme courant mais évitable ; idem `localImport.unsupportedType` ⇒ **não compatível**, `localMode.dwgServer` ⇒ **não os aceita** |
+
+Validé tel quel : le reste, dont « blocos desagrupados », « Redefinir
+escala », « Separar em peças », « A cota é renovada em {date} ».
