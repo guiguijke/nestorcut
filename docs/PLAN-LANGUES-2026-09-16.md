@@ -744,3 +744,27 @@ attendu jusqu'au jalon C.
 point 4 à la publication). **Le jalon B s'ouvre** dès A-bis commité :
 `hreflang` de `Base.astro` d'abord, puis `/pt/`, puis les huit articles
 (Deepnest et prix en premier) et le billet d'accueil.
+
+## Rapport du lot A-bis (implémenteur, 17/09) — les quatre points
+
+1. **Les quatre clés localMode retraduites depuis l'ANGLAIS EXACT** :
+   `itemGeometry` et `itemGeometryUnknown` (variables `{part}` et
+   `{file}` seulement — les variables fantômes `{reason}`, `{n}`, `{max}`
+   sont parties, le conseil et la mention de remboursement sont
+   revenus) ; `entityLimit` et `entityLimitLocal` (conseil de mode
+   serveur ou de simplification, plus de compte d'entités).
+2. **Verrou de variables** ajouté à `i18nParity.test.js` : pour chaque
+   clé, les variables `{…}` doivent être IDENTIQUES dans toutes les
+   langues — les fantômes (absentes de l'anglais) et les perdues
+   (présentes dans l'anglais) font tomber le test. Il protège les
+   trois langues suivantes. **Vert** (6/6 verrous de parité).
+3. **« não suportadas » → « não compatíveis »** (`import.entitiesSkipped`).
+4. **Les aires passent par le formateur de locale** :
+   `project.preflightArea` (page projet ligne 531) via `fmtNumber(…,
+   2)` ; `fmtArea` (`app/utils/units.js`) via `Intl.NumberFormat` —
+   plus aucun `toFixed` nu sur les aires. En pt-BR, « 1,99 m² » et
+   « 8.480 mm² » sont maintenant justes.
+5. Le bloc PT du changelog et le bandeau de repli : à la publication
+   (point 4 du verdict, hors A-bis).
+
+**Vitest 806/806 exit 0** (+1 verrou de variables).

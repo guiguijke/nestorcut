@@ -70,6 +70,27 @@ describe('L0 — parité des clés de langue', () => {
         const someKey = Object.keys(DICTS[DEFAULT_LOCALE])[0]
         expect(translate(someKey, 'zz-unknown')).toBe(DICTS[DEFAULT_LOCALE][someKey])
     })
+
+    // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
+    // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »
+    // de la clé anglaise laisse des variables fantômes ({reason} en toutes
+    // lettres à l'écran) et perd celles de la source.
+    it('mêmes variables {…} par clé dans toutes les langues', () => {
+        const varsOf = (s) => new Set(String(s).match(/\{(\w+)\}/g) || [])
+        for (const lang of LOCALES) {
+            if (lang === DEFAULT_LOCALE) continue
+            const ghost = []
+            const lost = []
+            for (const [k, v] of Object.entries(DICTS[lang])) {
+                const refVars = varsOf(DICTS[DEFAULT_LOCALE][k])
+                const langVars = varsOf(v)
+                for (const lv of langVars) if (!refVars.has(lv)) ghost.push(`${k}: ${lv}`)
+                for (const rv of refVars) if (!langVars.has(rv)) lost.push(`${k}: ${rv}`)
+            }
+            expect(ghost, `[${lang}] variables fantômes (absentes de l'anglais)`).toEqual([])
+            expect(lost, `[${lang}] variables perdues (présentes dans l'anglais)`).toEqual([])
+        }
+    })
 })
 
 describe('L0 — nombres par locale (Intl)', () => {

@@ -149,13 +149,16 @@ export function fmtLength(mm, unit) {
 export function fmtArea(mm2, unit) {
     const v = Number(mm2)
     if (!Number.isFinite(v)) return '—'
+    // L1/A-bis : les aires passent par Intl — en pt-BR le point sépare les
+    // milliers (« 1.99 m² » s'y lirait 199 m²), toFixed nu est un piège.
+    const nf = (max = 2) => new Intl.NumberFormat(undefined, { minimumFractionDigits: 0, maximumFractionDigits: max })
     if (unit === 'inch') {
         const in2 = v / SQMM_PER_SQIN
         const ft2 = in2 / SQIN_PER_SQFT
-        return `${Math.round(in2).toLocaleString()} in² (${ft2.toFixed(2)} ft²)`
+        return `${nf(0).format(in2)} in² (${nf(2).format(ft2)} ft²)`
     }
-    if (Math.abs(v) >= 1e6) return `${(v / 1e6).toFixed(2)} m²`
-    return `${Math.round(v).toLocaleString()} mm²`
+    if (Math.abs(v) >= 1e6) return `${nf(2).format(v / 1e6)} m²`
+    return `${nf(0).format(v)} mm²`
 }
 
 /**

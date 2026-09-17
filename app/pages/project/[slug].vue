@@ -528,7 +528,7 @@ const preflightLine = computed(() => {
         nFiles === files.length ? tp('unit.file', nFiles) : tp('unit.depositedFile', nFiles),
     ]
     if (report?.totalInflatedMm2 > 0) {
-        bits.push(t('project.preflightArea', { area: (report.totalInflatedMm2 / 1e6).toFixed(2) }))
+        bits.push(t('project.preflightArea', { area: fmtNumber(report.totalInflatedMm2 / 1e6, 2) }))
     }
     bits.push(tp('project.preflightSheets', nSheets))
     bits.push(t('project.preflightDensity', { pct: Math.round((REFERENCE_PACKING || 0.85) * 100) }))
