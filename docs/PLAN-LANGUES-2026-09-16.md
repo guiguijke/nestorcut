@@ -684,3 +684,63 @@ mis à jour vers ['en','fr','pt']). Image reconstruite.
 demande un délai supplémentaire après le nesting (le même que les
 harnais précédents, sans gravité, le résultat s'ouvre). La page
 Nouveautés s'ouvre directement. À prendre au prochain passage.
+
+## Vérification du jalon A de L1 (vérificateur, 17/09) — GO sous réserve d'un A-bis de quatre points, le jalon B peut s'ouvrir
+
+Rejoué sur l'image `app` reconstruite à `38fd36ba` (branche `l1-portugues`) :
+vitest **805, code 0** ; **parité indépendante** (mon propre script, pas le
+verrou) : 747 clés anglaises, 747 portugaises, 0 manquante, 0 orpheline ;
+rendu serveur : `Accept-Language: pt-BR` sans cookie ⇒ `<html lang="pt">`,
+« Crie sua conta » ; **le flux complet rejoué en portugais et regardé** :
+connexion, accueil (« Boa tarde », bloc « Novo nesting », cartes « Este
+dispositivo » / « Nossos servidores » avec « sem criptografia »), menu de
+langues à trois entrées, réglages (« Folga de segurança », « Espaçamento
+entre peças = 2 × kerf + folga », « Direções de otimização », « Borda
+esquerda / inferior / Equilibrado », « Aninhar nos furos »), fiche, carte
+groupée ×4 « seu ponto », vue agrandie avec sa légende, vue en direct
+(« Densidade da faixa », « Viável », « Núcleos »), résultat (« Aproveitamento
+de material », badges « Sem sobreposição », « Dentro da chapa »,
+**« Espaçamento ≥ 2 mm »**, « Todas as 1 peças colocadas », « Retalho limpo »,
+« aproveitável », « pelo menos », boutons « Copiar relatório / Exportar CSV /
+Baixar / Tentar novamente »), pied « Aviso legal · Privacidade · Novidades ».
+Aucune fuite de français ou d'anglais dans l'interface ; les captures de
+l'implémenteur montrent la même chose. C'est du portugais d'atelier.
+
+### A-bis — quatre points avant le jalon B
+
+1. **Quatre chaînes du mode local portent des variables que l'anglais n'a
+   pas** — `localMode.itemGeometry` (`{reason}`), `localMode.itemGeometryUnknown`
+   (`{reason}`), `localMode.entityLimit` et `localMode.entityLimitLocal`
+   (`{n}`, `{max}`) : elles ont été traduites depuis leurs cousines
+   `import.itemGeometry` / `localImport.tooManyEntities`, pas depuis leur
+   source. À l'écran, un Brésilien lirait « {reason} » en toutes lettres, et
+   le message a perdu son contenu (le remboursement, le conseil). À
+   **retraduire depuis l'anglais exact**. Et **un verrou de plus dans
+   `i18nParity.test.js`** : l'ensemble des `{variables}` de chaque clé est
+   identique dans toutes les langues — c'est ce qui aurait attrapé le défaut
+   et ce qui protégera l'italien, l'allemand et l'espagnol.
+2. `import.entitiesSkipped` : « não suportadas » ⇒ **« não compatíveis »**
+   (dernier reste de la règle 4).
+3. **Les aires en m² contournent le formateur de locale** :
+   `[slug].vue:531` (`toFixed(2)`) et les aires du rapport affichent
+   « 1.99 m² » et « 0.04 m² » à côté de « 8.480 mm² ». En français c'était
+   une faute de style ; **en portugais du Brésil, le point est le séparateur
+   de milliers : « 1.99 m² » se lit 199 m²**. Passer ces valeurs par
+   `fmtNumber(v, 2)` — défaut de L0 révélé par la première langue à point de
+   millier, il sert aux trois suivantes.
+4. **Page Nouveautés en portugais** : titre et sous-titre en portugais,
+   puces en anglais (repli, aucun bloc *PT* dans le CHANGELOG) — attendu
+   jusqu'à la publication. À l'étape 13 : `changelogParser.js` lit un bloc
+   *PT* quand il existe, et la page dit en tête, dans la langue, que les
+   versions antérieures restent en anglais.
+
+Formats vérifiés justes : « 0,4% » sans espace (l'usage brésilien),
+« 8.480 mm² », « 2,3% ». Les « ? » mènent encore à la doc anglaise :
+attendu jusqu'au jalon C.
+
+### Décision
+
+**Jalon A : GO sous réserve d'A-bis** (points 1 à 3 avant la fusion,
+point 4 à la publication). **Le jalon B s'ouvre** dès A-bis commité :
+`hreflang` de `Base.astro` d'abord, puis `/pt/`, puis les huit articles
+(Deepnest et prix en premier) et le billet d'accueil.
