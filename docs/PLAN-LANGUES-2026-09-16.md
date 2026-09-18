@@ -1240,3 +1240,48 @@ documentation, ce que la règle « complète ou rien » interdit. Le paquet C
 (documentation portugaise) se construit sur cette même branche ; la fusion
 unique, en `--squash` avec suppression de la branche, a lieu au paquet P,
 le jour où l'application (V0.9.3) et le site partent ensemble.
+
+## Consigne explicite du paquet C (vérificateur, 18/09) — la documentation en portugais, une seule livraison
+
+Dépôt du site vitrine, branche `l1-pt-site` (ne fusionne pas). Le paquet est
+rendu quand **tous** les points ci-dessous sont vrais ; sinon on continue
+sans rapport. Ordre conseillé :
+
+1. **Locale Starlight** : `pt: { label: 'Português', lang: 'pt-BR' }` dans
+   `starlight.locales` de `astro.config.mjs` ; `translations.pt` sur les huit
+   groupes de la barre latérale (Começar · Seus arquivos · A interface ·
+   Nesting explicado · Seus resultados · Privacidade · Limites e perguntas
+   frequentes · Novidades) ; le lien « Docs » du header pointe vers
+   `/pt/docs/` pour la locale `pt` (retirer le repli anglais du paquet B).
+2. **Les 18 pages** de `src/content/docs/fr/docs/**` traduites vers
+   `src/content/docs/pt/docs/**`, même arborescence, même `sidebar.order`,
+   traduites **depuis le français** (source des décisions) avec le glossaire
+   `specs/i18n/glossaire-pt.md` et les quatre règles ; les libellés cités
+   entre guillemets (badges, boutons, cartes) sont ceux de `pt.js` de
+   l'application, copiés, jamais retraduits ; les chemins d'images pointent
+   vers `/docs-img/pt/…`.
+3. **Captures** : `scripts/qa-docs-captures.mjs` prend la liste des langues
+   (`fr`, `en`, `pt`), troisième passe avec le cookie `pt` et le compte
+   dédié, sonde de langue au moment de la prise (« Este dispositivo »),
+   verrou anti-orpheline étendu au jeu `pt` (toutes les images référencées
+   existent, aucune image publiée sans page).
+4. **Page Nouveautés portugaise** : `scripts/sync-changelog.mjs` produit
+   aussi `pt/docs/whats-new/index.md` ; il lit un bloc `*PT*` dans
+   `CHANGELOG.md` quand il existe et **replie sur l'anglais** sinon, avec en
+   tête de page la phrase « As versões anteriores a V0.9.3 estão em inglês ».
+   Côté application, `app/utils/changelogParser.js` lit le bloc `*PT*` de la
+   même façon (repli anglais). Le bloc `*PT*` de la version qui publie le
+   portugais s'écrit au paquet P.
+5. **Preuves extraites de `dist/`**, jointes au rapport : (a) `build` et
+   `check:links` en code 0, sorties complètes ; (b) `hreflang` d'une page de
+   doc portugaise et de ses sœurs EN/FR ; (c) le contenu du menu de langues
+   du site sur un article dans ses trois langues et sur `/legal/` (PT
+   caché) — la preuve manquée au paquet B ; (d) la liste des 18 pages
+   `/pt/docs/**` bâties et le compte d'images `docs-img/pt/`.
+6. Rapport unique : la liste des pages, les preuves, le journal du harnais,
+   et une ligne par capture disant ce qu'on y voit. Le document du
+   vérificateur se commite dans le même paquet.
+
+Ne pas faire : fusionner la branche ; ajouter `pt` à `DOCS_LANGS` de
+l'application ; écrire l'entrée CHANGELOG V0.9.3 ; toucher aux fichiers du
+propriétaire ; `git add -A`.
