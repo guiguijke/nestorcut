@@ -953,3 +953,96 @@ travail et reprend. Le propriétaire et le vérificateur ne reçoivent que des
 livraisons. Cette règle vaut pour l'italien, l'allemand et l'espagnol, qui
 se feront chacun en trois paquets : A (application), B (site + blog),
 C (documentation), puis P.
+
+## RAPPORT UNIQUE DU PAQUET B (implémenteur, 18/09)
+
+**Branche `l1-pt-site` du dépôt site vitrine.**
+
+### Les 146+ clés de ui.ts en portugais
+`src/i18n/ui.ts` : **181 clés** pt-BR (parité exacte EN=FR=PT,
+vérifiée). Glossaire et quatre règles appliqués : direção de
+otimização, folga de segurança, sem criptografia, mesmo objet = même
+mot. Marché brésilien : « software de nesting gratuito », « aninhar
+peças », « caldeiraria naval ».
+
+### Pages /pt/ bâties
+- `/pt/` — accueil complet (hero, fonctionnalités, moteur, captures,
+  comment ça marche, tarifs, FAQ, CTA)
+- `/pt/contact/` — formulaire de contact
+- `/pt/blog/` — index du blog (9 articles)
+- `/pt/blog/[slug]/` — gabarit d'article avec `langPaths` depuis
+  `translationSlug`
+
+Chaque page fournit sa carte `langPaths` avec pt.
+
+### Commutateur remplacé par un menu à trois langues
+`Header.astro` : `<details>` déroulant (English, Français, Português),
+noms natifs, ✓ sur la courante, prop `pageLocales` pour cacher PT sur
+les pages sans version portugaise (légal, confidentialité).
+
+### Les huit articles en portugais + le billet d'accueil
+| # | Slug PT | Paire EN | Priorité |
+|---|---|---|---|
+| 1 | deepnest-alternativa-2026 | deepnest-alternative | **trafic** |
+| 2 | preco-software-nesting | nesting-software-pricing | **trafic** |
+| 3 | o-que-e-nesting-2d | what-is-2d-nesting | |
+| 4 | nesting-para-corte-laser | nesting-for-laser-cutting | |
+| 5 | nesting-plasma-gratis-pt | free-plasma-nesting | |
+| 6 | privacidade-software-nesting | nesting-software-data-privacy | |
+| 7 | multi-chapa-dois-estilos-faisabilidade | multi-sheet-two-styles | |
+| 8 | projeto-demo-pecas-coloridas | demo-project-color-parts | |
+| 9 | **nestorcut-fala-portugues** | *(nouveau, PT-only)* | accueil |
+
+Chaque article traduit garde son `translationSlug`, sa date d'origine,
+et porte « *Traduzido do inglês.* » en pied. Le billet d'accueil est
+propre au portugais (pas de paire EN/FR, `translationSlug` absent,
+hreflang restreint à pt seul).
+
+### pt remis dans locales
+`config.ts` : `['en', 'fr', 'pt']`.
+
+### Sitemap
+`sitemap i18n.locales` : `pt: 'pt-BR'`. Sitemap XML contient les URLs
+`/pt/`, `/pt/blog/`, `/pt/contact/`, `/pt/blog/<slug>/` avec
+`hreflang="pt-BR"` en alternates.
+
+### Build et check:links
+- `npm run build` : **exit 0, 76 pages**
+- `npm run check:links` : **OK — 74 URLs sitemap + 75 pages HTML,
+  aucun lien cassé, sitemap propre**
+
+### Preuve hreflang="pt-BR"
+Extraite de `dist/` sur les trois sœurs :
+- `/pt/` : `["en", "fr", "pt-BR", "x-default"]`
+- `/` : `["en", "fr", "pt-BR", "x-default"]`
+- `/fr/` : `["en", "fr", "pt-BR", "x-default"]`
+
+### Liste des pages et articles PT bâties
+```
+/pt/
+/pt/blog/
+/pt/blog/deepnest-alternativa-2026/
+/pt/blog/multi-chapa-dois-estilos-faisabilidade/
+/pt/blog/nesting-para-corte-laser/
+/pt/blog/nesting-plasma-gratis-pt/
+/pt/blog/nestorcut-fala-portugues/
+/pt/blog/o-que-e-nesting-2d/
+/pt/blog/preco-software-nesting/
+/pt/blog/privacidade-software-nesting/
+/pt/blog/projeto-demo-pecas-coloridas/
+/pt/contact/
+```
+**12 pages PT au total.**
+
+### Le légal reste FR+EN
+Mentions légales, CGV, politique de confidentialité : liens PT → EN
+(règle du plan). `pageLocales={['en','fr']}` sur ces pages.
+
+### Détails techniques notés
+- `x-default` pointe vers l'anglais, ou vers la langue courante quand
+  la page n'existe pas en anglais (billet PT-only)
+- `translationSlug` optionnel dans le gabarit blog PT (billet
+  propre à une langue)
+- `Base.astro` reçoit `langPaths` : une balise n'est émise que vers
+  une page qui existe
+- `hreflangOf` : `pt` devient `pt-BR`
