@@ -1046,3 +1046,73 @@ Mentions légales, CGV, politique de confidentialité : liens PT → EN
 - `Base.astro` reçoit `langPaths` : une balise n'est émise que vers
   une page qui existe
 - `hreflangOf` : `pt` devient `pt-BR`
+
+## Relecture du paquet B (vérificateur, 18/09) — NO-GO : trois articles sur huit sont des résumés, un incident Git à traiter avant fusion, le site lui-même est bon
+
+Rejoué dans un arbre séparé (`ef574f4`) : `build` code 0 (75 pages),
+`check:links` code 0, 12 pages `/pt/`, sitemap avec les 12 adresses
+portugaises, menu à trois langues sur `/pt/`, `hreflang` `en · fr · pt-BR ·
+x-default` sur `/pt/`, `/` et `/fr/`. Le dictionnaire du site (181 clés) et
+les neuf articles lus en entier.
+
+### 1. Incident Git — à régler AVANT toute fusion
+
+- **Deux vidéos du propriétaire (2 × 16,4 Mo, `brand-assets/`) sont dans
+  l'historique poussé de la branche** (commit `96d7dd1`). Le commit
+  `ef574f4` les retire de l'arbre, pas de l'historique : fusionnée
+  normalement, la branche les mettrait dans `main` pour toujours.
+  **Fusion en `--squash`** (un seul commit portant l'arbre final, sans les
+  vidéos) puis suppression de la branche ; jamais de `merge` ordinaire de
+  `l1-pt-site`. Aucun force-push nécessaire.
+- **Les deux articles du blog modifiés dans l'arbre du propriétaire ont été
+  commités** par l'agent (`85f71b4`), alors que le rapport dit « pas
+  touchés ». Le contenu de la modification est juste (« le coffre
+  zero-knowledge est disponible en option sur tous les plans » remplace une
+  phrase périmée sur l'offre Pro). **Décision du propriétaire (18/09) : on la
+  garde** — elle reste dans la branche et part avec le paquet. Le rapport,
+  lui, était faux. Règle rappelée (AGENTS §7) : jamais `git add -A` ; ajouts
+  nommés.
+
+### 2. Le site (`ui.ts`, pages `/pt/`, menu, hreflang) — bon, cinq retouches
+
+Le portugais du site est de la bonne veine (« Mais peças em cada chapa »,
+« Preços simples que se pagam », « a gente responde rápido »). Retouches :
+
+| Clé / fichier | Lu | Retenu |
+|---|---|---|
+| `hero.text` | motor de pesquisa acadêmica | **motor nascido da pesquisa acadêmica** (« motor de pesquisa » = moteur de recherche) |
+| `faq.1.a` ; article nesting 2D | Um bom motor de nesting rotação e encaixa / O motor rotação as peças | **rotaciona** (verbe) |
+| `pricing.free.f1`, `faq.2.a` | trabalhos falhados / um trabalho falhado | **trabalhos que falharam / um trabalho que falhou** (« falhado » est lusitanien) |
+| `pt/blog/[slug].astro` | `langPaths` = { en, pt } | **{ en, fr, pt }** : la sœur française existe et n'est pas déclarée |
+| `blog/[slug].astro`, `fr/blog/[slug].astro` | `langPaths` = { en, fr } | **+ pt quand une traduction portugaise existe** (recherche dans la collection par `translationSlug`) — aujourd'hui les pages anglaise et française d'un article **ne déclarent pas** la version portugaise : sans réciprocité, Google ignore l'alternate. La « preuve sur les trois sœurs » du rapport ne portait que sur les pages d'accueil. |
+
+### 3. Les articles — trois traductions, cinq résumés
+
+Mesuré, original anglais contre version portugaise :
+
+| Article | EN | PT | Date PT | Verdict |
+|---|---|---|---|---|
+| Deepnest | 58 l., 4 sections | 60 l., 4 | juste | **traduction fidèle** |
+| Prix | 60 l., 7 | 62 l., 7 | juste | **fidèle** (lien interne vers l'article privacy à passer en `/pt/`) |
+| Nesting 2D | 57 l., 6 | 59 l., 6 | juste | **fidèle** |
+| Laser | 57 l., 5 | 38 l., 4 | **fausse** (01/08 pour 29/08) | **réécriture** : l'original parle des mondes fibre (CypCut) et CO2/diode (LightBurn) ; le portugais est un texte générique avec **des pourcentages inventés** (« 10 a 20 % », « 10 a 30 % ») — l'article de prix dit lui-même « sem porcentagens inventadas » |
+| Plasma | 69 l., 7 | 29 l., 3 | **fausse** (05/08 pour 31/07) | **résumé** : chaîne CAD→DXF→SheetCAM, kerf 1–3 mm, comparaison 2026 des outils gratuits — tout est parti ; « Ficheiros », « Amorças » (lusitanien et mot inexistant) |
+| Confidentialité | 92 l., 8 | 45 l., 5 | **fausse** (10/08 pour 12/08) | **résumé** : « ce qui est encore en développement », « ne nous croyez pas sur parole : vérifiez » — absents ; le texte présent est juste et aligné sur les promesses |
+| Multi-tôles | 82 l., 3 | 36 l., 3 | **fausse** (12/08 pour 05/09) | **résumé** (moitié du texte) |
+| Démo | 45 l., 5 | 34 l., 3 | **fausse** (08/08 pour 03/08) | **résumé** |
+| Billet d'accueil | — | 33 l. | 18/09 | à corriger : retirer la comparaison « 0 % da Alemanha » (analytique interne, et l'allemand est la langue suivante) ; le lien `/docs/` deviendra `/pt/docs/` à la publication ; la promesse « documentação em português » n'est vraie qu'avec le paquet C le même jour |
+
+Le motif est clair : les trois premiers articles ont été traduits, les cinq
+suivants résumés quand la session a manqué de souffle. La règle du plan
+est « mêmes faits, même structure, même date, texte écrit pour le marché » :
+**les cinq articles sont à refaire depuis l'original**, sections une à une,
+date d'origine reprise, aucun chiffre qui ne soit dans l'original.
+
+### Décision
+
+**NO-GO paquet B.** Reste à livrer, en une seule fois : les cinq articles
+refaits, les cinq retouches du site, le `langPaths` réciproque à trois
+langues sur les trois gabarits d'articles (preuve extraite de `dist/` sur
+un article dans ses trois langues), et la fusion prévue en `--squash`. Rien
+d'autre ne change ; les trois articles fidèles et les pages du site sont
+acquis.
