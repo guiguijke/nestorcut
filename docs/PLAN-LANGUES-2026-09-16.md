@@ -1194,3 +1194,49 @@ reste `/docs/` jusqu'au paquet C.
 
 ### Ajouts Git
 Ajouts nommés fichier par fichier — plus jamais `git add -A`.
+
+## Relecture du paquet B révisé (`b0a7e59`) — vérificateur, 18/09 — GO, trois retouches de surface à emporter dans le paquet C
+
+Rejoué dans un arbre séparé : `build` code 0 (75 pages), `check:links`
+code 0 ; les fichiers du propriétaire intacts depuis `ef574f4` ; **la
+réciprocité `hreflang` extraite par moi sur l'article Laser dans ses trois
+langues** : les pages anglaise, française et portugaise déclarent chacune
+`en`, `fr`, `pt-BR` et `x-default` vers l'anglais ; un article anglais dont
+la traduction portugaise existe (Démo) déclare bien `pt-BR` ; le billet
+propre au portugais se déclare lui-même. Les cinq articles refaits lus en
+entier contre leurs originaux :
+
+| Article | EN | PT | Date | Sections | Verdict |
+|---|---|---|---|---|---|
+| Laser | 57 l. | 59 l. | 29/08 ✓ | 5 = 5 | fidèle : les deux mondes fibre/CO2, CypCut, LightBurn, Inkscape, « pas de pourcentage universel » — la phrase de l'original |
+| Plasma | 69 | 71 | 31/07 ✓ | 7 = 7 | fidèle : chaîne CAD→DXF→SheetCAM, kerf 1–3 mm, tableau des outils gratuits 2026, le paragraphe moteur |
+| Confidentialité | 92 | 94 | 12/08 ✓ | 8 = 8 | fidèle : les trois modes, « ce que nous ne promettons pas », « encore en développement », « vérifiez vous-même » ; aligné sur les promesses privées |
+| Multi-tôles | 82 | 91 | 05/09 ✓ | 3 = 3 | fidèle, chiffres de l'original (573/327, 555/345) conservés |
+| Démo | 45 | 47 | 03/08 ✓ | 5 = 5 | fidèle (304 pièces, ~68 %, 24 pièces paramétriques) |
+
+Les cinq retouches du site sont dans le diff (« motor nascido da pesquisa »,
+« rotaciona », « que falharam », `langPaths` à trois) ; le billet n'a plus la
+comparaison avec l'Allemagne ; le lien de Prix vers Confidentialité est en
+`/pt/`. Aucun « Ficheiro », aucune « Amorça », aucun pourcentage inventé.
+
+**Trois retouches de surface, à emporter dans le paquet C (aucun
+aller-retour dédié)** :
+
+| Fichier | Lu | Retenu |
+|---|---|---|
+| `projeto-demo-pecas-coloridas.md` | O **tutto** leva cerca de 90 segundos | **Tudo** leva… (italien égaré) |
+| `privacidade-software-nesting.md` | ninguém pode ler **você** | ninguém pode ler **seus arquivos** (calque de l'anglais « read you ») |
+| `privacidade-software-nesting.md` | tenha sucesso ou **falhado** | tenha sucesso ou **falhe** |
+
+Non mesuré par le vérificateur (sonde non accrochée) : le contenu du menu de
+langues sur un article dans ses trois langues et sur une page légale (PT
+caché). À prouver dans le rapport du paquet C, extrait de `dist/`.
+
+### Décision
+
+**GO paquet B.** La branche `l1-pt-site` **reste ouverte et ne fusionne
+pas** : fusionner publierait `/pt/` sur nestorcut.com avant la
+documentation, ce que la règle « complète ou rien » interdit. Le paquet C
+(documentation portugaise) se construit sur cette même branche ; la fusion
+unique, en `--squash` avec suppression de la branche, a lieu au paquet P,
+le jour où l'application (V0.9.3) et le site partent ensemble.
