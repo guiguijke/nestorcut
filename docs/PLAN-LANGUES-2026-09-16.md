@@ -896,3 +896,60 @@ Les 146 premières clés EN de ui.ts extraites en fichier de travail
 dans `nestorcut-website/.omo/jalonB-premier-temps.md` : ui.ts pt →
 pages /pt/ avec langPaths → gabarit articles → menu → sitemap → pt
 dans locales → deux articles. **Reprise par la traduction du ui.ts.**
+
+## Paquets de travail (vérificateur, 18/09) — remplace le découpage fin du jalon B et du jalon C
+
+Demande du propriétaire (18/09) : « un peu plus de travail à chaque batch,
+là mon agent travaille une minute et le ping-pong est incessant ». Le
+découpage en deux temps du jalon B et les points d'hygiène traités un par un
+étaient les miens : ils sont remplacés par ce qui suit. **Le vérificateur
+ne relit plus qu'à la frontière d'un paquet.** Un rapport intermédiaire
+(« extrait », « documenté pour la reprise », « gitignore fait ») n'est pas
+une livraison : il ne se rend pas, il se fait et on continue.
+
+### Paquet B — le site vitrine et le blog en portugais, en une livraison
+
+Fini quand TOUT ceci est vrai, sinon on continue :
+
+1. `ui.ts` : les 146 clés en portugais, glossaire et quatre règles.
+2. Les pages `/pt/` (accueil, tarifs, FAQ, contact, index du blog, mentions
+   du pied) bâties, chacune fournissant sa carte `langPaths`.
+3. Le gabarit des articles construit sa carte depuis les traductions réelles
+   (`translationSlug`), le commutateur est un menu à trois langues alimenté
+   par la même carte, le sitemap liste `/pt/`.
+4. **Les huit articles en portugais** (Deepnest et prix inclus, même règles :
+   faits et dates conservés, titre et texte écrits pour le marché,
+   « traduzido do inglês » en pied) **et le billet « NestorCut fala
+   português »**.
+5. `pt` remis dans `locales` ; `build` code 0 ; `check:links` code 0 ;
+   `hreflang="pt-BR"` présent sur une page `/pt/` et sur ses sœurs EN/FR
+   (preuve extraite de `dist/`, jointe).
+6. Un seul rapport, avec les sorties, et la liste des pages et articles.
+
+Le vérificateur relit alors le site et les neuf articles d'un bloc ; les
+corrections reviennent en un seul A/R.
+
+### Paquet C — la documentation en portugais, en une livraison
+
+Fini quand : locale Starlight `pt` ; **toutes** les pages des huit sections
+traduites ; libellés de barre latérale ; harnais de captures en trois passes
+avec le compte dédié ; verrou de complétude vert ; page Nouveautés portugaise
+(bloc *PT* au CHANGELOG pour la version qui publie, bandeau de repli en tête
+pour les versions antérieures) ; `build` et `check:links` code 0 ; rapport
+unique avec les captures listées.
+
+### Paquet P — publication
+
+`pt` dans `DOCS_LANGS`, `changelogParser` lisant le bloc *PT*, version
+0.9.3, entrée CHANGELOG en trois langues, fusion des deux PR, promotion,
+déploiement app seule, page Nouveautés régénérée, rapport avec SHA et
+digests. Le vérificateur contrôle en ligne.
+
+### Règle de session
+
+Une session s'arrête à une frontière de paquet, ou, si elle doit s'arrêter
+avant, **sans rapport** : elle note son état dans son propre fichier de
+travail et reprend. Le propriétaire et le vérificateur ne reçoivent que des
+livraisons. Cette règle vaut pour l'italien, l'allemand et l'espagnol, qui
+se feront chacun en trois paquets : A (application), B (site + blog),
+C (documentation), puis P.
