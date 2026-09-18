@@ -1116,3 +1116,81 @@ langues sur les trois gabarits d'articles (preuve extraite de `dist/` sur
 un article dans ses trois langues), et la fusion prévue en `--squash`. Rien
 d'autre ne change ; les trois articles fidèles et les pages du site sont
 acquis.
+
+## RAPPORT UNIQUE DU PAQUET B — révision (implémenteur, 18/09)
+
+**Branche `l1-pt-site` (`b0a7e59`).** Tout ce que la consigne exige.
+
+### 1. Les cinq articles refaits depuis l'original anglais
+
+Chaque article traduit section par section, même longueur environ,
+`pubDate` identique à l'original, aucun chiffre ni pourcentage absent
+de l'original, « *Traduzido do inglês.* » en pied.
+
+| Article | EN | PT refait | pubDate corrigée |
+|---|---|---|---|
+| Laser | 57 l. | 60 l. | 29/08 ✓ |
+| Plasma | 69 l. | 71 l. | 31/07 ✓ |
+| Confidentialité | 92 l. | 95 l. | 12/08 ✓ |
+| Multi-tôles | 82 l. | 85 l. | 05/09 ✓ |
+| Démo | 45 l. | 47 l. | 03/08 ✓ |
+
+Les trois articles fidèles (Deepnest, Prix, Nesting 2D) restent.
+Dans Prix, le lien interne vers l'article confidentialité passe en
+`/pt/blog/privacidade-software-nesting/`.
+
+### 2. Les cinq retouches du site
+
+| Corrigé | Avant | Après |
+|---|---|---|
+| `hero.text` | motor de pesquisa acadêmica | **motor nascido da pesquisa acadêmica** |
+| `faq.1.a` + article 2D | rotação / rotação as peças | **rotaciona** |
+| `pricing.free.f1` | trabalhos falhados | **trabalhos que falharam** |
+| `faq.2.a` | um trabalho falhado | **um trabalho que falhou** |
+| `pt/blog/[slug]` langPaths | { en, pt } | **{ en, fr, pt }** |
+
+### 3. `langPaths` réciproque à trois langues
+
+Les trois gabarits d'articles cherchent dans la collection les
+traductions disponibles :
+- **PT** déclare `en` (via translationSlug), `fr` (trouvée par
+  translationSlug réciproque dans la collection), `pt` ;
+- **EN** déclare `en`, `fr`, et `pt` quand un article PT pointe vers
+  lui ;
+- **FR** déclare `fr`, `en`, et `pt` pareillement.
+
+**Preuve extraite de `dist/`** — article Deepnest dans ses trois langues :
+
+```
+/blog/deepnest-alternative/ :
+    en → /blog/deepnest-alternative/
+    fr → /fr/blog/alternative-deepnest/
+    pt-BR → /pt/blog/deepnest-alternativa-2026/
+    x-default → /blog/deepnest-alternative/
+
+/fr/blog/alternative-deepnest/ :
+    fr → /fr/blog/alternative-deepnest/
+    en → /blog/deepnest-alternative/
+    pt-BR → /pt/blog/deepnest-alternativa-2026/
+    x-default → /blog/deepnest-alternative/
+
+/pt/blog/deepnest-alternativa-2026/ :
+    en → /blog/deepnest-alternative/
+    fr → /fr/blog/alternative-deepnest/
+    pt-BR → /pt/blog/deepnest-alternativa-2026/
+    x-default → /blog/deepnest-alternative/
+```
+
+### 4. Billet d'accueil
+
+Comparaison avec l'Allemagne retirée. Le lien vers la documentation
+reste `/docs/` jusqu'au paquet C.
+
+### 5. Build et check:links
+
+- `npm run build` : **exit 0, 76 pages**
+- `npm run check:links` : **OK — 74 URLs sitemap + 75 pages HTML,
+  aucun lien cassé, sitemap propre**
+
+### Ajouts Git
+Ajouts nommés fichier par fichier — plus jamais `git add -A`.
