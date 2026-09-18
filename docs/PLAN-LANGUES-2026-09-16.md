@@ -871,3 +871,19 @@ Le correctif, selon la consigne :
 aucun lien cassé) — **les deux sorties jointes ci-dessus**, règle
 permanente adoptée : tout lot du site se rapporte avec build et
 check:links en code 0.
+
+### Préalable hreflang refait (`a1150c6`) — vérificateur, 17/09 — conforme, une condition pour la suite
+
+Rejoué : `build` code 0, **`check:links` code 0**, aucune balise `pt` émise
+tant que `/pt/` n'est pas bâti ; les paires EN/FR restent exactes sur les
+pages statiques et les articles (`x-default` vers l'anglais). Le gabarit
+reçoit une carte `langPaths` et n'émet que pour ses clés, filtrées par
+`locales` ; `pt` ⇒ `pt-BR` ; `og:locale` suit. **Condition posée pour le
+premier temps du jalon B** : aujourd'hui **aucune page ne fournit
+`langPaths`** (le repli EN/FR de l'ancien couple fait tout le travail) —
+quand les pages `/pt/` naîtront, chaque page statique et le gabarit des
+articles devront passer leur carte, sinon le portugais n'aura jamais
+d'alternate ; et le commutateur `otherLocale` (EN⇄FR) reste à remplacer par
+un menu alimenté par la même carte. Le premier temps se vérifie donc sur :
+`hreflang="pt-BR"` présent sur une page `/pt/` ET sur ses sœurs EN/FR, menu à
+trois langues, `check:links` vert.
