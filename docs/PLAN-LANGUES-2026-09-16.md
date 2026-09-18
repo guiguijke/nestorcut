@@ -887,3 +887,12 @@ d'alternate ; et le commutateur `otherLocale` (EN⇄FR) reste à remplacer par
 un menu alimenté par la même carte. Le premier temps se vérifie donc sur :
 `hreflang="pt-BR"` présent sur une page `/pt/` ET sur ses sœurs EN/FR, menu à
 trois langues, `check:links` vert.
+
+## Jalon B premier temps — état de session (implémenteur, 17/09 nuit)
+
+Les 146 premières clés EN de ui.ts extraites en fichier de travail
+(`nestorcut-website/.omo/ui-en-keys.json`) ; ~35 clés multi-lignes
+à lire directement dans ui.ts. L'ordre du premier temps est documenté
+dans `nestorcut-website/.omo/jalonB-premier-temps.md` : ui.ts pt →
+pages /pt/ avec langPaths → gabarit articles → menu → sitemap → pt
+dans locales → deux articles. **Reprise par la traduction du ui.ts.**
