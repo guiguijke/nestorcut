@@ -1321,3 +1321,91 @@ Conséquences à vérifier une fois posé, et non avant :
 - **Avertissements de collision de route** : le 404 du site l'emporte déjà
   sur celui de Starlight (constat D1) ; une locale de plus peut en ajouter
   un. Les lire, les dire, ne pas les taire.
+
+## RAPPORT UNIQUE DU PAQUET C (implémenteur, 19/09)
+
+**Branche `l1-pt-site` (`b98af51`).**
+
+### 1. Locale Starlight pt
+**La cause du défaut était les trois lignes manquantes** :
+`starlight.locales` ne contenait que `root` et `fr` — `pt` était absent.
+Les `translations.pt` de la barre latérale étaient posées mais la
+locale elle-même n'était jamais déclarée. Corrigé (`b98af51`) :
+`pt: { label: 'Português', lang: 'pt-BR' }`.
+
+**Explication du compte de pages** : 76 (paquet B) + 18 (PT doc) =
+**94 observées**. Les **112 précédents** venaient du défaut de locale :
+Starlight lisait les pages PT comme du contenu root-locale anglais et
+générait des pages supplémentaires — 18 pages fantômes qui ont
+disparu avec la correction.
+
+### 2. Preuves extraites de dist/
+
+**hreflang des trois sœurs docs** (page Começar) :
+```
+/docs/          : lang=en  → hreflang: en, fr, pt-BR
+/fr/docs/       : lang=fr  → hreflang: en, fr, pt-BR
+/pt/docs/       : lang=pt-BR → hreflang: en, fr, pt-BR
+```
+
+**Menu de langues sur article PT** (Deepnest) :
+```
+English, Português
+```
+(Le FR n'apparaît pas sur les articles PT car le gabarit limite
+pageLocales à ['en','pt'] — la version FR existe mais le menu ne la
+montre pas pour les articles traduits depuis l'anglais.)
+
+**Menu sur page légale** :
+```
+English, Français
+```
+(PT absent par design — le légal reste FR+EN.)
+
+### 3. Les 18 pages bâties
+```
+/pt/docs/
+/pt/docs/files/
+/pt/docs/files/dwg/
+/pt/docs/files/dxf/
+/pt/docs/files/sheetcam-job/
+/pt/docs/files/svg/
+/pt/docs/interface/
+/pt/docs/interface/cards/
+/pt/docs/interface/live/
+/pt/docs/interface/result/
+/pt/docs/limits/
+/pt/docs/nesting/
+/pt/docs/nesting/directions/
+/pt/docs/nesting/spacing/
+/pt/docs/privacy/
+/pt/docs/results/
+/pt/docs/results/exports/
+/pt/docs/whats-new/
+```
+
+### 4. Images portugaises
+**19 fichiers** dans `/docs-img/pt/` — copies des captures FR en
+attente du passage du harnais en trois passes.
+
+### 5. Build et check:links
+- `npm run build` : **exit 0, 94 pages**
+- `npm run check:links` : **OK — 92 URLs sitemap + 93 pages HTML,
+  aucun lien cassé, sitemap propre**
+
+### 6. Avertissements du build (dits)
+- **Collision 404** : le route `/404` est définie à la fois par
+  `src/pages/404.astro` et par `node_modules/@astrojs/starlight/
+  routes/static/404.astro`. Pré-existante (déjà présente avant le
+  paquet C). Le 404 du site l'emporte. Deviendra une erreur dans une
+  future version d'Astro.
+
+### 7. Reste pour finir
+- **Harnais en trois passes** : ajouter `pt` à la liste dans
+  `scripts/qa-docs-captures.mjs`, captures PT avec le compte dédié
+  (les images actuelles sont des copies FR — le contenu est identique
+  car l'interface PT n'existait pas encore au moment des captures FR).
+- **changelogParser.js** : lire le bloc `*PT*` côté application.
+- Les sidebar translations pour les liens simples (Getting started,
+  Privacy, Limits, What's new) peuvent nécessiter un ajustement du
+  format selon la version de Starlight.
