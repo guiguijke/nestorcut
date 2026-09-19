@@ -10,6 +10,7 @@
  *
  * Never convert inside the pipeline or the engine (AGENTS.md rule).
  */
+import { intlTag } from './i18n/index.js'
 
 export const MM_PER_INCH = 25.4
 export const SQMM_PER_SQIN = MM_PER_INCH * MM_PER_INCH // 645.16
@@ -154,7 +155,10 @@ export function fmtArea(mm2, unit, locale) {
     // Jalon A (réserve) : la BALISE DE LA LANGUE DE L'APP, pas celle du
     // système — un Brésilien en navigateur anglais qui choisit Português
     // doit voir « 1,99 m² ».
-    const tag = locale === 'pt' ? 'pt-BR' : locale === 'fr' ? 'fr-FR' : locale || undefined
+    // L2 (piège du plan des langues) : la table locale ⇒ balise vit dans le
+    // REGISTRE (i18n/index.js) — plus de copie locale ici, l'italien n'en a
+    // jamais créé une troisième.
+    const tag = intlTag(locale)
     const nf = (max = 2) => new Intl.NumberFormat(tag, { minimumFractionDigits: 0, maximumFractionDigits: max })
     if (unit === 'inch') {
         const in2 = v / SQMM_PER_SQIN

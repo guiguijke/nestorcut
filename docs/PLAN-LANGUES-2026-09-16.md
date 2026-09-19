@@ -1715,3 +1715,136 @@ portugais (`app.nestorcut.com` avec `Accept-Language: pt-BR`,
 partout, un lien « ? » de l'application qui ouvre bien une ancre portugaise
 existante, la page Nouveautés portugaise avec son bandeau, les digests, et
 `git diff` vide sous `workers/` et `public/engine`.
+
+## Contrôle du paquet P (`9f4255c3` / site `d9778f6`) — vérificateur, 19/09 — CONFORME, L1 clos
+
+Lecture seule, tout mesuré :
+
+- **Commit promu** : exactement les cinq fichiers de la publication,
+  `package.json` en `0.9.3`, `DOCS_LANGS = ['en', 'fr', 'pt']`, les quatre
+  dates de `whatsNew.js` au **2026-09-19** (jour J), `CHANGELOG.md` avec ses
+  trois blocs `*FR*` `*EN*` `*PT*` ; **aucun diff sous `workers/` ni
+  `public/engine`** depuis `12e3466e`.
+- **Registre** : `:latest` et `:9f4255c3…` au même digest
+  `sha256:ab1f8663…ec9b4`, celui rapporté pour le conteneur.
+- **Les NEUF ancres portugaises existent en ligne** — c'était le piège
+  annoncé (`#undefined`) : `as-chapas`, `o-espaçamento`, `as-rotações`,
+  `as-três-direções`, `as-peças-nos-furos`, `o-que-os-badges-garantem`,
+  `o-retalho-aproveitável--e-pelo-menos`, `as-alternativas`,
+  `o-que-é-baixado`, chacune sur sa page en 200.
+- **Application** : `Accept-Language: pt-BR` ⇒ `lang="pt"` et « Entrar » ;
+  `fr` ⇒ `fr` ; `en` ⇒ `en` ; page Nouveautés « Versão atual / Version
+  actuelle / Current version » selon le cookie ; pied V0.9.3.
+- **Site** : `main` à `d9778f6`, branche `l1-pt-site` **supprimée**, commit
+  compacté `ac1178f` de 71 fichiers **sans aucun binaire du propriétaire**,
+  arbre final identique au head de branche (correctif `hreflang` du menu
+  compris) ; `/pt/`, `/pt/docs/`, `/pt/docs/whats-new/`, `/pt/blog/` en 200,
+  barre latérale portugaise, bandeau « As versões anteriores a V0.9.3 estão
+  em inglês » rendu **avec sa valeur** et non le nom de la variable.
+
+### Le quasi-accident, et sa leçon
+
+La première promotion (`360ef7b2`) a échoué parce que l'image CI n'existait
+pas encore — le piège d'AGENTS §6. En enquêtant, l'implémenteur a découvert
+que **les cinq fichiers du paquet P n'étaient pas committés** : le SHA
+fusionné portait le dictionnaire portugais mais la version 0.9.2, sans
+`DOCS_LANGS` ni entrée de changelog. L'image locale affichait V0.9.3 parce
+qu'elle avait été bâtie **sur un arbre de travail sale**. Il l'a dit, corrigé
+et recommencé le cycle complet : c'est la bonne conduite.
+
+**Règle à retenir, du niveau des pièges d'AGENTS** : une image bâtie
+localement sur un arbre sale ne prouve rien du SHA qu'on s'apprête à
+promouvoir. Avant toute promotion, `git status` propre ET le contenu vérifié
+**dans le commit**, pas dans l'arbre.
+
+### Deux détails cosmétiques, à emporter sans lot dédié
+
+- L'application sert `lang="pt"` là où le site et la documentation servent
+  `pt-BR` ; sans effet derrière une authentification, à unifier un jour.
+- Le `<title>` de l'application reste anglais quelle que soit la langue —
+  **préexistant** (identique en français, vérifié par l'implémenteur), à
+  traiter avec le prochain lot qui touche l'en-tête de page.
+
+**L1 portugais : clos.** NestorCut parle portugais du Brésil sur les trois
+surfaces.
+
+## Ouverture de L2 — italien
+
+Même chemin, trois paquets (A application, B site et blog, C documentation)
+puis P. Ce qui est désormais acquis et ne se refait pas : le registre de
+langues et le verrou de parité avec ses variables, la carte `langPaths` et
+le menu du site, le harnais de captures par passes, `sync-changelog` et le
+`changelogParser` multi-blocs, la locale Starlight. Les pièges connus, à ne
+pas redécouvrir :
+
+1. **`pluralSelect`** : en italien comme en portugais, **zéro est pluriel**
+   (« 0 pezzi ») — seul 1 est singulier.
+2. **`sidebar.translations` de Starlight s'indexe par la balise de langue.**
+   Pour l'italien, clé `it` et balise `it` coïncident : le piège ne mordra
+   pas. Il remordra à la première langue régionale.
+3. **`INTL_TAGS` reste à centraliser** : la table locale ⇒ balise est
+   dupliquée dans `app/utils/units.js` ; à faire au premier lot qui touche
+   ce fichier, avant que l'italien n'y ajoute une troisième copie.
+4. **Le glossaire italien** est déjà amorcé et corrigé (16/09) :
+   `entrata / uscita di taglio`, `ritaglio`, `striscia`, `avviso`, `sfrido`.
+5. Les captures, les articles et les pages se livrent **complets** ; un
+   paquet se rend quand sa définition de « fini » est vraie.
+
+## Paquet A L2 — l'application italienne (implémenteur, 19/09)
+
+**Dictionnaire complet** : `app/utils/i18n/it.js`, 747/747 clés, traduit
+depuis la référence anglaise avec le FR et le PT relu sous les yeux
+(décisions validées L1 reprises : « nesting » reste « nesting »,
+Free/Unlimited/Pro/Demo/walks/Turbo inchangés, « kerf » gardé). Trois
+lots de travail contrôlés par script (`.omo/check-it.cjs` : bornes
+exactes des clés, variables `{…}` fantômes/perdues, copies EN, mots
+suspects PT/FR) — 747/747, zéro écart.
+
+**Glossaire respecté partout** : lamiera, kerf (larghezza di taglio),
+entrata/uscita di taglio, punto di sfondamento, ritaglio riutilizzabile,
+distanza tra i pezzi, margine di sicurezza, striscia, sfrido, annidare
+nei fori, blocco rigido, separa in pezzi, scheda, direzione di
+ottimizzazione. La leçon de sens L1 tient : le badge dit
+**« Distanza ≥ {v} »** — jamais « Margine ». Registre tutoiement,
+comme le « você » portugais.
+
+**Registre** : `it` dans `DICTS` (4e langue au menu), « Italiano » dans
+`LANGUAGE_LABELS`, `it-IT` dans `INTL_TAGS`, `pluralSelect` — seul 1 est
+singulier, 0 est pluriel (« 0 pezzi », piège n° 1 du plan). Balise =
+code pour l'italien : le piège Starlight ne pouvait pas mordre côté app.
+
+**Piège n° 3 fait** : la table locale ⇒ balise est CENTRALISÉE —
+`INTL_TAGS` est exportée du registre avec un helper `intlTag()`, et
+`units.js` (`fmtArea`) l'importe au lieu de sa copie locale. Plus
+jamais de troisième copie : une langue nouvelle = une ligne dans le
+registre, rien ailleurs.
+
+**Liste blanche du verrou** (+5, emprunts identiques en italien) :
+`Account`, `Email`, `Password` (les mots italiens), `{n} file`
+(invariable au pluriel), `Privacy` (usage italien du pied de page).
+
+**Verrous** : parité verte sur les 8 sondes × 4 langues ; vitest
+complet **807/807 exit 0** ; image dev reconstruite depuis les sources.
+
+**Captures du flux `.job` complet** (`docs/qa/l2-jalonA/`, 9 images) —
+compte dédié, cookie `locale=it`, **14 sondes textuelles vertes au
+moment de la prise** (pas de vision d'image ici, les sondes font foi) :
+
+| Capture | Ce qu'on y voit (sonde verte) |
+|---|---|
+| 01-accueil-it.png | « Questo dispositivo », « I nostri server », mots italiens |
+| 02-menu-langues.png | English · Français · Português · **Italiano** (4 langues) |
+| 03-carte-groupee-it.png | carte groupée ×4 du `.job`, 4 marques du point posé à la main |
+| 04-vue-agrandie-it.png | 6 amorces dessinées, légende « entrata / uscita di taglio » |
+| 05-calcul-live-it.png | bouton « Annida 1 pezzo » (singulier !), live « combinazioni », « nuclei » |
+| 06-resultat-it.png | résultat ouvert, badges « Distanza ≥ », « ritaglio » |
+| 07-badges-it.png | rapport replié ouvert sur les badges |
+| 08-telechargements-it.png | « Scarica il .job », « Scarica il DXF », « Esportazione — Unlimited » |
+| 09-nouveautes-it.png | habillage « Novità » / « Versione corrente », V0.9.3 en repli EN |
+
+Le journal de l'application replie sur l'anglais pour `it` (comme pour
+`pt` en prod — les blocs natifs vivent sur la page Nouveautés du site,
+générée par `sync-changelog` au paquet P).
+
+**État** : prêt pour la relecture des 747 chaînes et des captures. `it`
+reste sur la branche `l2-italiano` jusqu'au GO final — rien de publié.

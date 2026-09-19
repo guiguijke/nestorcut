@@ -10,9 +10,10 @@
 import en from './en.js'
 import fr from './fr.js'
 import pt from './pt.js'
+import it from './it.js'
 
 /** Les dictionnaires livrés. L'ordre est celui du menu. */
-export const DICTS = { en, fr, pt }
+export const DICTS = { en, fr, pt, it }
 
 /** Codes de langues livrées (dérivé — jamais saisi à la main). */
 export const LOCALES = Object.keys(DICTS)
@@ -25,20 +26,29 @@ export const LANGUAGE_LABELS = {
     en: 'English',
     fr: 'Français',
     pt: 'Português',
+    it: 'Italiano',
 }
 
-/** Balise Intl par code — formatage des nombres (virgule décimale, etc.). */
-const INTL_TAGS = {
+/** Balise Intl par code — formatage des nombres (virgule décimale, etc.).
+ *  L2 (piège du plan) : LA table unique locale ⇒ balise — units.js
+ *  l'importe au lieu d'en garder une copie. */
+export const INTL_TAGS = {
     en: 'en-US',
     fr: 'fr-FR',
     pt: 'pt-BR',
+    it: 'it-IT',
+}
+
+/** La balise Intl d'un code de langue (repli : le code lui-même). */
+export function intlTag(locale) {
+    return INTL_TAGS[locale] || locale
 }
 
 /** Sélecteur de pluriel par langue ('one' | 'other'). */
 export function pluralSelect(locale, n) {
     if (locale === 'fr') return n === 0 || n === 1 ? 'one' : 'other'
-    // pt, it, de, es : seul 1 est singulier, 0 est pluriel (« 0 peças »)
-    if (locale === 'pt') return n === 1 ? 'one' : 'other'
+    // pt, it, de, es : seul 1 est singulier, 0 est pluriel (« 0 peças »,
+    // « 0 pezzi »)
     return n === 1 ? 'one' : 'other'
 }
 
@@ -65,8 +75,7 @@ export function translate(key, locale = DEFAULT_LOCALE, params = {}) {
 export function formatNumber(v, locale = DEFAULT_LOCALE, digits = 1) {
     const n = Number(v)
     if (!Number.isFinite(n)) return '—'
-    const tag = INTL_TAGS[locale] || locale
-    return new Intl.NumberFormat(tag, {
+    return new Intl.NumberFormat(intlTag(locale), {
         minimumFractionDigits: 0,
         maximumFractionDigits: digits,
     }).format(n)
