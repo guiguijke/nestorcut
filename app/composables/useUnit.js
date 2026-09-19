@@ -30,6 +30,9 @@ import {
 const unitState = ref(DEFAULT_UNIT)
 let enabledState = false
 let initialized = false
+// Jalon A (réserve) : la locale de l'app pour fmtArea — via useState comme
+// useLocale (par requête en SSR, jamais partagé).
+const localeState = () => useState('locale', () => 'en')
 
 /**
  * Non-composable accessor for module-level stores (files.js)
@@ -109,7 +112,9 @@ export function useUnit() {
         unitLabel: computed(() => unitLabel(unit.value)),
         fmtLength: (mm) => fmtLength(mm, unit.value),
         fmtLengthValue: (mm, decimals) => fmtLengthValue(mm, unit.value, decimals),
-        fmtArea: (mm2) => fmtArea(mm2, unit.value),
+        // Jalon A (réserve) : la balise de la langue de l'APP traverse —
+        // fmtArea formate selon la locale choisie, pas celle du système.
+        fmtArea: (mm2) => fmtArea(mm2, unit.value, localeState().value),
         mmToDisplay: (mm) => mmToDisplay(mm, unit.value),
         displayToMm: (v) => displayToMm(v, unit.value),
         convertInputValue: (str, from, to) => convertInputValue(str, from, to),

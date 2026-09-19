@@ -9,9 +9,10 @@
 // parité doit être VERT avant qu'elle apparaisse au menu.
 import en from './en.js'
 import fr from './fr.js'
+import pt from './pt.js'
 
 /** Les dictionnaires livrés. L'ordre est celui du menu. */
-export const DICTS = { en, fr }
+export const DICTS = { en, fr, pt }
 
 /** Codes de langues livrées (dérivé — jamais saisi à la main). */
 export const LOCALES = Object.keys(DICTS)
@@ -23,17 +24,21 @@ export const DEFAULT_LOCALE = 'en'
 export const LANGUAGE_LABELS = {
     en: 'English',
     fr: 'Français',
+    pt: 'Português',
 }
 
 /** Balise Intl par code — formatage des nombres (virgule décimale, etc.). */
 const INTL_TAGS = {
     en: 'en-US',
     fr: 'fr-FR',
+    pt: 'pt-BR',
 }
 
 /** Sélecteur de pluriel par langue ('one' | 'other'). */
 export function pluralSelect(locale, n) {
     if (locale === 'fr') return n === 0 || n === 1 ? 'one' : 'other'
+    // pt, it, de, es : seul 1 est singulier, 0 est pluriel (« 0 peças »)
+    if (locale === 'pt') return n === 1 ? 'one' : 'other'
     return n === 1 ? 'one' : 'other'
 }
 

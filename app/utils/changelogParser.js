@@ -1,9 +1,11 @@
 /**
- * Lot J11-b — le journal UNIQUE : `CHANGELOG.md` à la racine du dépôt de
- * l'app est LA source (§3 point 9). Cette page le lit tel quel (import
- * brut au build) et le découpe : une entrée par titre « ## V… », les
- * blocs *FR* / *EN* rendus dans la langue de l'utilisateur. Jamais de
- * seconde copie à maintenir.
+ * Lot J11-b puis paquet C (L1) — le journal UNIQUE : `CHANGELOG.md` à la
+ * racine du dépôt de l'app est LA source (§3 point 9). Cette page le lit
+ * tel quel (import brut au build) et le découpe : une entrée par titre
+ * « ## V… », les blocs *FR* / *EN* / *PT* rendus dans la langue de
+ * l'utilisateur. Le portugais REPIE sur l'anglais quand le bloc *PT*
+ * n'existe pas (versions antérieures à la langue). Jamais de seconde
+ * copie à maintenir.
  */
 import raw from '~~/CHANGELOG.md?raw'
 
@@ -17,7 +19,8 @@ function parseChangelog(md) {
         const body = chunk.slice(nl + 1)
         const fr = extractBlock(body, 'FR')
         const en = extractBlock(body, 'EN')
-        versions.push({ title, fr, en })
+        const pt = extractBlock(body, 'PT')
+        versions.push({ title, fr, en, pt: pt.length ? pt : en })
     }
     return versions
 }
@@ -27,7 +30,8 @@ function extractBlock(body, tag) {
     // Lot J11-bis (R2) : une ligne INDENTÉE qui ne commence pas par « - »
     // est une CONTINUATION de la puce précédente — l'ancien parseur la
     // jetait, et chaque puce se retrouvait tronquée à sa première ligne.
-    const re = new RegExp(`\\*${tag}\\*\\s*\\n([\\s\\S]*?)(?=\\s*\\*(?:FR|EN)\\*\\s*\\n|$)`)
+    // Paquet C : le lookahead couvre FR, EN ET PT.
+    const re = new RegExp(`\\*${tag}\\*\\s*\\n([\\s\\S]*?)(?=\\s*\\*(?:FR|EN|PT)\\*\\s*\\n|$)`)
     const m = re.exec(body)
     if (!m) return []
     const lines = m[1].split('\n').map((l) => l.trim())
