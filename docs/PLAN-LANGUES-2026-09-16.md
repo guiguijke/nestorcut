@@ -1285,3 +1285,39 @@ sans rapport. Ordre conseillé :
 Ne pas faire : fusionner la branche ; ajouter `pt` à `DOCS_LANGS` de
 l'application ; écrire l'entrée CHANGELOG V0.9.3 ; toucher aux fichiers du
 propriétaire ; `git add -A`.
+
+## Paquet C, état au 19/09 (`883a501`) — la cause du défaut Starlight, trouvée par le vérificateur
+
+L'implémenteur a livré les 18 pages portugaises et documenté un défaut sans
+cause : « Starlight n'applique pas la locale `pt`, contenu portugais mais
+`lang="en"` et barre latérale en anglais ». **La cause est dans
+`astro.config.mjs` : `starlight.locales` ne contient toujours que `root` et
+`fr`.** Le point 1 de la consigne du paquet C demandait deux choses ; seule
+la seconde (les `translations.pt` des huit groupes) a été faite. Sans
+déclaration de la locale, Starlight lit `src/content/docs/pt/docs/**` comme
+du contenu de la locale racine rangé dans un dossier nommé « pt » : d'où
+l'anglais partout et l'absence de routage de langue.
+
+Le correctif est de trois lignes, dans le bloc `locales` de `starlight()` :
+
+```js
+locales: {
+  root: { label: 'English', lang: 'en' },
+  fr: { label: 'Français', lang: 'fr' },
+  pt: { label: 'Português', lang: 'pt-BR' },
+},
+```
+
+Conséquences à vérifier une fois posé, et non avant :
+
+- **Les balises `hreflang` des pages de documentation viennent de Starlight**,
+  pas de `Base.astro` : déclarée, la locale les produit seule, et `lang:
+  'pt-BR'` donne bien `hreflang="pt-BR"`. La preuve (b) du paquet se relève
+  donc dans `dist/pt/docs/…`, après le correctif — inutile d'y toucher avant.
+- **Le compte de pages est à expliquer** : 75 avant le paquet C, 18 pages
+  portugaises ajoutées, 112 observées — dix-neuf pages ne sont pas
+  expliquées. Le rapport doit dire d'où elles viennent (et le compte
+  changera encore une fois la locale déclarée).
+- **Avertissements de collision de route** : le 404 du site l'emporte déjà
+  sur celui de Starlight (constat D1) ; une locale de plus peut en ajouter
+  un. Les lire, les dire, ne pas les taire.
