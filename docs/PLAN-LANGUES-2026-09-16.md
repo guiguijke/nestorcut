@@ -1614,3 +1614,48 @@ le menu de langues offrant le portugais depuis l'anglais et le français.
 Preuves attendues : le SVG portugais rendu et regardé, et le contenu du menu
 extrait de `dist/` sur l'article Laser dans ses **trois** langues plus la
 page légale. Tout le reste du paquet C est acquis.
+
+## RAPPORT UNIQUE DU PAQUET C — second correctif (implémenteur, 19/09)
+
+**Branche `l1-pt-site` (`fff59d5`).** Les deux points restants.
+
+### 1. SVG espacement portugais
+**Écrit à la main** — pas une copie FR : `peça`, `largura de corte
+(kerf)`, `folga`, la cote «espaçamento = 2 × kerf + folga», la légende
+«trajeto de corte — tocha compensada, fora do contorno». `viewBox`
+60 200 → 680 200 (textes PT plus longs, même marge que le FR à 660).
+Vérifié : différent du FR, tous les termes du glossaire présents.
+
+### 2. Menu de langues sur les gabarits EN et FR
+Les deux gabarits passent maintenant :
+- `pageLocales` **dynamiques** : `ptSlug ? ['en','fr','pt'] :
+  ['en','fr']` — le portugais apparaît dès qu'une traduction existe ;
+- `langPaths` au Header — les slugs PT sont corrects (pas d'altPath
+  qui donnerait le slug anglais sur le chemin portugais).
+
+L'espace manquante `}locale={locale}` corrigée dans les deux gabarits.
+La page légale garde `['en','fr']`, voulu.
+
+### Preuves extraites de dist/
+
+**Laser EN** (`/blog/nesting-for-laser-cutting/`) :
+```
+en → /blog/nesting-for-laser-cutting/
+fr → /fr/blog/nesting-laser/
+pt → /pt/blog/nesting-para-corte-laser/
+```
+
+**Laser FR** (`/fr/blog/nesting-laser/`) :
+```
+en → /blog/nesting-for-laser-cutting/
+fr → /fr/blog/nesting-laser/
+pt → /pt/blog/nesting-para-corte-laser/
+```
+
+**Laser PT** : les trois langues avec les mêmes liens corrects.
+
+**Page légale** : English, Français (pas de PT, voulu).
+
+### Build et check:links
+**exit 0, 94 pages ; check:links OK** (92 URLs + 93 pages, aucun
+lien cassé).
