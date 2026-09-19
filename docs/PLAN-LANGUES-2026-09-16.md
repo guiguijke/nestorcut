@@ -1486,3 +1486,62 @@ grave, et relancer le script pour vérifier la sortie.
 **NO-GO paquet C.** Les cinq points ci-dessus, en une seule livraison, sur
 la même branche. Les 18 pages traduites, la locale et les titres sont
 acquis : rien à refaire de ce côté.
+
+## RAPPORT UNIQUE DU PAQUET C — révision des cinq points (implémenteur, 19/09)
+
+**Branches** : `l1-pt-site` (`e1852cf`) pour le site, `l1-portugues`
+(`2949040d`) pour l'application. Les deux restent ouvertes.
+
+### 1. Sidebar : huit libellés portugais
+Les `translations` sont re-keyées `'pt-BR':` (Starlight indexe par la
+**balise de langue**, pas par la clé du dossier — le FR marchait par
+coïncidence, `fr` et `fr` valant pareil). Preuve extraite de
+`dist/pt/docs/` : les huit libellés rendent — Começar, Seus arquivos,
+A interface, Nesting explicado, Seus resultados, Privacidade, Limites e
+perguntas frequentes, Novidades.
+
+### 2. Captures : 19 images PT régénérées (plus des copies FR)
+Le harnais est étendu à trois passes (`fr`, `en`, `pt`) : textes PT
+dans la sonde (Este dispositivo, Nossos servidores, seu ponto,
+Espaçamento, Direções), `locale: 'pt-BR'`, cookie `pt`, compte dédié,
+verrou anti-orphelle sur les TROIS jeux (chaque image référencée doit
+exister dans fr + en + pt). **Les 19 images de `docs-img/pt/` sont
+régénérées depuis l'image `l1-portugues`** — vérifié par hash Git :
+toutes différentes des FR (plus aucune copie). Sortie du harnais :
+**GO, exit 0, toutes les sondes PASS, langue pt vérifiée à la prise**.
+
+### 3. `changelogParser.js` lit le bloc `*PT*`
+Le lookahead couvre maintenant FR|EN|PT, et `pt` reçoit le bloc `PT`
+quand il existe, avec **repli sur l'anglais** sinon. Vitest 21/21
+(y compris le verrou existant « FR+EN dans chaque version »).
+
+### 4. Bandeau de repli : template literal
+L'apostrophe simple est remplacée par un accent grave (template
+literal) : `${PT_SINCE}` s'interpolera correctement au paquet P.
+Le bandeau est absent aujourd'hui (aucun bloc `*PT` n'existe encore
+dans le changelog — c'est le comportement attendu ; il apparaîtra
+quand le bloc PT sera écrit au paquet P). Vérifié : pas de
+`${PT_SINCE}` en toutes lettres dans la sortie.
+
+### 5. Menu de langues sur article dans ses trois langues
+Le Header reçoit un prop `langPaths` : quand les slugs diffèrent entre
+langues (articles traduits), le menu utilise les chemins corrects au
+lieu d'`altPath`. Sur l'article Deepnest PT :
+```
+English → /blog/deepnest-alternative/
+Français → /fr/blog/alternative-deepnest/
+Português (courant)
+```
+**Les trois langues avec les bons slugs FR.**
+
+### Build et check:links
+- Site : **exit 0, 94 pages**, check:links **OK** (92 URLs + 93
+  pages, aucun lien cassé)
+- Avertissement pré-existant : collision `/404` site ↔ Starlight
+
+### Les quatre preuves
+1. **hreflang des 3 sœurs** : `en → en,fr,pt-BR` ; `fr → en,fr,pt-BR` ;
+   `pt-BR → en,fr,pt-BR`
+2. **Menu article 3 langues** : voir ci-dessus
+3. **Menu page légale** : English, Français (PT absent par design)
+4. **18 pages bâties + 19 images PT** (toutes régénérées, zéro copie)
