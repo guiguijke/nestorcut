@@ -1659,3 +1659,59 @@ pt → /pt/blog/nesting-para-corte-laser/
 ### Build et check:links
 **exit 0, 94 pages ; check:links OK** (92 URLs + 93 pages, aucun
 lien cassé).
+
+## Relecture finale du paquet C (`fff59d5`) — vérificateur, 19/09 — GO
+
+Rejoué : `build` code 0, **93 pages** (le rapport dit 94 — écart constant,
+sans conséquence), `check:links` code 0.
+
+- **Dessin de l'espacement** : le portugais est écrit, **rendu et regardé** —
+  peça, largura de corte (kerf) ×2, folga, la cote « espaçamento = 2 × kerf +
+  folga », la légende en trois lignes ; mesuré, le texte le plus à droite
+  finit à 627 pour un cadre de 680, rien n'est coupé, rien ne se chevauche.
+  **Plus aucune image portugaise identique à la française : 19 sur 19.**
+- **Menu de langues** : sur l'article Laser, les versions **anglaise,
+  française et portugaise** offrent chacune les trois langues avec les bons
+  slugs ; la page légale reste à deux, l'accueil portugais est à trois. Les
+  deux gabarits calculent `pageLocales` depuis `ptSlug` et passent
+  `langPaths` au `Header`.
+
+Détail sans conséquence, à emporter un jour : l'attribut `hreflang` des
+liens du menu dit `pt` là où l'en-tête de page dit `pt-BR`. C'est indicatif
+sur un `<a>`, Google lit l'en-tête ; par cohérence, `pt-BR` des deux côtés.
+
+**GO paquet C.** La documentation portugaise est complète. La branche ne
+fusionne toujours pas : tout part au paquet P.
+
+## Consigne du paquet P — la publication du portugais, une seule livraison
+
+Deux dépôts, le même jour. Ordre imposé :
+
+1. **`CHANGELOG.md`** (application) : entrée **V0.9.3** avec ses trois blocs
+   `*FR*`, `*EN*`, `*PT*` — « NestorCut fala português : interface,
+   documentação e blog ». `package.json` en `0.9.3`.
+2. **Les liens « ? » vers la documentation** (`app/utils/docsLinks.js`) :
+   ajouter `'pt'` à `DOCS_LANGS` **et l'ancre portugaise des neuf sujets**
+   dans `HELP_TOPICS`. Piège : `docsHelpUrl` lit `t.anchor[lang]` — une
+   langue déclarée sans ancre produit `#undefined`. Les ancres se relèvent
+   dans le HTML **bâti** de `dist/pt/docs/`, jamais devinées.
+3. **`whatsNew.js`** : les quatre dates au jour du déploiement.
+4. **Fusion de l'application** : `l1-portugues` dans `main`, fusion
+   ordinaire ; vitest code 0 ; image reconstruite.
+5. **Promotion et déploiement** : `promote-latest` sur le SHA complet,
+   `pull app` + `up -d app`, application seule (aucun diff moteur ni worker).
+6. **Fusion du site** : `l1-pt-site` dans `main` **en `--squash`** puis
+   **suppression de la branche** — les deux vidéos du propriétaire sont dans
+   son historique et ne doivent pas entrer dans `main`.
+7. **Page Nouveautés du site** : relancer `sync-changelog.mjs` (le bloc
+   `*PT*` existe désormais), vérifier que le bandeau « As versões anteriores
+   a V0.9.3 estão em inglês » s'affiche bien avec sa valeur interpolée, et
+   committer la sortie.
+8. Rapport : SHA promu, digest, SHA de `main` du site.
+
+**Contrôle du vérificateur après publication** : les trois surfaces en
+portugais (`app.nestorcut.com` avec `Accept-Language: pt-BR`,
+`nestorcut.com/pt/`, `nestorcut.com/pt/docs/`), le menu de langues à trois
+partout, un lien « ? » de l'application qui ouvre bien une ancre portugaise
+existante, la page Nouveautés portugaise avec son bandeau, les digests, et
+`git diff` vide sous `workers/` et `public/engine`.
