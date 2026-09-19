@@ -4,6 +4,29 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.3
+
+*FR*
+
+- NestorCut parle portugais du Brésil : interface, site et
+  documentation entièrement traduits. La langue de votre navigateur est
+  reconnue dès la première visite, et le menu de langues offre
+  Português à côté de English et Français.
+
+*EN*
+
+- NestorCut now speaks Brazilian Portuguese: interface, website and
+  documentation fully translated. Your browser language is detected on
+  your first visit, and the language menu offers Português alongside
+  English and French.
+
+*PT*
+
+- O NestorCut agora fala português do Brasil: interface, site e
+  documentação totalmente traduzidos. O idioma do seu navegador é
+  detectado na primeira visita, e o menu de idiomas oferece Português
+  junto de English e Français.
+
 ## V0.9.2
 
 *FR*

@@ -16,8 +16,14 @@ describe('D5 — liens d\'aide vers la documentation', () => {
         expect(docsHelpUrl('fr', 'badges')).toContain('/fr/docs/nesting/#ce-que-garantissent-les-badges')
     })
 
+    it('pt est publiée : son préfixe et SON ancre', () => {
+        expect(docsHelpUrl('pt', 'sheets')).toBe('https://nestorcut.com/pt/docs/interface/#as-chapas')
+        expect(docsHelpUrl('pt', 'badges')).toContain('/pt/docs/nesting/#o-que-os-badges-garantem')
+    })
+
     it('toute langue non publiée REPIE sur l\'anglais (écrit pour six codes)', () => {
-        for (const code of ['pt', 'pt-BR', 'it', 'de', 'es', 'zz-unknown']) {
+        // Paquet P : pt est PUBLIÉ, retiré de la liste des replis
+        for (const code of ['it', 'de', 'es', 'zz-unknown']) {
             expect(docsHelpUrl(code, 'sheets')).toBe(docsHelpUrl('en', 'sheets'))
         }
     })
@@ -27,7 +33,7 @@ describe('D5 — liens d\'aide vers la documentation', () => {
             for (const lang of DOCS_LANGS) {
                 const url = docsHelpUrl(lang, topic)
                 expect(url, `${topic}/${lang}`).toMatch(/#.+$/)
-                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/)?docs\//)
+                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/)?docs\//)
             }
         }
     })
