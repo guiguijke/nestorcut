@@ -1545,3 +1545,72 @@ Português (courant)
 2. **Menu article 3 langues** : voir ci-dessus
 3. **Menu page légale** : English, Français (PT absent par design)
 4. **18 pages bâties + 19 images PT** (toutes régénérées, zéro copie)
+
+## Relecture du paquet C révisé (`e1852cf`) — vérificateur, 19/09 — NO-GO étroit : deux points, le reste est acquis
+
+Rejoué : `build` code 0, **93 pages** (le rapport dit 94), `check:links`
+code 0. Trois points sur cinq sont faits et mesurés :
+
+- **Barre latérale** : les huit libellés de groupe rendent en portugais dans
+  `dist/pt/docs/` — Começar, Seus arquivos, A interface, Nesting explicado,
+  Seus resultados, Privacidade, Limites e perguntas frequentes, Novidades.
+  La clé `'pt-BR'` était bien le correctif.
+- **`changelogParser.js`** : `*PT*` extrait, repli anglais, 619 tests verts.
+- **Bandeau de repli** : accent grave, l'interpolation fonctionnera au
+  paquet P.
+
+### 1. Captures : 18 sur 19 — le dessin de l'espacement est resté français
+
+Vérifié par empreinte de blob : dix-huit images portugaises régénérées,
+**une identique à la française — `espacement-diagram.svg`**. Ce n'est pas une
+capture d'écran mais un dessin écrit à la main (lot D3-bis) : le harnais ne
+le produit pas, et le verrou anti-orpheline ne contrôle que l'existence, pas
+la langue. Sur la page portugaise de l'espacement, le lecteur voit donc
+« pièce », « saignée (kerf) », « sécurité » et la cote « espacement = 2 ×
+kerf + sécurité ». À écrire en portugais, avec le glossaire : **peça**,
+**largura de corte (kerf)**, **folga**, cote « **espaçamento = 2 × kerf +
+folga** », légende « **trajeto de corte — tocha compensada, fora do
+contorno** ». Le `viewBox` suivra la longueur des textes (le français avait
+dû passer à 660 pour la même raison) : rendre le SVG et le regarder.
+
+J'ai regardé trois des dix-huit captures régénérées (accueil, carte groupée,
+résultat) : elles sont bien en portugais. Le harnais à trois passes est en
+place et sa sonde de langue aussi.
+
+### 2. Le menu de langues n'offre jamais le portugais depuis l'anglais ni le français
+
+Mesuré dans `dist/blog/nesting-for-laser-cutting/index.html` : le menu ne
+propose que **English et Français**, alors que la traduction portugaise
+existe et que la balise `hreflang="pt-BR"` de la même page la déclare.
+Google le sait, le lecteur ne le voit pas — un Brésilien qui arrive sur
+l'article Deepnest ou l'article de prix, les deux pages qui apportent le
+trafic, n'a aucun moyen visible d'aller à la version portugaise. C'est une
+bonne part de l'objectif du chantier.
+
+Cause : `src/pages/blog/[slug].astro` et `src/pages/fr/blog/[slug].astro`
+passent `pageLocales={['en', 'fr'] as const}` en dur — alors qu'ils
+calculent déjà `ptSlug` deux lignes plus haut pour le `langPaths` du
+gabarit — et **ne passent pas `langPaths` au `Header`**, qui retomberait
+donc sur `altPath` (le slug de l'autre langue) pour construire l'adresse
+portugaise. Le `Header`, lui, est juste : il préfère `langPaths?.[l]`.
+Correctif, deux attributs par gabarit :
+
+```astro
+pageLocales={ptSlug ? (['en', 'fr', 'pt'] as const) : (['en', 'fr'] as const)}
+langPaths={{ en: …, fr: …, ...(ptSlug ? { pt: `blog/${ptSlug}` } : {}) }}
+```
+
+La page légale garde `['en', 'fr']` : c'est voulu, il n'y a pas de page
+légale portugaise.
+
+Détail de forme, au passage : `pageLocales={[…] as const}locale={locale}`
+manque une espace entre deux attributs dans trois gabarits (`blog`,
+`fr/blog`, `legal`, `index`). Ça compile, ça se lit mal.
+
+### Décision
+
+**NO-GO étroit.** Deux points : le dessin de l'espacement en portugais, et
+le menu de langues offrant le portugais depuis l'anglais et le français.
+Preuves attendues : le SVG portugais rendu et regardé, et le contenu du menu
+extrait de `dist/` sur l'article Laser dans ses **trois** langues plus la
+page légale. Tout le reste du paquet C est acquis.
