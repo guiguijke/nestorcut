@@ -1409,3 +1409,80 @@ attente du passage du harnais en trois passes.
 - Les sidebar translations pour les liens simples (Getting started,
   Privacy, Limits, What's new) peuvent nécessiter un ajustement du
   format selon la version de Starlight.
+
+## Relecture du paquet C (`b98af51`) — vérificateur, 19/09 — NO-GO : cinq points, dont deux diagnostiqués
+
+Rejoué dans un arbre séparé : `build` code 0, **93 pages** (le rapport dit
+94), `check:links` code 0, 18 pages sous `/pt/docs/`. Acquis et mesurés :
+`<html lang="pt-BR">`, `hreflang` `en · fr · pt-BR` sur la page portugaise,
+**les 18 titres de page traduits** (Visão geral, O espaçamento e as
+rotações, Os downloads e a visualização DXF…), l'interface propre de
+Starlight en portugais (Escuro / Claro / Auto), la collision `/404`
+préexistante dite. La locale est bien posée : le correctif des trois lignes
+a marché.
+
+**Le paquet a été rendu en listant trois points non faits.** C'est la
+deuxième fois (paquet B, cinq articles résumés). Un paquet se rend quand sa
+définition de « fini » est vraie ; sinon la session continue sans rapport.
+
+### 1. Les 19 images portugaises sont les images FRANÇAISES, à l'octet près
+
+Vérifié par empreinte de blob Git : `docs-img/pt/*` et `docs-img/fr/*` ont
+**les mêmes 19 empreintes**. La documentation portugaise montre donc une
+interface en français — exactement le défaut que le propriétaire a relevé
+lui-même le 16/09 sur les pages anglaises, et la règle « une capture par
+langue » écrite en réponse.
+
+La justification du rapport (« identiques car l'interface PT n'existait pas
+au moment des captures FR ») est **fausse** : l'interface portugaise existe
+depuis le jalon A — le vérificateur en a pris les captures le 17/09 sur
+l'image reconstruite (`~/qa-out/verif-l1a/`). Le harnais pouvait tourner.
+
+### 2. Les huit libellés de groupe de la barre latérale sont en anglais — cause trouvée
+
+Sur `/pt/docs/`, la navigation affiche : Getting started, Your files, The
+interface, Nesting explained, Your results, Privacy, Limits and FAQ, What's
+new. Le rapport affirme « la sidebar EST en portugais » ; seuls les
+**titres de page** le sont. **Cause : Starlight indexe les `translations`
+d'une entrée de barre latérale par la BALISE DE LANGUE (`lang`), pas par la
+clé de locale.** Le français marche par coïncidence (clé `fr`, lang `fr`) ;
+le portugais a la clé `pt` et la balise `pt-BR`. Il faut donc :
+
+```js
+translations: { fr: 'Vos fichiers', 'pt-BR': 'Seus arquivos' },
+```
+
+sur les huit entrées. **À retenir pour L2–L4** : ce piège ne mord que
+lorsque la clé de locale diffère de la balise ; il remordra à chaque langue
+régionale.
+
+### 3. Le harnais de captures n'a pas été touché
+
+`scripts/qa-docs-captures.mjs` (dépôt principal, `main` à `4dfdae62`) ne
+connaît toujours que deux passes. Le point 3 de la consigne n'est pas
+entamé : liste de langues, troisième passe au cookie `pt` et compte dédié,
+sonde de langue à la prise, verrou anti-orpheline sur le jeu `pt`.
+
+### 4. `changelogParser.js` de l'application ne lit pas le bloc `*PT*`
+
+Le script du site le fait, l'application non : son `parseChangelog` n'extrait
+que `FR` et `EN`. La page `/changelog` de l'application resterait en anglais
+pour un utilisateur portugais.
+
+### 5. Le bandeau de repli ne s'affichera jamais correctement
+
+`sync-changelog.mjs` : le bandeau est écrit **entre apostrophes simples**
+avec une interpolation — `'> **As versões anteriores a ${PT_SINCE} estão em
+inglês.**
+
+'`. JavaScript n'interpole pas dans une chaîne simple : la
+page afficherait `${PT_SINCE}` en toutes lettres. Invisible aujourd'hui (le
+bandeau ne se déclenche qu'avec un bloc `*PT*` au CHANGELOG, écrit au
+paquet P) — donc le défaut sortirait le jour de la publication. Accent
+grave, et relancer le script pour vérifier la sortie.
+
+### Décision
+
+**NO-GO paquet C.** Les cinq points ci-dessus, en une seule livraison, sur
+la même branche. Les 18 pages traduites, la locale et les titres sont
+acquis : rien à refaire de ce côté.
