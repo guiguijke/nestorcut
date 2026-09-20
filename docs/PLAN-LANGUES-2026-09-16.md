@@ -2206,3 +2206,100 @@ ouvert** — publication, deux dépôts le même jour, dans l'ordre :
 Contrôle du vérificateur après publication : les trois surfaces en italien,
 les neuf ancres d'aide en ligne, le menu à quatre langues, les digests, et
 `git diff` vide sous `workers/` et `public/engine`.
+
+## Contrôle du paquet P de L2 (`88769cad` / site `7d73061`) — vérificateur, 20/09 — CONFORME, L2 clos
+
+Lecture seule :
+
+- **Commit promu** : `package.json` en `0.9.4`, `DOCS_LANGS = ['en','fr','pt','it']`,
+  les quatre dates de `whatsNew.js` au **2026-09-20**, `CHANGELOG.md` avec
+  **quatre blocs** `*FR*` `*EN*` `*PT*` `*IT*` ; **aucun diff sous `workers/`
+  ni `public/engine`**.
+- **Registre** : `:latest` et `:88769cad…` au même digest
+  `sha256:efc407ab…93c5e0`, celui du conteneur.
+- **Les neuf ancres italiennes existent en ligne** : `le-lamiere`,
+  `la-distanza`, `le-rotazioni`, `le-tre-direzioni`, `i-pezzi-nei-fori`,
+  `cosa-garantiscono-i-badge`, `il-ritaglio-riutilizzabile--e-almeno`,
+  `le-alternative`, `cosa-si-scarica` — chacune sur sa page en 200.
+- **Application** : `it`, `pt`, `fr`, `en` servis selon la langue du
+  navigateur ; pied V0.9.4 ; page Nouveautés « Versione corrente : V0.9.4 ».
+- **Site** : `main` à `7d73061`, **les deux branches supprimées**, aucun
+  binaire du propriétaire dans la fusion ; toutes les surfaces en 200 ; la
+  page Nouveautés italienne porte le bloc natif **et** le bandeau rendu avec
+  sa valeur ; **les huit groupes de la barre latérale sont en italien** —
+  « Iniziare » et « L'interfaccia » compris, ce que ma sonde de la veille
+  n'avait pas su lire.
+
+**L2 italien : clos.** NestorCut parle quatre langues, publiées selon la
+règle — application, site et documentation le même jour.
+
+## Ouverture de L3 — allemand
+
+Même chemin : paquets A, B, C, puis P. La mécanique est entièrement acquise
+et ne se refait pas ; il ne reste que la langue et les captures. Ce qui est
+propre à l'allemand, à savoir d'avance :
+
+1. **Déclarer la locale Starlight avec `lang: 'de'`**, pour que la clé du
+   dossier et la balise coïncident — sinon les traductions de barre latérale
+   doivent être indexées `'de-DE'` (le piège du portugais).
+2. **`INTL_TAGS` : `de: 'de-DE'`** — virgule décimale et point de milliers,
+   comme le portugais. Les longueurs, les aires et les pourcentages passent
+   déjà par le registre depuis L2 : une ligne suffit.
+3. **Le vouvoiement (Sie)** est posé au glossaire — l'allemand d'atelier ne
+   tutoie pas, contrairement au *tu* italien et au *você* brésilien. À tenir
+   sur les 747 chaînes.
+4. **La longueur des mots composés** est le risque propre à l'allemand :
+   « Optimierungsrichtung », « Sicherheitszugabe », « Materialausnutzung »
+   dépassent de moitié leurs équivalents latins. Les captures doivent être
+   regardées pour ce qu'elles montrent des **boutons et des badges** — un
+   libellé qui déborde ou se coupe est un défaut de paquet A, pas une
+   retouche. Le dessin de l'espacement demandera très probablement un
+   `viewBox` plus large que 680.
+5. **Glossaire allemand** déjà corrigé (16/09) : Blech, Schnittspalt (Kerf),
+   Einfahrt / Ausfahrt, Einstichpunkt, Restblech, Teileabstand, Schrott,
+   Drehungen, Brenner (Plasmabrenner), Streifen, Materialausnutzung.
+6. Les rappels qui ont coûté cher : mention « Aus dem Englischen übersetzt »
+   en pied des huit articles traduits ; les captures se **régénèrent** dans
+   la langue, jamais ne se copient ; un paquet se rend quand sa définition de
+   « fini » est vraie.
+
+## Paquet A L3 — l'application allemande (implémenteur, 20/09 nuit)
+
+**Dictionnaire complet** : `app/utils/i18n/de.js`, 747/747 clés, trois
+lots contrôlés par `.omo/check-de.cjs` (bornes exactes, variables `{…}`,
+copies EN, fuites IT/PT/FR, **tutoiement** — l'allemand d'atelier
+vouvoie). 747/747, zéro écart ; **137 chaînes portent Sie/Ihr**.
+
+**Glossaire respecté partout** : Blech, Schnittspalt (Kerf),
+Einfahrt/Ausfahrt, Einstichpunkt, Restblech, Teileabstand,
+Sicherheitszugabe, Schrott, Streifen, Materialausnutzung,
+Optimierungsrichtung, starrer Block, in Einzelteile zerlegen, in Löcher
+verschachteln. Leçon de sens tenue : badge **« Abstand ≥ {v} »**, jamais
+« Zugabe ». Libellés de boutons gardés courts (« {n} Teile
+verschachteln ») — le risque des mots composés.
+
+**Registre** : `de` dans `DICTS` (5e langue), « Deutsch » au menu,
+`de: 'de-DE'` dans `INTL_TAGS` (une ligne — la table est centralisée
+depuis L2), `pluralSelect` : seul 1 est singulier (« 0 Teile »).
+Liste blanche +1 : `Name` (le mot allemand).
+
+**Verrous** : parité verte sur les sondes × 5 langues ; vitest
+**812/812 exit 0** ; image reconstruite.
+
+**Captures du flux `.job` complet** (`docs/qa/l3-jalonA/`, 9 images) —
+**18 sondes vertes**, dont les sondes de DÉBORDEMENT propres au risque
+allemand : chaque écran capturé (accueil, carte groupée, vue live,
+résultat, téléchargements) est sondé pour tout libellé dont le texte
+dépasse sa boîte — **zéro débordement horizontal** (les mots composés
+tiennent), y compris le bouton « 1 Teil verschachteln » (singulier
+verbeux) et « Die .job herunterladen ». Le badge dit
+**« Abstand ≥ 5,87 mm »** à la virgule allemande. Note d'instrument :
+la première sonde comptait un faux positif vertical
+(`.summary__value` +3y, `line-height: 1` — la métrique de glyphe dépasse
+la boîte ligne sans rien couper, clippeur = le conteneur de DÉFILEMENT
+du rapport, texte bien en dedans) — corrigée sur les bornes réelles du
+texte contre le bord du clippeur ; mesuré avant de conclure, le faux
+positif existe à l'identique en français.
+
+**État** : prêt pour la relecture des 747 chaînes et des captures. `de`
+reste sur la branche `l3-allemand` jusqu'au GO final — rien de publié.

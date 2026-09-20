@@ -24,10 +24,12 @@ const IDENTICAL_OK = [
     'Standard', 'Cloud · 24 h', 'Export — Unlimited', '{area} m²',
     // identiques dans les langues livrées — validés par la relecture :
     'Demo', 'material', 'Nesting', 'walks',
-    // italiens (L2) : emprunts identiques — « Account », « Email » et
+    // italien (L2) : emprunts identiques — « Account », « Email » et
     // « Password » SONT les mots italiens ; « file » est invariable au
     // pluriel ; « Privacy » est l'usage italien du pied de page.
     'Account', 'Email', 'Password', '{n} file', 'Privacy',
+    // allemand (L3) : « Name » EST le mot allemand.
+    'Name',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()
