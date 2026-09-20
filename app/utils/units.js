@@ -123,19 +123,30 @@ function trimFixed(v, decimals) {
  * strings). mm: 0.1 resolution; inch: 0.001" resolution (0.0254 mm — far
  * below any real kerf, so display rounding has no business impact).
  * Pass `decimals` to override (e.g. 2 for sub-mm spacing gaps).
+ *
+ * Relecture A L2 (20/09) : les LONGUEURS passent par Intl comme les aires —
+ * un FR/IT lit « 1040,4 mm », pas « 1040.4 mm » (défaut produit sorti de la
+ * capture italienne, présent en prod FR). Sans locale (chemins machine :
+ * export CSV — la virgule y casserait les colonnes), 'en' garde le point.
  */
-export function fmtLengthValue(mm, unit, decimals) {
+export function fmtLengthValue(mm, unit, decimals, locale) {
     const v = mmToDisplay(mm, unit)
     if (!Number.isFinite(v)) return '—'
     const d = decimals ?? (unit === 'inch' ? 3 : 1)
-    return trimFixed(v, d)
+    // useGrouping: false — le verrou exige « 1040,4 mm » (et l'ancien
+    // trimFixed ne groupait JAMAIS les milliers : pas de regression).
+    return new Intl.NumberFormat(intlTag(locale || 'en'), {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: d,
+        useGrouping: false,
+    }).format(v)
 }
 
 /**
  * Length for display (includes the unit suffix).
  */
-export function fmtLength(mm, unit) {
-    const s = fmtLengthValue(mm, unit)
+export function fmtLength(mm, unit, locale) {
+    const s = fmtLengthValue(mm, unit, undefined, locale)
     if (s === '—') return s
     return unit === 'inch' ? `${s}"` : `${s} mm`
 }

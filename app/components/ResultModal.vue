@@ -50,7 +50,7 @@ import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
 import { statusType } from '~~/constants/status.constants'
 import { trackEvent } from '~/utils/track'
-import { SQMM_PER_SQIN } from '~/utils/units'
+import { SQMM_PER_SQIN, fmtLengthValue as fmtLengthValueRaw } from '~/utils/units'
 import { displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
@@ -413,7 +413,9 @@ const exportCsv = () => {
     const isInch = unref(unit) === 'inch'
     const lenUnit = isInch ? 'in' : 'mm'
     const areaUnit = isInch ? 'in2' : 'mm2'
-    const csvLen = (mm) => fmtLengthValue(mm)
+    // CSV = chemin MACHINE : l'util brut, sans locale — la virgule
+    // décimale FR/IT y casserait les colonnes (relecture A L2).
+    const csvLen = (mm) => fmtLengthValueRaw(mm)
     const csvArea = (mm2) => (isInch ? (mm2 / SQMM_PER_SQIN).toFixed(1) : String(Math.round(mm2)))
     const reusableLabel = (off) => (off.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap'))
     const headers = [

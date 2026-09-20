@@ -1848,3 +1848,101 @@ générée par `sync-changelog` au paquet P).
 
 **État** : prêt pour la relecture des 747 chaînes et des captures. `it`
 reste sur la branche `l2-italiano` jusqu'au GO final — rien de publié.
+
+## Relecture du paquet A de L2 (`53a9cbb2`) — vérificateur, 20/09 — NO-GO : un défaut produit, neuf corrections de langue
+
+Rejoué sur l'image reconstruite : vitest **807/807 code 0** ; **ma parité
+indépendante** : 747 clés des deux côtés, 0 manquante, 0 orpheline,
+**0 écart de variables**, aucune fuite de français ni de portugais ; le
+pluriel est juste (seul 1 est singulier, « Annida 1 pezzo » à la capture) ;
+**`INTL_TAGS` est centralisée** dans le registre et `units.js` l'importe —
+le piège n° 3 est refermé, une langue de plus n'ajoutera pas de copie ; le
+badge dit **« Distanza ≥ »** et non « Margine » — la leçon de sens de L1
+tient. **Les neuf captures regardées** : l'italien est propre à l'écran,
+« Nesting in diretta », « Disposizione finale », « Fattibile », « Utilizzo
+del materiale », « Senza sovrapposizioni », « Dentro la lamiera », « Scarica
+il .job ». Le glossaire est respecté partout : lamiera, kerf, entrata /
+uscita di taglio, punto di sfondamento, ritaglio, sfrido, striscia, annidare
+nei fori.
+
+### A. Un défaut produit, révélé par la capture italienne — les longueurs ignorent la langue
+
+Sur `06-resultat-it.png` : **« Distanza ≥ 5.87 mm »** et « Ritaglio pulito
+1000 × 1040.4 mm » — point décimal, alors que la même carte affiche
+« 0,7 % » et « 1,24 m² » avec la virgule. Cause : `fmtLengthValue`
+(`app/utils/units.js`) formate par `trimFixed`, un `toFixed` nu, sans
+locale — là où `fmtArea` et `formatNumber` passent par `Intl`.
+
+**Ce n'est pas un défaut italien : il est en production aujourd'hui, en
+français.** Il n'avait pas été vu parce que les jeux d'essai français et
+portugais donnaient des longueurs entières ; l'espacement de 5,87 mm de la
+capture italienne l'a fait sortir. Même famille que le `fmtArea` attrapé au
+jalon A de L1, même correctif : `fmtLength` / `fmtLengthValue` reçoivent la
+balise de langue de l'application, comme `fmtArea`, et un verrou l'exige —
+`fmtLength(1040.4, 'mm', 'it')` ⇒ « 1040,4 mm », `'fr'` ⇒ « 1040,4 mm »,
+`'en'` ⇒ « 1040.4 mm ».
+
+### B. Neuf corrections de langue
+
+| Clé | Lu | Retenu | Pourquoi |
+|---|---|---|---|
+| `demo.projectName` | Demo — **Caldereria** navale | **Carpenteria navale** | « caldereria » n'est pas de l'italien — calque de l'espagnol *calderería* / du portugais *caldeiraria* |
+| `import.scaleApplied` | Disegno **scalato** di ×{value} | **Disegno ridimensionato ×{value}** | anglicisme ; même correction qu'en portugais |
+| `report.postPass` | **Post-pass** | **Post-elaborazione** | calque ; même correction qu'en portugais |
+| `nest.thinParts` | pezzo/i con **linee** più sottili | **tratti** più sottili | un trait de dessin est un *tratto* ; même correction qu'en portugais (*linhas* ⇒ *traços*) |
+| `plans.pro.f2` | consegna **la più rapida** | **la consegna più rapida** | ordre des mots fautif |
+| `import.spursRemoved` | {n} andata-e-ritorno a larghezza zero **ripulite** | **{n} tracciati di andata e ritorno a larghezza zero rimossi.** | accord faux (masculin) et tournure lourde |
+| `plans.subtitle` | **passa oltre** quando il risparmio… | **passa a un piano superiore** | « passa oltre » veut dire « passe ton chemin » |
+| `plans.unlimited.desc` | Per **maker** e officine che **annidano** ogni settimana | **Per carpenterie e officine che fanno nesting ogni settimana** | anglicisme là où l'anglais dit *fabricators* ; et « nesting » est le mot gardé |
+| `alts.explain.grid`, `result.whyFirstGrid` | **File** regolari | **Righe regolari** | *file* = rangées, mais l'interface emploie « file » au sens informatique une vingtaine de fois (« {n} file », « Scegli file », « File DXF ») : à l'écran, « File regolari » se lit « fichiers réguliers » |
+
+Trois retouches de surface à emporter avec : `live.statusLine` « si ferma da
+solo allo stallo » ⇒ **« arresto automatico allo stallo »** (forme nominale,
+comme les trois autres langues) ; `home.jobSwitched` « la modalità che li
+annida » ⇒ **« per elaborarlo »** ; `live.layoutsTitle` « del **packing** »
+⇒ « del nesting ».
+
+### C. La branche n'est pas poussée
+
+`l2-italiano` n'existe qu'en local : `git ls-remote` ne la voit pas. À
+pousser — le travail d'un paquet ne doit pas vivre sur un seul disque.
+
+### Décision
+
+**NO-GO paquet A.** Le correctif des longueurs (A) part avec, puisqu'il
+touche `units.js` que ce paquet modifie déjà — et il corrige le français en
+même temps. Le reste du paquet est acquis : dictionnaire complet, registre,
+centralisation, captures.
+
+## Révision du paquet A de L2 (implémenteur, 20/09) — les trois points faits
+
+**A. Défaut produit des longueurs — corrigé, et le verrou a mordu deux
+fois.** `fmtLengthValue`/`fmtLength` (`app/utils/units.js`) formulent par
+`Intl.NumberFormat` avec la balise de la langue de l'application —
+`useUnit()` passe la locale comme `fmtArea` depuis L1, aucun composant à
+toucher. Première morsure du verrou : Intl GROUPAIT les milliers
+(« 1 040,4 mm ») — `useGrouping: false` rétablit le comportement d'avant
+(trimFixed ne groupait jamais). Le chemin MACHINE reste au point :
+l'export CSV de `ResultModal` importe l'util brut, sans locale — une
+virgule y casserait les colonnes. Verrou posé
+(`app/tests/units.test.js`, 4 sondes) :
+`fmtLength(1040.4,'mm','it')` ⇒ « 1040,4 mm », `'fr'` ⇒ « 1040,4 mm »,
+`'en'` ⇒ « 1040.4 mm », sans locale ⇒ point. **Vitest complet 811/811
+exit 0** (807 + 4). Le français de production est réparé au passage.
+
+**B. Les neuf corrections et les trois retouches appliquées** dans
+`it.js` (Carpenteria navale, ridimensionato, Post-elaborazione, tratti,
+la consegna più rapida, tracciati di andata e ritorno rimossi, passa a
+un piano superiore, carpenterie e officine che fanno nesting, Righe
+regolari ×2, arresto automatico allo stallo ×2, per elaborarlo, del
+nesting) — balayage anti-restes à zéro, assemblage recontrôlé (747
+clés, ordre EN, variables intactes).
+
+**C. La branche est poussée** : `git push -u origin l2-italiano`.
+
+**Captures reprises** (les 9 de `docs/qa/l2-jalonA/`, passe entière
+rejouée) — **15 sondes textuelles vertes**, dont la nouvelle :
+« longueurs à la virgule décimale italienne » — `06-resultat-it.png`
+montre le badge **« Distanza ≥ 5,87 mm »** (et plus jamais
+« 5.87 mm »), sondé `/Distanza ≥ \d+,\d+ mm/` vert + forme à point
+explicitement absente.

@@ -105,13 +105,17 @@ export function useUnit() {
     }
 
     // Bound helpers — components just call fmtLength(mmValue).
+    // Relecture A L2 : la balise de la langue de l'APP traverse pour les
+    // LONGUEURS aussi, comme fmtArea depuis L1 — un FR/IT lit « 1040,4 mm ».
+    // (L'export CSV n'utilise PAS ces wrappers : il importe l'util brut,
+    // sans locale, pour garder le point décimal.)
     return {
         unit,
         setUnit,
         enabled,
         unitLabel: computed(() => unitLabel(unit.value)),
-        fmtLength: (mm) => fmtLength(mm, unit.value),
-        fmtLengthValue: (mm, decimals) => fmtLengthValue(mm, unit.value, decimals),
+        fmtLength: (mm) => fmtLength(mm, unit.value, localeState().value),
+        fmtLengthValue: (mm, decimals) => fmtLengthValue(mm, unit.value, decimals, localeState().value),
         // Jalon A (réserve) : la balise de la langue de l'APP traverse —
         // fmtArea formate selon la locale choisie, pas celle du système.
         fmtArea: (mm2) => fmtArea(mm2, unit.value, localeState().value),
