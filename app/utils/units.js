@@ -10,6 +10,7 @@
  *
  * Never convert inside the pipeline or the engine (AGENTS.md rule).
  */
+import { intlTag } from './i18n/index.js'
 
 export const MM_PER_INCH = 25.4
 export const SQMM_PER_SQIN = MM_PER_INCH * MM_PER_INCH // 645.16
@@ -122,19 +123,30 @@ function trimFixed(v, decimals) {
  * strings). mm: 0.1 resolution; inch: 0.001" resolution (0.0254 mm — far
  * below any real kerf, so display rounding has no business impact).
  * Pass `decimals` to override (e.g. 2 for sub-mm spacing gaps).
+ *
+ * Relecture A L2 (20/09) : les LONGUEURS passent par Intl comme les aires —
+ * un FR/IT lit « 1040,4 mm », pas « 1040.4 mm » (défaut produit sorti de la
+ * capture italienne, présent en prod FR). Sans locale (chemins machine :
+ * export CSV — la virgule y casserait les colonnes), 'en' garde le point.
  */
-export function fmtLengthValue(mm, unit, decimals) {
+export function fmtLengthValue(mm, unit, decimals, locale) {
     const v = mmToDisplay(mm, unit)
     if (!Number.isFinite(v)) return '—'
     const d = decimals ?? (unit === 'inch' ? 3 : 1)
-    return trimFixed(v, d)
+    // useGrouping: false — le verrou exige « 1040,4 mm » (et l'ancien
+    // trimFixed ne groupait JAMAIS les milliers : pas de regression).
+    return new Intl.NumberFormat(intlTag(locale || 'en'), {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: d,
+        useGrouping: false,
+    }).format(v)
 }
 
 /**
  * Length for display (includes the unit suffix).
  */
-export function fmtLength(mm, unit) {
-    const s = fmtLengthValue(mm, unit)
+export function fmtLength(mm, unit, locale) {
+    const s = fmtLengthValue(mm, unit, undefined, locale)
     if (s === '—') return s
     return unit === 'inch' ? `${s}"` : `${s} mm`
 }
@@ -154,7 +166,10 @@ export function fmtArea(mm2, unit, locale) {
     // Jalon A (réserve) : la BALISE DE LA LANGUE DE L'APP, pas celle du
     // système — un Brésilien en navigateur anglais qui choisit Português
     // doit voir « 1,99 m² ».
-    const tag = locale === 'pt' ? 'pt-BR' : locale === 'fr' ? 'fr-FR' : locale || undefined
+    // L2 (piège du plan des langues) : la table locale ⇒ balise vit dans le
+    // REGISTRE (i18n/index.js) — plus de copie locale ici, l'italien n'en a
+    // jamais créé une troisième.
+    const tag = intlTag(locale)
     const nf = (max = 2) => new Intl.NumberFormat(tag, { minimumFractionDigits: 0, maximumFractionDigits: max })
     if (unit === 'inch') {
         const in2 = v / SQMM_PER_SQIN

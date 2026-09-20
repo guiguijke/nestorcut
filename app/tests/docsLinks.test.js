@@ -21,9 +21,16 @@ describe('D5 — liens d\'aide vers la documentation', () => {
         expect(docsHelpUrl('pt', 'badges')).toContain('/pt/docs/nesting/#o-que-os-badges-garantem')
     })
 
+    it('it est publiée : son préfixe et SON ancre (paquet P L2)', () => {
+        expect(docsHelpUrl('it', 'sheets')).toBe('https://nestorcut.com/it/docs/interface/#le-lamiere')
+        expect(docsHelpUrl('it', 'spacing')).toContain('/it/docs/nesting/spacing/#la-distanza')
+        expect(docsHelpUrl('it', 'badges')).toContain('/it/docs/nesting/#cosa-garantiscono-i-badge')
+        expect(docsHelpUrl('it', 'downloads')).toContain('/it/docs/results/exports/#cosa-si-scarica')
+    })
+
     it('toute langue non publiée REPIE sur l\'anglais (écrit pour six codes)', () => {
-        // Paquet P : pt est PUBLIÉ, retiré de la liste des replis
-        for (const code of ['it', 'de', 'es', 'zz-unknown']) {
+        // Paquet P : pt puis it SONT PUBLIÉS, retirés de la liste des replis
+        for (const code of ['de', 'es', 'zz-unknown']) {
             expect(docsHelpUrl(code, 'sheets')).toBe(docsHelpUrl('en', 'sheets'))
         }
     })
@@ -33,7 +40,7 @@ describe('D5 — liens d\'aide vers la documentation', () => {
             for (const lang of DOCS_LANGS) {
                 const url = docsHelpUrl(lang, topic)
                 expect(url, `${topic}/${lang}`).toMatch(/#.+$/)
-                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/)?docs\//)
+                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/|it\/)?docs\//)
             }
         }
     })
