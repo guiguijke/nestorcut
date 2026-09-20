@@ -1946,3 +1946,87 @@ rejouée) — **15 sondes textuelles vertes**, dont la nouvelle :
 montre le badge **« Distanza ≥ 5,87 mm »** (et plus jamais
 « 5.87 mm »), sondé `/Distanza ≥ \d+,\d+ mm/` vert + forme à point
 explicitement absente.
+
+## Relecture de la révision du paquet A (`29b9437a`) — vérificateur, 20/09 — GO, avec une ligne à emporter dans le paquet B
+
+Rejoué : vitest **811/811 code 0** (les quatre verrous de longueur compris),
+branche **poussée**, les neuf corrections et les trois retouches présentes,
+aucune forme interdite restante. **La capture du résultat regardée** : le
+badge dit **« Distanza ≥ 5,87 mm »**, la chute « 1000 × 1040,4 mm », à côté
+de « 0,7 % » et « 1,24 m² » — tout le tableau parle enfin la même langue.
+Le correctif est au bon endroit : `useUnit` fait traverser la locale comme
+pour les aires, aucun composant touché. **Le français de production est
+réparé du même coup.**
+
+Le verrou a mordu avant moi sur un effet de bord que je n'avais pas prévu :
+`Intl` groupe les milliers par défaut, ce que l'ancien `toFixed` ne faisait
+jamais — `useGrouping: false` rétablit « 1040,4 » au lieu de « 1 040,4 ».
+C'est exactement à ça que sert un verrou écrit avant le correctif.
+
+### Une régression introduite par le correctif — une ligne, à emporter dans le paquet B
+
+`ResultModal.vue:418` : pour protéger l'export CSV de la virgule décimale,
+`csvLen` est passé de la fonction **liée** (`fmtLengthValue` de `useUnit`,
+qui portait l'unité) à l'util **brut sans argument** —
+`fmtLengthValueRaw(mm)`. L'unité est donc perdue : pour un utilisateur en
+**pouces**, le CSV porte l'en-tête « (in) » et des valeurs en
+**millimètres**. C'est un document de devis qui devient faux sans le dire.
+
+Correctif, une ligne — garder l'unité, ne retirer que la locale :
+
+```js
+const csvLen = (mm) => fmtLengthValueRaw(mm, unref(unit))
+```
+
+(`unref(unit)` est déjà utilisé deux lignes plus haut pour `isInch` ; la
+locale reste absente, donc le point décimal machine est conservé.) Un verrou
+de plus dans `units.test.js` : `fmtLengthValue(25.4, 'inch', 3)` sans locale
+⇒ « 1 » et non « 25.4 ».
+
+### Décision
+
+**GO paquet A.** La ligne du CSV part avec le paquet B — la branche ne
+fusionne pas avant le paquet P, rien ne se déploie entre-temps, et je la
+vérifie à la relecture du B. **Paquet B de L2 ouvert** : site vitrine et
+blog en italien, même définition de « fini » qu'au portugais (`ui.ts`,
+pages `/it/`, cartes `langPaths` réciproques à quatre langues, menu, sitemap,
+les huit articles plus le billet d'accueil, `build` et `check:links` en
+code 0, preuves extraites de `dist/`).
+
+## Paquet B L2 — le site vitrine et le blog italiens (implémenteur, 20/09)
+
+Branche `l2-it-site` (site), poussée — commit `fe874e0`. La ligne CSV
+emportée du GO A est dans `l2-italiano` (`f377d66e`), avec son verrou
+(`fmtLengthValue(25.4,'inch',3)` ⇒ « 1 »).
+
+- **ui.ts** : bloc `it` complet, **181/181 clés** (parité vérifiée par
+  script contre en/fr/pt — zéro manquante, zéro en trop). `locales` +
+  `Italiano`, sitemap `it: 'it-IT'`, schéma blog `it`.
+- **Pages `/it/`** : accueil (composants partagés localisés), contact,
+  index blog, gabarit articles. **Menu à quatre langues** partout où la
+  page existe.
+- **Helper `articleLangPaths`** (`src/i18n/blog.ts`) : carte RÉCIPROQUE
+  à N langues, ancre commune = slug de l'originale EN ; les gabarits
+  EN/FR/PT sont refaits dessus — au passage, les articles PT offrent le
+  menu 4 langues (avant : 3).
+- **Neuf articles** : les huit familles traduites DEPUIS L'ORIGINAL
+  ANGLAIS (dates et faits conservés : commits Deepnest 07/07/2020 et
+  28/07/2026, v1.5.6 mai 2025, 573/327 contre 555/345, prix
+  49–59 $ août 2026, 304 pièces/68 %, ~90 s) + le billet d'accueil
+  « NestorCut parla italiano » (propre à la langue, hreflang unique).
+  Diagrammes : les `-en.svg` comme au portugais (seul le FR a les siens).
+  Chaque article porte sa vraie description italienne — pas de résumé
+  reporté (leçon PT).
+- **Replis explicites** : Docs et légal/privacy italiens pointent
+  l'anglais tant que le paquet C n'est pas livré — même règle que le
+  paquet B PT pour les docs ; légal/privacy restent FR+EN pour toujours.
+- **Build 106 pages exit 0, check:links OK** (104 URLs, 105 pages
+  scannées, zéro cassé). **Preuves extraites de `dist/`** : `/it/` en
+  italien (`lang="it"`, titre traduit), menu 4 langues sur /it/ ET
+  Italiano offert depuis EN/FR/PT, hreflang 4 sœurs sur la famille
+  Deepnest des DEUX côtés (EN et IT), billet d'accueil à hreflang
+  unique, sitemap 12 URLs `/it/`, dates italiennes (« Pubblicato il
+  20 settembre 2026 »).
+
+Prêt pour la relecture des pages et des articles. Rien n'est publié :
+la branche du site ne fusionne qu'à la publication (paquet P).
