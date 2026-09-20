@@ -2030,3 +2030,112 @@ emportée du GO A est dans `l2-italiano` (`f377d66e`), avec son verrou
 
 Prêt pour la relecture des pages et des articles. Rien n'est publié :
 la branche du site ne fusionne qu'à la publication (paquet P).
+
+## Relecture du paquet B de L2 (`fe874e0`, site) — vérificateur, 20/09 — GO, deux points à emporter dans le paquet C
+
+La ligne du CSV est corrigée (`f377d66e`) : `fmtLengthValueRaw(mm, unref(unit))`,
+avec son verrou (`fmtLengthValue(25.4, 'inch', 3)` ⇒ « 1 »). Un utilisateur en
+pouces exporte de nouveau des pouces.
+
+Rejoué dans un arbre séparé : `build` code 0 (105 pages), `check:links`
+code 0, 12 pages `/it/`, sitemap avec 24 entrées italiennes, branche partant
+bien de `main` (portugais inclus) et poussée.
+
+- **Les huit articles sont de vraies traductions**, mesurées en mots contre
+  leur original : 96 %, 100 %, 106 %, 104 %, 109 %, 103 %, 103 %, 106 % —
+  mêmes dates, mêmes sections, chiffres de l'original conservés (commits
+  Deepnest du 07/07/2020 et 28/07/2026, v1.5.6 de mai 2025, 573/327 contre
+  555/345, 49–59 $ d'août 2026, 304 pièces, ~90 s). La leçon du portugais a
+  porté : aucun résumé.
+- **La réciprocité des balises est à quatre côtés** : anglais, français,
+  portugais et italien de la famille Deepnest déclarent chacun les quatre
+  langues plus `x-default`. Le helper introduit pour l'occasion rend la
+  mécanique indépendante du nombre de langues, et **les articles portugais y
+  gagnent la quatrième entrée** qu'ils n'avaient pas.
+- **Le menu offre les quatre langues** sur l'accueil, sur `/it/` et sur un
+  article italien ; la page légale reste à deux, par conception.
+- **La langue est bonne.** L'italien est naturel et tient le glossaire
+  (lamiera, ritaglio, sfrido, distanza tra i pezzi, annidare nei fori,
+  carpenteria). L'ajout honnête « (video in inglese) » sur la légende de la
+  démo est juste : la vidéo est bien en anglais.
+
+### Deux points à emporter dans le paquet C
+
+1. **Aucun des huit articles traduits ne porte la mention « Tradotto
+   dall'inglese »** en pied. C'est une règle du plan (§1, décision blog du
+   17/09) et le portugais la porte. Huit lignes à ajouter ; le billet
+   d'accueil, lui, est original et n'en a pas besoin.
+2. **« Inizia a annidare gratis »** (`hero.primaryCta` et `cta.button`) :
+   l'italien demande le *d* euphonique devant la même voyelle —
+   **« Inizia ad annidare gratis »**. Deux chaînes.
+
+Rappels sans action : le lien « Docs » et les pages légales italiennes
+pointent vers l'anglais, comme le portugais l'a fait à son paquet B ; le
+lien Docs bascule sur `/it/docs/` au paquet C.
+
+### Note de méthode (pour moi)
+
+Deux fausses alertes évitées dans cette relecture, toutes deux dues à mes
+propres sondes : le nombre de LIGNES d'un article n'est pas comparable
+(l'anglais est coupé à 72 colonnes, l'italien non — mesurer en MOTS) ; et
+une expression `[a-z-]+` ne capture pas `pt-BR`, ce qui m'a fait croire un
+instant que le portugais avait disparu du menu. Vérifier la sonde avant
+d'accuser le livrable.
+
+### Décision
+
+**GO paquet B.** Les deux points partent avec le paquet C — rien ne
+fusionne avant le paquet P. **Paquet C de L2 ouvert** : documentation
+italienne, même définition de « fini » qu'au portugais, avec la locale
+Starlight `it` (clé et balise coïncident : le piège des traductions de barre
+latérale ne mordra pas), les 18 pages, le harnais de captures en **quatre**
+passes, la page Nouveautés italienne et le bloc `*IT*`, `build` et
+`check:links` en code 0, preuves extraites de `dist/`.
+
+## Paquet C L2 — la documentation italienne (implémenteur, 20/09)
+
+Les deux points emportés du GO B sont posés : **« \*Tradotto
+dall'inglese.\* »** en pied des huit articles traduits (le billet
+d'accueil, original, n'en porte pas), et **« Inizia ad annidare
+gratis »** (*d* euphonique) sur `hero.primaryCta` et `cta.button`.
+
+- **Locale Starlight `it` déclarée** (`label: 'Italiano'`, `lang: 'it'`)
+  — c'est ELLE qui manquait la dernière fois ; et les **huit groupes de
+  la barre latérale traduits** (clé = balise : `it` = `it`, le piège PT
+  ne pouvait pas mordre, la locale est déclarée quand même) : Iniziare,
+  I tuoi file, L'interfaccia, Nesting spiegato, I tuoi risultati,
+  Privacy, Limiti e domande frequenti, Novità.
+- **18 pages traduites depuis le français**, ancres italiennes natives
+  (la page spacing porte `id="la-distanza-e-le-rotazioni"`, relevé dans
+  le HTML bâti — matière pour `DOCS_LANGS` au paquet P).
+- **SVG espacement écrit à la main** (`docs-img/it/espacement-diagram.svg`,
+  viewBox 680) : pezzo, larghezza di taglio (kerf), margine, « distanza =
+  2 × kerf + margine », legenda « percorso di taglio / torcia
+  compensata, fuori dal contorno ».
+- **Harnais en QUATRE passes** (`scripts/qa-docs-captures.mjs`) : sonde
+  de langue italienne au moment de la prise (Questo dispositivo / I
+  nostri server / il tuo punto / Distanza / Direzioni), contexte it-IT,
+  compte dédié, **verrou anti-orpheline sur les QUATRE jeux** — GO, les
+  19 images `docs-img/it/` sont régénérées DANS la langue (jamais
+  copiées), les jeux fr/en/pt re-régénérés au passage.
+- **Nouveautés italienne générée** : `sync-changelog.mjs` écrit le
+  whats-new IT (repli EN tant que le bloc `*IT*` n'existe pas, bandeau
+  « Le versioni precedenti a V0.9.4 sono in inglese » prêt à apparaître
+  au paquet P) ; au passage le découpage borne chaque bloc par le
+  marqueur SUIVANT — un bloc `*IT*` ne peut plus être absorbé par `*PT*`
+  (piège latent du premier découpage). Côté app,
+  `changelogParser.js` lit `*IT*` avec repli EN (lookahead étendu),
+  vitest **811/811**.
+- **Lien « Docs » basculé sur `/it/docs/`** (le repli anglais du paquet
+  B est retiré).
+- **Build 124 pages exit 0, check:links OK** (122 URLs, zéro cassé).
+  **Preuves extraites de `dist/`** : `/it/docs/` servi en italien
+  (`lang="it"`), les huit groupes italiens présents dans la barre
+  bâtie, menu **quatre langues** sur la page docs ET sur un article
+  (English · Français · Português · Italiano), whats-new IT en repli EN
+  (V0.9.3 anglaise visible), sitemap 122 URLs.
+
+Branches poussées : `l2-it-site` (`12ff91c`) et `l2-italiano`
+(`b86f44ad`). Prêt pour la relecture page à page. Reste au paquet P :
+`DOCS_LANGS` + ancres IT relevées, bloc `*IT*` du CHANGELOG, V0.9.4,
+fusions (app normale, site --squash), promote + déploiement.
