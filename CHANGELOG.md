@@ -4,6 +4,40 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.4
+
+*FR*
+
+- NestorCut parle italien : interface, site et documentation entièrement
+  traduits. La langue de votre navigateur est reconnue dès la première
+  visite, et le menu de langues offre Italiano à côté de English,
+  Français et Português. Au passage, les longueurs suivent la langue :
+  un utilisateur français lit désormais « 1040,4 mm » avec sa virgule.
+
+*EN*
+
+- NestorCut now speaks Italian: interface, website and documentation
+  fully translated. Your browser language is detected on your first
+  visit, and the language menu offers Italiano alongside English,
+  Français and Português. Along the way, lengths now follow the
+  language: a French user now reads "1040,4 mm" with the proper comma.
+
+*PT*
+
+- O NestorCut agora fala italiano: interface, site e documentação
+  totalmente traduzidos. O idioma do seu navegador é detectado na
+  primeira visita, e o menu de idiomas oferece Italiano junto de
+  English, Français e Português. De passagem, os comprimentos seguem o
+  idioma: um usuário francês agora lê « 1040,4 mm » com sua vírgula.
+
+*IT*
+
+- NestorCut ora parla italiano: interfaccia, sito e documentazione
+  completamente tradotti. La lingua del tuo browser viene riconosciuta
+  dalla prima visita, e il menu delle lingue offre Italiano accanto a
+  English, Français e Português. Al passaggio, le lunghezze seguono la
+  lingua: un utente francese ora legge « 1040,4 mm » con la sua virgola.
+
 ## V0.9.3
 
 *FR*
