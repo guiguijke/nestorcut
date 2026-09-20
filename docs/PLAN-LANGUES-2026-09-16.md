@@ -2139,3 +2139,70 @@ Branches poussées : `l2-it-site` (`12ff91c`) et `l2-italiano`
 (`b86f44ad`). Prêt pour la relecture page à page. Reste au paquet P :
 `DOCS_LANGS` + ancres IT relevées, bloc `*IT*` du CHANGELOG, V0.9.4,
 fusions (app normale, site --squash), promote + déploiement.
+
+## Relecture du paquet C de L2 (`12ff91c` site / `9c1a4ec1` app) — vérificateur, 20/09 — GO
+
+Rejoué : `build` code 0 (123 pages), `check:links` code 0, **18 pages sous
+`/it/docs/`**, `<html lang="it">`, menu à **quatre langues** sur un article
+italien, et `hreflang` à quatre côtés sur les quatre accueils de
+documentation. Les deux points emportés du paquet B sont faits : la mention
+« Tradotto dall'inglese » sur les huit articles traduits, et « Inizia **ad**
+annidare » sur les deux clés, sans reste.
+
+**Ce qui avait mordu deux fois ne mord plus.** La locale Starlight est
+déclarée (`it: { label: 'Italiano', lang: 'it' }`) et les huit groupes sont
+traduits ; **les 19 images italiennes sont toutes propres** — aucune n'est
+la copie d'une française, d'une anglaise ni d'une portugaise, vérifié par
+empreinte de blob. Les captures regardées montrent bien « Questo
+dispositivo », « I nostri server », « Scegli file », « il tuo punto ». Le
+dessin de l'espacement est écrit en italien avec le glossaire : pezzo,
+larghezza di taglio (kerf), margine, « distanza = 2 × kerf + margine »,
+légende « percorso di taglio — torcia compensata, fuori dal contorno ».
+
+Côté application : `changelogParser.js` lit le bloc `*IT*` avec repli
+anglais, le bandeau du générateur est un gabarit à accents graves dès la
+première écriture (la leçon du portugais), et un **piège latent a été
+refermé** : chaque bloc du changelog est désormais borné par le marqueur
+suivant, un futur `*IT*` ne peut plus être absorbé par `*PT*`.
+
+### Un point de langue, une vérification pour le paquet P
+
+- **Page de l'espacement** : le texte nomme la seconde composante « la
+  **sicurezza** » alors que la règle affichée juste au-dessus dit « 2 × kerf
+  + **margine** » et que le champ de l'application s'appelle « Margine di
+  sicurezza ». Aligner le mot en gras sur **« il margine di sicurezza »**.
+- **`IT_SINCE = 'V0.9.4'`** dans le générateur doit valoir exactement la
+  version qui publie l'italien. À confirmer au paquet P, sinon le bandeau de
+  repli se déclenche sur la mauvaise borne.
+
+Note de méthode (pour moi) : mon extraction de la barre latérale n'a capté
+que six libellés sur huit — mes propres motifs ne couvraient ni « Iniziare »
+(je cherchais « Inizia< ») ni l'apostrophe typographique de
+« L'interfaccia ». Le mécanisme est prouvé par les six autres et la
+configuration porte les huit. Troisième sonde fautive de la journée : écrire
+le motif d'après le texte attendu, pas d'après sa forme abrégée.
+
+### Décision
+
+**GO paquet C.** La documentation italienne est complète. **Paquet P de L2
+ouvert** — publication, deux dépôts le même jour, dans l'ordre :
+
+1. `CHANGELOG.md` : entrée **V0.9.4** avec ses quatre blocs `*FR*`, `*EN*`,
+   `*PT*`, `*IT*` ; `package.json` en `0.9.4` ; `IT_SINCE` aligné.
+2. `app/utils/docsLinks.js` : `'it'` dans `DOCS_LANGS` **et les neuf ancres
+   italiennes** relevées dans le HTML **bâti** de `dist/it/docs/` — une
+   langue déclarée sans ancre donne `#undefined`.
+3. `whatsNew.js` : les quatre dates au jour du déploiement.
+4. Fusion de `l2-italiano` dans `main`, vitest code 0, image reconstruite.
+5. `promote-latest` sur le SHA complet, `pull app` + `up -d app`,
+   application seule.
+6. Fusion de `l2-it-site` dans `main` du site — **fusion ordinaire cette
+   fois** : la branche part de `main` après le squash portugais et
+   n'embarque aucun binaire du propriétaire (vérifié).
+7. Relancer `sync-changelog.mjs`, vérifier les quatre pages Nouveautés et le
+   bandeau italien rendu avec sa valeur, committer.
+8. Rapport : SHA promu, digest, SHA de `main` du site.
+
+Contrôle du vérificateur après publication : les trois surfaces en italien,
+les neuf ancres d'aide en ligne, le menu à quatre langues, les digests, et
+`git diff` vide sous `workers/` et `public/engine`.
