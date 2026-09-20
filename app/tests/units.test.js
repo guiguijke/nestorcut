@@ -24,6 +24,10 @@ describe('fmtLength suit la locale (relecture A L2)', () => {
     it('sans locale (chemins machine — export CSV), le point reste', () => {
         expect(fmtLengthValue(1040.4, 'mm')).toBe('1040.4')
         expect(fmtLengthValue(5.87, 'mm', 2)).toBe('5.87')
+        // L\'unité ne se perd pas sans locale : 25,4 mm = 1" exactement
+        // (le CSV en pouces exportait des mm après le premier correctif).
+        expect(fmtLengthValue(25.4, 'inch', 3)).toBe('1')
+        expect(fmtLengthValue(1000, 'inch', 3)).toBe('39.37')
     })
 
     it('zéros de queue trimmés, entiers entiers, pouces localisés', () => {

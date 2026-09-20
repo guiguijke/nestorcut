@@ -414,8 +414,10 @@ const exportCsv = () => {
     const lenUnit = isInch ? 'in' : 'mm'
     const areaUnit = isInch ? 'in2' : 'mm2'
     // CSV = chemin MACHINE : l'util brut, sans locale — la virgule
-    // décimale FR/IT y casserait les colonnes (relecture A L2).
-    const csvLen = (mm) => fmtLengthValueRaw(mm)
+    // décimale FR/IT y casserait les colonnes (relecture A L2). Mais
+    // l'UNITÉ reste : sans elle, un utilisateur en pouces exporte des
+    // millimètres sous un en-tête « in » (relecture de la révision).
+    const csvLen = (mm) => fmtLengthValueRaw(mm, unref(unit))
     const csvArea = (mm2) => (isInch ? (mm2 / SQMM_PER_SQIN).toFixed(1) : String(Math.round(mm2)))
     const reusableLabel = (off) => (off.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap'))
     const headers = [
