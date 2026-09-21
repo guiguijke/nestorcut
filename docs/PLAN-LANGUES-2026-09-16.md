@@ -2551,3 +2551,153 @@ la branche (`2bca7ea`) **et poussé aussitôt sur main** (`e715c07`)
 
 Rien n'est publié pour l'allemand : les branches `l3-allemand` et
 `l3-de-site` attendent la relecture, puis le paquet C.
+
+## Relecture de la révision A + du paquet B de L3 (`5b0c4cde` app / `e66c7f7` site) — vérificateur, 21/09 — GO, six corrections dans le paquet C
+
+Rejoué : **vitest 813/813 code 0** ; les cinq dictionnaires rechargés et
+recomparés ; le site bâti dans un arbre séparé — **136 pages, code 0**,
+`check:links` **code 0** (134 URLs) ; les captures reprises regardées ; les
+neuf articles allemands mesurés contre leurs originaux ; et la production
+interrogée en lecture seule.
+
+### La révision A : les huit corrections sont là
+
+`licences.own` **restitue ses quatre clauses en allemand, en portugais et en
+italien** — restriction commerciale et service hébergé dérivé, héritage
+nest2d MIT, sparrow MIT / jagua-rs MPL-2.0, réserve de marque. « Sauberes
+Restblech » deux fois, vu dans la capture. « eine andere Anzahl », « dieses
+Projekts », « können Sie ihn deaktivieren », Option(en), Platzierungen,
+offene Konturen, Walks. Le pourcentage allemand prend son espace — « 0,7 % »
+trois fois dans la capture du résultat — et it/pt restent collés, comme il
+faut. `report.allPlaced` passe par `tp` dans les cinq langues. Le portugais
+redit « aceita apenas DXF e SVG ». Le lookahead du parseur accueille `DE`
+**dans le commit qui le concerne**, comme demandé.
+
+**Le verrou « les faits ne se perdent pas » est bien écrit** : sigles,
+identifiants de licence, versions, noms propres, liste blanche courte et
+justifiée (MB, CAD, AND, LAST, WARNING, ALL). Il fait ce qu'on lui demande.
+
+**Deux défauts introduits par la révision, à corriger :**
+
+- **Le singulier de `report.allPlaced` sonne faux dans les cinq langues.**
+  « 1 Teil platziert — alle », « 1 part placed — all of them », « 1 pièce
+  placée — toutes », « 1 pezzo collocato — tutti », « 1 peça colocada —
+  todas » : la queue « — toutes » contredit le singulier. Elle est inutile —
+  à une pièce, « 1 Teil platziert » dit déjà tout. **Supprimer la queue dans
+  les cinq langues.** (Visible dans `07-badges-de.png`.)
+- **« die vendortierten Nesting-Bibliotheken »** n'est pas de l'allemand, et
+  c'est dans le paragraphe juridique. → « die **mitgelieferten**
+  Nesting-Bibliotheken ». Au passage, l'italien « vendorizzate » et le
+  portugais « vendorizadas » sont des calques de jargon là où le français
+  dit « embarquées » : « incluse » et « incluídas » valent mieux.
+
+### Le hotfix de production : le correctif est juste, le réflexe ne l'est pas
+
+Le résidu était réel — `}>{t(nav.docs)}</a>` sur la ligne du lien Docs,
+depuis la publication italienne — et il a bien disparu : j'ai interrogé les
+cinq surfaces publiques, **zéro `}>` partout**, code 200 partout. Le
+correctif est bon et je le ratifie.
+
+Trois remarques, dans l'ordre d'importance :
+
+1. **Il est parti en production sans demander.** La règle est claire : hors
+   déploiement approuvé, une écriture en production se demande au
+   propriétaire. Un défaut visible sur chaque page justifie la hâte, pas la
+   décision unilatérale — le message d'une ligne aurait coûté deux minutes.
+2. **Le hotfix a emporté autre chose que le correctif** : le repli allemand
+   du lien Docs (`locale === 'de' ? 'en' : locale`) est du paquet B, qui
+   n'avait pas de GO. Il est inerte tant que `/de/` n'existe pas en
+   production — donc sans conséquence — mais un correctif d'urgence ne
+   transporte que son correctif.
+3. **Le commentaire allemand est SERVI** : `<!-- Paquet B L3 : kein deutsches
+   Docs vor Paket C -->` est rendu par Astro et se trouve **dans la source
+   de 63 pages du site bâti, et en production dans toutes les langues**. Un
+   commentaire Astro `{/* … */}` n'est pas émis. À changer.
+
+**Et ma part** : j'ai contrôlé la publication italienne en ligne le 20/09
+sans voir ce « }>Docs » qui s'affichait sur chaque page. Mes contrôles
+étaient des `grep` ciblés — ancres, barre latérale, hreflang — aucun ne
+lisait la page comme un visiteur. **Ajout à la liste de contrôle de
+publication** : chercher dans le HTML bâti les fragments de gabarit
+orphelins (`}>`, `{t(`, `</a>}`) — trois secondes, et ce défaut-là ne repasse
+plus.
+
+### Le paquet B : le site allemand tient
+
+- `ui.ts` **181/181 dans les cinq langues**, aucune clé absente ni
+  orpheline, **zéro tutoiement**, 43 chaînes en Sie/Ihr, **aucune valeur
+  copiée** de l'italien, du français ni de l'anglais.
+- **12 pages `/de/`**, menu à **cinq langues** sur chaque accueil, `hreflang`
+  à **cinq sœurs** sur les familles d'articles avec `x-default` vers
+  l'anglais, sitemap à 134 URLs.
+- **Les huit articles sont de vraies traductions** : rapport de mots 0,91 à
+  0,97 (l'allemand est naturellement plus compact), **dates identiques à
+  l'original**, **chiffres identiques**, mention « Aus dem Englischen
+  übersetzt » sur les huit et absente du neuvième, qui est natif. L'article
+  sur la confidentialité garde la clause d'honnêteté — « nous ne pouvons pas
+  lire vos fichiers », listé comme ce que nous refusons de promettre du mode
+  serveur.
+- Note d'instrument : ma sonde a d'abord signalé cinq chiffres « inventés ».
+  C'étaient des pourcentages attributifs allemands — « ein 92-%-Layout »,
+  « ein 88-%-Layout », « 100-%-privates Projekt » —, une forme correcte que
+  mon expression régulière ne savait pas lire. **Cinquième sonde fautive du
+  cycle** ; la règle tient : mesurer l'outil avant d'accuser le livrable.
+
+### Quatre corrections pour le paquet C
+
+**1. Les diagrammes des articles sont en ANGLAIS dans les articles
+allemands — et dans les italiens et les portugais, en production.** Les
+neuf articles allemands appellent `privacy-modes-**en**.svg`,
+`vault-zk-**en**.svg`, `plans-**en**.svg`, `laser-nesting-flow-**en**.svg`,
+`local-mode-flow-**en**.svg`. Ces images portent des phrases entières —
+« Local mode (100% private) », « Who can read it: », « File goes: ». Seul le
+français a son jeu. C'est **exactement la règle que le propriétaire a posée
+lui-même au lot D3** (des captures françaises sur des pages anglaises), et
+je l'ai laissée passer deux fois sur le blog. Cinq SVG × trois langues, à
+produire avec les dessins du paquet C — et l'allemand demandera des cadres
+plus larges, comme prévu.
+
+**2. `x-default` se désigne lui-même sur les accueils et les pages contact,
+dans toutes les langues, en production.** `/fr/` déclare `/fr/` comme
+x-default, `/it/` déclare `/it/`, et l'allemand ferait le cinquième : Google
+reçoit cinq x-default contradictoires pour une même grappe. Les articles,
+eux, sont corrects (x-default vers l'anglais). **Cause trouvée** : la page
+passe `langPaths={{ en: '', fr: '', … }}` et `Base.astro` teste
+`pathsByLang.en ? 'en' : locale` — **la chaîne vide est falsy**, donc le
+chemin anglais est vu comme absent. Le correctif est d'un mot : tester la
+PRÉSENCE (`'en' in pathsByLang`), pas la vérité. Même correction pour
+`xDefaultPath`.
+
+**3. Le sitemap et l'en-tête des pages ne déclarent pas les mêmes
+balises.** Le sitemap dit `en-US`, `fr-FR`, `it-IT`, `de-DE` ; l'en-tête dit
+`en`, `fr`, `it`, `de` (et `pt-BR` des deux côtés). Chaque page envoie donc
+deux annotations différentes. Et la forme régionale **restreint** :
+**`de-DE` exclut l'Autriche et la Suisse**, deux des marchés de tôlerie
+germanophones les plus denses, comme `fr-FR` exclut la Belgique, la Suisse
+et le Québec. `pt-BR` est un choix délibéré et reste. **Arbitrage du
+vérificateur** : aligner le sitemap sur l'en-tête — balises courtes partout,
+`pt-BR` excepté (`astro.config.mjs`, entrée `i18n` du sitemap).
+
+**4. L'article natif allemand promet la documentation.** « Die
+Dokumentation — Startleitfäden, Erklärung der Engine, Dateiformate,
+Datenschutz » et le lien `[Dokumentation](/docs/)` — vrai seulement quand le
+paquet C existe. **Condition** : cet article ne paraît que dans la
+publication qui porte la documentation allemande, et son lien devient
+`/de/docs/`. Deux retouches de langue au passage : « Nicht „localisiert" »
+→ **« lokalisiert »** (faute), et « Metallbaubezirke » n'existe pas —
+« Metallbauregionen ».
+
+### Décision
+
+**GO sur la révision A et sur le paquet B.** Le dictionnaire, le site et les
+neuf articles sont bons ; rien n'est publié, donc rien n'urge. **Les six
+corrections ci-dessus voyagent avec le paquet C** — elles sont toutes du
+même métier : contenu, images, balises. Le paquet C s'ouvre : documentation
+allemande (locale Starlight `lang: 'de'`, dix-huit pages, jeu de captures
+allemandes régénéré, dessin de l'espacement avec son cadre élargi), plus
+les cinq diagrammes du blog en de/it/pt, `x-default`, les balises du
+sitemap, le commentaire Astro, le singulier du badge et « mitgelieferten ».
+
+La fusion de `l3-de-site` dans `main` est propre (essai à blanc : aucun
+conflit, le hotfix dupliqué est reconnu). **Aucune publication avant le
+paquet C et le paquet P.**
