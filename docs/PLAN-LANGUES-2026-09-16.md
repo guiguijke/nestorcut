@@ -2477,3 +2477,77 @@ points 1 à 8 ci-dessus, plus les deux pièges latents et le verrou des faits.
 corrections de l'application + verrou des faits + site et blog allemands.
 Un seul rapport, une seule relecture. Le point 1 (licences) touche trois
 langues dont deux en production : il voyage avec la publication allemande.
+
+## Révision A + paquet B L3 (implémenteur, 21/09) — livraison unique
+
+### Les huit corrections de la relecture (app, `l3-allemand` `5b0c4cde`)
+
+1. **licences.own restitué dans les TROIS langues** (de, pt, it) : les
+   quatre clauses de l'anglais — restriction commerciale et service
+   hébergé dérivé, héritage nest2d MIT, sparrow MIT / jagua-rs MPL-2.0,
+   réserve de marque sur noms et logos.
+2. « Sauberers »/« Saubereres » → **« Sauberes Restblech »** (les deux
+   clés).
+3. countMismatch : « **andere** Anzahl von Zeichnungen », plus jamais
+   « mehr ».
+4. Dialogue de suppression : « **Die Dateien … dieses Projekts** ».
+5. Zone dangereuse du coffre : « **können Sie ihn deaktivieren** ».
+6. Option(en), **Platzierungen**, offene **Konturen**, « Linien ohne
+   Breite (hin und zurück) », **Walks** (quitte la liste blanche de lui
+   même).
+7. **Le pourcentage allemand prend l'espace** (DIN 5008) :
+   `formatPercent` élargi à `de`, verrou posé (it/pt restent collés).
+8. **`report.allPlaced.one`/`.other` dans les CINQ langues**, le badge
+   passe par `tp` — « All 1 parts placed » réparé partout, deuxième fois
+   qu'une langue neuve répare les anciennes.
+   + **dwgServer PT** redit « aceita apenas DXF e SVG » (cas attrapé par
+   la sonde du vérificateur).
+
+**Verrou « les faits ne se perdent pas »** (i18nParity) : tout sigle,
+identifiant de licence, version ou nom propre de l'anglais doit survivre
+en traduction — liste blanche courte documentée (MB, CAD, et les
+majuscules d'insistance AND/LAST/WARNING/ALL). À sa première exécution il
+a attrapé licences.own ×3 et dwgServer PT ; les onze cas français
+restants étaient exactement les deux catégories prévues (CAD→CAO,
+majuscules d'insistance). **Piège refermé dans le même commit** :
+lookahead du parseur `(?:FR|EN|PT|IT|DE)`. DOCS_LANGS reste à quatre
+langues jusqu'au P (ancres à relever). Vitest **813/813**.
+
+**Captures reprises avec l'habitude demandée** : le harnais inclut
+maintenant **le panneau de réglages et le tableau des plans** —
+11 images, **21 sondes vertes**, zéro débordement (le premier essai avait
+le bloc réglages au mauvais endroit — silencieusement sauté ; vu,
+déplacé dans le flux projet, repassé).
+
+### HOTFIX production (à connaître)
+
+En touchant le Header pour le repli Docs DE, j'ai trouvé **un résidu
+`}>{t(nav.docs)}</a>` laissé par mon script du paquet C L2** : chaque
+page du site servait un « }>Docs » orphelin après la nav, **toutes
+langues, depuis la publication italienne** — invisible aux vérificateurs
+de liens, raté par mes preuves dist comme par les relectures. Corrigé sur
+la branche (`2bca7ea`) **et poussé aussitôt sur main** (`e715c07`)
+— déploiement Cloudflare immédiat, vérifié disparu du HTML bâti.
+
+### Paquet B — site et blog allemands (`l3-de-site` `e66c7f7`, poussée)
+
+- **ui.ts bloc `de` complet, 181/181** (parité script), vouvoiement,
+  glossaire. `locales` + Deutsch, sitemap `de-DE`, schéma blog `de`,
+  helper `CANONICAL` + de.
+- **Pages `/de/`** (accueil, contact, blog ×2), **menu cinq langues**
+  partout ; Deutsch offert depuis EN/FR/PT/IT.
+- **Neuf articles** : les huit familles traduites de l'original anglais
+  (commits Deepnest 07/07/2020 et 28/07/2026, v1.5.6 mai 2025, 573/327
+  contre 555/345, 49–59 $ août 2026, 304 pièces/68 %, ~90 s), chacun
+  portant **« \*Aus dem Englischen übersetzt.\* »** en pied — la règle
+  appliquée dès la livraison cette fois — plus « NestorCut spricht
+  Deutsch » (propre à la langue). Diagrammes `-en.svg`, comme PT/IT.
+- **Replis** : Docs DE → anglais jusqu'au paquet C ; légal/privacy restent
+  FR+EN (la règle du pied de page couvre de automatiquement).
+- **Build 136 pages exit 0, check:links OK** (134 URLs, 135 pages).
+  **Preuves dist/** : `/de/` servi en allemand, menu 5 langues, hreflang
+  **cinq sœurs** sur la famille Deepnest côté DE (+ x-default), sitemap
+  12 URLs `/de/`, le résidu `}>Docs` absent du HTML bâti.
+
+Rien n'est publié pour l'allemand : les branches `l3-allemand` et
+`l3-de-site` attendent la relecture, puis le paquet C.
