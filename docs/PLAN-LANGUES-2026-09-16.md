@@ -2303,3 +2303,177 @@ positif existe à l'identique en français.
 
 **État** : prêt pour la relecture des 747 chaînes et des captures. `de`
 reste sur la branche `l3-allemand` jusqu'au GO final — rien de publié.
+
+## Relecture du paquet A de L3 (`40eb9158`) — vérificateur, 21/09 — RÉVISION
+
+Rejoué chez moi sur la branche `l3-allemand` : **vitest 812/812, code 0**
+(68 fichiers) ; les cinq dictionnaires chargés par Node et comparés clé à
+clé ; le conteneur local sert bien l'allemand (`lang="de"` sur `/plans`) ;
+**les neuf captures regardées une par une** ; et deux surfaces que le
+paquet ne capture pas, sondées par moi.
+
+### Ce qui tient, et qui tient bien
+
+- **747/747 clés, dans l'ordre de l'anglais**, aucune valeur vide, **les
+  mêmes variables `{…}` dans chaque clé**, aucune valeur égale au
+  français, à l'italien ni au portugais (zéro fuite), 24 valeurs égales à
+  l'anglais toutes couvertes par la liste blanche.
+- **Le vouvoiement tient sur les 747 chaînes** : ma sonde (`du`, `dich`,
+  `dir`, `dein*`, formes impératives familières) ne trouve **rien** ;
+  141 chaînes portent `Sie`/`Ihr`/`Ihnen`.
+- **Registre** : `de` dans `DICTS`, « Deutsch » au menu, `de: 'de-DE'`,
+  `pluralSelect` qui ne met au singulier que 1 (« 0 Teile »).
+- **Le risque des mots composés ne s'est pas réalisé.** Les captures le
+  montrent, et je suis allé le chercher là où le paquet ne regardait pas :
+  - **le panneau de réglages** — le cœur des composés — tient entièrement à
+    1440 px : « SICHERHEITSZUGABE (PRO TEIL) », « OPTIMIERUNGSRICHTUNGEN »,
+    et la règle **« Teileabstand = 2 × Kerf + Sicherheitszugabe = 2 mm »**
+    sur une seule ligne (capture `docs/qa/l3-jalonA-verif/10-reglages-de.png`) ;
+  - **le tableau comparatif des plans** — « Optimierungsrichtungen pro
+    Auftrag », « Verarbeitungspriorität », « Rechenkerne
+    (Liefergeschwindigkeit) » — **zéro débordement** à 1280 px
+    (`11-plans-de.png`) ; à 380 px le tableau défile dans son conteneur,
+    à l'identique en français et en anglais (`scrollWidth` du corps = 380,
+    aucun défilement horizontal de page) : ce n'est pas un défaut allemand.
+- Le badge dit **« Abstand ≥ 5,87 mm »** et le rapport « 8.561 mm² », « 1,24 m² » :
+  la virgule décimale et le point des milliers allemands sont bien posés —
+  le correctif de longueur du lot L2 profite à la cinquième langue sans
+  une ligne de plus.
+- La légende de la vue agrandie, la plus longue des cinq langues
+  (« Einfahrts-/Ausfahrtsweg », « mögliche Tangentenposition (Zone) »),
+  tient sans coupure.
+
+### Ce qui doit être corrigé — paquet A-révision
+
+**1. La page des licences est TRONQUÉE, en allemand — et aussi en
+portugais et en italien, déjà en production.** L'anglais et le français
+disent quatre choses ; `licences.own` n'en dit plus qu'une dans les trois
+autres langues. Sont perdus : **« aucun usage commercial ni service hébergé
+dérivé »** (la restriction même de la licence PolyForm), **l'héritage MIT du
+projet nest2d**, **sparrow (MIT) et jagua-rs (MPL-2.0)**, et **« le nom et
+les logos ne sont pas licenciés »**. Le tableau de la page, lui, liste
+toujours sparrow et jagua-rs avec leurs licences et leurs attributions (il
+ne dépend pas de la langue) : ce qui manque est la restriction, l'héritage
+et la réserve de marque. À compléter dans les trois langues, en traduisant
+fidèlement le texte anglais/français déjà validé — ce n'est pas une
+nouvelle promesse, c'est la restitution d'une promesse existante. Le
+portugais et l'italien partent avec la publication allemande.
+**Je l'ai laissé passer deux fois, à L1 et à L2.** Mon verrou de parité
+vérifiait les clés, les vides, les copies de l'anglais et les variables —
+jamais qu'une phrase disait encore ce qu'elle disait. Voir le verrou
+proposé plus bas.
+
+**2. Deux fautes d'orthographe sur le MÊME mot, visibles dans la capture
+livrée (`06-resultat-de.png`)** :
+- `report.offcut` : « **Sauberers** Restblech » → « Sauberes Restblech » ;
+- `result.cleanOffcut` : « **Saubereres** Restblech » (= « plus propre »)
+  → « Sauberes Restblech ».
+Les deux sont dans l'image jointe au rapport, l'une sous l'autre, dans le
+bandeau et dans la ligne du rapport. La règle `AGENTS.md` §7 n'est pas
+tenue quand on écrit « captures regardées, zéro défaut » au-dessus d'une
+image qui porte deux fautes.
+
+**3. Un diagnostic qui change de sens.** `sheetcamReserve.countMismatch` :
+l'anglais dit « a **different** number of drawings than it lists »,
+l'allemand dit « **mehr** Zeichnungen … als sie auflistet ». Quand le
+fichier en cache MOINS de dessins qu'il n'en liste, le message ment.
+→ « eine **andere** Anzahl von Zeichnungen … als sie auflistet ».
+
+**4. Le sujet du dialogue de suppression.** `project.deleteConfirmCloud` et
+`…Local` : l'anglais dit « **Its** files » (celles du projet), l'allemand
+dit « **Ihre** Dateien » — sous un titre « {name} löschen? », un lecteur
+allemand comprend « VOS fichiers ». Dans une confirmation destructive, la
+phrase doit désigner le projet : « **Die Dateien, Ergebnisse und Berichte
+dieses Projekts** werden endgültig gelöscht ».
+
+**5. Zone dangereuse du coffre.** `vault.disableDesc` : « lassen Sie ihn …
+deaktivieren » transforme une possibilité en instruction. → « … **können
+Sie ihn deaktivieren** und dabei Ihre Dateien behalten (entschlüsselt) oder
+vernichten. »
+
+**6. Quatre points de langue** :
+- `report.discarded` : « {n} **Option(s)** » est un pluriel anglais →
+  « Option(en) » ;
+- `report.duplicates` : « doppelte **Posen** » — « Pose » ne désigne pas une
+  pose de pièce en allemand → « doppelte **Platzierungen** » ;
+- `import.contoursDropped` et `import.spursRemoved` disent « **Verläufe** »
+  là où le reste du dictionnaire dit « Kontur » (`sheetcamJobDrawing.openPath`
+  = « eine offene Kontur ») → « {n} **offene Konturen** werden nicht
+  geschnitten » ; et « Nullbreite-Hin-und-Her-Verläufe » n'est pas de
+  l'allemand → « {n} Linien ohne Breite (hin und zurück) entfernt » ;
+- `live.walks` : « walks » en minuscules alors que le même mot est
+  capitalisé deux crans plus haut dans le même écran (« 1 Walk »,
+  « 8-Walk-Suche ») — un substantif prend la majuscule → « Walks ».
+  (Il quitte de lui-même la liste blanche des copies de l'anglais.)
+
+**7. Le pourcentage allemand prend une espace.** `formatPercent` ne la pose
+que pour le français : la vue live affiche « 6,9% » et le rapport « 0,7% »,
+là où l'allemand écrit « 6,9 % » (DIN 5008). Une condition à élargir à
+`de` — l'italien et le portugais gardent leur forme collée, qui est la
+leur. Le verrou d'unités suit.
+
+**8. « Alle 1 Teile platziert » (capture `07-badges-de.png`).** Le défaut
+est dans la SOURCE : `report.allPlaced` = « All {n} parts placed » n'a pas
+de singulier, dans aucune des cinq langues — l'anglais lit « All 1 parts
+placed » tout autant. L'allemand le rend simplement insupportable. Le
+mécanisme existe déjà (`unit.part.one`/`.other`) : une paire
+`report.allPlaced.one`/`.other` dans les cinq dictionnaires, et les cinq
+langues y gagnent. **C'est la deuxième fois qu'une langue nouvelle répare
+une langue ancienne** — l'italien avait rendu la virgule au français.
+
+### Deux pièges latents à refermer avant le paquet P
+
+- **`app/utils/changelogParser.js` ligne 35** : le lookahead vaut
+  `(?:FR|EN|PT|IT)`. Un bloc `*DE*` placé après `*IT*` sera **avalé par le
+  bloc italien**. C'est exactement le piège refermé côté générateur du site
+  à L2 ; il est resté ouvert côté application. À étendre à `DE` **dans le
+  commit qui écrit le premier bloc `*DE*`**, pas après.
+- **`DOCS_LANGS`** reste à quatre langues : `de` ne s'y ajoute qu'au paquet
+  P, **avec les neuf ancres allemandes relevées dans le HTML BÂTI** — une
+  langue déclarée sans ancre donne `#undefined`.
+
+### Le verrou qui manquait (à écrire au paquet A-révision)
+
+Dans `app/tests/i18nParity.test.js`, une épreuve **« les faits ne se
+perdent pas »** : tout sigle, identifiant de licence, numéro de version ou
+nom propre présent dans la chaîne anglaise doit se retrouver dans chaque
+traduction, avec une liste blanche courte (les unités qui se traduisent —
+`MB`→`Mo` —, les majuscules d'insistance traduites — `ALL`→`TOUTES` —, et
+les nombres à virgule décimale). Je l'ai écrite en sonde pour cette
+relecture : elle attrape `licences.own` dans les trois langues, et elle a
+trouvé **un second cas déjà en production — `localMode.dwgServer` en
+portugais** : l'anglais dit « local mode supports **DXF and SVG** only »,
+le portugais dit « o processamento local não os aceita » et ne dit plus
+quels formats le mode local accepte. À corriger avec le reste.
+
+### Notes d'instrument (les miennes)
+
+- Ma première sonde de débordement comptait le tableau comparatif des plans
+  comme onze défauts à 380 px : c'est un conteneur à défilement, identique
+  en français et en anglais. Vérifié avant d'écrire. **Quatrième fois ce
+  cycle qu'une sonde accuse à tort** — l'ordre reste : mesurer l'outil,
+  puis le livrable.
+- Les guillemets : l'allemand écrit `„…“`, le dictionnaire écrit `"…"`.
+  L'italien et le portugais font déjà pareil, publiés. Je **ne** le demande
+  **pas** pour l'allemand seul : à aligner sur les trois langues d'un coup,
+  un jour de ménage, ou pas du tout. Dit pour qu'il soit consigné, pas pour
+  qu'il soit fait maintenant.
+- Résidu non allemand, constaté en passant : le pied de page public de
+  l'application (`Legal Notice · Terms · Privacy · Refund Policy ·
+  Licences · Changelog · Benchmarks`) est en **anglais dans toutes les
+  langues, français compris**. Pré-existant, hors paquet.
+- Le `<title>` de l'application reste anglais en allemand comme ailleurs —
+  résidu déjà consigné, et désormais la dernière surface monolingue de
+  l'application : candidat au paquet P, une ligne.
+
+### Décision
+
+**Paquet A : RÉVISION.** Le dictionnaire est bon — 747 chaînes de vrai
+allemand d'atelier, vouvoyé, glossaire tenu, et le risque annoncé des mots
+composés ne s'est pas matérialisé. Ce qui reste est court et précis : les
+points 1 à 8 ci-dessus, plus les deux pièges latents et le verrou des faits.
+
+**La révision et le paquet B partent ENSEMBLE**, en une seule livraison :
+corrections de l'application + verrou des faits + site et blog allemands.
+Un seul rapport, une seule relecture. Le point 1 (licences) touche trois
+langues dont deux en production : il voyage avec la publication allemande.
