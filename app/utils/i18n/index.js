@@ -88,5 +88,5 @@ export function formatNumber(v, locale = DEFAULT_LOCALE, digits = 1) {
 export function formatPercent(v, locale = DEFAULT_LOCALE, digits = 1) {
     const n = Number(v)
     if (!Number.isFinite(n)) return '—'
-    return formatNumber(n, locale, digits) + (locale === 'fr' ? ' %' : '%')
+    return formatNumber(n, locale, digits) + (locale === 'fr' || locale === 'de' ? ' %' : '%')
 }

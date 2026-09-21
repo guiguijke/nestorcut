@@ -77,6 +77,44 @@ describe('L0 — parité des clés de langue', () => {
         expect(translate(someKey, 'zz-unknown')).toBe(DICTS[DEFAULT_LOCALE][someKey])
     })
 
+    // A-révision L3 (relecture 21/09) : « les faits ne se perdent pas » —
+    // tout sigle, identifiant de licence, numéro de version ou nom propre
+    // présent dans la chaîne anglaise doit se retrouver dans chaque
+    // traduction. Né du licences.own amputé en pt/it/de (héritage MIT,
+    // sparrow/jagua-rs, réserve de marque perdus) et de dwgServer PT qui
+    // ne disait plus « DXF et SVG ». Liste blanche COURTE : unités qui se
+    // traduisent (MB→Mo) et décimales normalisées (0.05 = 0,05).
+    it('les faits ne se perdent pas : sigles, licences, versions, noms propres', () => {
+        // Liste blanche COURTE (relecture L3) : unités qui se traduisent
+        // (MB→Mo, CAD→CAO) et majuscules d'insistance traduites
+        // (AND/LAST/WARNING/ALL → ET/DERNIER/AVERTISSEMENT/TOUTES…).
+        const FACT_WHITELIST = new Set(['MB', 'CAD', 'AND', 'LAST', 'WARNING', 'ALL'])
+        const properIds = /(?:sparrow|jagua-rs|PolyForm|Noncommercial|nest2d|Stripe|SheetCam|WebAssembly|IndexedDB|WireGuard|NestorCut|GitHub|Discord|Google)/g
+        const factsOf = (s) => {
+            const out = new Set()
+            for (const m of String(s).matchAll(/\b[A-Z]{2,}[0-9]*\b/g)) out.add(m[0])
+            for (const m of String(s).matchAll(/\b\d+(?:[.,]\d+)+\b/g)) out.add(m[0].replace(',', '.'))
+            for (const m of String(s).matchAll(properIds)) out.add(m[0])
+            return out
+        }
+        for (const lang of LOCALES) {
+            if (lang === DEFAULT_LOCALE) continue
+            const lost = []
+            for (const [k, v] of Object.entries(DICTS[lang])) {
+                const ref = String(DICTS[DEFAULT_LOCALE][k])
+                for (const f of factsOf(ref)) {
+                    if (FACT_WHITELIST.has(f)) continue
+                    const vStr = String(v)
+                    const present = f.includes('.')
+                        ? vStr.includes(f) || vStr.includes(f.replace('.', ','))
+                        : vStr.includes(f)
+                    if (!present) lost.push(`${k}: «${f}» absent`)
+                }
+            }
+            expect(lost, `[${lang}] faits perdus`).toEqual([])
+        }
+    })
+
     // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
     // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »
     // de la clé anglaise laisse des variables fantômes ({reason} en toutes
@@ -104,6 +142,9 @@ describe('L0 — nombres par locale (Intl)', () => {
         expect(formatNumber(1.5, 'fr', 1)).toBe('1,5')
         expect(formatNumber(1.5, 'en', 1)).toBe('1.5')
         expect(formatPercent(55.4, 'fr', 1)).toBe('55,4 %')
+        // Relecture L3 : l'allemand prend aussi l'espace (DIN 5008) ; it et pt restent collés.
+        expect(formatPercent(55.4, 'de', 1)).toBe('55,4 %')
+        expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
         expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
     })
 })
