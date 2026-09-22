@@ -3555,3 +3555,71 @@ complet (**application seule** si aucun diff moteur), fusion du site,
 production** — la boucle qui a si bien tenu pour l'allemand. La publication
 espagnole porte aussi les réparations des langues déjà en ligne : **les dates
 de pt, it et de**, et **les deux diagrammes portugais**.
+
+## Contrôle AVANT déploiement du paquet P de L4 (`158ac627` app / site `ab448ca`) — vérificateur, 22/09 — GO, sans préalable
+
+L'agent a préparé les trois écritures et s'est arrêté pour demander : la
+boucle tient. Pour la première fois du chantier des langues, **aucune
+correction n'est demandée avant la publication**.
+
+### Les six points de la relecture du paquet C : faits et prouvés
+
+- **Le verrou de source mord.** Le motif du ternaire est une expression
+  régulière littérale, **exécutée** (`p instanceof RegExp ? p.test(src) :
+  src.includes(p)`), les fichiers de test sont exclus du balayage, et le
+  verrou **se prouve lui-même** : il exige que la ligne fautive d'origine de
+  `quotaReset.js` le déclenche. Un verrou qui démontre qu'il peut échouer —
+  c'est la forme à retenir pour tous les suivants.
+- **Le parseur du changelog de l'application accueille `ES`**
+  (`(?:FR|EN|PT|IT|DE|ES)`), dans le commit qui écrit le premier bloc `*ES*`.
+- **La page Nouveautés espagnole est commitée et native** : plus de repli
+  Starlight, le bloc V0.9.6 en espagnol et le bandeau « Las versiones
+  anteriores a V0.9.6 están en inglés ».
+- « releer » et « el margen de seguridad » : faits.
+- **Les 54 ancres d'aide — neuf sujets × six langues — résolues une à une
+  contre l'`id` de leur page bâtie. Zéro échec**, accents compris
+  (`la-separación`, `qué-se-descarga`, `las-piezas-en-los-agujeros`).
+
+### L'état préparé
+
+- **Application `158ac627`** : `"version": "0.9.6"`, `DOCS_LANGS` à six
+  langues, `CHANGELOG.md` **V0.9.6 à six blocs** — chacun dit honnêtement que
+  les dates suivent désormais la langue et que pt, it et de lisaient des
+  dates anglaises —, `whatsNew.js` **resté vide** (la règle de la date de
+  première mise en production a tenu : rien n'a été réécrit),
+  **vitest 817/817 code 0** rejoué, et **aucun diff sous `workers/` ni
+  `public/engine`** depuis le déploiement allemand : application seule.
+- **Registre** : `:158ac627…` existe, digest `sha256:5fae0a3a…` ;
+  `:latest` porte encore `sha256:cd0ce425…`, l'allemand. Rien n'a bougé seul.
+- **Site `ab448ca`** (sur `l4-es-site`, `main` en est l'ancêtre : la
+  publication est une avance rapide) : build **183 pages code 0**,
+  `check:links` **code 0**, **zéro fragment orphelin**, `x-default` vers
+  l'anglais sur les **six** accueils, plan du site en balises courtes,
+  l'article natif présent, **aucun binaire du propriétaire**. Depuis mon
+  contrôle du paquet C, seuls des textes ont changé (pages Nouveautés, deux
+  retouches, dé-brouillon) : la mesure des trente-six dessins contre leurs
+  cartes tient.
+
+### Ce que cette publication répare aussi
+
+- **Les dates du portugais, de l'italien et de l'allemand**, qui
+  s'affichaient en anglais en production.
+- **Les deux diagrammes portugais** qui débordaient de leur carte
+  (« nem vazamento », « Orçamento máximo ») — dont celui que j'avais fait
+  mettre en ligne en le mesurant contre le cadre.
+
+### Décision
+
+**GO pour les trois écritures**, dans l'ordre :
+
+1. `promote-latest` sur `158ac6272dbe3297d391e4ccaa844411f4fd20b9`, puis
+   `pull` + `up -d app` sur Hetzner — **application seule**.
+2. Avance rapide de `main` du site sur `ab448ca` et poussée.
+3. Contrôle en ligne, suppression des deux branches, rapport : SHA promu,
+   digest — **attendu `sha256:5fae0a3a…`** sur `:latest`, sur `:158ac627…` et
+   dans le conteneur —, SHA du site.
+
+Je contrôlerai ensuite : six langues servies, les **neuf ancres espagnoles en
+ligne**, les dates localisées en portugais, italien et allemand, les deux
+diagrammes portugais servis corrigés, les six pages Nouveautés, et zéro
+fragment orphelin.
