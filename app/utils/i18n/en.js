@@ -475,7 +475,7 @@ export default {
     'report.overlapFree': 'Overlap-free',
     'report.insideSheet': 'Inside sheet',
     'report.spacing': 'Gap ≥ {v} {unit}',
-    'report.allPlaced.one': '{n} part placed — all of them',
+    'report.allPlaced.one': '{n} part placed',
     'report.allPlaced.other': 'All {n} parts placed',
     'report.postPass': 'Post-pass: {n} moved{rb}{e}',
     'report.notVerified': 'Not verified',

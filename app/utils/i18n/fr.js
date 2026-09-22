@@ -460,7 +460,7 @@ export default {
     'report.overlapFree': 'Sans recouvrement',
     'report.insideSheet': 'Dans la tôle',
     'report.spacing': 'Écart ≥ {v} {unit}',
-    'report.allPlaced.one': '{n} pièce placée — toutes',
+    'report.allPlaced.one': '{n} pièce placée',
     'report.allPlaced.other': 'Les {n} pièces sont placées',
     'report.postPass': 'Post-pass : {n} déplacées{rb}{e}',
     'report.notVerified': 'Non vérifié',
