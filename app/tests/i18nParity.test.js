@@ -6,6 +6,7 @@
 // l'anglais HORS liste blanche (noms propres et sigles qui ne se
 // traduisent pas). Une langue déclarée incomplète ne doit pas apparaître
 // dans le menu : ce test la fait tomber AVANT.
+import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { DICTS, LOCALES, DEFAULT_LOCALE, formatNumber, formatPercent, translate, intlTag } from '../utils/i18n'
 
@@ -140,6 +141,26 @@ describe('L0 — parité des clés de langue', () => {
         }
     })
 
+    // Relecture B L4 : verrou de SOURCE — le verrou de comportement ne
+    // tient que formatQuotaReset (1 point sur 5). Aucun formatage de
+    // date/heure sous app/ ne doit régresser vers la langue du
+    // NAVIGATEUR (undefined / []) ni vers un ternaire deux-langues.
+    it('verrou de source : aucune date formatée hors du registre sous app/', async () => {
+        const { execSync } = await import('node:child_process')
+        const PATTERNS = [
+            'toLocale' + 'DateString(undefined',
+            'toLocale' + 'TimeString(' + '[]' + ',',
+            new RegExp('=== .fr\s?\s.[a-z]{2}-[A-Z]{2}')
+        ]
+        const { globSync } = await import('node:fs')
+        const files = globSync('app/**/*.{js,vue}')
+        const offenders = []
+        for (const f of files) {
+            const src = fs.readFileSync(f, 'utf8')
+            for (const p of PATTERNS) if (src.includes(p.source || p)) offenders.push(f + ' : ' + (p.source || p))
+        }
+        expect(offenders, 'dates formatées hors registre').toEqual([])
+    })
     // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
     // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »
     // de la clé anglaise laisse des variables fantômes ({reason} en toutes
