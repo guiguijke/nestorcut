@@ -2995,3 +2995,90 @@ contre les autres langues.
 **L3 allemand : clos.** Le debt whatsNew (dates réécrites — consigne
 fautive du vérificateur, corrigée dans le plan) se videra au premier
 commit applicatif de L4 : une date de whatsNew ne se réécrit jamais.
+
+## Contrôle de la publication allemande (`ecd205da` / site `1308c0f`) — vérificateur, 22/09 — CONFORME, L3 clos
+
+Lecture seule, en production :
+
+- **Digests** : `:latest` et `:ecd205da…` portent tous deux
+  `sha256:cd0ce4256092…bbda121`, celui annoncé avant le déploiement et celui
+  du conteneur. L'application sert **V0.9.5**.
+- **Cinq langues servies** selon l'en-tête du navigateur : `de`, `it`, `pt`,
+  `fr`, `en`.
+- **Les neuf ancres d'aide allemandes existent en ligne**, chacune sur sa
+  page en 200 — `die-bleche`, `der-abstand`, `die-drehungen`,
+  `die-drei-richtungen`, **`die-teile-in-den-löchern`** (l'umlaut résout),
+  `was-die-badges-garantieren`,
+  `das-nutzbare-restblech--und-mindestens`, `die-alternativen`,
+  `was-heruntergeladen-wird`.
+- **Toutes les surfaces en 200** : `/de/`, `/de/docs/`, `/de/blog/`,
+  l'article natif dé-drafté, `/de/contact/`, et les quatre accueils
+  existants.
+- **La clause restituée est bien servie** : « Nicht wir, nicht Backups,
+  **kein Leak.** » et « Nem nós, nem backups, **nem vazamento.** » La
+  correction demandée avant la poussée a été faite avant la poussée.
+- **Les cinq pages Nouveautés** portent V0.9.5 ; les trois bandeaux de repli
+  (pt, it, de) sont rendus avec leur valeur, l'anglais et le français n'en
+  ont pas besoin.
+- **`x-default` pointe l'anglais sur les cinq accueils, en production** — le
+  défaut de référencement qui traînait depuis la publication portugaise est
+  corrigé pour de bon.
+- **Zéro fragment de gabarit orphelin** sur les pages publiques sondées : le
+  contrôle né du « }>Docs » fait désormais partie de la liste, et il est
+  vert en ligne.
+- **Les deux branches sont supprimées** des deux dépôts ; la fusion du site
+  ne contient **aucun binaire du propriétaire** (les deux MP4 sont restés
+  hors de l'index) ; le plus gros fichier publié est une capture de 385 Ko.
+
+**L3 allemand : clos.** NestorCut parle cinq langues — application, site,
+documentation et blog, publiés le même jour, selon la règle.
+
+### Ce que l'allemand a rapporté aux quatre autres langues
+
+Comme l'italien avant lui, le cycle allemand a réparé ce qui le précédait :
+
+1. **La page des licences** avait perdu, en portugais et en italien **déjà
+   publiés**, la restriction d'usage commercial, l'héritage MIT de nest2d,
+   les licences de sparrow et jagua-rs et la réserve de marque. Restituée
+   dans les trois langues.
+2. **Le résidu `}>Docs`** s'affichait sur chaque page du site, toutes
+   langues, depuis la publication italienne. Corrigé, et un contrôle ajouté
+   pour que ça ne repasse plus.
+3. **`x-default` se désignait lui-même** sur les accueils et les pages
+   contact de toutes les langues — cause racine : une chaîne vide traitée
+   comme absente. Réparé à la racine.
+4. **Le plan du site déclarait `de-DE`, `fr-FR`, `it-IT`** quand l'en-tête
+   déclarait `de`, `fr`, `it` : deux annotations contradictoires par page, et
+   une forme régionale qui excluait l'Autriche, la Suisse, la Belgique.
+   Aligné.
+5. **Les cinq diagrammes du blog étaient en anglais** dans les articles
+   portugais et italiens en production. Traduits — quinze fichiers.
+6. **`localMode.dwgServer`** en portugais ne disait plus quels formats le
+   mode local accepte. Réparé, et un verrou (« les faits ne se perdent
+   pas ») empêche désormais une traduction d'amputer une phrase.
+7. **« All 1 parts placed »** n'avait de singulier dans aucune des cinq
+   langues, l'anglais compris.
+
+### Les trois règles que ce cycle ajoute
+
+- **Un SVG ne renvoie pas à la ligne** : une traduction se mesure, texte par
+  texte, contre son cadre — le build et le vérificateur de liens sont
+  aveugles à un mot coupé.
+- **Corriger une mise en page ne doit pas retirer une promesse** : toute
+  retouche de cadrage se termine par un diff du texte contre les autres
+  langues.
+- **Une date de première mise en production ne se réécrit jamais** — la
+  consigne fautive était la mienne, elle est corrigée ; les quatre entrées
+  de `whatsNew.js` se vident au premier commit applicatif de L4.
+
+### Reste pour L4 (espagnol)
+
+Le chemin est identique : paquets A, B, C, P. Rien de nouveau à inventer,
+sauf ce qui est propre à la langue. Ce qui est déjà su : glossaire espagnol
+corrigé le 16/09 (**« sobrante aprovechable »**, **« chatarra »**),
+`INTL_TAGS` `es: 'es-ES'` — une ligne —, `pluralSelect` déjà juste (seul 1
+est singulier), locale Starlight `lang: 'es'` pour que clé et balise
+coïncident, et le **tutoiement** : l'espagnol d'atelier tutoie, comme
+l'italien et le portugais, contrairement à l'allemand. Le repli anglais du
+bandeau `ES_SINCE` vaudra la version qui publie. Et, dès le premier commit
+applicatif : vider les quatre entrées de `whatsNew.js`.
