@@ -122,6 +122,8 @@ import { sizeType } from '~~/constants/size.constants'
 import { formatQuotaReset } from '~/utils/quotaReset'
 
 const { t, locale } = useLocale()
+// Relecture L4 : la date suit la langue de l'app, pas celle du navigateur.
+import { intlTag } from '~/utils/i18n'
 
 // Date+heure localisées du reset du quota gratuit (1er du mois suivant,
 // 00:00 UTC) — affichées près du compteur de nestings restants.
@@ -138,7 +140,7 @@ const error = ref('')
 
 const formatDate = (iso) => {
     if (!iso) return ''
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString(intlTag(locale.value), {
         year: 'numeric', month: 'long', day: 'numeric',
     })
 }

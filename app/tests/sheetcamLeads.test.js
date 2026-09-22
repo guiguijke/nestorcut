@@ -396,20 +396,30 @@ describe('J11-b — version produit et journal unique', () => {
 describe('J11-c — le badge « Nouveau » expire à 7 jours', () => {
     it("à J+6 il est nouveau, à J+8 il ne l'est plus", async () => {
         const { isNewFeature, WHATS_NEW } = await import('../utils/whatsNew')
-        // Une clé réelle du registre — le verrou suit sa DATE (promue au
-        // déploiement), jamais une date copiée qui dériverait.
-        const key = 'job-download-primary'
-        const released = new Date(WHATS_NEW['job-download-primary'])
+        // L4 : le registre est vidé à l'ouverture de langue (règle du 22/09 —
+        // une date de première mise en production ne se réécrit jamais ; on
+        // n'y ajoute que les nouveautés du jour). Le verrou injecte donc sa
+        // propre clé à la date d'AUJOURD'HUI puis la retire : la règle des
+        // 7 jours ne dépend d'aucune entrée réelle.
+        const key = 'verrou-j11c'
+        WHATS_NEW[key] = new Date().toISOString().slice(0, 10)
+        const released = new Date(WHATS_NEW[key])
         const at = (days) => new Date(released.getTime() + days * 86400000)
-        expect(isNewFeature(key, at(6))).toBe(true)
-        expect(isNewFeature(key, at(8))).toBe(false)
+        try {
+            expect(isNewFeature(key, at(6))).toBe(true)
+            expect(isNewFeature(key, at(8))).toBe(false)
+        } finally {
+            delete WHATS_NEW[key]
+        }
     })
 
     it('une clé inconnue n\'est jamais nouvelle ; le registre est vivant', async () => {
         const { isNewFeature, WHATS_NEW } = await import('../utils/whatsNew')
         expect(isNewFeature('cle-inexistante')).toBe(false)
-        expect(Object.keys(WHATS_NEW).length).toBeGreaterThanOrEqual(3)
-        // Discipline : aucune entrée de plus de 30 jours (le lot doit vider).
+        // L4 : registre vide après la purge d'ouverture — et AUCUNE entrée
+        // de plus de 30 jours (le lot doit vider ; la clé injectée par le
+        // verrou voisin est retirée dans son finally).
+        // Discipline :
         const now = new Date()
         for (const [k, d] of Object.entries(WHATS_NEW)) {
             const age = (now - new Date(d)) / 86400000

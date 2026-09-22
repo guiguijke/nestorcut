@@ -6,8 +6,9 @@
 // l'anglais HORS liste blanche (noms propres et sigles qui ne se
 // traduisent pas). Une langue déclarée incomplète ne doit pas apparaître
 // dans le menu : ce test la fait tomber AVANT.
+import fs from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { DICTS, LOCALES, DEFAULT_LOCALE, formatNumber, formatPercent, translate } from '../utils/i18n'
+import { DICTS, LOCALES, DEFAULT_LOCALE, formatNumber, formatPercent, translate, intlTag } from '../utils/i18n'
 
 /** Valeurs autorisées à être identiques à l'anglais : sigles, noms
  *  propres, et les MOTS QUI SONT LES MÊMES en français (empruns :
@@ -30,6 +31,8 @@ const IDENTICAL_OK = [
     'Account', 'Email', 'Password', '{n} file', 'Privacy',
     // allemand (L3) : « Name » EST le mot allemand.
     'Name',
+    // espagnol (L4) : « Factor » / « factor {v} » SONT l'espagnol.
+    'Factor', 'factor {v}',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()
@@ -115,6 +118,59 @@ describe('L0 — parité des clés de langue', () => {
         }
     })
 
+    // Relecture L4 (« la trouvaille ») : cinq formatages de DATE serveaient
+    // la langue du navigateur ou un ternaire à deux branches — le pt, l'it
+    // et le de lisaient des dates anglaises en production. Verrou : pour
+    // chaque langue livrée (hors anglais), la date d'un instant fixe doit
+    // différer de l'anglaise — le nom du mois suffit à le prouver.
+    it('les dates suivent la langue de l\'application, jamais celle du navigateur', async () => {
+        const { formatQuotaReset } = await import('../utils/quotaReset')
+        // formatQuotaReset formate le RESET — le 1er du mois SUIVANT. Un
+        // instant de mi-octobre donne donc « 1 nov. » : le verrou attend le
+        // mois du RESET, pas celui de l'instant.
+        const instant = new Date('2026-10-15T12:00:00Z')
+        const en = formatQuotaReset(instant, 'en')
+        for (const lang of LOCALES) {
+            if (lang === DEFAULT_LOCALE) continue
+            const localized = formatQuotaReset(instant, lang)
+            expect(localized, `[${lang}] la date doit différer de l'anglaise`).not.toBe(en)
+            // le nom du mois localisé doit ÊTRE présent (pas juste différent)
+            const resetInstant = new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth() + 1, 1))
+            const month = new Intl.DateTimeFormat(intlTag(lang), { month: 'short' }).format(resetInstant).replace('.', '')
+            expect(localized, `[${lang}] le mois localisé «${month}» doit apparaître`).toContain(month.slice(0, 3))
+        }
+    })
+
+    // Relecture B L4 : verrou de SOURCE — le verrou de comportement ne
+    // tient que formatQuotaReset (1 point sur 5). Aucun formatage de
+    // date/heure sous app/ ne doit régresser vers la langue du
+    // NAVIGATEUR (undefined / []) ni vers un ternaire deux-langues.
+    // Relecture C L4 : le motif regex doit s'EXÉCUTER (p.test), pas se
+    // chercher comme chaîne — l'ancien src.includes(p.source) ne mordait
+    // jamais (prouvé sur la ligne fautive d'origine, qu'il laissait passer).
+    it('verrou de source : aucune date formatée hors du registre sous app/', async () => {
+        const PATTERNS = [
+            'toLocale' + 'DateString(undefined',
+            'toLocale' + 'TimeString(' + '[]' + ',',
+            /===\s*['"]fr['"]\s*\?\s*['"][a-z]{2}-[A-Z]{2}/,
+        ]
+        const { globSync } = await import('node:fs')
+        // les fichiers de test sont exclus : le verrou porte sur le code de
+        // PRODUCTION — son propre motif vivrait dans le test et le mordrait
+        const files = globSync('app/**/*.{js,vue}').filter((f) => !/[\\/]tests[\\/]/.test(f))
+        const offenders = []
+        for (const f of files) {
+            const src = fs.readFileSync(f, 'utf8')
+            for (const p of PATTERNS) {
+                const hit = p instanceof RegExp ? p.test(src) : src.includes(p)
+                if (hit) offenders.push(`${f} : ${p instanceof RegExp ? p.source : p}`)
+            }
+        }
+        expect(offenders, 'dates formatées hors registre').toEqual([])
+        // PREUVE que le verrou mord : la ligne fautive d'origine doit déclencher
+        const FAUTIVE = "const intlLocale = locale === 'fr' ? 'fr-FR' : 'en'"
+        expect(PATTERNS[2].test(FAUTIVE), 'le motif ternaire doit mordre sur la ligne fautive').toBe(true)
+    })
     // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
     // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »
     // de la clé anglaise laisse des variables fantômes ({reason} en toutes
@@ -144,7 +200,11 @@ describe('L0 — nombres par locale (Intl)', () => {
         expect(formatPercent(55.4, 'fr', 1)).toBe('55,4 %')
         // Relecture L3 : l'allemand prend aussi l'espace (DIN 5008) ; it et pt restent collés.
         expect(formatPercent(55.4, 'de', 1)).toBe('55,4 %')
+        // Relecture L4 : l'espagnol prend l'espace (RAE) — le dictionnaire
+        // écrit déjà « 5 % » : le même écran ne montrera pas deux formes.
+        expect(formatPercent(55.4, 'es', 1)).toBe('55,4 %')
         expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
+        expect(formatPercent(55.4, 'it', 1)).toBe('55,4%')
         expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
     })
 })

@@ -3082,3 +3082,476 @@ coïncident, et le **tutoiement** : l'espagnol d'atelier tutoie, comme
 l'italien et le portugais, contrairement à l'allemand. Le repli anglais du
 bandeau `ES_SINCE` vaudra la version qui publie. Et, dès le premier commit
 applicatif : vider les quatre entrées de `whatsNew.js`.
+
+## Paquet A L4 — l'application espagnole (implémenteur, 22/09)
+
+**Premier commit applicatif, les deux gestes demandés** : les quatre
+entrées de `whatsNew.js` VIDÉES (la dette du 16/09 — le registre est
+vide, une date de première mise en production ne se réécrit jamais) ;
+le verrou J11-c du badge réécrit en conséquence (il dépendait d'une
+entrée réelle du registre — il injecte désormais sa propre clé à la
+date du jour puis la retire ; la discipline « aucune entrée de plus de
+30 jours » tient).
+
+**Dictionnaire complet** : `app/utils/i18n/es.js`, **748/748 clés**
+(l'index de référence est passé à 748 avec la paire
+`report.allPlaced.one`/`.other` de la révision L3 — `en-keys.json`
+régénéré), trois lots contrôlés par `.omo/check-es.cjs` (bornes,
+variables, copies EN, fuites IT/PT/FR/DE et marqueurs portugais
+égarés — un « depois » attrapé en relecture propre). **TUTOIEMENT**
+comme l'italien et le portugais — le vouvoiement allemand n'a pas été
+recopié ; la sonde de fuite couvre les formes Sie/Ihr par ricochet
+(aucune).
+
+**Glossaire respecté partout** : chapa, sangría de corte (kerf),
+entrada/salida de corte, punto de perforación, sobrante aprovechable
+(badge court « aprovechable »), chatarra, separación entre piezas,
+margen de seguridad, banda, densidad de la banda, aprovechamiento de
+material, dirección de optimización, separar en piezas, bloque rígido,
+anidar en los agujeros, aviso de importación, informe, vista en
+directo, antorcha. Leçon de sens tenue : badge **« Separación ≥ {v} »**,
+jamais « Margen ». licences.own arrive avec ses QUATRE clauses d'emblée
+(la leçon des trois langues).
+
+**Registre** : `es` dans `DICTS` (6e langue), « Español » au menu,
+`es: 'es-ES'` dans `INTL_TAGS` (une ligne), `pluralSelect` inchangé
+(seul 1 singulier — « 0 piezas »). Liste blanche +2 : `Factor` /
+`factor {v}` (le mot espagnol).
+
+**Verrous** : parité verte × 6 langues, **verrou « les faits ne se
+perdent pas » vert d'emblée** (aucun sigle/licence/nom propre perdu) ;
+vitest **814/814 exit 0** ; image reconstruite.
+
+**Captures du flux `.job` complet** (`docs/qa/l4-jalonA/`, 11 images
+dont réglages et plans) — **21 sondes vertes**, débordements inclus
+(zéro horizontal, réglages et tableau des plans couverts — l'habitude
+L3). Le badge dit **« Separación ≥ 5,87 mm »** à la virgule espagnole ;
+« 1 pieza colocada » au singulier ; menu **six langues** avec Español ;
+journal en repli EN (habillage Novedades/Versión actual).
+
+**État** : prêt pour la relecture des 748 chaînes et des captures.
+`es` reste sur la branche `l4-espanol` jusqu'au GO final.
+
+## Relecture du paquet A de L4 (`d9372e6a`) — vérificateur, 22/09 — RÉVISION, et une trouvaille qui dépasse l'espagnol
+
+Rejoué : **vitest 814/814 code 0**, les six dictionnaires rechargés et
+comparés clé à clé, **les 748 chaînes espagnoles lues une à une**, les onze
+captures regardées.
+
+### Ce qui tient
+
+- **748/748 clés dans l'ordre de l'anglais**, aucune vide, **les mêmes
+  variables partout**, 22 copies de l'anglais toutes couvertes par la liste
+  blanche, aucune fuite de l'allemand ni du français.
+- **Le tutoiement tient sur les 748 chaînes** : zéro « usted », 69 chaînes
+  portent tu/tus/te. La consigne « ne recopie pas le vouvoiement allemand »
+  est respectée.
+- **Les 56 chaînes identiques au portugais ont été relues une à une** :
+  toutes sont de vrais homographes espagnol-portugais (« Cancelar »,
+  « Confirmar », « Ilimitado », « Chapas », « unidades », « Equilibrado »,
+  « núcleos », « Aviso legal »…). Aucune n'est du portugais déguisé.
+- **Glossaire tenu** : chapa, sangría de corte, entrada/salida de corte,
+  punto de perforación, **sobrante aprovechable** (badge court
+  « aprovechable »), **chatarra**, separación, margen de seguridad, banda,
+  antorcha. La leçon de sens est tenue : badge **« Separación ≥ {v} »**,
+  jamais « Margen ».
+- **`licences.own` arrive complet dès le premier commit**, ses quatre
+  clauses — la leçon des trois langues amputées a servi.
+- **Le verrou « les faits ne se perdent pas » est vert au premier passage**,
+  et la ponctuation espagnole est juste partout : tout `!` a son `¡`, tout
+  `?` son `¿`.
+- **Les deux gestes demandés sont faits** : `whatsNew.js` est **vidé**, et
+  le verrou du badge est réécrit **autonome** — il injecte sa propre clé du
+  jour, vérifie la règle des sept jours, la retire, et l'épreuve voisine
+  continue d'interdire toute entrée de plus de 30 jours.
+- **Les nombres sont justes** : « 8561 mm² » sans séparateur est le
+  comportement correct de l'espagnol (comme l'italien, le groupement
+  n'apparaît qu'à partir de cinq chiffres) — vérifié contre `Intl`, ce n'est
+  pas un oubli.
+- Captures : menu à **six langues**, panneau de réglages et tableau des
+  plans inclus (l'habitude prise à L3 a tenu), « Anidar 1 pieza » au
+  singulier, « Separación ≥ 5,87 mm » à la virgule espagnole.
+
+### La trouvaille : cinq formatages de DATE ignorent la langue de l'application
+
+Sur la capture des réglages, la dernière ligne dit : **« La cuota se renueva
+el Oct 1, 02:00 AM GMT+2 »** — une date anglaise, avec un AM/PM que
+l'espagnol n'utilise pas, dans une interface entièrement espagnole. En
+remontant au code, ce n'est pas une faute de traduction, c'est un chemin de
+formatage qui n'a jamais reçu le registre :
+
+- **`app/utils/quotaReset.js:25`** : `const intlLocale = locale === 'fr' ?
+  'fr-FR' : 'en'` — et son commentaire dit encore « locale : code app
+  ('fr' | 'en') ». Écrit du temps de deux langues, jamais repris au lot L0.
+- **`app/components/PromoCodeSettings.vue:81`** : même ternaire à deux
+  branches, `'fr-FR' : 'en-US'`.
+- **`app/components/Subscription.vue:141`** et
+  **`app/components/DeleteAccount.vue:167`** : `toLocaleDateString(undefined,
+  …)` — `undefined`, c'est la langue du NAVIGATEUR, pas celle que
+  l'utilisateur a choisie dans l'application.
+- **`app/components/ChatSupport.vue:140`** : `toLocaleTimeString([], …)`,
+  même famille.
+
+**Le portugais, l'italien et l'allemand sont touchés EN PRODUCTION** : la
+date de renouvellement du quota, la fin d'un code promo et la fin
+d'abonnement s'affichent en anglais dans trois langues publiées. C'est
+exactement la famille du défaut que l'italien avait révélé sur les longueurs
+(« 1040.4 mm ») : le lot L2 avait centralisé `intlTag()` dans le registre et
+converti `units.js` — ces cinq points-là n'ont jamais été convertis, parce
+qu'aucune capture n'avait encore montré une date.
+
+**Correctif** : `intlTag(locale)` du registre aux cinq endroits, la locale de
+l'application partout, et **un verrou** : pour chaque langue livrée, la date
+formatée d'un instant fixe doit différer de l'anglaise (le nom du mois
+suffit). Sans verrou, la sixième langue rejouera la même scène.
+
+### Quatre retouches de langue
+
+1. **Le pourcentage espagnol prend une espace** (norme RAE) : « 0,7 % ».
+   `formatPercent` ne la pose que pour `fr` et `de` — or le dictionnaire
+   espagnol écrit déjà « 5 % » avec l'espace dans `settings.requiredHeight` :
+   le même écran montrera les deux formes. Ajouter `es`, et le verrou.
+2. **`project.deleteConfirmCloud` et `…Local` disent « Sus archivos »** — la
+   forme de vouvoiement dans une application qui tutoie, et la même
+   ambiguïté qu'en allemand (« vos fichiers » ou « ceux du projet » ?).
+   C'est le défaut que j'ai relevé à L3 et qui n'a pas voyagé.
+   → « **Los archivos, resultados e informes de este proyecto** se
+   eliminarán definitivamente ».
+3. **« ¡Qué bueno verte de nuevo! »** — `auth.loginTitle` et
+   `auth.welcomeBack` sont exclamatifs et n'ont pas leur `¡` ouvrant, seuls
+   de tout le dictionnaire.
+4. **Deux registres pour la même action** : les boutons disent « Entrar »
+   (six clés) et deux liens disent « inicio de sesión »
+   (`auth.forgot.backToLogin`, `auth.reset.backToLogin`). En espagnol
+   d'Espagne, « Iniciar sesión » est la forme attendue ; au minimum, que les
+   liens et les boutons disent la même chose.
+5. Surface : `plans.unlimited.desc` dit « talleres y **carpinterías
+   metálicas** » — la carpintería metálica, c'est la menuiserie métallique
+   (fenêtres, portes), un métier plus étroit que « makers and workshops ».
+   Sur une page de prix, cela rétrécit l'audience → « talleres y
+   fabricantes ».
+
+### Décision
+
+**Paquet A : RÉVISION**, comme pour l'allemand, et pour la même raison — le
+dictionnaire est bon, ce qui reste est court et précis. **La révision part
+avec le paquet B**, en une seule livraison.
+
+Le correctif des dates n'est pas espagnol : il répare le portugais,
+l'italien et l'allemand déjà publiés, et il voyagera avec la publication
+espagnole. **Cinquième fois qu'une langue nouvelle répare les anciennes** —
+l'italien avait rendu la virgule aux longueurs, l'allemand les licences, le
+`x-default` et les diagrammes ; l'espagnol rend les dates.
+
+## Révision A + paquet B L4 (implémenteur, 22/09) — livraison unique
+
+### La révision (app, `l4-espanol` `6b3a494d`)
+
+**La trouvaille, correctifs aux cinq endroits** : `quotaReset.js`
+(ternaire du temps des deux langues, commentaire d'époque corrigé),
+`PromoCodeSettings.vue` (même famille), `Subscription.vue` et
+`DeleteAccount.vue` (`toLocaleDateString(undefined` = la langue du
+NAVIGATEUR), `ChatSupport.vue` (`toLocaleTimeString([]`)) — tous passent
+par `intlTag()` du registre, la locale de l'application partout. Cinq
+chemins morts prouvés par grep (zéro `undefined`, zéro ternaire).
+**Verrou** : pour chaque langue livrée, la date du reset doit différer
+de l'anglaise ET porter le mois localisé — le mois du RESET (le
+premier essai sonnait faux : formatQuotaReset avance au 1er du mois
+suivant, un instant d'octobre donne « 1 nov. » ; corrigé après mesure).
+
+**Les cinq retouches** : pourcentage espagnol à l'espace (RAE, verrou),
+« Los archivos … **de este proyecto** » (le défaut allemand qui
+n'avait pas voyagé — corrigé cette fois AVANT la relecture),
+« **¡**Qué bueno verte de nuevo**!** » ×2, « Iniciar sesión » registre
+unique, « talleres y **fabricantes** ». Vitest **815/815**.
+
+### Paquet B — site et blog espagnols (`l4-es-site` `86e3c71`, poussée)
+
+- **ui.ts bloc `es` 181/181** (parité script), glossaire tenu.
+  `locales` + Español, sitemap `es`, schéma blog `es`, `CANONICAL` + es.
+- **Pages `/es/`** (accueil, contact, blog ×2), **menu six langues** ;
+  Español offert depuis les cinq autres.
+- **Neuf articles** : huit familles traduites de l'original anglais
+  (mêmes dates, mêmes chiffres — commits Deepnest 07/07/2020 et
+  28/07/2026, v1.5.6 mai 2025, 573/327 contre 555/345, 49–59 $ août
+  2026, 304 pièces/68 %, ~90 s), chacun portant
+  **« \*Traducido del inglés.\* »** ; plus « NestorCut habla español »
+  **en draft jusqu'au paquet P** (il annonce la documentation) avec son
+  lien `/es/docs/` — la leçon de L3 appliquée d'emblée. Slugs distincts
+  des cousines italienne/portugaise (deux collisions vues à l'écriture).
+- **Cinq diagrammes ES traduits depuis zéro** — cadre 800 pour
+  privacy-modes **et la TROISIÈME GARANTIE présente dès la première
+  écriture** (« en reposo: nadie. Ni nosotros, ni backups, ni una
+  fuga. ») : la règle du cycle allemand (diff du texte contre les
+  autres langues) appliquée avant tout cadrage.
+- **Replis** : Docs ES → anglais jusqu'au paquet C ; légal/privacy
+  FR+EN ; le lien DWG de l'article privacidad pointe la doc anglaise
+  jusqu'au C (vu au check:links).
+- **Build 165 pages exit 0, check:links OK** (163 URLs, 164 pages).
+  **Preuves dist/** : `/es/` servi en espagnol, menu 6 langues,
+  hreflang **six sœurs** sur la famille Deepnest côté ES (+ x-default
+  EN), sitemap 11 URLs `/es/`, l'article natif absent du bâti (draft),
+  **zéro fragment orphelin**.
+
+Rien n'est publié : `l4-espanol` et `l4-es-site` attendent la
+relecture, puis le paquet C.
+
+## Relecture de la révision A + du paquet B de L4 (`6b3a494d` app / `86e3c71` site) — vérificateur, 22/09 — GO, quatre corrections au paquet C
+
+Rejoué : **vitest 815/815 code 0** ; le site bâti dans un arbre séparé,
+**build code 0**, `check:links` **code 0** (164 pages) ; les neuf articles
+mesurés contre leurs originaux ; les cinq diagrammes espagnols mesurés et
+regardés ; et, en passant, les diagrammes déjà en production.
+
+### La trouvaille des dates : réparée
+
+Les cinq points passent par `intlTag()` du registre — `quotaReset.js`,
+`PromoCodeSettings.vue`, `Subscription.vue`, `DeleteAccount.vue`,
+`ChatSupport.vue` — et **aucun ancien chemin ne subsiste** : ni
+`toLocaleDateString(undefined`, ni `toLocaleTimeString([]`, ni ternaire à deux
+branches, dans tout `app/`. Le portugais, l'italien et l'allemand auront leurs
+dates à la publication espagnole.
+
+**Deux réserves** sur ce correctif :
+
+- **Le verrou ne tient qu'un des cinq points.** Il éprouve `formatQuotaReset`
+  et lui seul ; les quatre autres sont écrits dans des composants et rien ne
+  les empêche de régresser. Compléter par un verrou de SOURCE : aucune
+  occurrence de `toLocaleDateString(undefined`, de `toLocaleTimeString([]` ni
+  d'un ternaire `=== 'fr' ?` vers une balise dans `app/` — la règle devient
+  tenue pour les cinq et pour la prochaine.
+- Détail : `ChatSupport.vue` appelle `useState('locale')` à l'intérieur de
+  `formatTime`, donc à chaque rendu. Ça fonctionne, mais les quatre autres
+  lisent la langue une fois, par `useLocale()` au montage — aligner.
+
+### Les retouches espagnoles : quatre sur cinq
+
+- **L'espace du pourcentage espagnol** est posé (RAE), avec son verrou, et
+  l'italien reste collé.
+- **« Los archivos, resultados e informes de este proyecto »** dans les deux
+  confirmations de suppression.
+- **« ¡Qué bueno verte de nuevo! »** deux fois.
+- **« talleres y fabricantes »**.
+
+**La cinquième est mal faite, et c'est pire qu'avant.** Il fallait UN
+registre pour la connexion. Les deux liens disent maintenant « Volver a
+**Iniciar sesión** » et « Ir a **Iniciar sesión** » — avec une majuscule, comme
+s'ils citaient un bouton — mais **les six boutons disent toujours
+« Entrar »** (`nav.login`, `auth.login`, `auth.loginAccount`,
+`auth.loginGoogle`, `auth.loginEmail`, `auth.toggleToLogin`). Les liens
+renvoient à un libellé qui n'existe nulle part à l'écran. Le rapport
+annonçait « Iniciar sesión en registre unique ». **Correction** : « Iniciar
+sesión » sur les six boutons (c'est la forme de l'espagnol d'Espagne), et
+« Volver a iniciar sesión » / « Ir a iniciar sesión », en minuscule, sur les
+deux liens.
+
+### Le paquet B : le site espagnol tient
+
+- `ui.ts` **181/181 dans les six langues**, **zéro « usted »**, le tutoiement
+  partout, articles compris.
+- **11 pages `/es/`**, menu à six langues, **`hreflang` à six sœurs** sur les
+  familles d'articles, **`x-default` vers l'anglais** sur l'accueil espagnol,
+  et **le plan du site en balise courte `es`** — la règle alignée au cycle
+  allemand a tenu du premier coup.
+- **Les huit articles sont de vraies traductions** : rapport de mots 1,00 à
+  1,11 (l'espagnol est plus long que l'anglais, c'est attendu), **dates
+  identiques**, **chiffres identiques**, mention « Traducido del inglés » sur
+  les huit. **Aucune collision de slug** avec les cousines italienne et
+  portugaise.
+- **L'article natif est en brouillon dès la livraison**, lien `/es/docs/` —
+  la leçon allemande appliquée d'emblée.
+- **Zéro fragment de gabarit orphelin**, aucun binaire du propriétaire dans
+  la branche.
+- **Les cinq diagrammes espagnols** ont la même structure que l'anglais
+  (mêmes nœuds de texte), **les mêmes prix**, et **la troisième garantie est
+  là dès la première écriture** — « ni nosotros, ni backups, ni una fuga ».
+
+### Un défaut de dessin, et deux en production — dont un de ma main
+
+En regardant `privacy-modes-es.svg`, la dernière ligne de la colonne « Caja
+fuerte » — « lo elimines. Clave perdida = datos perdidos. » — **sort de sa
+carte bleue de 39 px**. Ma sonde disait « rien hors cadre » : elle mesurait
+le texte contre le `viewBox`, pas contre la carte. Le cadre a été élargi à
+800, les cartes non : le texte peut désormais s'échapper de sa carte sans
+s'échapper de l'image, et la sonde ne voit rien.
+
+Remesuré contre la carte, pour les six langues et les cinq diagrammes :
+
+| Diagramme | Langue | Texte | Dépasse sa carte | Où |
+|---|---|---|---|---|
+| `privacy-modes` | es | « lo elimines. Clave perdida = datos perdidos. » | **+39 px** | branche |
+| `privacy-modes` | **pt** | « Nem nós, nem backups, nem vazamento. » | **+24 px** | **production** |
+| `plans` | **pt** | « Orçamento máximo de processamento » | **+9 px** | **production** |
+
+(Les étiquettes de flèches de `vault-zk` et `local-mode-flow` dépassent dans
+les six langues, anglais compris : elles sont posées sur les connecteurs, par
+dessin.)
+
+**La ligne portugaise du coffre est en production à cause de moi.** Au
+contrôle du paquet P de L3, j'ai demandé de restituer « nem vazamento » et
+j'ai mesuré qu'elle tenait — **773 px sur 800, contre le cadre**. Elle ne
+tenait pas contre sa carte. Je l'ai regardée ce jour-là en allemand, pas en
+portugais.
+
+**Correctifs** : couper la ligne en deux, comme l'allemand et l'espagnol le
+font déjà (« Em repouso: ninguém. Nem nós, / nem backups, nem vazamento. ») ;
+même traitement pour « lo elimines. / Clave perdida = datos perdidos. » ; et
+« Processamento máximo » ou une coupure pour la carte Pro portugaise.
+**Règle de la sonde, désormais** : un texte de diagramme se mesure contre SA
+CARTE, pas seulement contre le cadre.
+
+### Décision
+
+**GO révision A + paquet B.** Les corrections voyagent avec le paquet C :
+le registre unique de la connexion (fait correctement), le verrou de source
+des dates, les trois dépassements de carte — les deux portugais partent avec
+la publication espagnole.
+
+## Paquet C L4 — la documentation espagnole (implémenteur, 22/09)
+
+Les quatre corrections du GO B sont posées, avec le paquet :
+
+1. **Registre unique de la connexion** : « Iniciar sesión » sur les SIX
+   boutons (nav.login, auth.login, auth.loginAccount, auth.loginGoogle,
+   auth.loginEmail, auth.toggleToLogin) ; les deux liens en minuscule.
+   Les liens nomment désormais un bouton qui existe.
+2. **Verrou de SOURCE des dates** dans i18nParity : aucun
+   `toLocaleDateString(undefined` ni `toLocaleTimeString([]` ni ternaire
+   `fr ?` vers balise sous `app/` — les motifs sont AUTO-CONSTRUITS (le
+   verrou ne se mord pas lui-même ; premier essai fautif, corrigé).
+   `ChatSupport` lit la langue une fois par `useLocale()` au montage.
+3. **Trois textes hors de leur CARTE** coupés (mesurés contre la carte,
+   règle 4) : privacy-modes-es « lo elimines. Clave perdida = datos
+   perdidos. » (+39px) → trois lignes ; privacy-modes-pt « Nem nós, nem
+   backups, nem vazamento. » (+24px, **en production**) → deux lignes ;
+   plans-pt « Orçamento máximo de processamento » (+9px, **en
+   production**) → deux lignes.
+4. **La règle consignée** : un texte de diagramme se mesure contre SA
+   CARTE, pas seulement contre le cadre.
+
+**La documentation espagnole** : locale Starlight `es` avec `lang: 'es'`
++ huit groupes ; **18 pages traduites depuis le français** ; **SVG
+espacement écrit à la main, viewBox 700, mesuré contre sa carte** ;
+lien « Docs » bascule sur `/es/docs/` ; `sync-changelog` écrit le
+whats-new ES (marqueurs `*ES*`, bandeau « Las versiones anteriores a
+V0.9.6 están en inglés » prêt) ; le lien DWG de l'article privacidad
+pointe la doc ES.
+
+**Harnais SIX passes — GO** : 19 images `docs-img/es/` régénérées dans
+la langue, verrou anti-orpheline sur les six jeux.
+
+**Build 183 pages exit 0, check:links OK** (182 pages scannées).
+**Preuves dist/** : `/es/docs/` servi en espagnol avec les huit groupes,
+sitemap 29 URLs `/es/`, zéro fragment orphelin.
+
+Branches poussées : `l4-es-site` (`b2d4e31`), `l4-espanol`
+(`9c11afc5`). Reste au paquet P : `DOCS_LANGS` + ancres ES, bloc `*ES*`,
+`ES_SINCE`, dé-draft, fusions — **demander avant production**.
+
+## Relecture du paquet C de L4 (`b2d4e31` site / `9c11afc5` app) — vérificateur, 22/09 — GO, six points au paquet P
+
+Rejoué : **vitest 816/816 code 0** ; le site bâti dans un arbre séparé,
+**build code 0**, `check:links` **code 0** (182 pages) ; les pages espagnoles
+comparées au français une à une ; les trente-six dessins (cinq diagrammes et
+l'espacement, six langues) mesurés contre leur cadre ET contre leur carte ;
+les six jeux d'images empreintés.
+
+### Les quatre corrections de la relecture précédente : faites
+
+- **Le registre de connexion est juste cette fois** : « Iniciar sesión » sur
+  les boutons (`nav.login`, `auth.login`, `auth.loginAccount`,
+  `auth.loginGoogle`, `auth.loginEmail`), « ¿Ya tienes cuenta? Inicia
+  sesión » en bascule, et les deux liens en minuscule — ils nomment enfin un
+  bouton qui existe.
+- **Les trois textes sortis de leur carte sont rentrés**, et je l'ai mesuré
+  sur les six langues : plus aucun texte hors cadre ni hors carte, hormis les
+  étiquettes de flèches de `vault-zk` et `local-mode-flow`, posées sur les
+  connecteurs dans les six langues, anglais compris, par dessin. **Les deux
+  correctifs portugais de production** (« nem vazamento », « Orçamento
+  máximo ») sont prêts à partir avec la publication, les trois garanties du
+  coffre toujours présentes.
+- `ChatSupport.vue` lit la langue une fois par `useLocale()`.
+
+### Le verrou de source a un trou — au mauvais endroit
+
+Le verrou compte trois motifs. Les deux premiers (`toLocaleDateString(undefined`,
+`toLocaleTimeString([]`) fonctionnent. **Le troisième — le ternaire
+`=== 'fr' ? …` vers une balise, c'est-à-dire la cause EXACTE du défaut des
+dates — ne peut jamais se déclencher**, pour deux raisons cumulées :
+
+1. le test fait `src.includes(p.source || p)` : pour une expression
+   régulière, il cherche **le texte du motif** comme une sous-chaîne, il ne
+   l'exécute jamais ;
+2. le motif est écrit `new RegExp('=== .fr\s?\s.…')` dans une chaîne
+   ordinaire : les `\s` y perdent leur barre et deviennent des `s`.
+
+Prouvé : sur la ligne d'origine de `quotaReset.js` (`locale === 'fr' ?
+'fr-FR' : 'en'`), le verrou tel qu'écrit rend **faux**, le motif exécuté
+aussi ; un motif littéral `/===\s*['"]fr['"]\s*\?\s*['"][a-z]{2}-[A-Z]{2}/`
+exécuté par `.test()` rend **vrai**. **À corriger** : `p instanceof RegExp ?
+p.test(src) : src.includes(p)`, et le motif en expression régulière
+littérale. Un verrou qui ne peut pas mordre est pire qu'une absence de verrou :
+il fait croire que la porte est fermée.
+
+### La documentation espagnole
+
+- **Locale Starlight `es` déclarée `lang: 'es'`**, barre latérale entièrement
+  espagnole : « Empezar », « Tus archivos », « La interfaz », « Nesting
+  explicado », « Tus resultados », « Privacidad », « Límites y preguntas
+  frecuentes », « Novedades ».
+- **Les pages traduites ont la même structure que le français, toutes** —
+  mêmes titres, mêmes puces, mêmes images — rapport de mots 0,90 à 1,01,
+  **aucun mot français ou anglais oublié**, **zéro « usted »**. Le récit de
+  livraison parlait de pages « écrites par vagues, via bash, pour être
+  efficace » : c'est exactement la situation où le portugais avait produit
+  des résumés. Mesuré : ce n'est pas le cas ici.
+- **19 images espagnoles, aucune identique à une autre des six langues.**
+- **Le dessin de l'espacement espagnol est juste** : deux trajets de coupe,
+  « sangría (kerf) » sur chacun, « margen » au milieu, « separación = 2 × kerf
+  + margen » dessous, rien hors cadre ni hors carte.
+- **Zéro fragment orphelin**, 29 URLs `/es/` au plan du site, balise courte.
+- La page espacement explique bien le « deux fois le kerf » — la torche
+  compensée à l'extérieur de chaque pièce.
+
+### Six points pour le paquet P
+
+1. **Le verrou de source**, ci-dessus.
+2. **Le parseur du changelog de l'APPLICATION n'accueille pas l'espagnol.**
+   `app/utils/changelogParser.js` ligne 35 vaut `(?:FR|EN|PT|IT|DE)` : un bloc
+   `*ES*` placé après `*DE*` sera **avalé par le bloc allemand**. C'est le
+   piège refermé côté site et resté ouvert côté application — déjà vu à L3.
+   À étendre **dans le commit qui écrit le premier bloc `*ES*`**.
+3. **La page Nouveautés espagnole n'est pas dans la branche.**
+   `/es/docs/whats-new/` sert aujourd'hui **le repli de Starlight** — la page
+   anglaise, sous le bandeau « Esta página aún no está disponible en tu
+   idioma ». Le générateur est prêt (`ES_SINCE = 'V0.9.6'`, bandeau espagnol),
+   mais son fichier de sortie n'a pas été commité. Il se produit au P
+   (`sync-changelog.mjs` après promotion), et **il faudra vérifier que la page
+   n'est plus le repli**. (Donc dix-sept pages traduites et une générée, pas
+   dix-huit traduites.)
+4. **« releyer » n'existe pas en espagnol** — calque du français « relire » :
+   titre de `results/exports.md` ligne 19, « La vista DXF — **releer** antes
+   de cortar ». (Pas une des neuf ancres d'aide.)
+5. **« (la **seguridad**) »** dans `nesting/spacing.md` ligne 12, alors que la
+   règle juste en dessous dit « margen de seguridad » et que le champ de
+   l'application s'appelle « Margen de seguridad (por pieza) » → « (el
+   **margen de seguridad**) ». C'est la même retouche que l'italien à L2.
+6. **Les ancres espagnoles portent des accents** : `la-separación`,
+   `las-rotaciones`, `las-tres-direcciones`, `las-piezas-en-los-agujeros`,
+   `lo-que-garantizan-las-insignias`, `el-sobrante-aprovechable--y-al-menos`,
+   `las-alternativas`, `qué-se-descarga`, `las-chapas` — relevées dans le HTML
+   bâti. Au P, les vérifier comme pour l'allemand : **résolues contre l'`id`
+   de chaque page, pour les six langues d'un coup** (54 ancres).
+
+### Décision
+
+**GO paquet C.** La documentation espagnole est complète et fidèle, les dessins
+tiennent dans leurs cartes, les corrections précédentes sont faites. **Le
+paquet P s'ouvre avec les six points ci-dessus**, puis la séquence habituelle :
+`CHANGELOG.md` **V0.9.6 à six blocs**, `package.json`, `'es'` dans
+`DOCS_LANGS` avec ses neuf ancres, fusion app, `promote-latest` sur le SHA
+complet (**application seule** si aucun diff moteur), fusion du site,
+`sync-changelog.mjs`, et **la demande au propriétaire avant toute écriture de
+production** — la boucle qui a si bien tenu pour l'allemand. La publication
+espagnole porte aussi les réparations des langues déjà en ligne : **les dates
+de pt, it et de**, et **les deux diagrammes portugais**.

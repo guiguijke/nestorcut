@@ -12,10 +12,6 @@
  */
 export const WHATS_NEW = {
     // J11 (déployé avec V0.9.x) :
-    'job-grouped-card': '2026-09-22',
-    'lead-enlarged-view': '2026-09-22',
-    'job-download-primary': '2026-09-22',
-    'lead-preview': '2026-09-22',
 }
 
 /** La clé est-elle encore « nouvelle » à la date donnée ? (7 jours.) */

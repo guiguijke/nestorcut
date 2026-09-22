@@ -99,7 +99,9 @@ import MainTitle from './MainTitle.vue'
 import { themeType } from '~~/constants/theme.constants'
 import { trackEvent } from '~/utils/track'
 
-const { t } = useLocale()
+const { t, locale } = useLocale()
+// Relecture L4 : la date suit la langue de l'app, pas celle du navigateur.
+import { intlTag } from '~/utils/i18n'
 const router = useRouter()
 
 const { getters, actions } = authStore
@@ -164,7 +166,7 @@ const canDelete = computed(() => {
 
 const formatDate = (iso) => {
     if (!iso) return ''
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString(intlTag(locale.value), {
         year: 'numeric', month: 'long', day: 'numeric',
     })
 }

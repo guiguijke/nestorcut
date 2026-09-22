@@ -4,6 +4,62 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.6
+
+*FR*
+
+- NestorCut parle espagnol : interface, site et documentation entièrement
+  traduits. La langue de votre navigateur est reconnue dès la première
+  visite, et le menu de langues offre Español à côté de English, Français,
+  Português, Deutsch et Italiano. Au passage, les dates suivent la langue
+  de l'application partout — un utilisateur portugais, italien ou allemand
+  lisait des dates anglaises.
+
+*EN*
+
+- NestorCut now speaks Spanish: interface, website and documentation
+  fully translated. Your browser language is detected on your first
+  visit, and the language menu offers Español alongside English,
+  Français, Português, Deutsch and Italiano. Along the way, dates now
+  follow the app language everywhere — Portuguese, Italian and German
+  users were reading English dates.
+
+*PT*
+
+- O NestorCut agora fala espanhol: interface, site e documentação
+  totalmente traduzidos. O idioma do seu navegador é detectado na
+  primeira visita, e o menu de idiomas oferece Español junto de
+  English, Français, Português, Deutsch e Italiano. De passagem, as
+  datas seguem o idioma do aplicativo em todos os lugares — um usuário
+  português, italiano ou alemão lia datas em inglês.
+
+*IT*
+
+- NestorCut ora parla spagnolo: interfaccia, sito e documentazione
+  completamente tradotti. La lingua del tuo browser viene riconosciuta
+  dalla prima visita, e il menu delle lingue offre Español accanto a
+  English, Français, Português, Deutsch e Italiano. Al passaggio, le
+  date seguono la lingua dell'app ovunque — un utente portoghese,
+  italiano o tedesco leggeva date in inglese.
+
+*DE*
+
+- NestorCut spricht jetzt Spanisch: Oberfläche, Website und
+  Dokumentation vollständig übersetzt. Die Sprache Ihres Browsers wird
+  beim ersten Besuch erkannt, und das Sprachmenü bietet Español neben
+  English, Français, Português, Deutsch und Italiano. Nebenbei folgen
+  die Datierungen jetzt überall der App-Sprache — ein portugiesischer,
+  italienischer oder deutscher Benutzer las englische Datierungen.
+
+*ES*
+
+- NestorCut habla español: interfaz, sitio y documentación totalmente
+  traducidos. El idioma de tu navegador se detecta en la primera
+  visita, y el menú de idiomas ofrece Español junto a English,
+  Français, Português, Deutsch e Italiano. De paso, las fechas siguen
+  el idioma de la aplicación en todas partes — un usuario portugués,
+  italiano o alemán leía fechas en inglés.
+
 ## V0.9.5
 
 *FR*

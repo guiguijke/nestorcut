@@ -69,6 +69,8 @@
     import { FREE_NESTING_LIMIT } from '~~/shared/constants/payment.constants'
 
     const { t, locale } = useLocale()
+// Relecture L4 : la balise vient du registre — plus de ternaire deux langues.
+import { intlTag } from '~/utils/i18n'
 
     const { getters } = authStore
     const promo = computed(() => unref(getters.user)?.promo || null)
@@ -78,7 +80,7 @@
     const endedPromo = computed(() => (promo.value && !promo.value.active ? promo.value : null))
 
     const fmtDate = (d) =>
-        new Date(d).toLocaleDateString(locale.value === 'fr' ? 'fr-FR' : 'en-US', {
+        new Date(d).toLocaleDateString(intlTag(locale.value), {
             day: 'numeric',
             month: 'long',
             year: 'numeric',

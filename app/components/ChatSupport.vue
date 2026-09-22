@@ -62,6 +62,12 @@ import { themeType } from '~~/constants/theme.constants'
 import { ref, onMounted, onBeforeUnmount, unref } from 'vue'
 import { trackEvent } from '~/utils/track'
 
+// Relecture L4 : l'heure suit la langue de l'app, pas celle du navigateur.
+import { intlTag } from '~/utils/i18n'
+import { useLocale } from '~/composables/useLocale'
+
+const { locale } = useLocale()
+
 const supportDialog = useSupportDialog()
 
 const message = ref('')
@@ -137,7 +143,7 @@ const formatTime = (timestamp, withoutTime) => {
     const day = date.getDate().toString().padStart(2, '0')
     const month = (date.getMonth() + 1).toString().padStart(2, '0')
     const year = date.getFullYear()
-    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    const time = date.toLocaleTimeString(intlTag(locale.value), { hour: '2-digit', minute: '2-digit' })
     return withoutTime ? `${day}.${month}.${year}` : `${time}`
 }
 const messagesList = computed(() => {
