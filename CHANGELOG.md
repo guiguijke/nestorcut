@@ -4,6 +4,53 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.5
+
+*FR*
+
+- NestorCut parle allemand : interface, site et documentation entièrement
+  traduits. La langue de votre navigateur est reconnue dès la première
+  visite, et le menu de langues offre Deutsch à côté de English,
+  Français, Português et Italiano. Au passage, les balises de langue du
+  site sont harmonisées et la page d'accueil de chaque langue désigne
+  l'anglais comme référence.
+
+*EN*
+
+- NestorCut now speaks German: interface, website and documentation
+  fully translated. Your browser language is detected on your first
+  visit, and the language menu offers Deutsch alongside English,
+  Français, Português and Italiano. Along the way, the site's language
+  tags are harmonized and every language's home page now points to
+  English as the default.
+
+*PT*
+
+- O NestorCut agora fala alemão: interface, site e documentação
+  totalmente traduzidos. O idioma do seu navegador é detectado na
+  primeira visita, e o menu de idiomas oferece Deutsch junto de
+  English, Français, Português e Italiano. De passagem, as balizas de
+  idioma do site foram harmonizadas e a página inicial de cada idioma
+  aponta o inglês como referência.
+
+*IT*
+
+- NestorCut ora parla tedesco: interfaccia, sito e documentazione
+  completamente tradotti. La lingua del tuo browser viene riconosciuta
+  dalla prima visita, e il menu delle lingue offre Deutsch accanto a
+  English, Français, Português e Italiano. Al passaggio, i tag lingua
+  del sito sono stati armonizzati e la home di ogni lingua indica
+  l'inglese come riferimento.
+
+*DE*
+
+- NestorCut spricht jetzt Deutsch: Oberfläche, Website und
+  Dokumentation vollständig übersetzt. Die Sprache Ihres Browsers wird
+  beim ersten Besuch erkannt, und das Sprachmenü bietet Deutsch neben
+  English, Français, Português und Italiano. Nebenbei sind die
+  Sprach-Tags der Website harmonisiert, und die Startseite jeder
+  Sprache nennt das Englische als Referenz.
+
 ## V0.9.4
 
 *FR*

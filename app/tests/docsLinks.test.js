@@ -28,9 +28,19 @@ describe('D5 — liens d\'aide vers la documentation', () => {
         expect(docsHelpUrl('it', 'downloads')).toContain('/it/docs/results/exports/#cosa-si-scarica')
     })
 
+    it('de est publiée : son préfixe et SON ancre — umlauts compris (paquet P L3)', () => {
+        expect(docsHelpUrl('de', 'sheets')).toBe('https://nestorcut.com/de/docs/interface/#die-bleche')
+        expect(docsHelpUrl('de', 'spacing')).toContain('/de/docs/nesting/spacing/#der-abstand')
+        // l'ancre à umlaut doit être EXACTEMENT l'id bâti (die Teile in den Löchern)
+        expect(docsHelpUrl('de', 'holes')).toContain('/de/docs/nesting/directions/#die-teile-in-den-löchern')
+        expect(docsHelpUrl('de', 'badges')).toContain('/de/docs/nesting/#was-die-badges-garantieren')
+        expect(docsHelpUrl('de', 'offcut')).toContain('/de/docs/results/#das-nutzbare-restblech--und-mindestens')
+        expect(docsHelpUrl('de', 'downloads')).toContain('/de/docs/results/exports/#was-heruntergeladen-wird')
+    })
+
     it('toute langue non publiée REPIE sur l\'anglais (écrit pour six codes)', () => {
-        // Paquet P : pt puis it SONT PUBLIÉS, retirés de la liste des replis
-        for (const code of ['de', 'es', 'zz-unknown']) {
+        // Paquet P : pt, it puis de SONT PUBLIÉS, retirés de la liste des replis
+        for (const code of ['es', 'zz-unknown']) {
             expect(docsHelpUrl(code, 'sheets')).toBe(docsHelpUrl('en', 'sheets'))
         }
     })
@@ -40,7 +50,7 @@ describe('D5 — liens d\'aide vers la documentation', () => {
             for (const lang of DOCS_LANGS) {
                 const url = docsHelpUrl(lang, topic)
                 expect(url, `${topic}/${lang}`).toMatch(/#.+$/)
-                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/|it\/)?docs\//)
+                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/|it\/|de\/)?docs\//)
             }
         }
     })
