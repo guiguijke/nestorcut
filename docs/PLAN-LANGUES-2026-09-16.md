@@ -3082,3 +3082,52 @@ coïncident, et le **tutoiement** : l'espagnol d'atelier tutoie, comme
 l'italien et le portugais, contrairement à l'allemand. Le repli anglais du
 bandeau `ES_SINCE` vaudra la version qui publie. Et, dès le premier commit
 applicatif : vider les quatre entrées de `whatsNew.js`.
+
+## Paquet A L4 — l'application espagnole (implémenteur, 22/09)
+
+**Premier commit applicatif, les deux gestes demandés** : les quatre
+entrées de `whatsNew.js` VIDÉES (la dette du 16/09 — le registre est
+vide, une date de première mise en production ne se réécrit jamais) ;
+le verrou J11-c du badge réécrit en conséquence (il dépendait d'une
+entrée réelle du registre — il injecte désormais sa propre clé à la
+date du jour puis la retire ; la discipline « aucune entrée de plus de
+30 jours » tient).
+
+**Dictionnaire complet** : `app/utils/i18n/es.js`, **748/748 clés**
+(l'index de référence est passé à 748 avec la paire
+`report.allPlaced.one`/`.other` de la révision L3 — `en-keys.json`
+régénéré), trois lots contrôlés par `.omo/check-es.cjs` (bornes,
+variables, copies EN, fuites IT/PT/FR/DE et marqueurs portugais
+égarés — un « depois » attrapé en relecture propre). **TUTOIEMENT**
+comme l'italien et le portugais — le vouvoiement allemand n'a pas été
+recopié ; la sonde de fuite couvre les formes Sie/Ihr par ricochet
+(aucune).
+
+**Glossaire respecté partout** : chapa, sangría de corte (kerf),
+entrada/salida de corte, punto de perforación, sobrante aprovechable
+(badge court « aprovechable »), chatarra, separación entre piezas,
+margen de seguridad, banda, densidad de la banda, aprovechamiento de
+material, dirección de optimización, separar en piezas, bloque rígido,
+anidar en los agujeros, aviso de importación, informe, vista en
+directo, antorcha. Leçon de sens tenue : badge **« Separación ≥ {v} »**,
+jamais « Margen ». licences.own arrive avec ses QUATRE clauses d'emblée
+(la leçon des trois langues).
+
+**Registre** : `es` dans `DICTS` (6e langue), « Español » au menu,
+`es: 'es-ES'` dans `INTL_TAGS` (une ligne), `pluralSelect` inchangé
+(seul 1 singulier — « 0 piezas »). Liste blanche +2 : `Factor` /
+`factor {v}` (le mot espagnol).
+
+**Verrous** : parité verte × 6 langues, **verrou « les faits ne se
+perdent pas » vert d'emblée** (aucun sigle/licence/nom propre perdu) ;
+vitest **814/814 exit 0** ; image reconstruite.
+
+**Captures du flux `.job` complet** (`docs/qa/l4-jalonA/`, 11 images
+dont réglages et plans) — **21 sondes vertes**, débordements inclus
+(zéro horizontal, réglages et tableau des plans couverts — l'habitude
+L3). Le badge dit **« Separación ≥ 5,87 mm »** à la virgule espagnole ;
+« 1 pieza colocada » au singulier ; menu **six langues** avec Español ;
+journal en repli EN (habillage Novedades/Versión actual).
+
+**État** : prêt pour la relecture des 748 chaînes et des captures.
+`es` reste sur la branche `l4-espanol` jusqu'au GO final.

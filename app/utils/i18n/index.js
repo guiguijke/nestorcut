@@ -12,9 +12,10 @@ import fr from './fr.js'
 import pt from './pt.js'
 import it from './it.js'
 import de from './de.js'
+import es from './es.js'
 
 /** Les dictionnaires livrés. L'ordre est celui du menu. */
-export const DICTS = { en, fr, pt, it, de }
+export const DICTS = { en, fr, pt, it, de, es }
 
 /** Codes de langues livrées (dérivé — jamais saisi à la main). */
 export const LOCALES = Object.keys(DICTS)
@@ -29,6 +30,7 @@ export const LANGUAGE_LABELS = {
     pt: 'Português',
     it: 'Italiano',
     de: 'Deutsch',
+    es: 'Español',
 }
 
 /** Balise Intl par code — formatage des nombres (virgule décimale, etc.).
@@ -40,6 +42,7 @@ export const INTL_TAGS = {
     pt: 'pt-BR',
     it: 'it-IT',
     de: 'de-DE',
+    es: 'es-ES',
 }
 
 /** La balise Intl d'un code de langue (repli : le code lui-même). */
@@ -51,7 +54,7 @@ export function intlTag(locale) {
 export function pluralSelect(locale, n) {
     if (locale === 'fr') return n === 0 || n === 1 ? 'one' : 'other'
     // pt, it, de, es : seul 1 est singulier, 0 est pluriel (« 0 peças »,
-    // « 0 pezzi », « 0 Teile »)
+    // « 0 pezzi », « 0 Teile », « 0 piezas »)
     return n === 1 ? 'one' : 'other'
 }
 

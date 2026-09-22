@@ -30,6 +30,8 @@ const IDENTICAL_OK = [
     'Account', 'Email', 'Password', '{n} file', 'Privacy',
     // allemand (L3) : « Name » EST le mot allemand.
     'Name',
+    // espagnol (L4) : « Factor » / « factor {v} » SONT l'espagnol.
+    'Factor', 'factor {v}',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()
