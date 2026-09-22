@@ -2761,3 +2761,112 @@ Branches poussées : `l3-de-site` (`6e1473b`), `l3-allemand`
 bloc `*DE*` du CHANGELOG (V0.9.5 ?), `DE_SINCE`, dé-draft de l'article
 natif, fusions, promote + déploiement — **et demander avant toute
 écriture de production hors déploiement approuvé** (leçon du hotfix).
+
+## Relecture du paquet C de L3 (`6e1473b` site / `dc46b64d` app) — vérificateur, 22/09 — GO, cinq retouches emportées au paquet P
+
+Rejoué : **build 153 pages code 0**, `check:links` **code 0** (151 URLs),
+**vitest 813/813** ; les quinze diagrammes mesurés et rendus ; les dix-huit
+pages allemandes comparées au français ; les dix-neuf images empreintées.
+
+### Les six corrections de la relecture précédente : toutes vérifiées dans le HTML bâti
+
+- **`x-default` pointe l'anglais sur les CINQ accueils** — chacun se
+  désignait lui-même, en production. La cause (la chaîne vide falsy) est
+  traitée à la racine, dans `Base.astro`.
+- **Le plan du site est aligné sur l'en-tête** : `en`, `fr`, `it`, `de`,
+  `pt-BR` conservé. Plus d'annotation double, et l'allemand ne s'enferme
+  plus dans l'Allemagne.
+- **Zéro fragment de gabarit orphelin** dans tout le `dist` — le contrôle
+  que j'ai ajouté à la liste de publication après le « }>Docs » est appliqué
+  dès ce paquet, et il est vert.
+- Commentaire du Header en syntaxe Astro : **plus servi nulle part** (il
+  l'était sur 63 pages).
+- Le singulier du badge est net dans les cinq langues (« 1 Teil platziert »),
+  et « mitgelieferten » / « incluse » / « incluídas » remplacent les calques.
+
+### Le paquet C lui-même
+
+- **Locale Starlight déclarée `de: { label: 'Deutsch', lang: 'de' }`** —
+  clé et balise coïncident, le piège du portugais ne se rejoue pas.
+  `<html lang="de">`, **18 pages**, barre latérale entièrement allemande
+  (« Starten », « Ihre Dateien », « Die Oberfläche », « Die Projektseite »,
+  « Die Teilekarten », « Die Live-Ansicht », « Das Ergebnis »…), 18 liens.
+- **Les 18 pages sont de vraies traductions du français** : **structure
+  identique sur les 18** — mêmes titres, mêmes puces, mêmes images — et un
+  rapport de mots de 0,82 à 0,95, normal pour l'allemand. Les corrections
+  du chantier documentaire ont voyagé : un seul vorschlag en gratuit, le
+  « mindestens », les 100 mm, les badges, les 5 000 pièces.
+- **19 images allemandes, AUCUNE identique à une autre langue** (empreintes
+  des cinq jeux croisées) : elles sont régénérées, pas copiées.
+- **Le dessin de l'espacement allemand est juste** : `viewBox` élargi à 760,
+  **deux trajets de coupe** (la correction du lot D3 a survécu à la
+  traduction), « Schnittspalt (Kerf) » sur chacun, « Sicherheits-zugabe »
+  coupé proprement dans la bande, et la règle « Teileabstand = 2 × Kerf +
+  Sicherheitszugabe » dessous. Mesuré : rien ne sort du cadre.
+- **Les quinze diagrammes du blog** sont distincts deux à deux (aucune
+  copie), portent le **même nombre de nœuds de texte** que l'anglais
+  (structure préservée), et **les prix et la promesse de remboursement sont
+  identiques mot pour mot dans les cinq langues** — 0 €, 19 €/mois,
+  39 €/mois, garantie 30 jours. Les articles de/it/pt n'appellent plus une
+  seule image `-en`.
+
+### Cinq retouches, à emporter au paquet P
+
+**1. Le diagramme de confidentialité est COUPÉ en allemand — et pire en
+portugais, en production.** Un SVG ne renvoie pas à la ligne : la dernière
+phrase de la troisième colonne dépasse le `viewBox` de **10 px en allemand**
+(« ihn löschen. Schlüssel weg = Daten **we**| ») et de **23 px en
+portugais** (« Chave perdida = dados **perdi**| »), où elle est en ligne
+depuis le 19/09. Regardé, pas déduit : `docs/qa/l3-paquetC-verif/`. Élargir
+le `viewBox` à 800 ou couper la ligne en deux, dans les deux langues. Le
+français et l'italien tiennent.
+
+**2. Les cinq captures `resultats-rapport.png` montrent un libellé qui
+n'existera pas.** Elles portent « 1 Teil platziert — **alle** » et « 1 part
+placed — **all of them** » : le harnais a tourné sur l'image bâtie à
+`5b0c4cde`, avant la correction 5 qui supprime la queue. Les cinq langues
+sont concernées — ce qui prouve au passage que le harnais régénère bien les
+cinq jeux ensemble. **Un seul passage à cinq passes après reconstruction de
+l'image à `dc46b64d`** remet les cinq d'aplomb.
+
+**3. « ausserhalb » → « außerhalb »** dans
+`public/docs-img/de/espacement-diagram.svg` (la légende visible, ligne 38 ;
+et le commentaire ligne 4). La graphie en `ss` est suisse ; le reste du
+dictionnaire écrit correctement « schließen », « größte ».
+
+**4. « detalliert » → « detailliert »**,
+`src/content/docs/de/docs/results/index.md` ligne 26.
+
+**5. Piège pour le paquet P : les ancres allemandes portent des umlauts et
+un ß**, contrairement aux quatre autres langues qui sont en ASCII pur —
+`die-teile-in-den-löchern`, `das-nutzbare-restblech--und-mindestens`,
+`wie-groß-darf-eine-datei-sein`. Les neuf ancres d'aide existent bien dans
+le HTML bâti (`die-bleche`, `der-abstand`, `die-drehungen`,
+`die-drei-richtungen`, `die-teile-in-den-löchern`,
+`was-die-badges-garantieren`, `das-nutzbare-restblech--und-mindestens`,
+`die-alternativen`, `was-heruntergeladen-wird`) — mais elles se vérifient en
+**chargeant la page et en résolvant la cible**, pas en comparant des
+chaînes, et `docsLinks.js` doit les porter dans la même forme que l'id du
+HTML. Note : le rapport écrit « die-drei-richtung**s**en », le build dit
+« die-drei-richtungen » — c'est la seconde qu'il faut recopier.
+
+### Décision
+
+**GO paquet C.** La documentation allemande est complète et juste, les
+quinze diagrammes sont faits, et les six corrections de la relecture
+précédente sont vérifiées dans le HTML bâti — y compris les deux défauts de
+référencement qui traînaient en production depuis L1.
+
+**Paquet P ouvert**, et il porte du travail, pas seulement de la plomberie :
+les cinq retouches ci-dessus, puis la séquence habituelle —
+`CHANGELOG.md` **V0.9.5** avec ses cinq blocs (`*FR*` `*EN*` `*PT*` `*IT*`
+`*DE*` ; le lookahead du parseur les accueille déjà), `package.json`,
+`DE_SINCE` aligné sur la version qui publie, `'de'` dans `DOCS_LANGS` **avec
+les neuf ancres relevées dans le HTML bâti**, les cinq dates de `whatsNew.js`
+au jour du déploiement, fusion de `l3-allemand` (vitest code 0, image
+reconstruite), `promote-latest` sur le SHA complet, application seule,
+fusion ordinaire du site, `sync-changelog.mjs` puis vérification des cinq
+pages Nouveautés avec leur bandeau rendu.
+
+Et le rappel qui a coûté un hotfix : **une écriture en production se demande
+au propriétaire avant**, et elle ne transporte que son correctif.
