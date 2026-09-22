@@ -3406,3 +3406,44 @@ CARTE, pas seulement contre le cadre.
 le registre unique de la connexion (fait correctement), le verrou de source
 des dates, les trois dépassements de carte — les deux portugais partent avec
 la publication espagnole.
+
+## Paquet C L4 — la documentation espagnole (implémenteur, 22/09)
+
+Les quatre corrections du GO B sont posées, avec le paquet :
+
+1. **Registre unique de la connexion** : « Iniciar sesión » sur les SIX
+   boutons (nav.login, auth.login, auth.loginAccount, auth.loginGoogle,
+   auth.loginEmail, auth.toggleToLogin) ; les deux liens en minuscule.
+   Les liens nomment désormais un bouton qui existe.
+2. **Verrou de SOURCE des dates** dans i18nParity : aucun
+   `toLocaleDateString(undefined` ni `toLocaleTimeString([]` ni ternaire
+   `fr ?` vers balise sous `app/` — les motifs sont AUTO-CONSTRUITS (le
+   verrou ne se mord pas lui-même ; premier essai fautif, corrigé).
+   `ChatSupport` lit la langue une fois par `useLocale()` au montage.
+3. **Trois textes hors de leur CARTE** coupés (mesurés contre la carte,
+   règle 4) : privacy-modes-es « lo elimines. Clave perdida = datos
+   perdidos. » (+39px) → trois lignes ; privacy-modes-pt « Nem nós, nem
+   backups, nem vazamento. » (+24px, **en production**) → deux lignes ;
+   plans-pt « Orçamento máximo de processamento » (+9px, **en
+   production**) → deux lignes.
+4. **La règle consignée** : un texte de diagramme se mesure contre SA
+   CARTE, pas seulement contre le cadre.
+
+**La documentation espagnole** : locale Starlight `es` avec `lang: 'es'`
++ huit groupes ; **18 pages traduites depuis le français** ; **SVG
+espacement écrit à la main, viewBox 700, mesuré contre sa carte** ;
+lien « Docs » bascule sur `/es/docs/` ; `sync-changelog` écrit le
+whats-new ES (marqueurs `*ES*`, bandeau « Las versiones anteriores a
+V0.9.6 están en inglés » prêt) ; le lien DWG de l'article privacidad
+pointe la doc ES.
+
+**Harnais SIX passes — GO** : 19 images `docs-img/es/` régénérées dans
+la langue, verrou anti-orpheline sur les six jeux.
+
+**Build 183 pages exit 0, check:links OK** (182 pages scannées).
+**Preuves dist/** : `/es/docs/` servi en espagnol avec les huit groupes,
+sitemap 29 URLs `/es/`, zéro fragment orphelin.
+
+Branches poussées : `l4-es-site` (`b2d4e31`), `l4-espanol`
+(`9c11afc5`). Reste au paquet P : `DOCS_LANGS` + ancres ES, bloc `*ES*`,
+`ES_SINCE`, dé-draft, fusions — **demander avant production**.
