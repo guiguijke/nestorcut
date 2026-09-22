@@ -2701,3 +2701,63 @@ sitemap, le commentaire Astro, le singulier du badge et « mitgelieferten ».
 La fusion de `l3-de-site` dans `main` est propre (essai à blanc : aucun
 conflit, le hotfix dupliqué est reconnu). **Aucune publication avant le
 paquet C et le paquet P.**
+
+## Paquet C L3 — la documentation allemande (implémenteur, 22/09)
+
+Les six corrections de la relecture GO B sont posées, avec le paquet :
+
+1. **Les cinq diagrammes du blog traduits en de/it/pt** — 15 SVG écrits
+   par remplacement de nœuds textuels exacts (360 remplacements, tri par
+   longueur décroissante contre les collisions) ; mon premier balayage a
+   laissé passer « File goes: » manquant dans MA carte privacy-modes —
+   vu au contrôle de résidus anglais, corrigé (3×3). Les articles de/it/
+   pt servent désormais leur jeu — plus aucune référence `-en.svg`.
+2. **x-default réparé** : `Base.astro` teste désormais la PRÉSENCE
+   (`'en' in pathsByLang`), pas la vérité — prouvé dans dist : les cinq
+   accueils désignent l'anglais, les articles toujours l'originale EN.
+3. **Sitemap aligné sur l'en-tête** : balises courtes en/fr/it/de,
+   `pt-BR` reste (choix délibéré) — prouvé dans dist/sitemap-0.xml.
+4. **Commentaire du Header en syntaxe Astro** — plus servi nulle part.
+5. **La queue du singulier supprimée dans les cinq langues** (app) —
+   « 1 Teil platziert », « 1 part placed », etc.
+6. **« mitgelieferten »** (de), **« incluse »** (it), **« incluídas »**
+   (pt) — le paragraphe juridique parle la langue.
+   Article natif : **draft jusqu'au paquet P**, lien `/de/docs/`,
+   « lokalisiert », « Metallbauregionen ».
+
+**La documentation allemande** : locale Starlight `de` déclarée avec
+`lang: 'de'` (clé = balise, le piège PT ne pouvait pas mordre) ; les
+**huit groupes de la barre latérale** traduits (Starten, Ihre Dateien,
+Die Oberfläche, Nesting erklärt, Ihre Ergebnisse, Datenschutz, Grenzen
+und häufige Fragen, Neuigkeiten) ; **18 pages traduites depuis le
+français**, ancres allemandes natives (die-bleche, der-abstand,
+die-drehungen, die-drei-richtungen, die-teile-in-loechern,
+was-die-badges-garantieren… — matière pour `DOCS_LANGS` au paquet P) ;
+**SVG espacement écrit à la main avec viewBox élargi à 760**
+(Schnittspalt (Kerf), Sicherheitszugabe sur deux lignes,
+« Teileabstand = 2 × Kerf + Sicherheitszugabe ») ; lien « Docs »
+bascule sur `/de/docs/` ; `sync-changelog` écrit le whats-new DE
+(marqueurs `*DE*` bornés par le suivant, bandeau « Versionen vor
+V0.9.5 sind auf Englisch » prêt, `DE_SINCE` à ajuster au P si le
+numéro change) ; côté app, le parseur lit déjà `*DE*` (lookahead L2).
+
+**Harnais en CINQ passes** : sonde de langue allemande (Dieses Gerät /
+Ihre Server / Ihr Punkt / Abstand / Richtungen), contexte de-DE, compte
+dédié, **verrou anti-orpheline sur les CINQ jeux — GO**, les 19 images
+`docs-img/de/` régénérées DANS la langue.
+
+**Build 153 pages exit 0, check:links OK** (151 URLs, 152 pages). Une
+erreur de build d'abord : mon `draft: true // commentaire` — YAML
+n'accepte pas `//` (`#` posé). **Preuves extraites de `dist/`** :
+`/de/docs/` en allemand (`lang="de"`) avec les huit groupes allemands ;
+**zéro fragment orphelin** (`}>` / `{t(` / `</a>}`) dans tout le HTML
+bâti — le contrôle nouveau de la liste de publication, appliqué dès ce
+paquet ; x-default anglais sur les cinq accueils ; sitemap 29 URLs
+`/de/` ; l'article natif absent du bâti (draft) ; les 15 diagrammes
+traduits servis dans leurs langues.
+
+Branches poussées : `l3-de-site` (`6e1473b`), `l3-allemand`
+(corrections + harnais). Reste au paquet P : `DOCS_LANGS` + ancres DE,
+bloc `*DE*` du CHANGELOG (V0.9.5 ?), `DE_SINCE`, dé-draft de l'article
+natif, fusions, promote + déploiement — **et demander avant toute
+écriture de production hors déploiement approuvé** (leçon du hotfix).
