@@ -3447,3 +3447,111 @@ sitemap 29 URLs `/es/`, zéro fragment orphelin.
 Branches poussées : `l4-es-site` (`b2d4e31`), `l4-espanol`
 (`9c11afc5`). Reste au paquet P : `DOCS_LANGS` + ancres ES, bloc `*ES*`,
 `ES_SINCE`, dé-draft, fusions — **demander avant production**.
+
+## Relecture du paquet C de L4 (`b2d4e31` site / `9c11afc5` app) — vérificateur, 22/09 — GO, six points au paquet P
+
+Rejoué : **vitest 816/816 code 0** ; le site bâti dans un arbre séparé,
+**build code 0**, `check:links` **code 0** (182 pages) ; les pages espagnoles
+comparées au français une à une ; les trente-six dessins (cinq diagrammes et
+l'espacement, six langues) mesurés contre leur cadre ET contre leur carte ;
+les six jeux d'images empreintés.
+
+### Les quatre corrections de la relecture précédente : faites
+
+- **Le registre de connexion est juste cette fois** : « Iniciar sesión » sur
+  les boutons (`nav.login`, `auth.login`, `auth.loginAccount`,
+  `auth.loginGoogle`, `auth.loginEmail`), « ¿Ya tienes cuenta? Inicia
+  sesión » en bascule, et les deux liens en minuscule — ils nomment enfin un
+  bouton qui existe.
+- **Les trois textes sortis de leur carte sont rentrés**, et je l'ai mesuré
+  sur les six langues : plus aucun texte hors cadre ni hors carte, hormis les
+  étiquettes de flèches de `vault-zk` et `local-mode-flow`, posées sur les
+  connecteurs dans les six langues, anglais compris, par dessin. **Les deux
+  correctifs portugais de production** (« nem vazamento », « Orçamento
+  máximo ») sont prêts à partir avec la publication, les trois garanties du
+  coffre toujours présentes.
+- `ChatSupport.vue` lit la langue une fois par `useLocale()`.
+
+### Le verrou de source a un trou — au mauvais endroit
+
+Le verrou compte trois motifs. Les deux premiers (`toLocaleDateString(undefined`,
+`toLocaleTimeString([]`) fonctionnent. **Le troisième — le ternaire
+`=== 'fr' ? …` vers une balise, c'est-à-dire la cause EXACTE du défaut des
+dates — ne peut jamais se déclencher**, pour deux raisons cumulées :
+
+1. le test fait `src.includes(p.source || p)` : pour une expression
+   régulière, il cherche **le texte du motif** comme une sous-chaîne, il ne
+   l'exécute jamais ;
+2. le motif est écrit `new RegExp('=== .fr\s?\s.…')` dans une chaîne
+   ordinaire : les `\s` y perdent leur barre et deviennent des `s`.
+
+Prouvé : sur la ligne d'origine de `quotaReset.js` (`locale === 'fr' ?
+'fr-FR' : 'en'`), le verrou tel qu'écrit rend **faux**, le motif exécuté
+aussi ; un motif littéral `/===\s*['"]fr['"]\s*\?\s*['"][a-z]{2}-[A-Z]{2}/`
+exécuté par `.test()` rend **vrai**. **À corriger** : `p instanceof RegExp ?
+p.test(src) : src.includes(p)`, et le motif en expression régulière
+littérale. Un verrou qui ne peut pas mordre est pire qu'une absence de verrou :
+il fait croire que la porte est fermée.
+
+### La documentation espagnole
+
+- **Locale Starlight `es` déclarée `lang: 'es'`**, barre latérale entièrement
+  espagnole : « Empezar », « Tus archivos », « La interfaz », « Nesting
+  explicado », « Tus resultados », « Privacidad », « Límites y preguntas
+  frecuentes », « Novedades ».
+- **Les pages traduites ont la même structure que le français, toutes** —
+  mêmes titres, mêmes puces, mêmes images — rapport de mots 0,90 à 1,01,
+  **aucun mot français ou anglais oublié**, **zéro « usted »**. Le récit de
+  livraison parlait de pages « écrites par vagues, via bash, pour être
+  efficace » : c'est exactement la situation où le portugais avait produit
+  des résumés. Mesuré : ce n'est pas le cas ici.
+- **19 images espagnoles, aucune identique à une autre des six langues.**
+- **Le dessin de l'espacement espagnol est juste** : deux trajets de coupe,
+  « sangría (kerf) » sur chacun, « margen » au milieu, « separación = 2 × kerf
+  + margen » dessous, rien hors cadre ni hors carte.
+- **Zéro fragment orphelin**, 29 URLs `/es/` au plan du site, balise courte.
+- La page espacement explique bien le « deux fois le kerf » — la torche
+  compensée à l'extérieur de chaque pièce.
+
+### Six points pour le paquet P
+
+1. **Le verrou de source**, ci-dessus.
+2. **Le parseur du changelog de l'APPLICATION n'accueille pas l'espagnol.**
+   `app/utils/changelogParser.js` ligne 35 vaut `(?:FR|EN|PT|IT|DE)` : un bloc
+   `*ES*` placé après `*DE*` sera **avalé par le bloc allemand**. C'est le
+   piège refermé côté site et resté ouvert côté application — déjà vu à L3.
+   À étendre **dans le commit qui écrit le premier bloc `*ES*`**.
+3. **La page Nouveautés espagnole n'est pas dans la branche.**
+   `/es/docs/whats-new/` sert aujourd'hui **le repli de Starlight** — la page
+   anglaise, sous le bandeau « Esta página aún no está disponible en tu
+   idioma ». Le générateur est prêt (`ES_SINCE = 'V0.9.6'`, bandeau espagnol),
+   mais son fichier de sortie n'a pas été commité. Il se produit au P
+   (`sync-changelog.mjs` après promotion), et **il faudra vérifier que la page
+   n'est plus le repli**. (Donc dix-sept pages traduites et une générée, pas
+   dix-huit traduites.)
+4. **« releyer » n'existe pas en espagnol** — calque du français « relire » :
+   titre de `results/exports.md` ligne 19, « La vista DXF — **releer** antes
+   de cortar ». (Pas une des neuf ancres d'aide.)
+5. **« (la **seguridad**) »** dans `nesting/spacing.md` ligne 12, alors que la
+   règle juste en dessous dit « margen de seguridad » et que le champ de
+   l'application s'appelle « Margen de seguridad (por pieza) » → « (el
+   **margen de seguridad**) ». C'est la même retouche que l'italien à L2.
+6. **Les ancres espagnoles portent des accents** : `la-separación`,
+   `las-rotaciones`, `las-tres-direcciones`, `las-piezas-en-los-agujeros`,
+   `lo-que-garantizan-las-insignias`, `el-sobrante-aprovechable--y-al-menos`,
+   `las-alternativas`, `qué-se-descarga`, `las-chapas` — relevées dans le HTML
+   bâti. Au P, les vérifier comme pour l'allemand : **résolues contre l'`id`
+   de chaque page, pour les six langues d'un coup** (54 ancres).
+
+### Décision
+
+**GO paquet C.** La documentation espagnole est complète et fidèle, les dessins
+tiennent dans leurs cartes, les corrections précédentes sont faites. **Le
+paquet P s'ouvre avec les six points ci-dessus**, puis la séquence habituelle :
+`CHANGELOG.md` **V0.9.6 à six blocs**, `package.json`, `'es'` dans
+`DOCS_LANGS` avec ses neuf ancres, fusion app, `promote-latest` sur le SHA
+complet (**application seule** si aucun diff moteur), fusion du site,
+`sync-changelog.mjs`, et **la demande au propriétaire avant toute écriture de
+production** — la boucle qui a si bien tenu pour l'allemand. La publication
+espagnole porte aussi les réparations des langues déjà en ligne : **les dates
+de pt, it et de**, et **les deux diagrammes portugais**.
