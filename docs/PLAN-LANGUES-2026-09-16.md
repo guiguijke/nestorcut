@@ -3131,3 +3131,114 @@ journal en repli EN (habillage Novedades/Versión actual).
 
 **État** : prêt pour la relecture des 748 chaînes et des captures.
 `es` reste sur la branche `l4-espanol` jusqu'au GO final.
+
+## Relecture du paquet A de L4 (`d9372e6a`) — vérificateur, 22/09 — RÉVISION, et une trouvaille qui dépasse l'espagnol
+
+Rejoué : **vitest 814/814 code 0**, les six dictionnaires rechargés et
+comparés clé à clé, **les 748 chaînes espagnoles lues une à une**, les onze
+captures regardées.
+
+### Ce qui tient
+
+- **748/748 clés dans l'ordre de l'anglais**, aucune vide, **les mêmes
+  variables partout**, 22 copies de l'anglais toutes couvertes par la liste
+  blanche, aucune fuite de l'allemand ni du français.
+- **Le tutoiement tient sur les 748 chaînes** : zéro « usted », 69 chaînes
+  portent tu/tus/te. La consigne « ne recopie pas le vouvoiement allemand »
+  est respectée.
+- **Les 56 chaînes identiques au portugais ont été relues une à une** :
+  toutes sont de vrais homographes espagnol-portugais (« Cancelar »,
+  « Confirmar », « Ilimitado », « Chapas », « unidades », « Equilibrado »,
+  « núcleos », « Aviso legal »…). Aucune n'est du portugais déguisé.
+- **Glossaire tenu** : chapa, sangría de corte, entrada/salida de corte,
+  punto de perforación, **sobrante aprovechable** (badge court
+  « aprovechable »), **chatarra**, separación, margen de seguridad, banda,
+  antorcha. La leçon de sens est tenue : badge **« Separación ≥ {v} »**,
+  jamais « Margen ».
+- **`licences.own` arrive complet dès le premier commit**, ses quatre
+  clauses — la leçon des trois langues amputées a servi.
+- **Le verrou « les faits ne se perdent pas » est vert au premier passage**,
+  et la ponctuation espagnole est juste partout : tout `!` a son `¡`, tout
+  `?` son `¿`.
+- **Les deux gestes demandés sont faits** : `whatsNew.js` est **vidé**, et
+  le verrou du badge est réécrit **autonome** — il injecte sa propre clé du
+  jour, vérifie la règle des sept jours, la retire, et l'épreuve voisine
+  continue d'interdire toute entrée de plus de 30 jours.
+- **Les nombres sont justes** : « 8561 mm² » sans séparateur est le
+  comportement correct de l'espagnol (comme l'italien, le groupement
+  n'apparaît qu'à partir de cinq chiffres) — vérifié contre `Intl`, ce n'est
+  pas un oubli.
+- Captures : menu à **six langues**, panneau de réglages et tableau des
+  plans inclus (l'habitude prise à L3 a tenu), « Anidar 1 pieza » au
+  singulier, « Separación ≥ 5,87 mm » à la virgule espagnole.
+
+### La trouvaille : cinq formatages de DATE ignorent la langue de l'application
+
+Sur la capture des réglages, la dernière ligne dit : **« La cuota se renueva
+el Oct 1, 02:00 AM GMT+2 »** — une date anglaise, avec un AM/PM que
+l'espagnol n'utilise pas, dans une interface entièrement espagnole. En
+remontant au code, ce n'est pas une faute de traduction, c'est un chemin de
+formatage qui n'a jamais reçu le registre :
+
+- **`app/utils/quotaReset.js:25`** : `const intlLocale = locale === 'fr' ?
+  'fr-FR' : 'en'` — et son commentaire dit encore « locale : code app
+  ('fr' | 'en') ». Écrit du temps de deux langues, jamais repris au lot L0.
+- **`app/components/PromoCodeSettings.vue:81`** : même ternaire à deux
+  branches, `'fr-FR' : 'en-US'`.
+- **`app/components/Subscription.vue:141`** et
+  **`app/components/DeleteAccount.vue:167`** : `toLocaleDateString(undefined,
+  …)` — `undefined`, c'est la langue du NAVIGATEUR, pas celle que
+  l'utilisateur a choisie dans l'application.
+- **`app/components/ChatSupport.vue:140`** : `toLocaleTimeString([], …)`,
+  même famille.
+
+**Le portugais, l'italien et l'allemand sont touchés EN PRODUCTION** : la
+date de renouvellement du quota, la fin d'un code promo et la fin
+d'abonnement s'affichent en anglais dans trois langues publiées. C'est
+exactement la famille du défaut que l'italien avait révélé sur les longueurs
+(« 1040.4 mm ») : le lot L2 avait centralisé `intlTag()` dans le registre et
+converti `units.js` — ces cinq points-là n'ont jamais été convertis, parce
+qu'aucune capture n'avait encore montré une date.
+
+**Correctif** : `intlTag(locale)` du registre aux cinq endroits, la locale de
+l'application partout, et **un verrou** : pour chaque langue livrée, la date
+formatée d'un instant fixe doit différer de l'anglaise (le nom du mois
+suffit). Sans verrou, la sixième langue rejouera la même scène.
+
+### Quatre retouches de langue
+
+1. **Le pourcentage espagnol prend une espace** (norme RAE) : « 0,7 % ».
+   `formatPercent` ne la pose que pour `fr` et `de` — or le dictionnaire
+   espagnol écrit déjà « 5 % » avec l'espace dans `settings.requiredHeight` :
+   le même écran montrera les deux formes. Ajouter `es`, et le verrou.
+2. **`project.deleteConfirmCloud` et `…Local` disent « Sus archivos »** — la
+   forme de vouvoiement dans une application qui tutoie, et la même
+   ambiguïté qu'en allemand (« vos fichiers » ou « ceux du projet » ?).
+   C'est le défaut que j'ai relevé à L3 et qui n'a pas voyagé.
+   → « **Los archivos, resultados e informes de este proyecto** se
+   eliminarán definitivamente ».
+3. **« ¡Qué bueno verte de nuevo! »** — `auth.loginTitle` et
+   `auth.welcomeBack` sont exclamatifs et n'ont pas leur `¡` ouvrant, seuls
+   de tout le dictionnaire.
+4. **Deux registres pour la même action** : les boutons disent « Entrar »
+   (six clés) et deux liens disent « inicio de sesión »
+   (`auth.forgot.backToLogin`, `auth.reset.backToLogin`). En espagnol
+   d'Espagne, « Iniciar sesión » est la forme attendue ; au minimum, que les
+   liens et les boutons disent la même chose.
+5. Surface : `plans.unlimited.desc` dit « talleres y **carpinterías
+   metálicas** » — la carpintería metálica, c'est la menuiserie métallique
+   (fenêtres, portes), un métier plus étroit que « makers and workshops ».
+   Sur une page de prix, cela rétrécit l'audience → « talleres y
+   fabricantes ».
+
+### Décision
+
+**Paquet A : RÉVISION**, comme pour l'allemand, et pour la même raison — le
+dictionnaire est bon, ce qui reste est court et précis. **La révision part
+avec le paquet B**, en une seule livraison.
+
+Le correctif des dates n'est pas espagnol : il répare le portugais,
+l'italien et l'allemand déjà publiés, et il voyagera avec la publication
+espagnole. **Cinquième fois qu'une langue nouvelle répare les anciennes** —
+l'italien avait rendu la virgule aux longueurs, l'allemand les licences, le
+`x-default` et les diagrammes ; l'espagnol rend les dates.
