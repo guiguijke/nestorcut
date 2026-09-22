@@ -145,21 +145,31 @@ describe('L0 — parité des clés de langue', () => {
     // tient que formatQuotaReset (1 point sur 5). Aucun formatage de
     // date/heure sous app/ ne doit régresser vers la langue du
     // NAVIGATEUR (undefined / []) ni vers un ternaire deux-langues.
+    // Relecture C L4 : le motif regex doit s'EXÉCUTER (p.test), pas se
+    // chercher comme chaîne — l'ancien src.includes(p.source) ne mordait
+    // jamais (prouvé sur la ligne fautive d'origine, qu'il laissait passer).
     it('verrou de source : aucune date formatée hors du registre sous app/', async () => {
-        const { execSync } = await import('node:child_process')
         const PATTERNS = [
             'toLocale' + 'DateString(undefined',
             'toLocale' + 'TimeString(' + '[]' + ',',
-            new RegExp('=== .fr\s?\s.[a-z]{2}-[A-Z]{2}')
+            /===\s*['"]fr['"]\s*\?\s*['"][a-z]{2}-[A-Z]{2}/,
         ]
         const { globSync } = await import('node:fs')
-        const files = globSync('app/**/*.{js,vue}')
+        // les fichiers de test sont exclus : le verrou porte sur le code de
+        // PRODUCTION — son propre motif vivrait dans le test et le mordrait
+        const files = globSync('app/**/*.{js,vue}').filter((f) => !/[\\/]tests[\\/]/.test(f))
         const offenders = []
         for (const f of files) {
             const src = fs.readFileSync(f, 'utf8')
-            for (const p of PATTERNS) if (src.includes(p.source || p)) offenders.push(f + ' : ' + (p.source || p))
+            for (const p of PATTERNS) {
+                const hit = p instanceof RegExp ? p.test(src) : src.includes(p)
+                if (hit) offenders.push(`${f} : ${p instanceof RegExp ? p.source : p}`)
+            }
         }
         expect(offenders, 'dates formatées hors registre').toEqual([])
+        // PREUVE que le verrou mord : la ligne fautive d'origine doit déclencher
+        const FAUTIVE = "const intlLocale = locale === 'fr' ? 'fr-FR' : 'en'"
+        expect(PATTERNS[2].test(FAUTIVE), 'le motif ternaire doit mordre sur la ligne fautive').toBe(true)
     })
     // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
     // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »

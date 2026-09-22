@@ -38,9 +38,17 @@ describe('D5 — liens d\'aide vers la documentation', () => {
         expect(docsHelpUrl('de', 'downloads')).toContain('/de/docs/results/exports/#was-heruntergeladen-wird')
     })
 
+    it('es est publiée : son préfixe et SON ancre (paquet P L4)', () => {
+        expect(docsHelpUrl('es', 'sheets')).toBe('https://nestorcut.com/es/docs/interface/#las-chapas')
+        expect(docsHelpUrl('es', 'spacing')).toContain('/es/docs/nesting/spacing/#la-separación')
+        expect(docsHelpUrl('es', 'holes')).toContain('/es/docs/nesting/directions/#las-piezas-en-los-agujeros')
+        expect(docsHelpUrl('es', 'badges')).toContain('/es/docs/nesting/#lo-que-garantizan-las-insignias')
+        expect(docsHelpUrl('es', 'downloads')).toContain('/es/docs/results/exports/#qué-se-descarga')
+    })
+
     it('toute langue non publiée REPIE sur l\'anglais (écrit pour six codes)', () => {
         // Paquet P : pt, it puis de SONT PUBLIÉS, retirés de la liste des replis
-        for (const code of ['es', 'zz-unknown']) {
+        for (const code of ['zz-unknown']) {
             expect(docsHelpUrl(code, 'sheets')).toBe(docsHelpUrl('en', 'sheets'))
         }
     })
@@ -50,7 +58,7 @@ describe('D5 — liens d\'aide vers la documentation', () => {
             for (const lang of DOCS_LANGS) {
                 const url = docsHelpUrl(lang, topic)
                 expect(url, `${topic}/${lang}`).toMatch(/#.+$/)
-                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/|it\/|de\/)?docs\//)
+                expect(url).toMatch(/^https:\/\/nestorcut\.com\/(fr\/|pt\/|it\/|de\/|es\/)?docs\//)
             }
         }
     })
