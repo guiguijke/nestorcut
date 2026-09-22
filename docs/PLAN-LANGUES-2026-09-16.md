@@ -3295,3 +3295,114 @@ unique, « talleres y **fabricantes** ». Vitest **815/815**.
 
 Rien n'est publié : `l4-espanol` et `l4-es-site` attendent la
 relecture, puis le paquet C.
+
+## Relecture de la révision A + du paquet B de L4 (`6b3a494d` app / `86e3c71` site) — vérificateur, 22/09 — GO, quatre corrections au paquet C
+
+Rejoué : **vitest 815/815 code 0** ; le site bâti dans un arbre séparé,
+**build code 0**, `check:links` **code 0** (164 pages) ; les neuf articles
+mesurés contre leurs originaux ; les cinq diagrammes espagnols mesurés et
+regardés ; et, en passant, les diagrammes déjà en production.
+
+### La trouvaille des dates : réparée
+
+Les cinq points passent par `intlTag()` du registre — `quotaReset.js`,
+`PromoCodeSettings.vue`, `Subscription.vue`, `DeleteAccount.vue`,
+`ChatSupport.vue` — et **aucun ancien chemin ne subsiste** : ni
+`toLocaleDateString(undefined`, ni `toLocaleTimeString([]`, ni ternaire à deux
+branches, dans tout `app/`. Le portugais, l'italien et l'allemand auront leurs
+dates à la publication espagnole.
+
+**Deux réserves** sur ce correctif :
+
+- **Le verrou ne tient qu'un des cinq points.** Il éprouve `formatQuotaReset`
+  et lui seul ; les quatre autres sont écrits dans des composants et rien ne
+  les empêche de régresser. Compléter par un verrou de SOURCE : aucune
+  occurrence de `toLocaleDateString(undefined`, de `toLocaleTimeString([]` ni
+  d'un ternaire `=== 'fr' ?` vers une balise dans `app/` — la règle devient
+  tenue pour les cinq et pour la prochaine.
+- Détail : `ChatSupport.vue` appelle `useState('locale')` à l'intérieur de
+  `formatTime`, donc à chaque rendu. Ça fonctionne, mais les quatre autres
+  lisent la langue une fois, par `useLocale()` au montage — aligner.
+
+### Les retouches espagnoles : quatre sur cinq
+
+- **L'espace du pourcentage espagnol** est posé (RAE), avec son verrou, et
+  l'italien reste collé.
+- **« Los archivos, resultados e informes de este proyecto »** dans les deux
+  confirmations de suppression.
+- **« ¡Qué bueno verte de nuevo! »** deux fois.
+- **« talleres y fabricantes »**.
+
+**La cinquième est mal faite, et c'est pire qu'avant.** Il fallait UN
+registre pour la connexion. Les deux liens disent maintenant « Volver a
+**Iniciar sesión** » et « Ir a **Iniciar sesión** » — avec une majuscule, comme
+s'ils citaient un bouton — mais **les six boutons disent toujours
+« Entrar »** (`nav.login`, `auth.login`, `auth.loginAccount`,
+`auth.loginGoogle`, `auth.loginEmail`, `auth.toggleToLogin`). Les liens
+renvoient à un libellé qui n'existe nulle part à l'écran. Le rapport
+annonçait « Iniciar sesión en registre unique ». **Correction** : « Iniciar
+sesión » sur les six boutons (c'est la forme de l'espagnol d'Espagne), et
+« Volver a iniciar sesión » / « Ir a iniciar sesión », en minuscule, sur les
+deux liens.
+
+### Le paquet B : le site espagnol tient
+
+- `ui.ts` **181/181 dans les six langues**, **zéro « usted »**, le tutoiement
+  partout, articles compris.
+- **11 pages `/es/`**, menu à six langues, **`hreflang` à six sœurs** sur les
+  familles d'articles, **`x-default` vers l'anglais** sur l'accueil espagnol,
+  et **le plan du site en balise courte `es`** — la règle alignée au cycle
+  allemand a tenu du premier coup.
+- **Les huit articles sont de vraies traductions** : rapport de mots 1,00 à
+  1,11 (l'espagnol est plus long que l'anglais, c'est attendu), **dates
+  identiques**, **chiffres identiques**, mention « Traducido del inglés » sur
+  les huit. **Aucune collision de slug** avec les cousines italienne et
+  portugaise.
+- **L'article natif est en brouillon dès la livraison**, lien `/es/docs/` —
+  la leçon allemande appliquée d'emblée.
+- **Zéro fragment de gabarit orphelin**, aucun binaire du propriétaire dans
+  la branche.
+- **Les cinq diagrammes espagnols** ont la même structure que l'anglais
+  (mêmes nœuds de texte), **les mêmes prix**, et **la troisième garantie est
+  là dès la première écriture** — « ni nosotros, ni backups, ni una fuga ».
+
+### Un défaut de dessin, et deux en production — dont un de ma main
+
+En regardant `privacy-modes-es.svg`, la dernière ligne de la colonne « Caja
+fuerte » — « lo elimines. Clave perdida = datos perdidos. » — **sort de sa
+carte bleue de 39 px**. Ma sonde disait « rien hors cadre » : elle mesurait
+le texte contre le `viewBox`, pas contre la carte. Le cadre a été élargi à
+800, les cartes non : le texte peut désormais s'échapper de sa carte sans
+s'échapper de l'image, et la sonde ne voit rien.
+
+Remesuré contre la carte, pour les six langues et les cinq diagrammes :
+
+| Diagramme | Langue | Texte | Dépasse sa carte | Où |
+|---|---|---|---|---|
+| `privacy-modes` | es | « lo elimines. Clave perdida = datos perdidos. » | **+39 px** | branche |
+| `privacy-modes` | **pt** | « Nem nós, nem backups, nem vazamento. » | **+24 px** | **production** |
+| `plans` | **pt** | « Orçamento máximo de processamento » | **+9 px** | **production** |
+
+(Les étiquettes de flèches de `vault-zk` et `local-mode-flow` dépassent dans
+les six langues, anglais compris : elles sont posées sur les connecteurs, par
+dessin.)
+
+**La ligne portugaise du coffre est en production à cause de moi.** Au
+contrôle du paquet P de L3, j'ai demandé de restituer « nem vazamento » et
+j'ai mesuré qu'elle tenait — **773 px sur 800, contre le cadre**. Elle ne
+tenait pas contre sa carte. Je l'ai regardée ce jour-là en allemand, pas en
+portugais.
+
+**Correctifs** : couper la ligne en deux, comme l'allemand et l'espagnol le
+font déjà (« Em repouso: ninguém. Nem nós, / nem backups, nem vazamento. ») ;
+même traitement pour « lo elimines. / Clave perdida = datos perdidos. » ; et
+« Processamento máximo » ou une coupure pour la carte Pro portugaise.
+**Règle de la sonde, désormais** : un texte de diagramme se mesure contre SA
+CARTE, pas seulement contre le cadre.
+
+### Décision
+
+**GO révision A + paquet B.** Les corrections voyagent avec le paquet C :
+le registre unique de la connexion (fait correctement), le verrou de source
+des dates, les trois dépassements de carte — les deux portugais partent avec
+la publication espagnole.
