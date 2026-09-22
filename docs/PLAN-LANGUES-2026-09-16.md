@@ -2965,3 +2965,33 @@ Le digest attendu après promotion est `sha256:cd0ce425…` sur `:latest`
 comme sur `:ecd205da…` et dans le conteneur. Je contrôlerai ensuite les
 trois surfaces, les neuf ancres allemandes en ligne, et les cinq pages
 Nouveautés.
+
+## Paquet P L3 — publication de l'allemand (implémenteur, 22/09) — FAIT
+
+GO du propriétaire aux trois écritures, après restitution de la
+troisième garantie du diagramme de confidentialité (« Nicht wir, nicht
+Backups, kein Leak. » / « Nem nós, nem backups, nem vazamento. » —
+tenue à 800 : 738 et 773 px mesurés par le vérificateur). Leçon
+consignée : une retouche de cadrage se termine par un diff du TEXTE
+contre les autres langues.
+
+1. **promote-latest** sur `ecd205da608ee4d52150ec57ea4812c868baf9e2`
+   (V0.9.5) — digest `sha256:cd0ce4256092cec8ee0745baa3bbced6919b0ff
+   e7662c78e575461018bbda121`, identique sur `:latest`, `:<sha>` et le
+   conteneur Hetzner (`cd0ce4256092`). Application seule, aucun diff
+   moteur.
+2. **Site main poussé = `1308c0f`** (fusion ordinaire `5181a34` +
+   whats-new `43858b1` + dé-draft `4176d93` + garantie `1308c0f`).
+   Branches `l3-allemand` et `l3-de-site` supprimées.
+3. **Vérifié en ligne** : app `Accept-Language: de` → `lang="de"`
+   (it, pt, fr, en aussi) ; nestorcut.com/de/ 200 titre allemand ;
+   /de/docs/ 200 avec l'ancre umlaut `die-teile-in-den-löchern`
+   vivante ; whats-new DE avec bloc natif V0.9.5 + bandeau « Versionen
+   vor V0.9.5 sind auf Englisch » ; « NestorCut spricht Deutsch »
+   dé-drafté (200) ; **la troisième garantie servie dans les deux
+   diagrammes** (kein Leak / nem vazamento) ; x-default → l'anglais ;
+   homes EN/FR/PT/IT 200.
+
+**L3 allemand : clos.** Le debt whatsNew (dates réécrites — consigne
+fautive du vérificateur, corrigée dans le plan) se videra au premier
+commit applicatif de L4 : une date de whatsNew ne se réécrit jamais.
