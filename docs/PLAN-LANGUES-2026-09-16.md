@@ -2870,3 +2870,98 @@ pages Nouveautés avec leur bandeau rendu.
 
 Et le rappel qui a coûté un hotfix : **une écriture en production se demande
 au propriétaire avant**, et elle ne transporte que son correctif.
+
+## Contrôle AVANT déploiement du paquet P de L3 (`ecd205da` app / site `4176d93`) — vérificateur, 22/09 — GO, une correction d'abord
+
+L'agent a préparé les trois écritures et s'est arrêté pour demander. C'est
+la règle, elle est tenue. Tout est vérifié ici **avant** que quoi que ce
+soit parte.
+
+### Les cinq retouches : faites, mesurées
+
+- **Les cadres sont élargis à 800 en allemand et en portugais**, et **plus
+  aucun texte ne sort du cadre** : les quinze diagrammes remesurés un à un,
+  zéro dépassement. Regardé aussi : « löschen. Schlüssel weg = Daten weg. »
+  et « excluí-lo — sem chave, sem dados. » sont entiers.
+- **Les cinq captures du rapport sont reprises** sur l'image reconstruite —
+  « 1 Teil platziert », sans queue — et les 19 images de chaque langue
+  restent distinctes de celles des quatre autres (empreintes croisées).
+- « außerhalb » ×2, « detailliert » : faits.
+- **Les 45 ancres d'aide — neuf sujets × cinq langues — RÉSOLUES une à une
+  contre l'`id` de leur page bâtie. Zéro échec**, umlauts compris
+  (`die-teile-in-den-löchern`, `das-nutzbare-restblech--und-mindestens`).
+  C'est la première fois que le contrôle est fait pour les cinq langues
+  d'un coup : les quatre anciennes sont confirmées au passage.
+
+### L'état préparé, vérifié pièce par pièce
+
+- **Application `ecd205da`** : `"version": "0.9.5"`, `DOCS_LANGS` à cinq
+  langues, `CHANGELOG.md` **V0.9.5 avec ses cinq blocs** `*FR*` `*EN*`
+  `*PT*` `*IT*` `*DE*`, `DE_SINCE = 'V0.9.5'`, **vitest 814/814 code 0**
+  rejoué chez moi, et **aucun diff sous `workers/` ni `public/engine`**
+  depuis le dernier déploiement — l'application seule est justifiée.
+- **Registre** : le tag `:ecd205da…` existe, digest
+  `sha256:cd0ce425…` ; `:latest` porte encore
+  `sha256:efc407ab…`, l'italien. Rien n'a bougé tout seul.
+- **Site `4176d93`** (local, non poussé) : build **154 pages code 0**,
+  `check:links` **code 0**, **30 pages allemandes**, **zéro fragment de
+  gabarit orphelin**, `x-default` vers l'anglais sur les cinq accueils, le
+  Header propre après résolution du conflit (lien direct, plus de repli),
+  page Nouveautés allemande à six entrées avec **le bloc V0.9.5 en allemand
+  natif** et le bandeau rendu avec sa valeur (« Versionen vor V0.9.5 sind
+  auf Englisch. »), article natif dé-drafté et présent. Les deux vidéos du
+  propriétaire sont restées hors de l'index.
+
+### Une correction avant la poussée du site
+
+**Le raccourcissement des lignes a coûté une clause, en allemand et en
+portugais.** Le diagramme de confidentialité dit, en anglais, en français
+et en italien : « ni nous, **ni les sauvegardes, ni une fuite** ». Les deux
+langues retouchées ne disent plus que « Nicht wir, nicht Backups. » et
+« Nem nós, nem backups. » — **la troisième garantie a disparu**, et c'est la
+plus forte : même une fuite n'expose rien, puisque la clé n'est pas chez
+nous. Corriger une mise en page ne doit pas retirer une promesse.
+
+Et la place existe, je l'ai mesurée dans le cadre élargi :
+« Nicht wir, nicht Backups, kein Leak. » occupe jusqu'à **738 px sur 800** ;
+« Nem nós, nem backups, nem vazamento. » jusqu'à **773 sur 800**. Les deux
+tiennent sans retoucher le cadre. **À remettre avant de pousser le site.**
+
+### Une dette que je dois corriger, et elle est de moi
+
+**`app/utils/whatsNew.js` : les quatre dates sont RÉÉCRITES à chaque
+promotion.** L'en-tête du fichier dit pourtant que `livréLe` est la date de
+**PREMIÈRE** mise en production. Les quatre nouveautés sont celles du lot
+J11, livrées le **2026-09-16** ; elles ont été redatées au 19, au 20, puis
+au 22. Le badge « Neu » est donc réarmé de sept jours à chaque publication —
+il s'affiche encore sur la capture du rapport allemand, sur des nouveautés
+qui ont une semaine.
+
+**La consigne fautive est la mienne** : j'ai écrit « les dates de
+`whatsNew.js` au jour du déploiement » à chaque paquet P, ce qui était juste
+pour la PREMIÈRE mise en production de ces quatre nouveautés et faux les
+trois fois suivantes. **Règle corrigée, pour tous les paquets P à venir** :
+une date de `whatsNew.js` ne se réécrit JAMAIS ; on n'y touche que pour
+ajouter une nouveauté livrée ce jour-là, et le fichier se VIDE de ses
+entrées de plus de 30 jours. Comme le correctif exigerait un nouveau SHA et
+un nouveau passage d'intégration pour un badge, **il part au premier commit
+applicatif suivant** (ouverture de L4), où les quatre entrées seront
+simplement vidées.
+
+### Décision
+
+**GO pour les trois écritures de production**, dans l'ordre prévu, **après
+la restitution de la clause manquante dans les deux diagrammes** (site
+seul, aucun coût d'intégration) :
+
+1. `promote-latest` sur `ecd205da608ee4d52150ec57ea4812c868baf9e2`, puis
+   `pull` + `up -d app` sur Hetzner — **application seule**, le diff moteur
+   est vide.
+2. Poussée du site `main` (après la correction des deux SVG).
+3. Contrôle en ligne, suppression des deux branches, rapport : SHA promu,
+   digest, SHA du site.
+
+Le digest attendu après promotion est `sha256:cd0ce425…` sur `:latest`
+comme sur `:ecd205da…` et dans le conteneur. Je contrôlerai ensuite les
+trois surfaces, les neuf ancres allemandes en ligne, et les cinq pages
+Nouveautés.
