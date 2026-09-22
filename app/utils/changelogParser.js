@@ -32,7 +32,7 @@ function extractBlock(body, tag) {
     // est une CONTINUATION de la puce précédente — l'ancien parseur la
     // jetait, et chaque puce se retrouvait tronquée à sa première ligne.
     // Paquet C : le lookahead couvre FR, EN ET PT ; paquet C L2 : IT aussi.
-    const re = new RegExp(`\\*${tag}\\*\\s*\\n([\\s\\S]*?)(?=\\s*\\*(?:FR|EN|PT|IT)\\*\\s*\\n|$)`)
+    const re = new RegExp(`\\*${tag}\\*\\s*\\n([\\s\\S]*?)(?=\\s*\\*(?:FR|EN|PT|IT|DE)\\*\\s*\\n|$)`)
     const m = re.exec(body)
     if (!m) return []
     const lines = m[1].split('\n').map((l) => l.trim())

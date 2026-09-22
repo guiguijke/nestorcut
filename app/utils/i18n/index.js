@@ -11,9 +11,10 @@ import en from './en.js'
 import fr from './fr.js'
 import pt from './pt.js'
 import it from './it.js'
+import de from './de.js'
 
 /** Les dictionnaires livrés. L'ordre est celui du menu. */
-export const DICTS = { en, fr, pt, it }
+export const DICTS = { en, fr, pt, it, de }
 
 /** Codes de langues livrées (dérivé — jamais saisi à la main). */
 export const LOCALES = Object.keys(DICTS)
@@ -27,6 +28,7 @@ export const LANGUAGE_LABELS = {
     fr: 'Français',
     pt: 'Português',
     it: 'Italiano',
+    de: 'Deutsch',
 }
 
 /** Balise Intl par code — formatage des nombres (virgule décimale, etc.).
@@ -37,6 +39,7 @@ export const INTL_TAGS = {
     fr: 'fr-FR',
     pt: 'pt-BR',
     it: 'it-IT',
+    de: 'de-DE',
 }
 
 /** La balise Intl d'un code de langue (repli : le code lui-même). */
@@ -48,7 +51,7 @@ export function intlTag(locale) {
 export function pluralSelect(locale, n) {
     if (locale === 'fr') return n === 0 || n === 1 ? 'one' : 'other'
     // pt, it, de, es : seul 1 est singulier, 0 est pluriel (« 0 peças »,
-    // « 0 pezzi »)
+    // « 0 pezzi », « 0 Teile »)
     return n === 1 ? 'one' : 'other'
 }
 
@@ -85,5 +88,5 @@ export function formatNumber(v, locale = DEFAULT_LOCALE, digits = 1) {
 export function formatPercent(v, locale = DEFAULT_LOCALE, digits = 1) {
     const n = Number(v)
     if (!Number.isFinite(n)) return '—'
-    return formatNumber(n, locale, digits) + (locale === 'fr' ? ' %' : '%')
+    return formatNumber(n, locale, digits) + (locale === 'fr' || locale === 'de' ? ' %' : '%')
 }

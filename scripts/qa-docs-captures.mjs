@@ -175,10 +175,12 @@ async function runPass(browser, pass, creds) {
         ? { device: /Este dispositivo/i, servers: /Nossos servidores/i, yourPoint: /seu ponto/i, spacing: 'Espaçamento', directions: 'Direções', computing: /Processando/i }
         : pass === 'it'
         ? { device: /Questo dispositivo/i, servers: /I nostri server/i, yourPoint: /il tuo punto/i, spacing: 'Distanza', directions: 'Direzioni', computing: /Calcolo|nesting/i }
+        : pass === 'de'
+        ? { device: /Dieses Gerät/i, servers: /Unsere Server/i, yourPoint: /Ihr Punkt/i, spacing: 'Abstand', directions: 'Richtungen', computing: /Berechnung|Nesting/i }
         : { device: /This device/i, servers: /Our servers/i, yourPoint: /your point/i, spacing: 'Spacing', directions: 'Layout directions', computing: /computing|nesting/i }
 
     const ctx = await browser.newContext({
-        locale: pass === 'fr' ? 'fr-FR' : pass === 'pt' ? 'pt-BR' : pass === 'it' ? 'it-IT' : 'en-US',
+        locale: pass === 'fr' ? 'fr-FR' : pass === 'pt' ? 'pt-BR' : pass === 'it' ? 'it-IT' : pass === 'de' ? 'de-DE' : 'en-US',
         viewport: { width: 1440, height: 900 },
         deviceScaleFactor: 2,
     })
@@ -343,6 +345,7 @@ try {
     await runPass(browser, 'en', creds)
     await runPass(browser, 'pt', creds)
     await runPass(browser, 'it', creds)
+    await runPass(browser, 'de', creds)
 } catch (e) {
     failed = String(e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)
     log('ERREUR:', failed)
@@ -356,7 +359,7 @@ const walkMd = (dir) => {
         const p = path.join(dir, f)
         if (fs.statSync(p).isDirectory()) { walkMd(p); continue }
         if (!f.endsWith('.md')) continue
-        for (const m of fs.readFileSync(p, 'utf8').matchAll(/\/docs-img\/(?:fr|en|pt|it)\/([\w.-]+)/g)) referenced.add(m[1])
+        for (const m of fs.readFileSync(p, 'utf8').matchAll(/\/docs-img\/(?:fr|en|pt|it|de)\/([\w.-]+)/g)) referenced.add(m[1])
     }
 }
 walkMd(DOCS)
@@ -390,8 +393,8 @@ for (const [key, p] of allPresent) {
         log('image orpheline retirée :', key)
     }
 }
-const missing = [...referenced].filter((f) => !allPresent.has(`fr/${f}`) || !allPresent.has(`en/${f}`) || !allPresent.has(`pt/${f}`) || !allPresent.has(`it/${f}`))
-check('lock', 'chaque image référencée existe DANS LES QUATRE langues', missing.length === 0, { manquantes: missing })
+const missing = [...referenced].filter((f) => !allPresent.has(`fr/${f}`) || !allPresent.has(`en/${f}`) || !allPresent.has(`pt/${f}`) || !allPresent.has(`it/${f}`) || !allPresent.has(`de/${f}`))
+check('lock', 'chaque image référencée existe DANS LES CINQ langues', missing.length === 0, { manquantes: missing })
 check('lock', 'aucune image orpheline après nettoyage', true, { retirees: orphans })
 
 fs.writeFileSync(LOG, logs.join('\n') + '\n')
@@ -400,4 +403,4 @@ if (failed || reds.length) {
     console.log(`NO-GO — ${reds.length} sonde(s) rouge(s)${failed ? ' + erreur' : ''}`)
     process.exit(1)
 }
-console.log('GO — captures régénérées dans les QUATRE langues (compte neuf, éléments cadrés, langue sondée, zéro orpheline)')
+console.log('GO — captures régénérées dans les CINQ langues (compte neuf, éléments cadrés, langue sondée, zéro orpheline)')

@@ -62,7 +62,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing'])
 
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
-const { t, fmtPercent, fmtNumber } = useLocale()
+const { t, tp, fmtPercent, fmtNumber } = useLocale()
 const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
@@ -510,7 +510,7 @@ const reportBadges = computed(() => {
     const allPlaced = unref(resultModalData).requested === unref(resultModalData).placed
     badges.push({
         ok: allPlaced && !unref(isUnfit),
-        label: t('report.allPlaced', { n: unref(resultModalData).placed }),
+        label: tp('report.allPlaced', unref(resultModalData).placed),
     })
     // X2 (vérif tour 4) : solution partielle — le compte non placé est un
     // badge visible, jamais un job en erreur.
