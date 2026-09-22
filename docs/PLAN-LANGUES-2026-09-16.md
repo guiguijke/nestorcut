@@ -3242,3 +3242,56 @@ l'italien et l'allemand déjà publiés, et il voyagera avec la publication
 espagnole. **Cinquième fois qu'une langue nouvelle répare les anciennes** —
 l'italien avait rendu la virgule aux longueurs, l'allemand les licences, le
 `x-default` et les diagrammes ; l'espagnol rend les dates.
+
+## Révision A + paquet B L4 (implémenteur, 22/09) — livraison unique
+
+### La révision (app, `l4-espanol` `6b3a494d`)
+
+**La trouvaille, correctifs aux cinq endroits** : `quotaReset.js`
+(ternaire du temps des deux langues, commentaire d'époque corrigé),
+`PromoCodeSettings.vue` (même famille), `Subscription.vue` et
+`DeleteAccount.vue` (`toLocaleDateString(undefined` = la langue du
+NAVIGATEUR), `ChatSupport.vue` (`toLocaleTimeString([]`)) — tous passent
+par `intlTag()` du registre, la locale de l'application partout. Cinq
+chemins morts prouvés par grep (zéro `undefined`, zéro ternaire).
+**Verrou** : pour chaque langue livrée, la date du reset doit différer
+de l'anglaise ET porter le mois localisé — le mois du RESET (le
+premier essai sonnait faux : formatQuotaReset avance au 1er du mois
+suivant, un instant d'octobre donne « 1 nov. » ; corrigé après mesure).
+
+**Les cinq retouches** : pourcentage espagnol à l'espace (RAE, verrou),
+« Los archivos … **de este proyecto** » (le défaut allemand qui
+n'avait pas voyagé — corrigé cette fois AVANT la relecture),
+« **¡**Qué bueno verte de nuevo**!** » ×2, « Iniciar sesión » registre
+unique, « talleres y **fabricantes** ». Vitest **815/815**.
+
+### Paquet B — site et blog espagnols (`l4-es-site` `86e3c71`, poussée)
+
+- **ui.ts bloc `es` 181/181** (parité script), glossaire tenu.
+  `locales` + Español, sitemap `es`, schéma blog `es`, `CANONICAL` + es.
+- **Pages `/es/`** (accueil, contact, blog ×2), **menu six langues** ;
+  Español offert depuis les cinq autres.
+- **Neuf articles** : huit familles traduites de l'original anglais
+  (mêmes dates, mêmes chiffres — commits Deepnest 07/07/2020 et
+  28/07/2026, v1.5.6 mai 2025, 573/327 contre 555/345, 49–59 $ août
+  2026, 304 pièces/68 %, ~90 s), chacun portant
+  **« \*Traducido del inglés.\* »** ; plus « NestorCut habla español »
+  **en draft jusqu'au paquet P** (il annonce la documentation) avec son
+  lien `/es/docs/` — la leçon de L3 appliquée d'emblée. Slugs distincts
+  des cousines italienne/portugaise (deux collisions vues à l'écriture).
+- **Cinq diagrammes ES traduits depuis zéro** — cadre 800 pour
+  privacy-modes **et la TROISIÈME GARANTIE présente dès la première
+  écriture** (« en reposo: nadie. Ni nosotros, ni backups, ni una
+  fuga. ») : la règle du cycle allemand (diff du texte contre les
+  autres langues) appliquée avant tout cadrage.
+- **Replis** : Docs ES → anglais jusqu'au paquet C ; légal/privacy
+  FR+EN ; le lien DWG de l'article privacidad pointe la doc anglaise
+  jusqu'au C (vu au check:links).
+- **Build 165 pages exit 0, check:links OK** (163 URLs, 164 pages).
+  **Preuves dist/** : `/es/` servi en espagnol, menu 6 langues,
+  hreflang **six sœurs** sur la famille Deepnest côté ES (+ x-default
+  EN), sitemap 11 URLs `/es/`, l'article natif absent du bâti (draft),
+  **zéro fragment orphelin**.
+
+Rien n'est publié : `l4-espanol` et `l4-es-site` attendent la
+relecture, puis le paquet C.
