@@ -20,10 +20,14 @@ export function nextQuotaReset(now = new Date()) {
  * Libellé localisé « date + heure » du prochain reset, dans le fuseau de
  * l'utilisateur — le reset à 00:00 UTC n'est pas minuit local, le nom de
  * fuseau court lève l'ambiguïté (ex. « 1 sept., 02:00 UTC+2 »).
- * locale : code app ('fr' | 'en', cf. useLocale) — Intl attend 'fr-FR'.
+ * locale : code app (cf. useLocale) — la balise Intl vient du REGISTRE
+ * (relecture L4 : ce ternaire à deux branches datait du temps des deux
+ * langues ; il servait des dates anglaises au pt/it/de en production).
  */
+import { intlTag } from './i18n/index.js'
+
 export function formatQuotaReset(now, locale) {
-    const intlLocale = locale === 'fr' ? 'fr-FR' : 'en'
+    const intlLocale = intlTag(locale)
     return new Intl.DateTimeFormat(intlLocale, {
         month: 'short',
         day: 'numeric',

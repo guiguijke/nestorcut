@@ -7,7 +7,7 @@
 // traduisent pas). Une langue déclarée incomplète ne doit pas apparaître
 // dans le menu : ce test la fait tomber AVANT.
 import { describe, expect, it } from 'vitest'
-import { DICTS, LOCALES, DEFAULT_LOCALE, formatNumber, formatPercent, translate } from '../utils/i18n'
+import { DICTS, LOCALES, DEFAULT_LOCALE, formatNumber, formatPercent, translate, intlTag } from '../utils/i18n'
 
 /** Valeurs autorisées à être identiques à l'anglais : sigles, noms
  *  propres, et les MOTS QUI SONT LES MÊMES en français (empruns :
@@ -117,6 +117,29 @@ describe('L0 — parité des clés de langue', () => {
         }
     })
 
+    // Relecture L4 (« la trouvaille ») : cinq formatages de DATE serveaient
+    // la langue du navigateur ou un ternaire à deux branches — le pt, l'it
+    // et le de lisaient des dates anglaises en production. Verrou : pour
+    // chaque langue livrée (hors anglais), la date d'un instant fixe doit
+    // différer de l'anglaise — le nom du mois suffit à le prouver.
+    it('les dates suivent la langue de l\'application, jamais celle du navigateur', async () => {
+        const { formatQuotaReset } = await import('../utils/quotaReset')
+        // formatQuotaReset formate le RESET — le 1er du mois SUIVANT. Un
+        // instant de mi-octobre donne donc « 1 nov. » : le verrou attend le
+        // mois du RESET, pas celui de l'instant.
+        const instant = new Date('2026-10-15T12:00:00Z')
+        const en = formatQuotaReset(instant, 'en')
+        for (const lang of LOCALES) {
+            if (lang === DEFAULT_LOCALE) continue
+            const localized = formatQuotaReset(instant, lang)
+            expect(localized, `[${lang}] la date doit différer de l'anglaise`).not.toBe(en)
+            // le nom du mois localisé doit ÊTRE présent (pas juste différent)
+            const resetInstant = new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth() + 1, 1))
+            const month = new Intl.DateTimeFormat(intlTag(lang), { month: 'short' }).format(resetInstant).replace('.', '')
+            expect(localized, `[${lang}] le mois localisé «${month}» doit apparaître`).toContain(month.slice(0, 3))
+        }
+    })
+
     // A-bis (jalon A de L1) : les VARIABLES {…} de chaque clé doivent être
     // IDENTIQUES dans toutes les langues — une traduction depuis une « cousine »
     // de la clé anglaise laisse des variables fantômes ({reason} en toutes
@@ -146,7 +169,11 @@ describe('L0 — nombres par locale (Intl)', () => {
         expect(formatPercent(55.4, 'fr', 1)).toBe('55,4 %')
         // Relecture L3 : l'allemand prend aussi l'espace (DIN 5008) ; it et pt restent collés.
         expect(formatPercent(55.4, 'de', 1)).toBe('55,4 %')
+        // Relecture L4 : l'espagnol prend l'espace (RAE) — le dictionnaire
+        // écrit déjà « 5 % » : le même écran ne montrera pas deux formes.
+        expect(formatPercent(55.4, 'es', 1)).toBe('55,4 %')
         expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
+        expect(formatPercent(55.4, 'it', 1)).toBe('55,4%')
         expect(formatPercent(55.4, 'en', 1)).toBe('55.4%')
     })
 })
