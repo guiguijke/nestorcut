@@ -3623,3 +3623,76 @@ Je contrôlerai ensuite : six langues servies, les **neuf ancres espagnoles en
 ligne**, les dates localisées en portugais, italien et allemand, les deux
 diagrammes portugais servis corrigés, les six pages Nouveautés, et zéro
 fragment orphelin.
+
+## Contrôle de la publication espagnole (`158ac627` / site `ab448ca`) — vérificateur, 23/09 — CONFORME, L4 clos, CHANTIER DES LANGUES CLOS
+
+Lecture seule, en production :
+
+- **Digests** : `:latest` et `:158ac627…` portent `sha256:5fae0a3a…`, celui
+  annoncé avant le déploiement. L'application sert **V0.9.6** et **six
+  langues** selon le navigateur : `es`, `de`, `it`, `pt`, `fr`, `en`.
+- **Le correctif des dates est dans le code servi**, et je l'ai vérifié dans
+  les fichiers JavaScript que la production distribue (90 morceaux
+  téléchargés) : `formatQuotaReset` y passe par le registre (`const
+  e=n(a);return new Intl.DateTimeFormat(e,…)`), **aucune trace** de l'ancien
+  ternaire `"fr"?"fr-FR":"en"`, ni de `toLocaleDateString(void 0`, ni de
+  `toLocaleTimeString([]`. Le rapport de l'agent disait « pt et de sondés
+  verts » — ce qui ne prouvait que la langue de la page, pas les dates ; la
+  preuve est maintenant dans le code servi.
+- **Les neuf ancres d'aide espagnoles existent en ligne**, accents compris.
+- **Toutes les surfaces en 200** : `/es/`, `/es/docs/`, `/es/blog/`,
+  l'article natif, `/es/contact/`, et les cinq autres accueils.
+- **Les six pages Nouveautés** portent V0.9.6, aucune n'est un repli, et les
+  quatre bandeaux (pt, it, de, es) sont rendus.
+- **`x-default` vers l'anglais sur les six accueils, zéro fragment orphelin**
+  sur chacun.
+- **Les deux diagrammes portugais sont servis corrigés** (« nem backups, nem
+  vazamento », « de processamento »).
+- **Les quatre branches sont supprimées**, le harnais à six passes est
+  commité (`f0436357`), aucun binaire du propriétaire n'a été publié.
+
+**L4 espagnol : clos. Le chantier des langues est clos** : NestorCut parle
+six langues — application, site, documentation et blog, chacune publiée
+complète, le même jour pour ses trois surfaces.
+
+### Le bilan du chantier
+
+| Langue | Publiée | Version | Ce qu'elle a réparé chez les autres |
+|---|---|---|---|
+| Portugais (Brésil) | 19/09 | V0.9.3 | le socle : registre, verrou de parité, verrou des variables |
+| Italien | 20/09 | V0.9.4 | **les longueurs** suivaient mal la langue — français compris (« 1040.4 mm ») |
+| Allemand | 22/09 | V0.9.5 | **les licences** amputées en pt/it, le résidu `}>Docs` sur tout le site, **`x-default`** qui se désignait lui-même, les balises régionales du plan du site, les diagrammes anglais du blog, le singulier du badge |
+| Espagnol | 23/09 | V0.9.6 | **les dates** de pt/it/de, deux diagrammes portugais hors de leur carte |
+
+### Les règles que le chantier laisse
+
+1. Une langue se publie **complète ou pas** : application, site,
+   documentation, captures, le même jour.
+2. Le vérificateur relit **100 % des chaînes** d'une langue qu'il ne lit pas
+   au propriétaire — le propriétaire ne tranche que prix, promesses, légal et
+   déploiement.
+3. **Un verrou se prouve lui-même** : il exige que la ligne fautive
+   d'origine le déclenche. Un verrou qui ne peut pas mordre est pire qu'aucun.
+4. **Un SVG ne renvoie pas à la ligne** : chaque texte traduit se mesure
+   contre **sa carte**, pas seulement contre le cadre de l'image.
+5. **Une retouche de cadrage se termine par un diff du texte** contre les
+   autres langues : la place gagnée ne doit jamais coûter une promesse.
+6. **Une date de première mise en production ne se réécrit jamais**.
+7. **Toute écriture en production se demande au propriétaire avant**, et un
+   correctif d'urgence ne transporte que son correctif.
+8. À chaque publication, **le HTML bâti se fouille pour les fragments de
+   gabarit orphelins**, et **les ancres d'aide se résolvent contre l'`id` de
+   leur page, pour toutes les langues d'un coup**.
+9. **Les captures se régénèrent dans la langue**, jamais ne se copient, et
+   se prennent **après** la reconstruction de l'image finale.
+
+### Ce qui reste, consigné, sans urgence
+
+- Le `<title>` de l'application est anglais dans les six langues.
+- Le pied de page public de l'application (Legal Notice, Terms, Privacy…)
+  est anglais dans les six langues, français compris.
+- Les guillemets droits `"…"` en pt, it, de, es là où chaque langue a les
+  siens (« », „ “).
+- L'application déclare `lang="pt"` quand le site déclare `pt-BR`.
+- Les pages légales restent en français et en anglais (décision du
+  propriétaire).
