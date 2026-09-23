@@ -3696,3 +3696,77 @@ complète, le même jour pour ses trois surfaces.
 - L'application déclare `lang="pt"` quand le site déclare `pt-BR`.
 - Les pages légales restent en français et en anglais (décision du
   propriétaire).
+
+## Lot M1 — le ménage des langues (décision du propriétaire, 23/09)
+
+Le propriétaire a choisi : **un petit lot de ménage, puis la reprise de la
+feuille de route**. Un seul paquet, une seule livraison, application seule,
+aucun moteur. Il traite ce que chaque visiteur non anglophone voit encore en
+anglais. Endroits relevés dans le code par le vérificateur :
+
+### 1. Le titre de l'onglet — anglais dans les six langues
+
+- `nuxt.config.js:137` : titre par défaut figé,
+  « NestorCut — State-of-the-art nesting for laser, plasma & CNC cutting ».
+- `app/plugins/visibilityState.client.js` : le même texte en dur
+  (`defaultTitle`), et **« Nest ready »** — le titre qui clignote quand un
+  nesting se termine dans un onglet caché. Anglais lui aussi.
+
+**À faire** : deux clés, `meta.title` et `meta.nestReady`, dans les six
+dictionnaires ; le titre posé par `useHead` dans `app/app.vue` avec la
+langue courante, pour que le **rendu serveur** porte déjà le bon titre (le
+titre de `nuxt.config.js` ne reste qu'un repli) ; le plugin lit les deux
+clés au lieu de ses chaînes en dur et suit le changement de langue sans
+rechargement. Garder « NestorCut » tel quel ; pour le slogan, reprendre la
+formulation que le site vitrine utilise déjà dans chaque langue, pour que
+l'onglet et le site disent la même chose.
+
+### 2. Le pied de page public — anglais dans les six langues, français compris
+
+`app/components/Footer.vue`, lignes 40 à 88 : **sept libellés en dur** —
+« Legal Notice », « Terms », « Privacy », « Refund Policy », « Licences »,
+« Changelog », « Benchmarks ». (« GitHub » et « Discord » sont des noms, ils
+restent.) **À faire** : les passer par `t()`, en réutilisant les clés qui
+existent (`footer.legal`, `footer.privacy`, `footer.whatsNew`) et en créant
+les autres (`footer.terms`, `footer.refund`, `footer.licences`,
+`footer.benchmarks`) dans les six langues. Les pages légales restent en
+français et en anglais (décision du propriétaire) : on traduit le LIBELLÉ,
+pas la page — c'est déjà ce que fait le petit pied de page de l'application.
+
+### 3. `lang="pt"` au lieu de `pt-BR`
+
+`app/app.vue:22` : `htmlAttrs: { lang: locale }` déclare `pt` alors que tout
+le portugais est brésilien et que le site déclare `pt-BR`. **À faire** :
+même règle que le site (`hreflangOf`) — `pt` devient `pt-BR`, les autres
+langues gardent leur code court. **Pas** `intlTag()` ici : il rendrait
+`en-US`, `fr-FR`, `de-DE`, la forme régionale écartée au cycle allemand.
+
+### 4. Optionnel — les guillemets de chaque langue
+
+Là où l'anglais a « “…” », le portugais, l'italien, l'allemand et l'espagnol
+ont des guillemets droits `"…"`. Chaque langue a les siens : « … » en italien
+et en espagnol, „…“ en allemand, “…” en portugais. À faire si le reste est
+fini ; le verrou des faits doit rester vert.
+
+### Définition de « fini »
+
+- vitest **code 0**, parité verte (les nouvelles clés dans les six langues,
+  aucune copie de l'anglais hors liste blanche).
+- **Le titre prouvé dans les six langues** : le `<title>` du HTML servi par
+  le serveur pour chaque `Accept-Language` (sonde texte), et
+  `document.title` après un changement de langue sans rechargement.
+- `<html lang="pt-BR">` prouvé de la même façon.
+- **Captures regardées** du pied de page en allemand et en espagnol, et une
+  ligne disant ce qu'on y voit.
+- `CHANGELOG.md` : une entrée **V0.9.7** à six blocs, une phrase — l'onglet et
+  le pied de page parlent la langue choisie.
+- Puis la publication habituelle : `promote-latest` sur le SHA complet,
+  application seule, **en demandant au propriétaire avant toute écriture de
+  production**.
+
+### Après M1
+
+Le vérificateur fera une **revue courte de la feuille de route**
+(`docs/MASTERPLAN-2026-09-05.md` §4 date du 09/09 ; le chantier `.job`, la
+documentation et les langues l'ont dépassée) et proposera au propriétaire
+le prochain chantier, à choisir par lui.
