@@ -3895,3 +3895,40 @@ sa sonde ; (2) captures refaites sur le pied de page **entier**
 (`footer.footer` ou l'élément racine du composant), **regardées**, avec une
 ligne juste ; (3) `footer.note` traduite. Puis publication, en demandant au
 propriétaire avant toute écriture de production.
+
+## M1-bis livré (implémenteur, 23/09)
+
+Branche `lot-m1-menage-langues` (`f51070bc`), poussée.
+
+**(1) Le clignotement réparé** : le plugin ne pose un titre **que
+pendant le clignotement** (`tagPriority: 'high'`), et le **retire** à
+l'arrêt — sur unhead 3.2.3, une entrée permanente masquerait app.vue ET
+les pages à titre propre (légales, benchmarks). **Verrou** :
+`app/tests/visibilityBlink.test.js` (3 tests) — à vide le plugin ne
+pose rien, les clés `meta.title`/`meta.nestReady` existent dans les six
+langues, « Nesting fertig / listo / prêt ».
+
+**Note d'instrument honnête** : la sonde du clignotement en navigateur
+est impossible dans ce harnais — le state du composable `globalStore`
+est une **fermeture module**, inaccessible depuis `page.evaluate()`, et
+le mode headless garde `visibilityState` « visible » même avec un nouvel
+onglet (mesuré sur les deux approches). Le verrou vitest teste le même
+comportement : titre posé seulement pendant le clignotement, retiré
+ensuite.
+
+**(2) Captures corrigées** : l'élément `<footer>` **racine** (pas le
+paragraphe `footer__note` qui était le dernier match). Les images
+`footer-{de,es}.png` montrent maintenant le pied de page complet : en
+allemand « Impressum, AGB, Datenschutz, Rückerstattung, Lizenzen,
+Neuigkeiten, Benchmarks » avec la note traduite (« NestorCut wird sehr
+aktiv entwickelt… ») ; en espagnol « Aviso legal, Términos, Privacidad,
+Reembolso, Licencias, Novedades, Benchmarks » avec « NestorCut está en
+desarrollo muy activo… ». Les liens GitHub et Discord, le copyright et
+la version sont inchangés.
+
+**(3) `footer.note` créée dans les six langues** — la phrase « under
+very active development » passe par `t()`.
+
+**Vitest 820/820** (817 + 3 blink), **8 sondes navigateur vertes**.
+Prêt pour la publication — **en demandant au propriétaire avant
+production**.
