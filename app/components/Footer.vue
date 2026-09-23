@@ -96,7 +96,7 @@
                     <br>NestorCut V{{ fullVersion }} — <NuxtLink to="/changelog" class="footer__one-link">{{ t('footer.whatsNew') }}</NuxtLink>
                 </p>
                 <p class="footer__note">
-                    NestorCut is under very active development — a bug you hit today may already be fixed tomorrow.
+                    {{ t('footer.note') }}
                 </p>
             </div>
         </div>

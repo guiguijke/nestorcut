@@ -718,6 +718,7 @@ export default {
     'footer.refund': "Rimborsi",
     'footer.licences': "Licenze",
     'footer.benchmarks': "Benchmark",
+    'footer.note': "NestorCut è in sviluppo molto attivo — un bug che incontri oggi potrebbe essere già corretto domani.",
     "auth.newsletterOptIn": "Tienimi informato sulle novità e gli aggiornamenti di NestorCut (newsletter facoltativa, disdici quando vuoi).",
     "auth.checkEmail.title": "Controlla la tua casella di posta",
     "auth.checkEmail.text": "Ti abbiamo inviato un link di verifica. Fai clic per attivare il tuo account e iniziare ad annidare. Il link è valido 24 ore — controlla anche lo spam se non lo trovi.",

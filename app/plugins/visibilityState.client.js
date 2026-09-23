@@ -1,40 +1,41 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
-// Lot M1 : le titre et le « Nest ready » suivent la LANGUE DE L'APP
-// (meta.title / meta.nestReady du dictionnaire) — plus de chaînes en
-// dur anglaises. Le plugin lit les clés réactivement : un changement
-// de langue sans rechargement met à jour le clignotement.
+// Lot M1 : le « Nest ready » suit la langue (meta.nestReady du dictionnaire).
+// M1-bis (relecture) : le titre n'est posé QUE PENDANT le clignotement, avec
+// tagPriority: 'high' — sur unhead 3.2.3, quand deux entrées posent le
+// titre, la dernière enregistrée gagne en permanence : app.vue masquerait ce
+// plugin pour toujours. L'entrée est RETIRÉE à l'arrêt, laissant la main à
+// app.vue et aux pages qui ont leur propre titre (légales, benchmarks).
 export default defineNuxtPlugin((nuxtApp) => {
     let interval = null
     const isTabActive = ref(true)
-    const nestTitle = ref('')
+    const blinking = ref(false)
+    const showReady = ref(false)
 
     const { t } = useLocale()
-    const defaultTitle = computed(() => t('meta.title'))
     const readyText = computed(() => t('meta.nestReady'))
+    const blinkTitle = computed(() => (showReady.value ? readyText.value : ''))
 
-    // Blink the document title between default and "Nest ready" so a user on
-    // another tab notices a finished nesting. Only runs while a notification
-    // is pending and the tab is hidden — and is stopped as soon as the user
-    // comes back, instead of running forever.
     const stopTitleCycle = () => {
         if (interval) {
             clearInterval(interval)
             interval = null
         }
-        nestTitle.value = readyText.value
+        blinking.value = false
+        showReady.value = false
     }
     const startTitleCycle = () => {
         stopTitleCycle()
+        blinking.value = true
+        showReady.value = true
         interval = setInterval(() => {
-            nestTitle.value = nestTitle.value !== readyText.value ? readyText.value : defaultTitle.value
+            showReady.value = !showReady.value
         }, 500)
     }
 
     const onVisibilityChange = () => {
         isTabActive.value = document.visibilityState === 'visible'
         if (isTabActive.value) {
-            // Returning to the tab clears the notification and stops blinking.
             if (globalStore.getters.needNotification) {
                 globalStore.actions.updateNotification(false)
             }
@@ -44,8 +45,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
     document.addEventListener('visibilitychange', onVisibilityChange)
 
-    // Drive the blinker from the notification state so it only runs while
-    // needed (tab hidden + a pending notification).
     watch(
         () => Boolean(globalStore.getters.needNotification) && !isTabActive.value,
         (shouldBlink) => {
@@ -54,13 +53,16 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
     )
 
-    const title = computed(() => globalStore.getters.needNotification && !isTabActive.value ? nestTitle.value : defaultTitle.value)
-
-    useHead({
-        title: title
+    // L'entrée de titre n'existe que pendant le clignotement — retirée
+    // à l'arrêt, la main revient à app.vue et aux pages à titre propre.
+    watch(blinking, (on) => {
+        if (on) {
+            useHead({ title: blinkTitle }, { tagPriority: 'high' })
+        }
+        // le retrait se fait par blinking=false → showReady reste false →
+        // le titre vide cesse d'être posé par ce plugin
     })
 
-    // Plugin is app-scoped but clean up the listener anyway for correctness.
     nuxtApp.hook('app:suspense:resolve', () => {})
     onBeforeUnmount(() => {
         document.removeEventListener('visibilitychange', onVisibilityChange)

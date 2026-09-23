@@ -834,6 +834,7 @@ export default {
     'footer.refund': "Refund Policy",
     'footer.licences': "Licenses",
     'footer.benchmarks': "Benchmarks",
+    'footer.note': "NestorCut is under very active development — a bug you hit today may already be fixed tomorrow.",
 
     // ── Email verification & newsletter ──
     'auth.newsletterOptIn': 'Keep me informed about NestorCut news and updates (optional newsletter, unsubscribe anytime).',

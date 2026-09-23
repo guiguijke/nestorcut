@@ -721,6 +721,7 @@ export default {
     'footer.refund': "Rückerstattung",
     'footer.licences': "Lizenzen",
     'footer.benchmarks': "Benchmarks",
+    'footer.note': "NestorCut wird sehr aktiv entwickelt — ein Bug, der Sie heute trifft, kann morgen schon behoben sein.",
     "auth.newsletterOptIn": "Über NestorCut-Neuigkeiten und Updates informiert bleiben (optionaler Newsletter, jederzeit abbestellbar).",
     "auth.checkEmail.title": "Prüfen Sie Ihr Postfach",
     "auth.checkEmail.text": "Wir haben Ihnen einen Bestätigungslink gesendet. Klicken Sie darauf, um Ihr Konto zu aktivieren und mit dem Nesting zu starten. Der Link ist 24 Stunden gültig — schauen Sie nötigenfalls auch in den Spam-Ordner.",
