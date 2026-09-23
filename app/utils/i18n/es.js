@@ -7,6 +7,8 @@
 // seguridad, anidar en los agujeros. Badge « Separación >= »,
 // jamais « Margen ». Référence du verrou de parité : en.js.
 export default {
+    'meta.title': "NestorCut — Software de Nesting Online Gratuito para Corte Láser, Plasma y CNC",
+    'meta.nestReady': "Nesting listo",
     "nav.home": "Inicio",
     "nav.workspace": "Área de trabajo",
     "nav.features": "Funciones",
@@ -717,6 +719,10 @@ export default {
     "footer.whatsNew": "Novedades",
     "footer.legal": "Aviso legal",
     "footer.privacy": "Privacidad",
+    'footer.terms': "Términos",
+    'footer.refund': "Reembolso",
+    'footer.licences': "Licencias",
+    'footer.benchmarks': "Benchmarks",
     "auth.newsletterOptIn": "Mantenerme informado de las novedades y actualizaciones de NestorCut (newsletter opcional, cancela cuando quieras).",
     "auth.checkEmail.title": "Revisa tu bandeja de entrada",
     "auth.checkEmail.text": "Te hemos enviado un enlace de verificación. Haz clic en él para activar tu cuenta y empezar a anidar. El enlace es válido durante 24 horas — revisa el spam si no lo ves.",

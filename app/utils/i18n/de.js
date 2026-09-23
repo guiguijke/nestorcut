@@ -5,6 +5,8 @@
 // Sicherheitszugabe, Schrott, Optimierungsrichtung. Badge « Abstand
 // >= », jamais « Zugabe ». Référence du verrou de parité : en.js.
 export default {
+    'meta.title': "NestorCut — Kostenlose Online-Nesting-Software für Laser-, Plasma- und CNC-Schnitt",
+    'meta.nestReady': "Nesting fertig",
     "nav.home": "Start",
     "nav.workspace": "Arbeitsbereich",
     "nav.features": "Funktionen",
@@ -715,6 +717,10 @@ export default {
     "footer.whatsNew": "Neuigkeiten",
     "footer.legal": "Impressum",
     "footer.privacy": "Datenschutz",
+    'footer.terms': "AGB",
+    'footer.refund': "Rückerstattung",
+    'footer.licences': "Lizenzen",
+    'footer.benchmarks': "Benchmarks",
     "auth.newsletterOptIn": "Über NestorCut-Neuigkeiten und Updates informiert bleiben (optionaler Newsletter, jederzeit abbestellbar).",
     "auth.checkEmail.title": "Prüfen Sie Ihr Postfach",
     "auth.checkEmail.text": "Wir haben Ihnen einen Bestätigungslink gesendet. Klicken Sie darauf, um Ihr Konto zu aktivieren und mit dem Nesting zu starten. Der Link ist 24 Stunden gültig — schauen Sie nötigenfalls auch in den Spam-Ordner.",

@@ -2,6 +2,8 @@
 // glossaire specs/i18n/glossaire-it.md (fait foi) ; « nesting » reste
 // « nesting », compris des ateliers. Référence du verrou de parité : en.js.
 export default {
+    'meta.title': "NestorCut — Software di Nesting Online Gratuito per Taglio Laser, Plasma e CNC",
+    'meta.nestReady': "Nesting pronto",
     "nav.home": "Inizio",
     "nav.workspace": "Area di lavoro",
     "nav.features": "Funzioni",
@@ -712,6 +714,10 @@ export default {
     "footer.whatsNew": "Novità",
     "footer.legal": "Note legali",
     "footer.privacy": "Privacy",
+    'footer.terms': "Termini",
+    'footer.refund': "Rimborsi",
+    'footer.licences': "Licenze",
+    'footer.benchmarks': "Benchmark",
     "auth.newsletterOptIn": "Tienimi informato sulle novità e gli aggiornamenti di NestorCut (newsletter facoltativa, disdici quando vuoi).",
     "auth.checkEmail.title": "Controlla la tua casella di posta",
     "auth.checkEmail.text": "Ti abbiamo inviato un link di verifica. Fai clic per attivare il tuo account e iniziare ad annidare. Il link è valido 24 ore — controlla anche lo spam se non lo trovi.",

@@ -1,4 +1,6 @@
 export default {
+    'meta.title': "NestorCut — Software de Nesting Online Gratuito para Corte a Laser, Plasma e CNC",
+    'meta.nestReady': "Nesting pronto",
     "nav.home": "Início",
     "nav.workspace": "Meu espaço",
     "nav.features": "Recursos",
@@ -709,6 +711,10 @@ export default {
     "footer.whatsNew": "Novidades",
     "footer.legal": "Aviso legal",
     "footer.privacy": "Privacidade",
+    'footer.terms': "Termos",
+    'footer.refund': "Reembolso",
+    'footer.licences': "Licenças",
+    'footer.benchmarks': "Benchmarks",
     "auth.newsletterOptIn": "Manter-me informado sobre novidades e atualizações do NestorCut (newsletter opcional, cancele quando quiser).",
     "auth.checkEmail.title": "Verifique sua caixa de entrada",
     "auth.checkEmail.text": "Enviamos um link de verificação. Clique nele para ativar sua conta e começar a aninhar. O link é válido por 24 horas — depois disso, peça outro.",

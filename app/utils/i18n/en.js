@@ -3,6 +3,8 @@
 // référence du verrou de parité (app/tests/i18nParity.test.js).
 // Toute clé ajoutée ici doit exister dans CHAQUE langue livrée.
 export default {
+    'meta.title': "NestorCut — Free Online Nesting Software for Laser, Plasma & CNC Cutting",
+    'meta.nestReady': "Nest ready",
     'nav.home': 'Home',
     'nav.workspace': 'Workspace',
     'nav.features': 'Features',
@@ -828,6 +830,10 @@ export default {
     'footer.whatsNew': "What's new",
         'footer.legal': 'Legal notice',
     'footer.privacy': 'Privacy',
+    'footer.terms': "Terms",
+    'footer.refund': "Refund Policy",
+    'footer.licences': "Licenses",
+    'footer.benchmarks': "Benchmarks",
 
     // ── Email verification & newsletter ──
     'auth.newsletterOptIn': 'Keep me informed about NestorCut news and updates (optional newsletter, unsubscribe anytime).',
