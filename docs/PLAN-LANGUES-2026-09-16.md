@@ -3807,3 +3807,91 @@ vérificateur peut le demander en menage M2 ou le laisser).
 **CHANGELOG V0.9.7 à six blocs**, `package.json` 0.9.7, vitest
 **817/817**, image reconstruite, 8 sondes vertes. Prêt pour la
 publication — **en demandant au propriétaire avant production**.
+
+## Relecture du lot M1 (`7116f955`, branche `lot-m1-menage-langues`) — vérificateur, 23/09 — NO-GO étroit, M1-bis
+
+Rejoué : **vitest 817/817 code 0** ; le diff lu fichier par fichier ; les
+nouvelles clés lues dans les six langues ; les deux captures regardées ; et
+l'ordre des titres éprouvé sur la bibliothèque que l'application embarque
+réellement (`unhead` 3.2.3, livré par Nuxt).
+
+### Ce qui tient
+
+- **Les traductions sont justes** : `meta.title` reprend le slogan du site
+  dans chaque langue, `meta.nestReady` (« Nesting prêt », « Nesting fertig »,
+  « Nesting listo »…), et les quatre libellés du pied de page (« CGV »,
+  « AGB », « Términos », « Rückerstattung »…) ; « Benchmarks » à la liste
+  blanche, légitimement.
+- `Footer.vue` : les sept libellés passent par `t()`.
+- **`lang="pt-BR"`** par une règle locale, `pt` seul transformé — pas
+  `intlTag()`, comme demandé.
+- `CHANGELOG.md` **V0.9.7 à six blocs**, honnête ; `whatsNew.js` resté vide.
+
+### 1. Régression : le titre qui clignote en fin de calcul ne s'affiche plus
+
+Le titre est maintenant posé à DEUX endroits : `app/app.vue` (`useHead({
+title: t('meta.title') })`) et `app/plugins/visibilityState.client.js`,
+dont c'est tout le rôle — faire clignoter « Nesting fertig » dans l'onglet
+quand un calcul se termine pendant que l'utilisateur est ailleurs.
+
+Le plugin s'enregistre **avant** le composant racine. Or, éprouvé sur
+`unhead` 3.2.3 : **quand deux entrées posent le titre, la dernière
+enregistrée gagne — et elle continue de gagner même quand la première met sa
+valeur à jour.** `app.vue` masque donc le plugin en permanence : l'onglet ne
+clignote plus jamais. Les huit sondes du lot ne l'ont pas vu : elles
+vérifient le titre au repos et après un changement de langue, jamais onglet
+caché + calcul terminé.
+
+**Correctif** (éprouvé lui aussi sur la même bibliothèque) : le plugin ne
+pose un titre **que pendant le clignotement**, avec `tagPriority: 'high'`,
+et le **retire** quand le clignotement s'arrête. Une entrée `high` gagne sur
+`app.vue` ; la retirer hors notification laisse la main à `app.vue` et aux
+pages qui ont leur propre titre (les pages légales, benchmarks) — qu'une
+priorité permanente écraserait. **Et une sonde** : onglet simulé caché
+(`visibilityState` + évènement `visibilitychange`), notification levée,
+`document.title` doit alterner entre le titre et « Nesting fertig » — puis
+revenir au titre quand l'onglet redevient visible.
+
+### 2. Les captures ne montrent pas le pied de page
+
+`docs/qa/m1-footer/footer-de.png` et `footer-es.png` contiennent **une seule
+phrase, en anglais** : « NestorCut is under very active development — a bug
+you hit today may already be fixed tomorrow. » Aucun libellé, aucune langue.
+Le sélecteur `page.locator('footer, [class*="footer"]').last()` a attrapé le
+DERNIER élément dont la classe contient « footer » — le paragraphe
+`footer__note` —, pas le pied de page.
+
+Le rapport disait : « on y voit le pied de page avec « Impressum, AGB,
+Rückerstattung, Lizenzen » en allemand et « Aviso legal, Términos,
+Reembolso, Licencias » en espagnol ». **Ce n'est pas dans les images.** La
+règle `AGENTS.md` §7 — une capture se regarde avant d'écrire ce qu'on y voit
+— est enfreinte pour la troisième fois du projet. La sonde textuelle des
+libellés est peut-être verte ; la preuve visuelle, elle, n'existe pas.
+
+### 3. Une phrase anglaise de plus dans ce même pied de page
+
+La phrase que montrent les captures est elle-même **en dur, en anglais, dans
+les six langues** : `app/components/Footer.vue` ligne 99. Elle fait partie
+du même pied de page public que le lot devait traduire. Une clé
+`footer.note` dans les six dictionnaires.
+
+### À dire au propriétaire, sans action demandée
+
+- **Le titre anglais a changé** : de « State-of-the-art nesting for laser,
+  plasma & CNC cutting » à « Free Online Nesting Software for Laser, Plasma
+  & CNC Cutting » — c'est la formulation du site, comme la consigne le
+  demandait, mais c'est un texte commercial visible : le propriétaire peut
+  préférer l'ancien.
+- Les pages légales et benchmarks gardent leur propre titre anglais
+  (`legal-notice.vue`, `privacy.vue`, `refund.vue`,
+  `terms-and-conditions.vue`, `benchmarks.vue`) : cohérent avec des pages
+  légales en français et en anglais, rien à faire.
+
+### Décision
+
+**NO-GO étroit — M1-bis**, sur la même branche : (1) titre du plugin posé
+seulement pendant le clignotement, en priorité haute, retiré ensuite, avec
+sa sonde ; (2) captures refaites sur le pied de page **entier**
+(`footer.footer` ou l'élément racine du composant), **regardées**, avec une
+ligne juste ; (3) `footer.note` traduite. Puis publication, en demandant au
+propriétaire avant toute écriture de production.
