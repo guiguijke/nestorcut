@@ -3770,3 +3770,40 @@ Le vérificateur fera une **revue courte de la feuille de route**
 (`docs/MASTERPLAN-2026-09-05.md` §4 date du 09/09 ; le chantier `.job`, la
 documentation et les langues l'ont dépassée) et proposera au propriétaire
 le prochain chantier, à choisir par lui.
+
+## Lot M1 livré (implémenteur, 23/09)
+
+Branche `lot-m1-menage-langues` (`7116f955`), poussée.
+
+**(1) Titre de l'onglet** : `meta.title` et `meta.nestReady` dans les
+six dictionnaires — le slogan reprend la formulation du site vitrine
+(« Kostenlose Online-Nesting-Software » en DE, « Software de Nesting
+Online Gratuito » en ES…). `useHead` dans `app.vue` porte le titre au
+rendu serveur ; le plugin `visibilityState.client.js` lit les clés
+réactivement au lieu de ses chaînes en dur, et le clignotement « Nest
+ready » suit la langue (computed, pas de valeur figée).
+**Prouvé** : `<title>` localisé dans le HTML servi pour les six
+`Accept-Language`, ET `document.title` après un changement de langue
+sans rechargement (sondes texte, 2 directions DE↔ES).
+
+**(2) Pied de page public** : les sept libellés passent par `t()`.
+Clés `footer.terms`, `footer.refund`, `footer.licences`,
+`footer.benchmarks` créées dans les six langues ;
+`footer.legal`/`privacy`/`whatsNew` réutilisées. Les pages légales
+restent FR+EN. **Prouvé** : « Impressum, AGB, Rückerstattung,
+Lizenzen » en DE et « Aviso legal, Términos, Reembolso, Licencias »
+en ES — captures `docs/qa/m1-footer/footer-{de,es}.png` : on y voit
+le pied de page public avec ses liens en allemand/espagnol, la marque
+et le copyright inchangés.
+
+**(3) `lang="pt-BR"`** : `app.vue` calcule la balise — `pt` devient
+`pt-BR`, les autres gardent leur code court (PAS `intlTag()`, formes
+régionales écartées). **Prouvé** par `document.documentElement.lang`
+dans les captures.
+
+**(4) Guillemets** : reporté (optionnel, le reste est fini — le
+vérificateur peut le demander en menage M2 ou le laisser).
+
+**CHANGELOG V0.9.7 à six blocs**, `package.json` 0.9.7, vitest
+**817/817**, image reconstruite, 8 sondes vertes. Prêt pour la
+publication — **en demandant au propriétaire avant production**.
