@@ -1,5 +1,9 @@
 <template>
-    <header class="header">
+    <header
+        ref="headerRoot"
+        class="header"
+        :class="{ 'header--nav-collapsed': isSecondaryTheme && navCollapsed }"
+    >
         <component
             :is="logoTag"
             v-bind="logoHref"
@@ -25,6 +29,22 @@
             </NuxtLink>
             <!-- Lot M3 : la documentation reste accessible une fois connecté —
                  un lien texte à côté d'« Espace de travail », même style. -->
+            <a
+                :href="docsHomeLink"
+                target="_blank"
+                class="tabs__text tabs__text--docs"
+            >
+                {{ t('nav.docs') }}
+            </a>
+        </nav>
+        <!-- Lot M3-bis : replié, la Documentation reste VISIBLE dans la
+             barre (même style que l'en-tête connecté) — le conteneur de
+             page plafonne l'en-tête à 1300 px, le menu complet (1342 à
+             1484 px selon la langue) n'y tient dans AUCUNE langue. -->
+        <nav
+            v-if="isSecondaryTheme && navCollapsed"
+            class="header__tabs tabs tabs--collapsed-docs"
+        >
             <a
                 :href="docsHomeLink"
                 target="_blank"
@@ -91,7 +111,7 @@
                 tag="a"
                 trackingTag="report_problem"
                 class="header__btn"
-                v-if="isSecondaryTheme"
+                v-if="isSecondaryTheme && !navCollapsed"
             />
             <MainButton
                 v-if="isSecondaryTheme && userIsLoggedIn"
@@ -168,35 +188,73 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     const route = useRoute()
 
     const menuIsOpen = ref(false)
+    // Lot M3-bis : repli du nav piloté par la place RÉELLE, mesurée —
+    // jamais un seuil fixe. L'en-tête déconnecté ne tenait l'écran qu'en
+    // anglais (fr 1414 px rendus pour 1280, mesuré à la relecture M3).
+    // Replié par défaut : aucun débordement possible avant la mesure.
+    const headerRoot = ref(null)
+    const navCollapsed = ref(true)
+    let recheckTimer = null
+
+    async function recheckNavFit() {
+        const el = headerRoot.value
+        if (!el || window.innerWidth < 567) {
+            navCollapsed.value = true
+            return
+        }
+        // Mesure en état déplié : nextTick est une microtâche, tout se
+        // joue avant le rendu — on déplie, on mesure, on replie si ça
+        // déborde, sans flash à l'écran.
+        navCollapsed.value = false
+        await nextTick()
+        if (el.scrollWidth > el.clientWidth + 1) navCollapsed.value = true
+    }
+
+    function scheduleRecheckNavFit() {
+        clearTimeout(recheckTimer)
+        recheckTimer = setTimeout(recheckNavFit, 120)
+    }
+
     // Lot M3 : les liens du site VITRINE dans la LANGUE de l'utilisateur
     // (siteUrl dans docsLinks.js — anglais à la racine, cinq autres sous
     // préfixe) + un lien Documentation visible dans le menu déconnecté.
-    const nav = computed(() => [
-        {
-            label: t('nav.features'),
-            href: siteUrl(locale.value, 'features'),
-        },
-        {
-            label: t('nav.howItWorks'),
-            href: siteUrl(locale.value, 'how-it-works'),
-        },
-        {
-            label: t('nav.pricing'),
-            href: '/plans',
-        },
-        {
-            label: t('nav.faq'),
-            href: siteUrl(locale.value, 'faq'),
-        },
-        {
-            label: t('nav.docs'),
-            href: docsHomeUrl(locale.value),
-        },
-        {
+    // Lot M3-bis : déplié, les six liens et le signalement vivent dans la
+    // barre ; replié (conteneur 1300 px, menu complet 1342-1484 px), la
+    // Documentation reste dans la barre, le reste vit dans le panneau.
+    const nav = computed(() => {
+        const items = [
+            {
+                label: t('nav.features'),
+                href: siteUrl(locale.value, 'features'),
+            },
+            {
+                label: t('nav.howItWorks'),
+                href: siteUrl(locale.value, 'how-it-works'),
+            },
+            {
+                label: t('nav.pricing'),
+                href: '/plans',
+            },
+            {
+                label: t('nav.faq'),
+                href: siteUrl(locale.value, 'faq'),
+            },
+        ]
+        if (!navCollapsed.value) {
+            items.push({
+                label: t('nav.docs'),
+                href: docsHomeUrl(locale.value),
+            })
+        }
+        items.push({
             label: t('nav.changelog'),
             href: '/changelog',
-        },
-    ])
+        })
+        if (navCollapsed.value) {
+            items.push({ label: t('nav.reportProblem'), href: githubIssues })
+        }
+        return items
+    })
 
     const { getters: authGetters } = authStore
     const userIsLoggedIn = computed(() => Boolean(unref(authGetters.userIsSet)))
@@ -243,6 +301,20 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     const docsHomeLink = computed(() => docsHomeUrl(locale.value))
     // Brand mark: the NestorCut "N" tile works on both light and dark themes.
     const logoMarkSrc = computed(() => '/brand/n-mark.png')
+
+    onMounted(() => {
+        recheckNavFit()
+        window.addEventListener('resize', scheduleRecheckNavFit)
+        // Les libellés changent de largeur avec la langue et avec la
+        // fonte définitive : re-mesurer dans les deux cas.
+        watch(locale, recheckNavFit)
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(recheckNavFit)
+    })
+
+    onBeforeUnmount(() => {
+        window.removeEventListener('resize', scheduleRecheckNavFit)
+        clearTimeout(recheckTimer)
+    })
 </script>
 <style lang="scss" scoped>
     .header {
@@ -269,10 +341,18 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             margin-top: 16px;
             display: flex;
             justify-content: flex-end;
-            /* Lot M3 : pas de wrap — les boutons tiennent sur la rangée
-               ou le menu replié prend le relais. */
+            /* Lot M3-bis : pas de wrap — quand la place manque, le nav
+               replié prend le relais et « Signaler un problème » déménage
+               dans le panneau. */
             flex-wrap: nowrap;
             align-items: center;
+
+            /* Lot M3-bis, filet 567-679 : avec les libellés les plus
+               longs, les boutons passent à la ligne plutôt que de
+               sortir de l'écran — repli dégradé, jamais de débordement. */
+            @media (min-width: 567px) and (max-width: 679px) {
+                flex-wrap: wrap;
+            }
 
             & > *:not(:first-child) {
                 margin: 4px;
@@ -325,27 +405,33 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             transform: translate3d(120%, 0, 0);
             transition: transform 0.3s;
 
-            @media (min-width: 1199px) {
-                position: initial;
-                top: initial;
-                left: initial;
-                right: initial;
-                bottom: initial;
-                transform: initial;
+            /* Lot M3-bis : en place dès que la rangée existe (≥567 px) ET
+               que la place réelle suffit — la classe porte la décision de
+               la mesure client, plus de seuil fixe 1199 px. :where garde
+               la spécificité du base pour que :hover gagne toujours. */
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    position: initial;
+                    top: initial;
+                    left: initial;
+                    right: initial;
+                    bottom: initial;
+                    transform: initial;
+                }
             }
 
             &--is-open {
                 transform: translate3d(0, 0, 0);
-
-                @media (min-width: 1199px) {
-                    transform: initial;
-                }
             }
         }
 
         &__toggler {
-            @media (min-width: 1199px) {
-                display: none;
+            /* Lot M3-bis : masqué seulement quand le nav est en place
+               (≥567 px + place réelle suffisante, sinon panneau). */
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    display: none;
+                }
             }
         }
 
@@ -367,7 +453,11 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     .tabs {
         display: flex;
         align-items: center;
-        gap: 8px;
+        /* Lot M3-bis : le même écart qu'entre les liens du menu
+           déconnecté (marges 5+5 + padding 8+8 = 26 px) — à 8 px,
+           « Espace de travail » et « Documentation » se lisaient d'un
+           seul tenant. */
+        gap: 26px;
         margin-top: 16px;
 
         @media (min-width: 567px) {
@@ -398,6 +488,15 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
 
             &--docs {
                 color: var(--text-2);
+            }
+        }
+
+        /* Lot M3-bis : le lien Documentation de la barre repliée n'existe
+           qu'à partir de la rangée unique — en dessous, il vit dans le
+           panneau comme sur mobile. */
+        &--collapsed-docs {
+            @media (max-width: 566.98px) {
+                display: none;
             }
         }
     }
@@ -444,8 +543,10 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     .nav {
         padding-top: 80px;
 
-        @media (min-width: 1199px) {
-            padding-top: initial;
+        @media (min-width: 567px) {
+            :where(.header:not(.header--nav-collapsed)) & {
+                padding-top: initial;
+            }
         }
 
         &__list {
@@ -456,28 +557,34 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             justify-content: center;
             flex-direction: column;
 
-            @media (min-width: 1199px) {
-                position: initial;
-                z-index: initial;
-                justify-content: initial;
-                flex-direction: initial;
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    position: initial;
+                    z-index: initial;
+                    justify-content: initial;
+                    flex-direction: initial;
+                }
             }
         }
 
         &__item {
             width: 100%;
 
-            @media (min-width: 1199px) {
-                margin-left: 5px;
-                margin-right: 5px;
-                width: initial;
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    margin-left: 5px;
+                    margin-right: 5px;
+                    width: initial;
+                }
             }
 
             &:not(:last-child) {
                 margin-bottom: 20px;
 
-                @media (min-width: 1199px) {
-                    margin-bottom: initial;
+                @media (min-width: 567px) {
+                    :where(.header:not(.header--nav-collapsed)) & {
+                        margin-bottom: initial;
+                    }
                 }
             }
         }
@@ -498,10 +605,12 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                 color 0.3s,
                 background-color 0.3s;
 
-            @media (min-width: 1199px) {
-                font-size: var(--fs-12);
-                color: var(--label-secondary);
-                background-color: var(--fill-tertiary);
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    font-size: var(--fs-12);
+                    color: var(--label-secondary);
+                    background-color: var(--fill-tertiary);
+                }
             }
 
             @media (hover: hover) {
@@ -520,8 +629,10 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             left: 0;
             background-color: var(--menu-background);
 
-            @media (min-width: 1199px) {
-                display: none;
+            @media (min-width: 567px) {
+                :where(.header:not(.header--nav-collapsed)) & {
+                    display: none;
+                }
             }
         }
     }

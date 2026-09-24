@@ -8,27 +8,27 @@ noms de lots internes. La version affichée dans l'en-tête est le
 
 *FR*
 
-- Le menu de l'application parle votre langue : les liens Fonctionnalités, Comment ça marche et FAQ pointent vers le site dans votre langue, un lien Documentation apparaît dans le menu et à côté d'Espace de travail, et l'en-tête tient sur une ligne — chaque libellé à sa place, jamais coupé. La promesse d'notifications par e-mail est retirée (elle n'a jamais fonctionné), ainsi que les crédits et la mention « layouts plus denses » du plan Pro : Pro livre le même résultat plus tôt, pas un autre.
+- Le menu de l'application parle votre langue : les liens Fonctionnalités, Comment ça marche et FAQ pointent vers le site dans votre langue, un lien Documentation apparaît dans le menu et à côté d'Espace de travail, et l'en-tête s'adapte à la place disponible — menu complet quand tout tient, menu replié sinon — jamais un libellé coupé ni hors de l'écran. La promesse d'notifications par e-mail est retirée (elle n'a jamais fonctionné), ainsi que les crédits et la mention « layouts plus denses » du plan Pro : Pro livre le même résultat plus tôt, pas un autre.
 
 *EN*
 
-- The app menu now speaks your language: the Features, How it works and FAQ links point to the site in your language, a Documentation link appears in the menu and next to Workspace, and the header fits on one line — every label in place, never wrapped. The email notification promise is removed (it never worked), along with credits and the Pro "denser layouts" claim: Pro delivers the same result sooner, not a different one.
+- The app menu now speaks your language: the Features, How it works and FAQ links point to the site in your language, a Documentation link appears in the menu and next to Workspace, and the header adapts to the available space — full menu when everything fits, collapsed menu otherwise — never a label wrapped or off-screen. The email notification promise is removed (it never worked), along with credits and the Pro "denser layouts" claim: Pro delivers the same result sooner, not a different one.
 
 *PT*
 
-- O menu da aplicação agora fala seu idioma: os links Recursos, Como funciona e FAQ apontam para o site no seu idioma, um link Documentação aparece no menu e ao lado de Meu espaço, e o cabeçalho cabe em uma linha — cada rótulo no lugar, nunca quebrado. A promessa de notificações por e-mail foi retirada (nunca funcionou), junto com os créditos e a menção "arranjos mais densos" do Pro: o Pro entrega o mesmo resultado mais cedo, não outro.
+- O menu da aplicação agora fala seu idioma: os links Recursos, Como funciona e FAQ apontam para o site no seu idioma, um link Documentação aparece no menu e ao lado de Meu espaço, e o cabeçalho se adapta ao espaço disponível — menu completo quando tudo cabe, menu recolhido caso contrário — nunca um rótulo quebrado ou fora da tela. A promessa de notificações por e-mail foi retirada (nunca funcionou), junto com os créditos e a menção "arranjos mais densos" do Pro: o Pro entrega o mesmo resultado mais cedo, não outro.
 
 *IT*
 
-- Il menu dell'applicazione ora parla la tua lingua: i link Funzioni, Come funziona e FAQ puntano al sito nella tua lingua, un link Documentazione appare nel menu e accanto a Area di lavoro, e l'intestazione sta su una riga — ogni etichetta al suo posto, mai spezzata. La promessa di notifiche via email è stata ritirata (non ha mai funzionato), insieme ai crediti e alla menzione "disposizioni più dense" del Pro: il Pro consegna lo stesso risultato prima, non un altro.
+- Il menu dell'applicazione ora parla la tua lingua: i link Funzioni, Come funziona e FAQ puntano al sito nella tua lingua, un link Documentazione appare nel menu e accanto a Area di lavoro, e l'intestazione si adatta allo spazio disponibile — menu completo quando tutto sta, menu richiuso altrimenti — mai un'etichetta spezzata o fuori dallo schermo. La promessa di notifiche via email è stata ritirata (non ha mai funzionato), insieme ai crediti e alla menzione "disposizioni più dense" del Pro: il Pro consegna lo stesso risultato prima, non un altro.
 
 *DE*
 
-- Das Anwendungsmenü spricht jetzt Ihre Sprache: die Links Funktionen, So funktioniert es und FAQ zeigen auf die Website in Ihrer Sprache, ein Dokumentations-Link erscheint im Menü und neben Arbeitsbereich, und die Kopfzeile passt in eine Zeile — jede Beschriftung an ihrem Platz, nie umbrochen. Die E-Mail-Benachrichtigungs-Zusage wurde zurückgezogen (sie funktionierte nie), ebenso wie Credits und die "dichteren Layouts"-Aussage von Pro: Pro liefert dasselbe Ergebnis früher, kein anderes.
+- Das Anwendungsmenü spricht jetzt Ihre Sprache: die Links Funktionen, So funktioniert es und FAQ zeigen auf die Website in Ihrer Sprache, ein Dokumentations-Link erscheint im Menü und neben Arbeitsbereich, und die Kopfzeile passt sich dem verfügbaren Platz an — volles Menü, wenn alles hineinpasst, sonst eingeklapptes Menü — nie eine Beschriftung umbrochen oder außerhalb des Bildschirms. Die E-Mail-Benachrichtigungs-Zusage wurde zurückgezogen (sie funktionierte nie), ebenso wie Credits und die "dichteren Layouts"-Aussage von Pro: Pro liefert dasselbe Ergebnis früher, kein anderes.
 
 *ES*
 
-- El menú de la aplicación ahora habla tu idioma: los enlaces Funciones, Cómo funciona y FAQ apuntan al sitio en tu idioma, un enlace Documentación aparece en el menú y junto a Área de trabajo, y la cabecera cabe en una línea — cada etiqueta en su sitio, nunca cortada. La promesa de notificaciones por correo electrónico fue retirada (nunca funcionó), junto con los créditos y la mención "disposiciones más densas" de Pro: Pro entrega el mismo resultado antes, no otro.
+- El menú de la aplicación ahora habla tu idioma: los enlaces Funciones, Cómo funciona y FAQ apuntan al sitio en tu idioma, un enlace Documentación aparece en el menú y junto a Área de trabajo, y la cabecera se adapta al espacio disponible — menú completo cuando todo cabe, menú plegado en caso contrario — nunca una etiqueta cortada ni fuera de la pantalla. La promesa de notificaciones por correo electrónico fue retirada (nunca funcionó), junto con los créditos y la mención "disposiciones más densas" de Pro: Pro entrega el mismo resultado antes, no otro.
 
 ## V0.9.7
 
