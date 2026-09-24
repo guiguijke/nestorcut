@@ -31,6 +31,8 @@ const IDENTICAL_OK = [
     'Account', 'Email', 'Password', '{n} file', 'Privacy',
     // allemand (L3) : « Name » EST le mot allemand.
     'Name',
+    // lot M1 : « Benchmarks » est le mot français aussi (emprunt commun).
+    'Benchmarks',
     // espagnol (L4) : « Factor » / « factor {v} » SONT l'espagnol.
     'Factor', 'factor {v}',
 ]

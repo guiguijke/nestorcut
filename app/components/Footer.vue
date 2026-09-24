@@ -37,7 +37,7 @@
                         to="/legal-notice"
                         class="list__link"
                     >
-                        Legal Notice
+                        {{ t('footer.legal') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -45,7 +45,7 @@
                         to="/terms-and-conditions"
                         class="list__link"
                     >
-                        Terms
+                        {{ t('footer.terms') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -53,7 +53,7 @@
                         to="/privacy"
                         class="list__link"
                     >
-                        Privacy
+                        {{ t('footer.privacy') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -61,7 +61,7 @@
                         to="/refund"
                         class="list__link"
                     >
-                        Refund Policy
+                        {{ t('footer.refund') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -69,7 +69,7 @@
                         to="/licences"
                         class="list__link"
                     >
-                        Licences
+                        {{ t('footer.licences') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -77,7 +77,7 @@
                         to="/changelog"
                         class="list__link"
                     >
-                        Changelog
+                        {{ t('footer.whatsNew') }}
                     </NuxtLink>
                 </li>
                 <li class="list__item">
@@ -85,7 +85,7 @@
                         to="/benchmarks"
                         class="list__link"
                     >
-                        Benchmarks
+                        {{ t('footer.benchmarks') }}
                     </NuxtLink>
                 </li>
             </ul>
@@ -96,7 +96,7 @@
                     <br>NestorCut V{{ fullVersion }} — <NuxtLink to="/changelog" class="footer__one-link">{{ t('footer.whatsNew') }}</NuxtLink>
                 </p>
                 <p class="footer__note">
-                    NestorCut is under very active development — a bug you hit today may already be fixed tomorrow.
+                    {{ t('footer.note') }}
                 </p>
             </div>
         </div>

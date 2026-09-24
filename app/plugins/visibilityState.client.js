@@ -1,34 +1,53 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
-const defaultTitle = 'NestorCut — State-of-the-art nesting for laser, plasma & CNC cutting'
-
+// Lot M1 : le « Nest ready » suit la langue (meta.nestReady du dictionnaire).
+// M1-bis : le titre n'est posé QUE PENDANT le clignotement, avec
+// tagPriority: 'high' — sur unhead 3.2.3, la dernière entrée enregistrée
+// gagne en permanence : app.vue masquerait ce plugin pour toujours.
+// M1-ter (relecture M1-bis) : l'entrée est DISPOSÉE à l'arrêt
+// (entry.dispose()) — un titre vide en priorité haute SUPPRIME la balise
+// titre au lieu de rendre la main (le navigateur fige alors le titre du
+// chargement, les pages légales perdent le leur). Pendant le clignotement,
+// la phase « éteinte » alterne avec t('meta.title'), jamais une chaîne vide.
 export default defineNuxtPlugin((nuxtApp) => {
     let interval = null
+    let headEntry = null
     const isTabActive = ref(true)
-    const nestTitle = ref('Nest ready')
+    const showReady = ref(false)
 
-    // Blink the document title between default and "Nest ready" so a user on
-    // another tab notices a finished nesting. Only runs while a notification
-    // is pending and the tab is hidden — and is stopped as soon as the user
-    // comes back, instead of running forever.
+    const { t } = useLocale()
+    const readyText = computed(() => t('meta.nestReady'))
+    const restTitle = computed(() => t('meta.title'))
+    const blinkTitle = computed(() => (showReady.value ? readyText.value : restTitle.value))
+
+    const disposeHeadEntry = () => {
+        if (headEntry) {
+            headEntry.dispose()
+            headEntry = null
+        }
+    }
+
     const stopTitleCycle = () => {
         if (interval) {
             clearInterval(interval)
             interval = null
         }
-        nestTitle.value = 'Nest ready'
+        showReady.value = false
+        disposeHeadEntry()
     }
+
     const startTitleCycle = () => {
         stopTitleCycle()
+        showReady.value = true
+        headEntry = useHead({ title: blinkTitle }, { tagPriority: 'high' })
         interval = setInterval(() => {
-            nestTitle.value = nestTitle.value !== 'Nest ready' ? 'Nest ready' : defaultTitle
+            showReady.value = !showReady.value
         }, 500)
     }
 
     const onVisibilityChange = () => {
         isTabActive.value = document.visibilityState === 'visible'
         if (isTabActive.value) {
-            // Returning to the tab clears the notification and stops blinking.
             if (globalStore.getters.needNotification) {
                 globalStore.actions.updateNotification(false)
             }
@@ -38,8 +57,6 @@ export default defineNuxtPlugin((nuxtApp) => {
 
     document.addEventListener('visibilitychange', onVisibilityChange)
 
-    // Drive the blinker from the notification state so it only runs while
-    // needed (tab hidden + a pending notification).
     watch(
         () => Boolean(globalStore.getters.needNotification) && !isTabActive.value,
         (shouldBlink) => {
@@ -48,13 +65,6 @@ export default defineNuxtPlugin((nuxtApp) => {
         }
     )
 
-    const title = computed(() => globalStore.getters.needNotification && !isTabActive.value ? nestTitle.value : defaultTitle)
-
-    useHead({
-        title: title
-    })
-
-    // Plugin is app-scoped but clean up the listener anyway for correctness.
     nuxtApp.hook('app:suspense:resolve', () => {})
     onBeforeUnmount(() => {
         document.removeEventListener('visibilitychange', onVisibilityChange)

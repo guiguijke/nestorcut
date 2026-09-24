@@ -4,6 +4,32 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.7
+
+*FR*
+
+- L'onglet et le pied de page parlent la langue choisie : le titre du navigateur suit l'anglais, le français, le portugais, l'italien, l'allemand ou l'espagnol, et les liens du pied de page sont traduits (les pages légales restent en français et en anglais). Le portugais est déclaré brésilien comme sur le site.
+
+*EN*
+
+- The browser tab and the public footer now speak the chosen language: the page title follows English, French, Portuguese, Italian, German or Spanish, and the footer links are translated (the legal pages stay in French and English). Portuguese is declared Brazilian, matching the website.
+
+*PT*
+
+- A aba do navegador e o rodapé público agora falam o idioma escolhido: o título da página segue inglês, francês, português, italiano, alemão ou espanhol, e os links do rodapé estão traduzidos (as páginas legais continuam em francês e inglês). O português é declarado brasileiro, como no site.
+
+*IT*
+
+- La scheda del browser e il piè di pagina pubblico ora parlano la lingua scelta: il titolo della pagina segue inglese, francese, portoghese, italiano, tedesco o spagnolo, e i link del piè di pagina sono tradotti (le pagine legali restano in francese e inglese). Il portoghese è dichiarato brasiliano, come sul sito.
+
+*DE*
+
+- Der Browser-Tab und die öffentliche Fußzeile sprechen jetzt die gewählte Sprache: der Seitentitel folgt Englisch, Französisch, Portugiesisch, Italienisch, Deutsch oder Spanisch, und die Fußzeilen-Links sind übersetzt (die Rechtsseiten bleiben Französisch und Englisch). Portugiesisch wird als brasilianisch deklariert, wie auf der Website.
+
+*ES*
+
+- La pestaña del navegador y el pie de página público ahora hablan el idioma elegido: el título de la página sigue inglés, francés, portugués, italiano, alemán o español, y los enlaces del pie de página están traducidos (las páginas legales siguen en francés e inglés). El portugués se declara brasileño, como en el sitio.
+
 ## V0.9.6
 
 *FR*

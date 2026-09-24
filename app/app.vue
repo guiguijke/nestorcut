@@ -17,8 +17,13 @@
 // attribut sur les pages publiques. Le ref calculé traverse useHead :
 // le rendu serveur porte la locale de la requête, le commutateur
 // rebascule l'attribut sans rechargement.
-const { locale } = useLocale()
+// Lot M1 : le TITRE suit la langue aussi (meta.title du dictionnaire),
+// et pt devient pt-BR comme le site — les autres gardent leur code
+// court (PAS intlTag(), qui rendrait les formes régionales écartées).
+const { locale, t } = useLocale()
+const langTag = computed(() => (locale.value === 'pt' ? 'pt-BR' : locale.value))
 useHead({
-    htmlAttrs: { lang: locale },
+    htmlAttrs: { lang: langTag },
+    title: computed(() => t('meta.title')),
 })
 </script>
