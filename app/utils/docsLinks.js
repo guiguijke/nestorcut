@@ -41,3 +41,20 @@ export function docsHelpUrl(locale, topic) {
     const prefix = lang === 'en' ? '/docs/' : `/${lang}/docs/`
     return `${DOCS_SITE}${prefix}${t.page}#${t.anchor[lang]}`
 }
+
+// Lot M3 : l'accueil de la DOCUMENTATION dans la langue — même règle de
+// préfixe que docsHelpUrl (anglais à la racine, cinq autres sous préfixe).
+export function docsHomeUrl(locale) {
+    const lang = DOCS_LANGS.includes(locale) ? locale : 'en'
+    const prefix = lang === 'en' ? '/docs/' : `/${lang}/docs/`
+    return `${DOCS_SITE}${prefix}`
+}
+
+// Lot M3 : un lien du SITE VITRINE dans la langue de l'utilisateur —
+// l'anglais à la racine, les cinq autres sous leur préfixe, même règle
+// que docsHelpUrl. L'ancre optionnelle pointe la section (#features…).
+const SITE_PREFIXED = ['fr', 'pt', 'it', 'de', 'es']
+export function siteUrl(locale, anchor = '') {
+    const prefix = SITE_PREFIXED.includes(locale) ? `/${locale}/` : '/'
+    return `${DOCS_SITE}${prefix}${anchor ? `#${anchor}` : ''}`
+}

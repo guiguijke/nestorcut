@@ -11,6 +11,7 @@ export default {
     'nav.howItWorks': 'How It Works',
     'nav.pricing': 'Pricing',
     'nav.faq': 'FAQ',
+    'nav.docs': 'Documentation',
     'nav.changelog': 'Changelog',
     'nav.openWorkspace': 'Open my workspace',
     'nav.reportProblem': 'Report a problem',

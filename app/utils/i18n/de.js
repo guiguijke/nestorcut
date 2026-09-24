@@ -13,6 +13,7 @@ export default {
     "nav.howItWorks": "So funktioniert es",
     "nav.pricing": "Preise",
     "nav.faq": "FAQ",
+    'nav.docs': 'Dokumentation',
     "nav.changelog": "Neuigkeiten",
     "nav.openWorkspace": "Meinen Arbeitsbereich öffnen",
     "nav.reportProblem": "Problem melden",

@@ -23,6 +23,15 @@
             <NuxtLink to="/home" class="tabs__text" active-class="tabs__text--active">
                 {{ t('nav.workspace') }}
             </NuxtLink>
+            <!-- Lot M3 : la documentation reste accessible une fois connecté —
+                 un lien texte à côté d'« Espace de travail », même style. -->
+            <a
+                :href="docsHomeLink"
+                target="_blank"
+                class="tabs__text tabs__text--docs"
+            >
+                {{ t('nav.docs') }}
+            </a>
         </nav>
         <nav
             v-if="isSecondaryTheme"
@@ -128,10 +137,11 @@
     import { sizeType } from '~~/constants/size.constants'
     import { trackEvent } from '~/utils/track'
     import { useSiteConfig } from '~~/data/siteConfig'
+    import { siteUrl, docsHomeUrl } from '~/utils/docsLinks'
 
     const { githubIssues } = useSiteConfig()
 
-    const { t } = useLocale()
+    const { t, locale } = useLocale()
 // Lot J11-b : version produit de package.json (runtimeConfig).
 const appVersion = String(useRuntimeConfig().public.appVersion || '')
 const majorMinor = appVersion.split('.').slice(0, 2).join('.')
@@ -158,14 +168,17 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     const route = useRoute()
 
     const menuIsOpen = ref(false)
+    // Lot M3 : les liens du site VITRINE dans la LANGUE de l'utilisateur
+    // (siteUrl dans docsLinks.js — anglais à la racine, cinq autres sous
+    // préfixe) + un lien Documentation visible dans le menu déconnecté.
     const nav = computed(() => [
         {
             label: t('nav.features'),
-            href: 'https://nestorcut.com/#features',
+            href: siteUrl(locale.value, 'features'),
         },
         {
             label: t('nav.howItWorks'),
-            href: 'https://nestorcut.com/#how-it-works',
+            href: siteUrl(locale.value, 'how-it-works'),
         },
         {
             label: t('nav.pricing'),
@@ -173,7 +186,11 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         },
         {
             label: t('nav.faq'),
-            href: 'https://nestorcut.com/#faq',
+            href: siteUrl(locale.value, 'faq'),
+        },
+        {
+            label: t('nav.docs'),
+            href: docsHomeUrl(locale.value),
         },
         {
             label: t('nav.changelog'),
@@ -222,6 +239,8 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         return unref(theme) === themeType.primary ? 'sun' : 'moon'
     })
 
+    // Lot M3 : le lien Documentation dans la langue de l'utilisateur.
+    const docsHomeLink = computed(() => docsHomeUrl(locale.value))
     // Brand mark: the NestorCut "N" tile works on both light and dark themes.
     const logoMarkSrc = computed(() => '/brand/n-mark.png')
 </script>
@@ -250,7 +269,9 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             margin-top: 16px;
             display: flex;
             justify-content: flex-end;
-            flex-wrap: wrap;
+            /* Lot M3 : pas de wrap — les boutons tiennent sur la rangée
+               ou le menu replié prend le relais. */
+            flex-wrap: nowrap;
             align-items: center;
 
             & > *:not(:first-child) {
@@ -374,6 +395,10 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                 color: var(--accent);
                 font-weight: 700;
             }
+
+            &--docs {
+                color: var(--text-2);
+            }
         }
     }
 
@@ -381,6 +406,8 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         display: flex;
         align-items: center;
         gap: 10px;
+        /* Lot M3 : le logo ne se comprime jamais — le nav fait le déplacement. */
+        flex-shrink: 0;
 
         &__mark {
             height: 42px;
@@ -396,6 +423,8 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                 font-weight: 500;
                 color: var(--label-tertiary);
                 letter-spacing: 0.02em;
+                /* Lot M3 : un vrai écart entre la version et le premier lien du menu. */
+                margin-right: 16px;
             }
 
 &__label {
@@ -454,11 +483,16 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         }
 
         &__link {
+                /* Lot M3 : chaque libellé du menu sur UNE ligne — jamais de retour à la ligne. */
+                white-space: nowrap;
             text-align: center;
             border-radius: var(--radius);
-            padding: 6px 12px;
+            /* Lot M3 : 14px + padding réduit — six liens tiennent dans
+               l'en-tête à 1280px sans chevaucher la version ni faire
+               passer les boutons à la ligne. */
+            padding: 4px 8px;
             display: block;
-            font-size: var(--fs-18);
+            font-size: var(--fs-14);
             color: var(--main-white);
             transition:
                 color 0.3s,
