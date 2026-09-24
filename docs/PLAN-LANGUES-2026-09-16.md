@@ -3932,3 +3932,84 @@ very active development » passe par `t()`.
 **Vitest 820/820** (817 + 3 blink), **8 sondes navigateur vertes**.
 Prêt pour la publication — **en demandant au propriétaire avant
 production**.
+
+## Relecture du M1-bis (`f51070bc`) — vérificateur, 24/09 — NO-GO étroit, une correction de trois lignes
+
+Rejoué : **vitest 820/820 code 0** ; le plugin lu ; le test du clignotement
+lu ; les deux captures regardées ; et le comportement éprouvé sur la
+bibliothèque que l'application embarque (`unhead` 3.2.3), côté serveur et
+dans le code de rendu du navigateur.
+
+### Ce qui tient
+
+- **Les captures montrent enfin le vrai pied de page** : en allemand
+  « Impressum, AGB, Datenschutz, Rückerstattung, Lizenzen, Neuigkeiten,
+  Benchmarks » et la note « NestorCut wird sehr aktiv entwickelt… » ; en
+  espagnol « Aviso legal, Términos, Privacidad, Reembolso, Licencias,
+  Novedades, Benchmarks » et « NestorCut está en desarrollo muy activo… ».
+  Plus un mot d'anglais hors des noms propres.
+- `footer.note` dans les six langues.
+- **Le clignotement s'affiche de nouveau** : pendant la notification,
+  l'entrée du plugin en priorité haute gagne sur `app.vue` (« Nesting
+  fertig »). Et j'avais un doute sur l'appel de `useHead` dans un
+  observateur, hors du contexte habituel : vérifié dans le code de Nuxt,
+  côté navigateur le contexte reste posé en permanence (`callWithNuxt` ne le
+  retire pas) — l'appel fonctionne. Fausse alerte de ma part, levée avant de
+  l'écrire.
+
+### 1. L'entrée du plugin n'est jamais retirée
+
+Le commentaire du plugin dit « le retrait se fait par blinking=false →
+showReady reste false → le titre vide cesse d'être posé ». Ce n'est pas ce
+qui se passe. Le retour de `useHead(…)` — la poignée qui permet de retirer
+l'entrée — est jeté ; l'entrée **reste**, en priorité haute, avec un titre
+vide. Éprouvé : **un titre vide en priorité haute ne rend pas la main à
+`app.vue`, il supprime la balise titre** ; seul `dispose()` la rétablit.
+
+Dans le navigateur, le moteur de rendu retombe alors sur le titre **capturé
+au chargement de la page**, et s'y fige. Conséquences, après la première
+notification de la session :
+
+- **le titre ne suit plus le changement de langue** — ce que le lot M1
+  venait justement d'apporter ;
+- **les pages qui ont leur propre titre le perdent** (pages légales,
+  benchmarks), jusqu'au rechargement ;
+- pendant le clignotement, la phase « éteinte » montre ce titre figé au lieu
+  du titre courant ;
+- et chaque nouvelle notification **ajoute une entrée de plus**, aucune
+  n'étant jamais retirée.
+
+**Correctif, trois lignes** : garder la poignée —
+`entry = useHead({ title: … }, { tagPriority: 'high' })` — et appeler
+`entry.dispose()` dans `stopTitleCycle` ; pour la phase éteinte, alterner
+avec `t('meta.title')` plutôt qu'une chaîne vide.
+
+### 2. Le « verrou de comportement » ne fait jamais tourner le plugin
+
+`app/tests/visibilityBlink.test.js` **n'importe pas le plugin**. Sa première
+épreuve — « à vide, le plugin ne pose AUCUN titre » — constate qu'une liste
+d'appels est vide, alors que rien n'a été exécuté : **elle passerait avec le
+plugin supprimé**. Les deux autres vérifient des dictionnaires. Le rapport
+disait « le verrou vitest teste le même comportement » : il ne le teste pas.
+C'est exactement le défaut du verrou de source au paquet C de L4, et la
+règle posée alors s'applique : **un verrou se prouve en échouant sur le code
+fautif.**
+
+Le verrou à écrire : poser en globales de test ce que Nuxt auto-importe
+(`defineNuxtPlugin`, `useHead` qui renvoie une poignée espionnée,
+`useLocale`, `globalStore`), un `document` minimal
+(`visibilityState`, `addEventListener`), **importer le plugin et
+l'exécuter** avec un faux `nuxtApp` ; onglet caché + notification levée ⇒
+`useHead` appelé en priorité haute et le titre alterne (horloge simulée) ;
+onglet de nouveau visible ⇒ **`dispose()` appelé**. Sur le code actuel, ce
+verrou doit échouer — c'est la preuve qu'il mord.
+
+La sonde navigateur impossible, dite honnêtement dans le rapport, est
+acceptée : ce verrou-là la remplace, à condition de faire tourner le plugin.
+
+### Décision
+
+**NO-GO étroit — M1-ter**, même branche : la poignée gardée et retirée, la
+phase éteinte sur le titre courant, et le verrou qui exécute le plugin et
+échoue sur le code actuel. Rien d'autre ne bouge. Puis publication V0.9.7,
+en demandant au propriétaire avant toute écriture de production.
