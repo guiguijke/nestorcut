@@ -4083,3 +4083,15 @@ page vérifiés en ligne dans deux langues.
 Note du vérificateur au propriétaire, sans objection reçue : le titre
 anglais passe de « State-of-the-art nesting… » à « Free Online Nesting
 Software… » (la formulation du site vitrine).
+
+## Contrôle AVANT déploiement de V0.9.7 (`36307d07`) — vérificateur, 24/09 — GO
+
+Le commit à promouvoir porte exactement le plugin, le verrou, les
+dictionnaires, `Footer.vue` et `app.vue` vérifiés au M1-ter (aucun écart),
+`"version": "0.9.7"`, `whatsNew.js` vide, et **aucun diff sous `workers/` ni
+`public/engine`** depuis V0.9.6 : application seule. Le tag `:36307d07…`
+existe, digest **`sha256:11148c0c…`** ; `:latest` porte encore
+`sha256:5fae0a3a…` (V0.9.6). Le commit suivant sur `main` (`0acf6bef`) ne
+touche qu'un document. **GO** : `promote-latest` sur
+`36307d07fc997a4c6ab66475c6f042069d433d36`, digest attendu `11148c0c…` sur
+`:latest`, `:36307d07…` et le conteneur.
