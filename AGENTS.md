@@ -578,13 +578,15 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     à 'standard' pour ne pas laisser survivre un Pro de test. Résolution
     unique dans `getComputeTier` (projection Mongo incluant `grantedTier`).
     Verrous : `server/tests/entitlement.test.js` (5 cas grant tier).
-38. **Chaîne « email fin de nesting » inatteignable** (constat 2026-08-12) :
-    `emailNotify: 'need_notify'` n'est produit QUE par
-    `nest/[slug]/notify.post.js` (zéro appelant nulle part) → le plugin
-    `2_nest-notify` ne déclenche jamais, alors que pricing/STRATEGY
-    annoncent les notifications email en paid. À trancher par le
-    propriétaire : recâbler (statut posé à l'enqueue selon le tier) ou
-    retirer le claim + les 3 maillons.
+38. **Chaîne « email fin de nesting » — RÉSOLUE PAR RETRAIT** (décision
+    du propriétaire 24/09, lot M2) : `emailNotify: 'need_notify'` n'était
+    produit QUE par `nest/[slug]/notify.post.js` (zéro appelant) → le
+    plugin `2_nest-notify` ne déclenchait jamais, alors que pricing/
+    STRATEGY annonçaient les notifications email en paid. Le propriétaire
+    a tranché : **retirer le claim + les 3 maillons** — fait au lot M2
+    (promesse retirée du site ×6 langues, clé morte supprimée ×6 dicts,
+    `notify.post.js` + `2_nest-notify.js` + champ `emailNotify` supprimés,
+    balayage résiduel propre).
 
 39. **Le test SPP « tout tient sur une tôle » mesure l'aire ENVELOPPE** :
     l'aire nette (trous déduits) passe à tort sur les pièces à

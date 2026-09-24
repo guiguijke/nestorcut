@@ -122,7 +122,6 @@ export default {
     "plans.compare.multiSheet": "Lavori multi-lamiera",
     "plans.compare.heterogeneous": "Lamiere di formati diversi",
     "plans.compare.export": "Esportazione DXF e ZIP",
-    "plans.compare.emailNotif": "Notifiche via email",
     "plans.compare.zeroKnowledge": "Cifratura zero-knowledge",
     "plans.compare.trial": "Prova gratuita di 7 giorni",
     "plans.value.unlimited": "Illimitato",

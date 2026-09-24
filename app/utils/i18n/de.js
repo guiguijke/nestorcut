@@ -125,7 +125,6 @@ export default {
     "plans.compare.multiSheet": "Aufträge mit mehreren Blechen",
     "plans.compare.heterogeneous": "Verschiedene Blechformate",
     "plans.compare.export": "DXF- und ZIP-Export",
-    "plans.compare.emailNotif": "E-Mail-Benachrichtigungen",
     "plans.compare.zeroKnowledge": "Zero-Knowledge-Verschlüsselung",
     "plans.compare.trial": "7 Tage kostenlos testen",
     "plans.value.unlimited": "Unbegrenzt",

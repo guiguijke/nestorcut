@@ -133,7 +133,6 @@ export default {
     'plans.compare.multiSheet': 'Multi-sheet jobs',
     'plans.compare.heterogeneous': 'Heterogeneous sheet types',
     'plans.compare.export': 'DXF & ZIP export',
-    'plans.compare.emailNotif': 'Email notifications',
     'plans.compare.zeroKnowledge': 'Zero-knowledge encryption',
     'plans.compare.trial': '7-day free trial',
     'plans.value.unlimited': 'Unlimited',

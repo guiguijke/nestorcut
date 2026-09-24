@@ -132,7 +132,6 @@ export default {
     'plans.compare.multiSheet': 'Tâches multi-tôles',
     'plans.compare.heterogeneous': 'Types de tôles hétérogènes',
     'plans.compare.export': 'Export DXF & ZIP',
-    'plans.compare.emailNotif': 'Notifications par e-mail',
     'plans.compare.zeroKnowledge': 'Chiffrement zero-knowledge',
     'plans.compare.trial': 'Essai gratuit de 7 jours',
     'plans.value.unlimited': 'Illimité',

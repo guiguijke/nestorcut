@@ -61,9 +61,11 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
   est **à la création du projet** (cartes Cet appareil / Nos serveurs),
   pas un toggle « Lieu de calcul » séparé (clés i18n `localMode.*`
   orphelines). DWG ⇒ nos serveurs dans tous les cas.
-- Notifications email de fin de nesting [spéc — chaîne inatteignable :
-  `emailNotify` n'est posé que par une route sans appelant, AGENTS #38.
-  Soit recâbler à l'enqueue, soit retirer le claim `/plans`].
+- ~~Notifications email de fin de nesting~~ **[RETRAIT le 24/09, lot M2,
+  décision du propriétaire]** — la promesse est retirée du site (grille,
+  articles, diagrammes, six langues), la clé morte et la chaîne morte
+  supprimées de l'application. Nous ne promettons plus de notifications
+  email.
 
 ### Pro — 39 €/mois
 

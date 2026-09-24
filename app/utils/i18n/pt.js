@@ -119,7 +119,6 @@ export default {
     "plans.compare.multiSheet": "Trabalhos multi-chapa",
     "plans.compare.heterogeneous": "Chapas de formatos diferentes",
     "plans.compare.export": "Exportação DXF e ZIP",
-    "plans.compare.emailNotif": "Notificações por e-mail",
     "plans.compare.zeroKnowledge": "Criptografia zero-knowledge",
     "plans.compare.trial": "Avaliação gratuita de 7 dias",
     "plans.value.unlimited": "Ilimitado",
