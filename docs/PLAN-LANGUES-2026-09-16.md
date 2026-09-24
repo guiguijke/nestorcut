@@ -4118,3 +4118,11 @@ GO du propriétaire et du vérificateur (`67621053`).
 
 **Lot M1 : clos.** Après ce lot : revue de la feuille de route par le
 vérificateur (`docs/MASTERPLAN-2026-09-05.md` §4).
+
+## Contrôle de la publication V0.9.7 — vérificateur, 24/09 — CONFORME, M1 clos
+
+Lecture seule : `:latest` et `:36307d07…` au même digest `sha256:11148c0c…` ;
+l'application sert **V0.9.7** ; **le titre de l'onglet est localisé dans le
+HTML servi pour les six langues** ; `lang="pt-BR"` ; les libellés anglais du
+pied de page public n'apparaissent plus qu'en anglais ; branche supprimée.
+**Lot M1 clos. Le chantier des langues et son ménage sont terminés.**

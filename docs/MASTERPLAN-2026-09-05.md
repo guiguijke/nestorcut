@@ -414,3 +414,69 @@ exception :
    entre variantes, ne crée pas de troisième copie du post-pass et
    n'ajoute pas de chantier au lot.
 
+
+
+## 9. Revue de la feuille de route (vérificateur, 24/09)
+
+La séquence du §4 date du 09/09. Depuis, trois chantiers non prévus l'ont
+dépassée : le `.job` SheetCam (J4 à J11, chaîne complète en production), la
+documentation (huit sections, six langues) et les langues (six langues sur
+trois surfaces). État relu pour proposer la suite ; **le choix est au
+propriétaire**.
+
+### 9.1 Une promesse publique non tenue — à trancher d'abord
+
+**Les notifications par e-mail sont vendues et n'existent pas.** Le site
+vitrine les promet dans l'offre Unlimited (`pricing.unlimited.f5`, « Email
+notifications & cancel anytime »), **dans les six langues**, et le
+diagramme des prix du blog aussi, **dans les six langues**. Or l'application
+ne peut pas en envoyer une seule : le statut `emailNotify: 'need_notify'`
+n'est posé que par `server/api/nest/[slug]/notify.post.js`, **qu'aucun code
+n'appelle** — le piège n°38 d'`AGENTS.md`, relevé le 12/08, resté « à
+trancher par le propriétaire ». Le chantier des langues a multiplié la
+promesse par six : j'ai vérifié que chaque traduction disait ce que disait
+l'anglais, jamais que l'anglais disait vrai.
+
+Deux options :
+
+- **Recâbler** (petit lot) : poser le statut à la mise en file d'un nesting
+  payant ; le plugin d'envoi (`server/plugins/2_nest-notify.js`) et le
+  service d'e-mail existent déjà — les e-mails de vérification de compte
+  partent en production.
+- **Retirer la promesse** : six chaînes du site, six diagrammes, et la clé
+  morte de l'application.
+
+**Recommandation : recâbler.** C'est une ligne de la grille tarifaire payante,
+le mécanisme est déjà écrit, il manque un maillon.
+
+### 9.2 Ce que seul le propriétaire peut faire
+
+- **Le jalon utilisateurs** : campagne de retours sans réponse au 10/09, cinq
+  entretiens d'atelier jamais tenus. Le §4 en faisait la porte avant T3-T5 ;
+  l'ordre des chantiers produit reste une hypothèse tant qu'elle n'est pas
+  passée.
+- **Un premier paiement réel** (le webhook Stripe est confirmé, aucun
+  paiement vu).
+- La **recette C1-C11** en production, les **fichiers `.job`** qui manquent à
+  la carte du format (zone d'exclusion non nulle, plusieurs opérations,
+  plusieurs outils, angle autre que 90°), l'épinglage de la version de Mongo.
+
+### 9.3 Les chantiers produit candidats, par ordre recommandé
+
+1. **La couture des contours (R2 de la phase C d'import)** — priorité 2 du
+   propriétaire le 10/09. Les lots 2a (garde) et 2b (unités) sont en
+   production ; la couture ne l'est pas. **704 entités sur 9 fichiers du
+   corpus ne sont rattachées à aucune pièce et ne sont pas découpées, sans
+   que l'utilisateur le sache** (`AGENTS.md` 5b). Pour un atelier, une pièce
+   découpée incomplète sans avertissement est le pire défaut possible.
+   Consigne déjà tranchée : chercher l'existant avant de coder
+   (`ezdxf.edgeminer` / `edgesmith` côté Python, équivalent Rust pour le
+   navigateur).
+2. **La bibliothèque de chutes, v1 rectangulaire** (§3.3, « l'argent
+   direct ») : le rapport calcule déjà la chute réutilisable garantie de
+   chaque tôle ; l'enregistrer comme nouvelle tôle et nester dedans.
+3. Le reste du §3 (contraintes de tôle, remplissage, coupe commune, API)
+   attend le jalon utilisateurs.
+
+**Proposition** : le recâblage des e-mails d'abord (petit, et c'est une
+promesse vendue), puis la couture des contours, puis les chutes v1.
