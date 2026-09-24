@@ -149,3 +149,87 @@ vrai.**
 avec son impact (atelier bloqué / résultat faux / gêne / cosmétique), sa
 preuve et son coût estimé. Le vérificateur le classe ; le propriétaire choisit
 les lots de correction.
+
+---
+
+## 3. Relecture du lot M2 et décisions du propriétaire (24/09) — M2-bis avant publication
+
+### Ce que M2 a bien fait
+
+Relu sur le commit local du site `0061d3a` et la branche
+`audit-stabilisation` (`74003799`) : **plus une seule mention des
+notifications par e-mail** sur la grille, les six articles et les six
+diagrammes ; `pricing.unlimited.f5` dit « Cancel anytime » et ses
+équivalents ; les six phrases d'article restent correctes ; côté
+application, clé morte et chaîne morte supprimées après balayage, piège
+n°38 noté résolu, vitest 821/821.
+
+### Un trou dans le diagramme
+
+Le rapport disait « une ligne en moins, pas un texte raccourci » : c'est
+justement le problème. Dans la colonne Unlimited des six `plans-*.svg`, les
+lignes restent à `y = 165, 184, 203` puis **`241`** — la ligne `222` est
+partie, **les autres n'ont pas remonté**. Regardé : un blanc au milieu de la
+liste, entre « 3 layouts to compare » et « Material report export ». Retirer
+une ligne d'une liste, c'est aussi resserrer la liste.
+
+### Deux autres promesses fausses, dans le même diagramme — et ailleurs
+
+En regardant ce diagramme, deux affirmations ne tenaient pas. Vérifiées :
+
+1. **Les « crédits » n'existent pas.** « Credits: pay-as-you-go packs, no
+   subscription » (bas du diagramme, six langues) — et l'article des prix
+   leur consacre **une puce, une section entière** (« Credits: occasional
+   use, no subscription ») et **sa description** (« Free, Unlimited 19 €, Pro
+   39 € or credits »), dans les six langues. Or la boutique Stripe ne compte
+   que **deux abonnements mensuels** (`scripts/create-live-products.mjs`),
+   aucun pack, et `docs/STRATEGY.md` n'en parle pas.
+2. **« Denser layouts » en Pro** (colonne Pro du diagramme) contredit la page
+   des plans de l'application, qui promet au gratuit **« Same fully
+   optimized result as paid plans »**, et la règle du moteur (`AGENTS.md`
+   §1 : même qualité pour tous, arrêt sur plateau partout, le tier ne change
+   que la vitesse). La même idée est écrite dans deux articles : l'article
+   des prix (« the more time you give it… », ligne 44 environ) et l'article
+   confidentialité (« more compute power gives denser layouts on big jobs »,
+   ligne 44 environ), dans les six langues.
+
+**Décisions du propriétaire (24/09)** :
+
+- **Crédits : retirés maintenant**, dans la même poussée que l'e-mail. Ils
+  reviendront le jour où les packs existeront.
+- **Même qualité pour tous : Pro = plus rapide et prioritaire, pas plus
+  dense.**
+
+### M2-bis — à faire avant de pousser le site
+
+1. **Le trou** : dans les six `plans-*.svg`, remonter les lignes sous celle
+   retirée pour que la liste reste régulière (pas de 19 px).
+2. **Les crédits** :
+   - diagramme : retirer « Credits: … » du bandeau du bas (il ne garde que la
+     garantie de remboursement de 30 jours, **qui existe** — page
+     `/refund` — et la ligne du coffre) ; le titre « Four ways to pay » devient
+     **« Three ways to pay »** et ses équivalents ;
+   - article des prix, six langues : retirer la puce, la section entière, et
+     « or credits » de la description ; l'`alt` italien « Piani NestorCut:
+     Free, Unlimited, Pro, crediti » se corrige avec.
+3. **« Denser layouts »** :
+   - diagramme : retirer la ligne de la colonne Pro (six langues), et
+     resserrer comme au point 1 ;
+   - articles : réécrire les deux passages pour dire ce qui est vrai — **plus
+     de puissance, c'est plus vite, pas plus dense** : le même résultat, livré
+     plus tôt. **Ne pas toucher** la phrase qui compare NestorCut aux « outils
+     gratuits historiques » (article plasma gratuit) : c'est une autre
+     comparaison.
+4. **Chercher avant de conclure** : les formes ont été repérées par le
+   vérificateur, pas forcément toutes. Balayer les six langues (site, blog,
+   documentation, diagrammes) pour « credit / crédit / Credits / créditos /
+   crediti », « pay-as-you-go / prepaid / à l'usage », et « denser / plus
+   dense / dichter / más dens / più dens / mais dens » en lien avec un plan ou
+   la puissance.
+5. **Les règles des dessins** : chaque texte mesuré contre **sa carte** ;
+   **diff du texte** contre les autres langues — seules les lignes retirées
+   doivent manquer ; les diagrammes **regardés** après coup.
+6. Build, `check:links`, zéro fragment orphelin, et un **balayage final** qui
+   prouve qu'il ne reste aucune des trois promesses.
+
+Puis **demander au propriétaire avant de pousser** `main` du site.

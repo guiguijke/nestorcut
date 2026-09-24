@@ -493,3 +493,6 @@ promesse vendue), puis la couture des contours, puis les chutes v1.
   les chutes v1 attendent le registre de l'audit.
 
 Plan : `docs/PLAN-AUDIT-STABILISATION-2026-09-24.md`.
+- **Décisions du propriétaire (24/09, suite)** : les **crédits** (packs à
+  l'usage) sont retirés du site — ils n'existent pas ; **même qualité pour
+  tous** : Pro = plus rapide et prioritaire, pas plus dense. Lot M2-bis.
