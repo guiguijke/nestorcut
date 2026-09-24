@@ -233,3 +233,50 @@ En regardant ce diagramme, deux affirmations ne tenaient pas. Vérifiées :
    prouve qu'il ne reste aucune des trois promesses.
 
 Puis **demander au propriétaire avant de pousser** `main` du site.
+
+## 4. Relecture du M2-bis (site `edf89b2`) — vérificateur, 24/09 — deux retouches avant publication
+
+**Ce qui tient** : plus aucun crédit ni pack (les seuls « credit » restants
+sont « credit card » et « a refused job never costs a nesting credit »,
+légitimes) ; plus d'e-mail ; « Denser layouts » sorti des six colonnes Pro ;
+le titre dit « Three ways to pay » ; la garantie de 30 jours et la ligne du
+coffre restent ; la colonne Unlimited est resserrée (165, 184, 203, 222) dans
+les six langues ; la phrase de l'article confidentialité dit maintenant
+« more compute power delivers the same result sooner on big jobs ».
+
+### 1. Le diagramme portugais est illisible
+
+Colonne Pro de `plans-pt.svg` : `y = 165, 184, 199, 203`. « de processamento »
+(199, la suite de « Orçamento máximo ») et « Fila prioritária » (203) sont à
+4 px l'un de l'autre : **les deux lignes se superposent**. Regardé :
+illisible. Le rapport disait « vérifié par les coordonnées y » — les
+coordonnées disaient justement 199 et 203. **Correctif** : 165, 184, 203, 222.
+**Et regarder les six images**, pas seulement les coordonnées.
+
+### 2. Le paragraphe « anytime » se contredit
+
+Article des prix, ligne 43, six langues. Il dit maintenant : « the more time
+you give it, the denser the final layout gets. On a small job, Unlimited and
+Pro often land on the same result. On a big job, Pro delivers the same result
+sooner. » Lu d'un trait, juste après « It buys compute power » : plus de
+temps donne plus dense, donc Pro donne plus dense ; et « souvent le même
+résultat sur un petit job » laisse entendre qu'il ne l'est pas sur un gros.
+La phrase finale corrigée contredit les deux phrases qui la précèdent.
+
+La règle, décidée par le propriétaire et écrite dans `AGENTS.md` §1 : **tous
+les plans s'arrêtent au même point — quand le moteur ne progresse plus
+(plateau).** Pro ne cherche ni plus longtemps ni mieux ; il cherche avec plus
+de cœurs à la fois, donc le même résultat arrive plus tôt, et la différence
+se voit sur les gros jobs. **Réécrire le paragraphe dans ce sens**, dans les
+six langues, sans « the denser the final layout gets » et sans « often the
+same on a small job ».
+
+### Pour l'audit AUD-1
+
+La promesse « même qualité pour tous » est désormais écrite partout. L'audit
+doit **mesurer** qu'elle est vraie : sur un gros job, chaque plan atteint-il
+le plateau avant sa limite de temps ? Si un plan s'arrête sur sa limite de
+temps avant le plateau, Pro peut donner plus dense, et c'est alors le
+produit — ou la promesse — qui devra être réaligné, au choix du propriétaire.
+
+Puis **demander au propriétaire avant de pousser** `main` du site.
