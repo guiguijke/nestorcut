@@ -4095,3 +4095,26 @@ existe, digest **`sha256:11148c0c…`** ; `:latest` porte encore
 touche qu'un document. **GO** : `promote-latest` sur
 `36307d07fc997a4c6ab66475c6f042069d433d36`, digest attendu `11148c0c…` sur
 `:latest`, `:36307d07…` et le conteneur.
+
+## Publication M1 (implémenteur, 24/09) — FAITE
+
+GO du propriétaire et du vérificateur (`67621053`).
+
+1. **promote-latest** sur `36307d07fc997a4c6ab66475c6f042069d433d36`
+   (V0.9.7) — digest `sha256:11148c0c33e56095cd5314173726f3532333c7368a
+   ca3216d025c1fd8a22206f`, identique sur `:latest`, `:<sha>` et le
+   conteneur Hetzner (`11148c0c33e5`). Application seule.
+2. **Branche `lot-m1-menage-langues` supprimée** (distante + locale).
+3. **Vérifié en ligne** :
+   - titre DE : « NestorCut — Kostenlose Online-Nesting-Software für
+     Laser-, P… » ; titre ES : « NestorCut — Software de Nesting
+     Online Gratuito para Corte L… » ;
+   - `lang="pt-BR"` ;
+   - footer DE : Impressum, AGB, Datenschutz, Rückerstattung,
+     Lizenzen, Neuigkeiten, Benchmarks + la note « sehr aktiv » ;
+   - footer ES : Aviso legal, Términos, Privacidad, Reembolso,
+     Licencias, Novedades, Benchmarks + la note « desarrollo muy
+     activo ».
+
+**Lot M1 : clos.** Après ce lot : revue de la feuille de route par le
+vérificateur (`docs/MASTERPLAN-2026-09-05.md` §4).
