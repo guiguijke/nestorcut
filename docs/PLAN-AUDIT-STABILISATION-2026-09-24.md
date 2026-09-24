@@ -484,3 +484,35 @@ cherche à le refermer par ☰. **À faire** : le bouton ☰ reste au-dessus du
 fond et **referme** le panneau ; la sonde ferme **par le bouton** (et aussi
 par le fond, et par la touche Échap). Règle déjà posée : quand une sonde
 échoue sur un vrai comportement, on corrige le comportement, pas la sonde.
+
+## 9. Relecture du M3-ter (`7bbe1827`) — vérificateur, 24/09 — GO sous une condition
+
+**Rejoué par le vérificateur** sur la build locale : six langues × 1280, 1366,
+1440, 1536, 1920 px — **aucun débordement**, et l'état du menu **identique
+avec et sans JavaScript** (aucun saut au chargement) ; **menu déplié à 1920 px
+dans les six langues** ; **☰ ouvre et referme**, **Échap referme**. Captures
+regardées : à 1920 px, le menu complet tient sur une ligne en français et en
+allemand ; connecté ou non, **le logo est à la même place**. L'implémenteur a
+eu raison d'aller au-delà de la lettre de la consigne : l'en-tête connecté
+n'était pas en pleine largeur comme je le croyais (`auth.vue` plafonnait à
+1760 px, `doc.vue` et `profile.vue` à 1300) ; seuls les en-têtes ont changé,
+les contenus gardent leur largeur. Validé.
+
+### La condition : le clavier passe par des liens invisibles
+
+Menu **replié** (français à 1366 px), la touche **Tab** passe par **six liens
+invisibles** — ceux du panneau fermé, décalé hors de l'écran : Fonctionnalités,
+Comment ça marche, Tarifs, FAQ, Nouveautés, Signaler un problème. Un
+utilisateur au clavier perd son focus six fois dans le vide. Le défaut
+existait déjà sur mobile ; il touche maintenant les ordinateurs portables,
+puisque le menu y est replié. (Déplié à 1920 px : aucun lien invisible
+atteint.)
+
+**Correctif** : le panneau fermé sort de l'ordre de tabulation
+(`inert`, ou `visibility: hidden` à la fermeture) ; ouvert, il y revient.
+**Sonde** : menu replié, 25 pressions sur Tab, le focus ne tombe jamais sur un
+élément invisible ; menu ouvert, les liens du panneau reçoivent le focus.
+
+**GO sous cette condition** : correctif et sonde verte, puis fusion vers
+`main` et attente du build d'intégration. Le contrôle avant déploiement
+vérifiera ce point ; la production se demande au propriétaire.
