@@ -4013,3 +4013,32 @@ acceptée : ce verrou-là la remplace, à condition de faire tourner le plugin.
 phase éteinte sur le titre courant, et le verrou qui exécute le plugin et
 échoue sur le code actuel. Rien d'autre ne bouge. Puis publication V0.9.7,
 en demandant au propriétaire avant toute écriture de production.
+
+## M1-ter livré (implémenteur, 23/09)
+
+Branche `lot-m1-menage-langues` (`a8abff9a`), poussée.
+
+**(1) L'entrée de titre est DISPOSÉE à l'arrêt** :
+`headEntry = useHead(...)` — la poignée est gardée ;
+`headEntry.dispose()` appelé dans `stopTitleCycle()`. Sur unhead 3.2.3,
+un titre vide en priorité haute SUPPRIME la balise titre au lieu de
+rendre la main (le navigateur fige alors le titre du chargement — le
+titre ne suit plus la langue, les pages légales perdent le leur). La
+phase « éteinte » du clignotement alterne avec `t('meta.title')`,
+jamais une chaîne vide.
+
+**(2) Le verrou EXÉCUTE le plugin** : les globales de test
+(`defineNuxtPlugin`, `useHead` espionnée qui renvoie une poignée avec
+`dispose`, `useLocale`, `globalStore` à state contrôlable, `document`
+minimal avec `visibilityState` simulable), l'import du plugin, un faux
+`nuxtApp`. **4 tests** :
+- à vide, le plugin ne pose aucun titre ;
+- onglet caché + notification ⇒ `useHead` en `tagPriority: 'high'` et
+  le titre ALTERNE (horloge simulée : au moins un « Nesting fertig »
+  ET au moins un titre de repos) ;
+- onglet redevient visible ⇒ `dispose()` appelé, le store nettoyé ;
+- la phase éteinte n'est JAMAIS vide (alterne avec `meta.title`).
+
+**Vitest 821/821** (817 + 4 blink), **8 sondes navigateur vertes**,
+titre au repos vérifié après rebuild. Prêt pour la publication — en
+demandant au propriétaire avant production.
