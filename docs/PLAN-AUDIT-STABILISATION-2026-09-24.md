@@ -280,3 +280,82 @@ temps avant le plateau, Pro peut donner plus dense, et c'est alors le
 produit — ou la promesse — qui devra être réaligné, au choix du propriétaire.
 
 Puis **demander au propriétaire avant de pousser** `main` du site.
+
+## 5. Relecture des retouches M2-bis (site `15a54f9`) — vérificateur, 24/09 — GO publication du site
+
+Le diagramme portugais **regardé** : la colonne Pro est lisible (« Orçamento
+máximo / de processamento » sur deux lignes, puis « Fila prioritária »), plus
+aucune superposition. Le paragraphe « anytime » dit maintenant, en anglais
+comme en français : « tous les plans s'arrêtent au même point… Pro cherche
+avec plus de cœurs à la fois — le même résultat arrive plus tôt ». **GO pour
+pousser `main` du site**, sur l'accord du propriétaire.
+
+**Note de méthode** : l'implémenteur a écrit qu'il ne peut pas voir les
+images et que « les coordonnées font foi ». Les coordonnées ne montrent pas
+une superposition de texte, un trou ou un débordement de carte — trois
+défauts de ce lot que seul le regard a trouvés. **Règle** : quand
+l'implémenteur ne peut pas voir une image, il le dit, il joint l'image, et
+**le vérificateur la regarde avant toute publication.**
+
+---
+
+## 6. Lot M3 — le menu de l'application et l'accès à la documentation (demande du propriétaire, 24/09, avant l'audit)
+
+Photo du propriétaire : la page d'accueil de l'application, **non connecté**.
+Reproduit par le vérificateur en production, en français, allemand et
+espagnol, à 1280, 1440 et 1600 px :
+
+1. **« V0.9 » colle au premier lien** (« V0.9Fonctionnalités ») : l'écart
+   mesuré entre le numéro de version et le premier lien va de −5 à +2 px.
+2. **« Comment ça marche » passe sur deux lignes** (47 px de haut contre 29
+   pour les autres), dans **toutes les langues** (« So funktioniert es »,
+   « Cómo funciona ») et **même à 1600 px** : la rangée se désaligne.
+3. **Le bouton « Connexion / Inscription » tombe sous « Signaler un
+   problème »** : l'en-tête ne tient plus sur une ligne.
+4. **Trois liens renvoient au site ANGLAIS** : « Fonctionnalités », « Comment
+   ça marche » et « FAQ » pointent vers `https://nestorcut.com/#…`, quelle que
+   soit la langue — un Français atterrit sur l'accueil anglais.
+5. **Aucun lien visible vers la documentation**, ni déconnecté, ni connecté —
+   seulement les petits « ? » des réglages. Une fois connecté, les liens du
+   site disparaissent (c'est voulu, le propriétaire le confirme) ; la
+   documentation, elle, doit rester accessible. Elle existe déjà dans les six
+   langues.
+
+### À faire
+
+1. **L'en-tête déconnecté sur une ligne** (`app/components/MainHeader.vue`,
+   thème secondaire) : un vrai écart entre la version et le premier lien ;
+   les libellés du menu **sur une ligne** ; « Signaler un problème » et
+   « Connexion / Inscription » sur la même rangée. Quand la largeur ne suffit
+   plus, le **menu replié** (le bouton `header__toggler` existe déjà) prend le
+   relais — **jamais un libellé qui passe à la ligne**.
+2. **Les liens du site dans la langue de l'utilisateur** : l'accueil, les
+   fonctionnalités, le fonctionnement et la FAQ vers
+   `https://nestorcut.com/<langue>/#…` — l'anglais à la racine, les cinq autres
+   sous leur préfixe, **la même règle que les liens d'aide**. Une fonction à
+   côté de `docsHelpUrl` dans `app/utils/docsLinks.js`, pas une deuxième
+   table.
+3. **Un lien « Documentation » bien visible, dans les deux états** :
+   - déconnecté : un élément du menu, à côté de « Tarifs » ;
+   - connecté : un lien texte à côté d'« Espace de travail », même style ;
+   - il ouvre l'**accueil de la documentation dans la langue de
+     l'utilisateur** (`/docs/`, `/fr/docs/`, … `/es/docs/`), par une fonction
+     `docsHomeUrl(locale)` dans `docsLinks.js` ;
+   - une clé `nav.docs` dans les six dictionnaires.
+4. **Verrous** qui se prouvent en échouant sur le code actuel : chaque lien
+   du site et de la documentation porte le préfixe de la langue (six
+   langues) ; et une sonde navigateur qui mesure, en six langues, à 1280 et
+   1600 px : **chaque lien du menu tient sur une ligne**, **au moins 8 px**
+   entre la version et le premier lien, l'en-tête sur **une seule rangée** ;
+   à 1024 px, le menu replié.
+5. **Captures jointes** (en-tête déconnecté FR et DE à 1280 et 1600,
+   connecté FR avec le lien Documentation, menu replié à 1024). L'implémenteur
+   ne voit pas les images : il le dit, et **le vérificateur les regarde**.
+
+### Publication
+
+**V0.9.8**, application seule, avec la partie application de M2 déjà sur
+`main` (clé morte et chaîne mortes supprimées). `CHANGELOG.md` à six blocs :
+le menu réparé, les liens vers le site dans votre langue, la documentation
+accessible depuis l'application. **En demandant au propriétaire avant toute
+écriture de production.** L'audit AUD-1 démarre ensuite.
