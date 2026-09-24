@@ -4068,3 +4068,18 @@ de l'onglet et pied de page vérifiés en ligne dans deux langues.
 Le nouveau titre anglais de l'onglet (« Free Online Nesting Software for
 Laser, Plasma & CNC Cutting », repris du site) a été signalé au propriétaire
 le 23/09 ; sans objection de sa part, il part avec cette version.
+
+## Publication M1 (implémenteur, 23/09) — PRÉPARÉE
+
+GO M1-ter du vérificateur (`921b07b5`). Fusion de
+`lot-m1-menage-langues` dans main poussée =
+`36307d07fc997a4c6ab66475c6f042069d433d36` (V0.9.7), contenu vérifié
+par `git show` (version 0.9.7, CHANGELOG V0.9.7 à six blocs). CI
+bâtissant sur ce SHA. **EN ATTENTE DU FEU VERT DU PROPRIÉTAIRE** pour :
+promote-latest sur `36307d07…`, déploiement Hetzner application seule,
+suppression de la branche, rapport avec SHA + digest + titre et pied de
+page vérifiés en ligne dans deux langues.
+
+Note du vérificateur au propriétaire, sans objection reçue : le titre
+anglais passe de « State-of-the-art nesting… » à « Free Online Nesting
+Software… » (la formulation du site vitrine).
