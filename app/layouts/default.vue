@@ -21,12 +21,9 @@ import { themeType } from '~~/constants/theme.constants';
     display: flex;
     min-height: 100vh;
 
-    &__header {
-        margin-left: auto;
-        margin-right: auto;
-        max-width: 1300px;
-        width: 100%;
-    }
+    /* M3-ter : l'en-tête déconnecté prend TOUTE la largeur, comme
+       l'en-tête connecté (le menu complet demande jusqu'à 1500 px selon
+       la langue) ; le contenu des pages garde sa largeur de lecture. */
     &__content {
         flex-grow: 1;
         margin: 20px auto;

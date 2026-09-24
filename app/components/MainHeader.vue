@@ -2,7 +2,7 @@
     <header
         ref="headerRoot"
         class="header"
-        :class="{ 'header--nav-collapsed': isSecondaryTheme && navCollapsed }"
+        :class="'header--lang-' + locale"
     >
         <component
             :is="logoTag"
@@ -38,11 +38,12 @@
             </a>
         </nav>
         <!-- Lot M3-bis : replié, la Documentation reste VISIBLE dans la
-             barre (même style que l'en-tête connecté) — le conteneur de
-             page plafonne l'en-tête à 1300 px, le menu complet (1342 à
-             1484 px selon la langue) n'y tient dans AUCUNE langue. -->
+             barre (même style que l'en-tête connecté). M3-ter : l'élément
+             vit toujours dans le DOM — c'est le CSS qui choisit l'état
+             (replié par défaut, déplié au seuil de la langue), pour que le
+             premier affichage, sans JavaScript, soit le bon. -->
         <nav
-            v-if="isSecondaryTheme && navCollapsed"
+            v-if="isSecondaryTheme"
             class="header__tabs tabs tabs--collapsed-docs"
         >
             <a
@@ -63,7 +64,7 @@
                     v-for="(navItem, navIndex) in nav"
                     :key="navIndex"
                     @click="toggleMenu"
-                    class="nav__item"
+                    :class="['nav__item', navItem.cls]"
                 >
                     <NuxtLink
                         :to="navItem.href"
@@ -110,8 +111,8 @@
                 :label="t('nav.reportProblem')"
                 tag="a"
                 trackingTag="report_problem"
-                class="header__btn"
-                v-if="isSecondaryTheme && !navCollapsed"
+                class="header__btn header__btn--report"
+                v-if="isSecondaryTheme"
             />
             <MainButton
                 v-if="isSecondaryTheme && userIsLoggedIn"
@@ -188,73 +189,76 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     const route = useRoute()
 
     const menuIsOpen = ref(false)
-    // Lot M3-bis : repli du nav piloté par la place RÉELLE, mesurée —
-    // jamais un seuil fixe. L'en-tête déconnecté ne tenait l'écran qu'en
-    // anglais (fr 1414 px rendus pour 1280, mesuré à la relecture M3).
-    // Replié par défaut : aucun débordement possible avant la mesure.
+    // Lot M3-ter : le repli est décidé au PREMIER AFFICHAGE par le seuil
+    // CSS de la langue (seuils mesurés, carte $nav-inflow-at dans le
+    // style) — le serveur rend la classe de langue, aucune mesure
+    // n'attend JavaScript. Cette fonction reste le FILET : si la réalité
+    // déborde (fonte, zoom), elle pose la classe de repli directement sur
+    // l'élément — pas d'état Vue, tout se joue avant le rendu, zéro saut.
     const headerRoot = ref(null)
-    const navCollapsed = ref(true)
     let recheckTimer = null
 
-    async function recheckNavFit() {
+    function applyNavFit() {
         const el = headerRoot.value
-        if (!el || window.innerWidth < 567) {
-            navCollapsed.value = true
+        if (!el) return
+        if (window.innerWidth < 567) {
+            el.classList.add('header--nav-collapsed')
             return
         }
-        // Mesure en état déplié : nextTick est une microtâche, tout se
-        // joue avant le rendu — on déplie, on mesure, on replie si ça
-        // déborde, sans flash à l'écran.
-        navCollapsed.value = false
-        await nextTick()
-        if (el.scrollWidth > el.clientWidth + 1) navCollapsed.value = true
+        // Mesure en état déplié : tout se passe dans UNE tâche synchrone,
+        // le navigateur ne peint que l'état final.
+        el.classList.remove('header--nav-collapsed')
+        el.classList.toggle('header--nav-collapsed', el.scrollWidth > el.clientWidth + 1)
     }
 
     function scheduleRecheckNavFit() {
         clearTimeout(recheckTimer)
-        recheckTimer = setTimeout(recheckNavFit, 120)
+        recheckTimer = setTimeout(applyNavFit, 120)
+    }
+
+    // Ajout M3-ter : Échap referme le panneau ouvert.
+    function onKeydown(e) {
+        if (e.key === 'Escape' && menuIsOpen.value) menuIsOpen.value = false
     }
 
     // Lot M3 : les liens du site VITRINE dans la LANGUE de l'utilisateur
     // (siteUrl dans docsLinks.js — anglais à la racine, cinq autres sous
-    // préfixe) + un lien Documentation visible dans le menu déconnecté.
-    // Lot M3-bis : déplié, les six liens et le signalement vivent dans la
-    // barre ; replié (conteneur 1300 px, menu complet 1342-1484 px), la
-    // Documentation reste dans la barre, le reste vit dans le panneau.
-    const nav = computed(() => {
-        const items = [
-            {
-                label: t('nav.features'),
-                href: siteUrl(locale.value, 'features'),
-            },
-            {
-                label: t('nav.howItWorks'),
-                href: siteUrl(locale.value, 'how-it-works'),
-            },
-            {
-                label: t('nav.pricing'),
-                href: '/plans',
-            },
-            {
-                label: t('nav.faq'),
-                href: siteUrl(locale.value, 'faq'),
-            },
-        ]
-        if (!navCollapsed.value) {
-            items.push({
-                label: t('nav.docs'),
-                href: docsHomeUrl(locale.value),
-            })
-        }
-        items.push({
+    // préfixe). M3-ter : la liste porte les DEUX états — Documentation et
+    // signalement y vivent en permanence, le CSS affiche l'un ou l'autre
+    // (replié : Documentation dans la barre, signalement dans le panneau ;
+    // déplié : l'inverse). Le DOM ne change jamais d'état : pas de saut.
+    const nav = computed(() => [
+        {
+            label: t('nav.features'),
+            href: siteUrl(locale.value, 'features'),
+        },
+        {
+            label: t('nav.howItWorks'),
+            href: siteUrl(locale.value, 'how-it-works'),
+        },
+        {
+            label: t('nav.pricing'),
+            href: '/plans',
+        },
+        {
+            label: t('nav.faq'),
+            href: siteUrl(locale.value, 'faq'),
+        },
+        {
+            label: t('nav.docs'),
+            href: docsHomeUrl(locale.value),
+            cls: 'nav__item--docs',
+        },
+        {
             label: t('nav.changelog'),
             href: '/changelog',
-        })
-        if (navCollapsed.value) {
-            items.push({ label: t('nav.reportProblem'), href: githubIssues })
-        }
-        return items
-    })
+        },
+        {
+            label: t('nav.reportProblem'),
+            href: githubIssues,
+            cls: 'nav__item--report',
+        },
+    ])
 
     const { getters: authGetters } = authStore
     const userIsLoggedIn = computed(() => Boolean(unref(authGetters.userIsSet)))
@@ -303,16 +307,18 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     const logoMarkSrc = computed(() => '/brand/n-mark.png')
 
     onMounted(() => {
-        recheckNavFit()
+        applyNavFit()
         window.addEventListener('resize', scheduleRecheckNavFit)
+        window.addEventListener('keydown', onKeydown)
         // Les libellés changent de largeur avec la langue et avec la
         // fonte définitive : re-mesurer dans les deux cas.
-        watch(locale, recheckNavFit)
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(recheckNavFit)
+        watch(locale, applyNavFit)
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(applyNavFit)
     })
 
     onBeforeUnmount(() => {
         window.removeEventListener('resize', scheduleRecheckNavFit)
+        window.removeEventListener('keydown', onKeydown)
         clearTimeout(recheckTimer)
     })
 </script>
@@ -396,6 +402,9 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         }
 
         &__nav {
+            /* Base = panneau replié (plein écran, coulissé hors écran).
+               L'état « en place » suit le seuil CSS DE LA LANGUE (bloc
+               $nav-inflow-at en fin de style) — voir le lot M3-ter. */
             z-index: 1;
             position: fixed;
             top: 0;
@@ -405,34 +414,17 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             transform: translate3d(120%, 0, 0);
             transition: transform 0.3s;
 
-            /* Lot M3-bis : en place dès que la rangée existe (≥567 px) ET
-               que la place réelle suffit — la classe porte la décision de
-               la mesure client, plus de seuil fixe 1199 px. :where garde
-               la spécificité du base pour que :hover gagne toujours. */
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
-                    position: initial;
-                    top: initial;
-                    left: initial;
-                    right: initial;
-                    bottom: initial;
-                    transform: initial;
-                }
-            }
-
             &--is-open {
                 transform: translate3d(0, 0, 0);
             }
         }
 
         &__toggler {
-            /* Lot M3-bis : masqué seulement quand le nav est en place
-               (≥567 px + place réelle suffisante, sinon panneau). */
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
-                    display: none;
-                }
-            }
+            /* M3-ter : AU-DESSUS du panneau ouvert — l'utilisateur qui
+               ouvre par ☰ doit pouvoir refermer par ☰, le fond ne le
+               recouvre pas. */
+            position: relative;
+            z-index: 2;
         }
 
         &__btn {
@@ -445,6 +437,16 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                     position: initial;
                     top: initial;
                     right: initial;
+                }
+            }
+
+            /* M3-ter : replié, le signalement vit dans le PANNEAU — le
+               bouton ne revient dans la barre qu'à l'état « en place »
+               (sélecteur .header .header__wrapper pour gagner sur le
+               display:flex du MainButton quel que soit l'ordre du CSS). */
+            &--report {
+                .header .header__wrapper & {
+                    display: none;
                 }
             }
         }
@@ -541,13 +543,9 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
     }
 
     .nav {
+        /* Base = panneau replié. L'état « en place » suit le seuil CSS de
+           la langue ($nav-inflow-at, fin de style) — lot M3-ter. */
         padding-top: 80px;
-
-        @media (min-width: 567px) {
-            :where(.header:not(.header--nav-collapsed)) & {
-                padding-top: initial;
-            }
-        }
 
         &__list {
             position: relative;
@@ -556,36 +554,20 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             align-items: center;
             justify-content: center;
             flex-direction: column;
-
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
-                    position: initial;
-                    z-index: initial;
-                    justify-content: initial;
-                    flex-direction: initial;
-                }
-            }
         }
 
         &__item {
             width: 100%;
 
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
-                    margin-left: 5px;
-                    margin-right: 5px;
-                    width: initial;
-                }
-            }
-
             &:not(:last-child) {
                 margin-bottom: 20px;
+            }
 
-                @media (min-width: 567px) {
-                    :where(.header:not(.header--nav-collapsed)) & {
-                        margin-bottom: initial;
-                    }
-                }
+            /* M3-ter : la Documentation vit dans le PANNEAU à l'état
+               replié — dans la barre, c'est le lien tabs--collapsed-docs
+               qui la porte. L'item n'apparaît qu'à l'état « en place ». */
+            &--docs {
+                display: none;
             }
         }
 
@@ -605,14 +587,6 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                 color 0.3s,
                 background-color 0.3s;
 
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
-                    font-size: var(--fs-12);
-                    color: var(--label-secondary);
-                    background-color: var(--fill-tertiary);
-                }
-            }
-
             @media (hover: hover) {
                 &:hover {
                     color: var(--accent-primary);
@@ -628,11 +602,90 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             bottom: 0;
             left: 0;
             background-color: var(--menu-background);
+        }
+    }
 
-            @media (min-width: 567px) {
-                :where(.header:not(.header--nav-collapsed)) & {
+    /* ==================================================================
+       Lot M3-ter : l'état « en place » (menu déplié dans la barre).
+       Déclencheur = seuil CSS PAR LANGUE : le serveur pose la classe
+       header--lang-<locale> (il connaît la langue), et les seuils sont
+       les largeurs mesurées du menu complet + 8 px. Le premier affichage
+       — sans JavaScript comme avant hydratation — est ainsi le bon dans
+       chaque langue. La classe header--nav-collapsed (posée par la
+       mesure JavaScript, applyNavFit) reste le FILET : elle replie si la
+       réalité déborde (fonte différente, zoom). :where garde la
+       spécificité du base pour que :hover gagne toujours ; les bascules
+       de visibilité (signalement, Documentation) utilisent un sélecteur
+       plein, elles n'ont pas de :hover à préserver.
+       Seuils = largeur NATURELLE mesurée du menu déplié (padding +
+       logo+version + nav + actions) + 8 px, par langue :
+       en 1288, it 1333, pt 1372, de 1399, es 1436, fr 1446.
+       ================================================================== */
+    $nav-inflow-at: (
+        en: 1296px,
+        fr: 1454px,
+        pt: 1380px,
+        it: 1341px,
+        de: 1407px,
+        es: 1444px,
+    );
+
+    @each $lang, $min in $nav-inflow-at {
+        @media (min-width: $min) {
+            :where(.header--lang-#{$lang}:not(.header--nav-collapsed)) {
+                & .header__nav {
+                    position: initial;
+                    top: initial;
+                    left: initial;
+                    right: initial;
+                    bottom: initial;
+                    transform: initial;
+                }
+                & .header__toggler {
                     display: none;
                 }
+                & .tabs--collapsed-docs {
+                    display: none;
+                }
+                & .nav {
+                    padding-top: initial;
+                }
+                & .nav__list {
+                    position: initial;
+                    z-index: initial;
+                    justify-content: initial;
+                    flex-direction: initial;
+                }
+                & .nav__item {
+                    margin-left: 5px;
+                    margin-right: 5px;
+                    width: initial;
+                }
+                & .nav__item:not(:last-child) {
+                    margin-bottom: initial;
+                }
+                & .nav__item--docs {
+                    display: list-item;
+                }
+                & .nav__item--report {
+                    display: none;
+                }
+                & .nav__link {
+                    font-size: var(--fs-12);
+                    color: var(--label-secondary);
+                    background-color: var(--fill-tertiary);
+                }
+                & .nav__background {
+                    display: none;
+                }
+            }
+
+            /* Le signalement revient dans la barre : sélecteur PLEIN
+               (0,4,0) — la base le cache avec .header .header__wrapper
+               (0,3,0) pour gagner sur le display:flex du MainButton
+               quel que soit l'ordre du CSS bundlé ; il faut la battre. */
+            .header--lang-#{$lang}:not(.header--nav-collapsed) .header__wrapper .header__btn--report {
+                display: flex;
             }
         }
     }
