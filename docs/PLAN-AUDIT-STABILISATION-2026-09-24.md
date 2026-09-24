@@ -418,3 +418,58 @@ vérifiait que les boutons étaient **sur la même rangée**, jamais qu'ils
    **jointes pour que je les regarde**.
 
 Puis V0.9.8 comme prévu, en demandant au propriétaire avant la production.
+
+## 8. Relecture du M3-bis (`72ffc4ce`) — vérificateur, 24/09 — un dernier pas, M3-ter
+
+**Ce qui tient.** Mesuré par moi sur la build locale, six langues, à 1024,
+1280, 1366, 1440, 1536 et 1920 px : **plus aucun débordement** — ni
+défilement horizontal, ni élément de l'en-tête hors de l'écran ; le lien
+Documentation et la connexion restent visibles dans la barre à toutes ces
+largeurs. La sonde échoue bien sur `52f305db` (29 rouges, mes chiffres au
+pixel près) et passe sur le correctif : c'est la forme demandée. Captures
+regardées : l'en-tête replié tient sur une ligne ; une fois connecté,
+« Espace » et « Documentation » sont nettement séparés (26 px). Au téléphone
+(375 px, hors consigne), la Documentation passe dans le panneau replié :
+acceptable.
+
+**La découverte de l'implémenteur est juste, et il a bien fait de ne pas
+toucher seul au layout** : `app/layouts/default.vue` plafonne l'en-tête à
+**1300 px**, alors que le menu complet en demande de 1342 (italien) à 1484
+(français). Conséquence du M3-bis : **le menu du site est replié derrière ☰
+partout, même sur un écran de 1920 px, dans les six langues.**
+
+### Arbitrage du vérificateur : l'en-tête déconnecté passe en pleine largeur
+
+Le propriétaire l'a dit en ouvrant le lot : une fois connecté, ces liens
+disparaissent, « ce qui est bien » — autrement dit, **déconnecté, il les veut
+visibles**. Un menu toujours replié sur grand écran cache « Tarifs » et
+« Fonctionnalités » au visiteur qui découvre le produit. Et le plafond de
+1300 px ne vaut que pour l'en-tête **déconnecté** : connecté, l'en-tête
+occupe déjà toute la largeur (logo à 16 px du bord), ce que le propriétaire
+préfère (« utiliser tout l'écran », mémoire du 08/09). Les deux états
+n'alignent même pas leur logo.
+
+**Décision** : dans `app/layouts/default.vue`, l'en-tête prend **toute la
+largeur**, comme l'en-tête connecté ; le **contenu** des pages publiques
+garde sa largeur de lecture (1300 px — carte de connexion, pages légales).
+Le repli par la place réelle, déjà écrit, fait alors le reste : **menu
+complet là où il tient, replié ailleurs.**
+
+### M3-ter
+
+1. `main__header` sans plafond (même marges que l'en-tête connecté) ;
+   `main__content` inchangé.
+2. **Pas de saut au chargement.** Le rendu serveur sort replié ; sur grand
+   écran, le client déplierait après coup — un menu qui s'ouvre sous les
+   yeux. Le premier affichage doit être le bon : par exemple un seuil CSS par
+   langue (le serveur connaît la langue, et les largeurs nécessaires sont
+   mesurées), la mesure JavaScript restant le filet. **Sonde** : même page
+   chargée **sans JavaScript** et **avec**, à 1280, 1440 et 1920 px, six
+   langues — l'état du menu (déplié ou replié) doit être **identique**.
+3. **La sonde de place reste verte** aux sept largeurs, et elle vérifie en
+   plus que le menu est **déplié à 1920 px dans les six langues**.
+4. Captures à regarder : français et allemand à 1920 (déplié) et à 1366
+   (replié), anglais à 1440, et la page connectée pour vérifier que les deux
+   logos sont à la même place.
+
+Puis V0.9.8, en demandant au propriétaire avant la production.
