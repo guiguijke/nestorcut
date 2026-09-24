@@ -473,3 +473,14 @@ complet là où il tient, replié ailleurs.**
    logos sont à la même place.
 
 Puis V0.9.8, en demandant au propriétaire avant la production.
+
+### Ajout au M3-ter : le bouton ☰ ne referme pas le panneau
+
+Le journal de travail de l'implémenteur le dit en passant : « la fermeture du
+panneau par le toggler timeout (l'overlay couvre le bouton) », et la sonde a
+été **changée pour fermer par un clic sur le fond**. C'est le défaut qu'il
+fallait corriger, pas le test : un utilisateur qui ouvre le menu par ☰
+cherche à le refermer par ☰. **À faire** : le bouton ☰ reste au-dessus du
+fond et **referme** le panneau ; la sonde ferme **par le bouton** (et aussi
+par le fond, et par la touche Échap). Règle déjà posée : quand une sonde
+échoue sur un vrai comportement, on corrige le comportement, pas la sonde.
