@@ -4042,3 +4042,29 @@ minimal avec `visibilityState` simulable), l'import du plugin, un faux
 **Vitest 821/821** (817 + 4 blink), **8 sondes navigateur vertes**,
 titre au repos vérifié après rebuild. Prêt pour la publication — en
 demandant au propriétaire avant production.
+
+## Relecture du M1-ter (`a8abff9a`) — vérificateur, 24/09 — GO, publication V0.9.7
+
+Rejoué : **vitest 821/821 code 0** (69 fichiers), **aucun diff sous
+`workers/` ni `public/engine`**, version 0.9.7.
+
+- **L'entrée de titre est retirée** : la poignée de `useHead` est gardée,
+  `dispose()` est appelé à chaque arrêt (et avant chaque nouveau départ :
+  plus d'accumulation), la phase « éteinte » alterne avec `t('meta.title')`.
+- **Le verrou exécute le plugin, et il mord — prouvé par moi** : remis tour
+  à tour sur les deux versions fautives du plugin, il échoue **trois fois**
+  sur celle de M1-bis (titre alterné, `dispose()`, phase éteinte vide) et
+  **deux fois** sur celle de M1 (priorité haute absente, `dispose()`) ; sur
+  le code actuel, **4/4**. Le plugin a été restauré à l'identique après
+  l'épreuve. C'est la forme demandée depuis le paquet C de L4 : un verrou qui
+  démontre qu'il sait échouer.
+
+**GO publication V0.9.7**, application seule : fusion de la branche dans
+`main`, image bâtie par l'intégration, `promote-latest` sur le SHA complet,
+`pull` + `up -d app`. **Le propriétaire donne son accord avant.** Rapport :
+SHA promu, digest identique sur `:latest`, `:<sha>` et le conteneur ; titre
+de l'onglet et pied de page vérifiés en ligne dans deux langues.
+
+Le nouveau titre anglais de l'onglet (« Free Online Nesting Software for
+Laser, Plasma & CNC Cutting », repris du site) a été signalé au propriétaire
+le 23/09 ; sans objection de sa part, il part avec cette version.
