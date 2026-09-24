@@ -1,33 +1,45 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
 // Lot M1 : le « Nest ready » suit la langue (meta.nestReady du dictionnaire).
-// M1-bis (relecture) : le titre n'est posé QUE PENDANT le clignotement, avec
-// tagPriority: 'high' — sur unhead 3.2.3, quand deux entrées posent le
-// titre, la dernière enregistrée gagne en permanence : app.vue masquerait ce
-// plugin pour toujours. L'entrée est RETIRÉE à l'arrêt, laissant la main à
-// app.vue et aux pages qui ont leur propre titre (légales, benchmarks).
+// M1-bis : le titre n'est posé QUE PENDANT le clignotement, avec
+// tagPriority: 'high' — sur unhead 3.2.3, la dernière entrée enregistrée
+// gagne en permanence : app.vue masquerait ce plugin pour toujours.
+// M1-ter (relecture M1-bis) : l'entrée est DISPOSÉE à l'arrêt
+// (entry.dispose()) — un titre vide en priorité haute SUPPRIME la balise
+// titre au lieu de rendre la main (le navigateur fige alors le titre du
+// chargement, les pages légales perdent le leur). Pendant le clignotement,
+// la phase « éteinte » alterne avec t('meta.title'), jamais une chaîne vide.
 export default defineNuxtPlugin((nuxtApp) => {
     let interval = null
+    let headEntry = null
     const isTabActive = ref(true)
-    const blinking = ref(false)
     const showReady = ref(false)
 
     const { t } = useLocale()
     const readyText = computed(() => t('meta.nestReady'))
-    const blinkTitle = computed(() => (showReady.value ? readyText.value : ''))
+    const restTitle = computed(() => t('meta.title'))
+    const blinkTitle = computed(() => (showReady.value ? readyText.value : restTitle.value))
+
+    const disposeHeadEntry = () => {
+        if (headEntry) {
+            headEntry.dispose()
+            headEntry = null
+        }
+    }
 
     const stopTitleCycle = () => {
         if (interval) {
             clearInterval(interval)
             interval = null
         }
-        blinking.value = false
         showReady.value = false
+        disposeHeadEntry()
     }
+
     const startTitleCycle = () => {
         stopTitleCycle()
-        blinking.value = true
         showReady.value = true
+        headEntry = useHead({ title: blinkTitle }, { tagPriority: 'high' })
         interval = setInterval(() => {
             showReady.value = !showReady.value
         }, 500)
@@ -52,16 +64,6 @@ export default defineNuxtPlugin((nuxtApp) => {
             else stopTitleCycle()
         }
     )
-
-    // L'entrée de titre n'existe que pendant le clignotement — retirée
-    // à l'arrêt, la main revient à app.vue et aux pages à titre propre.
-    watch(blinking, (on) => {
-        if (on) {
-            useHead({ title: blinkTitle }, { tagPriority: 'high' })
-        }
-        // le retrait se fait par blinking=false → showReady reste false →
-        // le titre vide cesse d'être posé par ce plugin
-    })
 
     nuxtApp.hook('app:suspense:resolve', () => {})
     onBeforeUnmount(() => {
