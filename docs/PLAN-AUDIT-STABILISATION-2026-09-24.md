@@ -359,3 +359,62 @@ espagnol, à 1280, 1440 et 1600 px :
 le menu réparé, les liens vers le site dans votre langue, la documentation
 accessible depuis l'application. **En demandant au propriétaire avant toute
 écriture de production.** L'audit AUD-1 démarre ensuite.
+
+## 7. Relecture du lot M3 (`52f305db`) — vérificateur, 24/09 — NO-GO étroit, M3-bis
+
+**Le site est en ligne et juste** (vérifié : plus d'e-mail ni de crédits sur
+l'accueil, diagramme portugais corrigé servi).
+
+**Ce qui tient dans M3** : les liens du menu pointent vers le site **dans la
+langue** (`https://nestorcut.com/fr/#features`, `/de/#faq`…, l'anglais à la
+racine) ; le lien **Documentation** existe dans les deux états et ouvre
+l'accueil de la documentation dans la langue (`/fr/docs/`, `/de/docs/`,
+`/docs/`) ; `nav.docs` dans les six langues ; les libellés tiennent sur une
+ligne ; vitest 825/825. Les captures regardées : à 1600 px en français,
+l'en-tête est propre ; le menu replié à 1024 px aussi.
+
+### L'en-tête déborde de l'écran dans cinq langues sur six
+
+Sur la capture `header-de-1280.png`, le bouton de connexion est **coupé par
+le bord de l'écran** (« Anmelden / Ko… »). Mesuré sur l'application
+construite avec ce lot (stack locale), largeur de la page contre largeur de
+l'écran :
+
+| | 1280 px | 1366 px | 1440 px |
+|---|---|---|---|
+| français | 1414 — déborde | 1447 — déborde | **1484 — déborde** |
+| espagnol | 1405 — déborde | 1438 — déborde | **1475 — déborde** |
+| allemand | 1368 — déborde | 1401 — déborde | tient |
+| portugais | 1341 — déborde | 1374 — déborde | tient |
+| italien | 1302 — déborde | tient | tient |
+| anglais | tient | tient | tient |
+
+La page **défile horizontalement** et le bouton de connexion sort de l'écran —
+aux largeurs d'ordinateur portable les plus courantes, et jusqu'à 1440 px en
+français. Avant M3, les libellés passaient à la ligne (laid) ; maintenant ils
+tiennent sur une ligne, mais l'en-tête ne tient plus dans l'écran. La sonde
+vérifiait que les boutons étaient **sur la même rangée**, jamais qu'ils
+étaient **dans l'écran** : elle ne pouvait pas le voir.
+
+### M3-bis
+
+1. **L'en-tête tient dans l'écran à toute largeur, dans les six langues.** Le
+   menu replié doit prendre le relais **là où le contenu ne tient plus**,
+   pas à un seuil fixe de 1024 px choisi pour l'anglais. Pistes, au choix de
+   l'implémenteur : replier seulement les liens du site (fonctionnalités,
+   fonctionnement, FAQ, nouveautés) en gardant Documentation et la connexion
+   visibles ; déplacer « Signaler un problème » dans le menu replié ; ou
+   décider du repli d'après la place réelle (mesure du contenu, requête de
+   conteneur) plutôt que d'après la largeur d'écran.
+2. **La sonde mesure ce qui compte** : à **1024, 1280, 1366, 1440, 1536, 1600
+   et 1920 px**, dans les six langues, `document.documentElement.scrollWidth`
+   ≤ largeur de l'écran, et le bord droit de **chaque** élément de l'en-tête ≤
+   largeur de l'écran. Elle doit **échouer sur `52f305db`** — c'est la preuve
+   qu'elle mord.
+3. Détail, connecté : « **Espace** » et « **Documentation** » se lisent comme
+   un seul intitulé (« Espace Documentation ») : même écart qu'entre les liens
+   du menu déconnecté.
+4. **Captures reprises** — dont l'allemand et le français à 1280 et 1366 —
+   **jointes pour que je les regarde**.
+
+Puis V0.9.8 comme prévu, en demandant au propriétaire avant la production.
