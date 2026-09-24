@@ -480,3 +480,16 @@ le mécanisme est déjà écrit, il manque un maillon.
 
 **Proposition** : le recâblage des e-mails d'abord (petit, et c'est une
 promesse vendue), puis la couture des contours, puis les chutes v1.
+
+### 9.4 Décisions du propriétaire (24/09)
+
+- **Notifications par e-mail : la promesse est retirée** (site six langues,
+  articles, diagrammes ; clé et chaîne mortes de l'application supprimées) —
+  lot M2.
+- **Pas de nouveau chantier produit : une vague d'audit de stabilisation**
+  (promesses publiques confrontées à la production, échecs réels agrégés,
+  défauts connus, justesse sur le corpus, parcours de bout en bout), puis des
+  lots de correction choisis par le propriétaire. La couture des contours et
+  les chutes v1 attendent le registre de l'audit.
+
+Plan : `docs/PLAN-AUDIT-STABILISATION-2026-09-24.md`.

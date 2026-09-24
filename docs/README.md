@@ -62,6 +62,7 @@ renvoient au dépôt archivé privé.
 
 | `PLAN-DOCUMENTATION-2026-09-15.md` | La documentation NestorCut (15/09) : Starlight dans le site vitrine, FR + EN, recherche, menu ; architecture en huit sections et lots D1 à D5. |
 | `PLAN-LANGUES-2026-09-16.md` | Quatre langues de plus (16/09) : portugais du Brésil, italien, allemand, espagnol — décision owner ; règle « complète ou rien », glossaire d'atelier et relecteur natif, socle L0, lots L1 à L4, après D4. |
+- [PLAN-AUDIT-STABILISATION-2026-09-24.md](PLAN-AUDIT-STABILISATION-2026-09-24.md) — retrait de la promesse e-mail (M2), puis vague d'audit de stabilisation (AUD-1 à AUD-3) ; décision du propriétaire du 24/09
 | `PLAN-UX-JOB-VERSION-2026-09-15.md` | Audit UI/UX du flux `.job` (15/09) et lot J11 : carte groupée pour un `.job` multi-pièces, version affichée « NestorCut V2.x », badges « Nouveau » à expiration. |
 | `PLAN-CORRECTIF-VUE-DXF-2026-09-14.md` | Vue DXF d'un résultat local figée : reproduction, cause, correctif H1 | vivant |
 | `RECETTE-PROPRIETAIRE-2026-09-14.md` | Recette des priorités 3 et 4 en production, à faire par le propriétaire avant toute nouvelle feature | vivant |
