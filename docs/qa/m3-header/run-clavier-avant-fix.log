@@ -1,0 +1,7 @@
+PASS replié fr@1366 : le menu est bien replié {"collapsed":true,"open":false}
+FAIL replié fr@1366 : 25 Tab, le focus ne tombe JAMAIS sur un élément invisible {"invisibles":["Fonctionnalités","Comment ça marche","Tarifs","FAQ","Nouveautés","Signaler un problème"],"parcours":["NestorCutV0.9","Documentation","Fonctionnalités","Comment ça marche","Tarifs","FAQ","Nouveautés","Signaler un problème","BUTTON","mm","in","Français▾","Connexion / Inscription","BUTTON","Connexion avec e-mail","GitHub","Discord","Mentions légales","CGV","Confidentialité","Remboursement","Licences","Nouveautés","Benchmarks","Nouveautés"]}
+PASS ouvert fr@1366 : les liens du panneau reçoivent le focus {"liensFocus":["Fonctionnalités","Comment ça marche","Tarifs","FAQ","Nouveautés","Signaler un problème"]}
+PASS refermé fr@1366 : les liens re-sortent de l'ordre de tabulation {"invisibles":[]}
+PASS déplié fr@1920 : le menu est bien déplié 
+PASS déplié fr@1920 : 20 Tab, aucun focus invisible {"invisibles":[]}
+PASS déplié fr@1920 : les liens du menu en barre reçoivent le focus {"liens":["Fonctionnalités","Comment ça marche","Tarifs","FAQ","Documentation","Nouveautés"]}

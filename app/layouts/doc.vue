@@ -15,12 +15,8 @@
     display: flex;
     min-height: 100vh;
 
-    &__header {
-        margin-left: auto;
-        margin-right: auto;
-        max-width: 1300px;
-        width: 100%;
-    }
+    /* M3-ter : en-tête pleine largeur, aligne sur l en-tête déconnecté
+       (les deux logos à 16 px du bord) ; le contenu garde sa largeur. */
     &__content {
         flex-grow: 1;
         margin: 40px auto;

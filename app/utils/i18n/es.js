@@ -15,6 +15,7 @@ export default {
     "nav.howItWorks": "Cómo funciona",
     "nav.pricing": "Planes",
     "nav.faq": "FAQ",
+    'nav.docs': 'Documentación',
     "nav.changelog": "Novedades",
     "nav.openWorkspace": "Abrir mi área de trabajo",
     "nav.reportProblem": "Informar de un problema",
