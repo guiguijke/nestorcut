@@ -412,10 +412,22 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             right: 0;
             bottom: 0;
             transform: translate3d(120%, 0, 0);
-            transition: transform 0.3s;
+            /* Condition GO M3-ter : fermé, le panneau sort de l'ordre de
+               tabulation (visibility: hidden) — la touche Tab ne passait
+               par six liens invisibles. À la fermeture, le masquage est
+               RETARDÉ de la durée du coulissement pour laisser l'animation
+               de sortie se jouer ; à l'ouverture, visibilité immédiate. */
+            visibility: hidden;
+            transition:
+                transform 0.3s,
+                visibility 0s linear 0.3s;
 
             &--is-open {
+                visibility: visible;
                 transform: translate3d(0, 0, 0);
+                transition:
+                    transform 0.3s,
+                    visibility 0s;
             }
         }
 
@@ -640,6 +652,8 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                     right: initial;
                     bottom: initial;
                     transform: initial;
+                    /* en place, le menu est visible ET focusable */
+                    visibility: visible;
                 }
                 & .header__toggler {
                     display: none;
