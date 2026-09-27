@@ -508,3 +508,8 @@ identifiant** (catalogue partagé, seuil d'anonymat de 5, aucun cookie de
 mesure, compteurs 25 mois, journal technique 14 jours) — le remplacement du
 suivi individuel, les événements du navigateur, les jalons de cohorte, GA4 et
 les textes publics restent au propriétaire (§8 du point).
+- **Décisions du propriétaire (27/09)** : journal technique vidé en
+  production après le déploiement de S0 ; suivi par **compteurs sans
+  identifiant + étapes de parcours** ; événements du navigateur en
+  **catégories seulement** ; **Google Analytics remplacé par une mesure sans
+  cookie** sur le site. Ouverts : lieu de calcul des payants, textes légaux.

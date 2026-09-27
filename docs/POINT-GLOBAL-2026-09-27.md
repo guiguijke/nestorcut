@@ -406,6 +406,30 @@ d'AUD-1 et la reprise des défauts connus.
 7. Plus tard : identifiant `local:<e-mail>` à remplacer par un identifiant
    opaque (migration) ; admin ouvert sans mot de passe sur le réseau maison.
 
+### Décisions du propriétaire (27/09)
+
+- **Journal technique : tout vider en production**, juste après le
+  déploiement de la V0.9.8 qui porte S0 (action P-a du document privé ;
+  rapporter le nombre de documents supprimés). Restent à fournir : le nombre
+  de comptes au coffre activé (nombre seul) et l'emplacement et la durée des
+  sauvegardes.
+- **Suivi : compteurs sans identifiant + étapes de parcours** (jalons
+  booléens sans date sur le compte, effacés avec lui) : lots U1, U2, U3, U5,
+  U6, U7a, U7b.
+- **Navigateur : oui, des catégories seulement** (import réussi ou raté et sa
+  cause, type d'export ; jamais de nom ni de contenu) : lot U4, avec la
+  retouche de la page confidentialité (P1) publiée **après** la production.
+- **Site vitrine : mesure sans cookie à la place de Google Analytics** (par
+  exemple Cloudflare Web Analytics, Cloudflare hébergeant déjà le site) : lot
+  G — retrait de gtag (`Base.astro`, `config.ts`), balise de mesure sans
+  cookie, page confidentialité mise à jour dans les six langues. L'activation
+  côté tableau de bord Cloudflare revient au propriétaire. Avis juridique
+  recommandé avant P1 (compteurs authentifiés, jalons), non bloquant pour S0,
+  U1-U3 et G.
+
+Restent ouverts : le lieu de calcul des payants (texte ou produit) et la
+rédaction des textes légaux du §4 (lot P).
+
 ---
 
 ## 9. Non-faits
