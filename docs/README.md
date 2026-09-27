@@ -21,6 +21,7 @@ et sorties de QA restent dans `qa/<campagne>/`.
 
 | Fichier | Contenu |
 |---|---|
+| [`POINT-GLOBAL-2026-09-27.md`](POINT-GLOBAL-2026-09-27.md) | **Point global du 27/09** (vérificateur) : état de la production, contrôle avant déploiement de la V0.9.8, audit (constats confirmés, sécurité renvoyée au document privé `specs/AUDIT-SECURITE-2026-09-27.md`), promesses publiques contre le code, features restantes vérifiées dans le code, admin et suivi d'usage sans données personnelles, lots S0 / M4 / P / A1-A2 / U1-U7, décisions du propriétaire |
 | [`MASTERPLAN-2026-09-05.md`](MASTERPLAN-2026-09-05.md) | **Boussole** : la référence du nesting dans le navigateur (§0), séquenciation T0-T5, registre des décisions, forme des instructions à l'implémenteur (§8) |
 | [`PLAN-PERF-UX-2026-09-05.md`](PLAN-PERF-UX-2026-09-05.md) | Plan perf/UX en 6 lots (lots 1-3 livrés, 4 en cours, 5-6 cadrés) |
 | [`FICHE-LOT4-T2-2026-09-06.md`](FICHE-LOT4-T2-2026-09-06.md) | Lot 4 (T2) : verrous par chantier, décision Rust/Python, contrôles intermédiaires, recentrage navigateur |

@@ -496,3 +496,15 @@ Plan : `docs/PLAN-AUDIT-STABILISATION-2026-09-24.md`.
 - **Décisions du propriétaire (24/09, suite)** : les **crédits** (packs à
   l'usage) sont retirés du site — ils n'existent pas ; **même qualité pour
   tous** : Pro = plus rapide et prioritaire, pas plus dense. Lot M2-bis.
+
+### 9.5 Point global du 27/09 (vérificateur)
+
+Petit audit global, features restantes et admin, à la demande du
+propriétaire : `docs/POINT-GLOBAL-2026-09-27.md` (constats de sécurité dans le
+document privé `specs/AUDIT-SECURITE-2026-09-27.md` : le dépôt est public).
+Arbitrages du vérificateur : **le correctif de sécurité S0 part dans la
+V0.9.8** ; le suivi produit devient une **mesure par compteurs sans
+identifiant** (catalogue partagé, seuil d'anonymat de 5, aucun cookie de
+mesure, compteurs 25 mois, journal technique 14 jours) — le remplacement du
+suivi individuel, les événements du navigateur, les jalons de cohorte, GA4 et
+les textes publics restent au propriétaire (§8 du point).
