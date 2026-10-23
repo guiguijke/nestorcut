@@ -40,7 +40,20 @@ export function configureSolver({ run, cancel } = {}) {
 
 async function realRunner(jobSlug, opts) {
     const { runLocalJobPrivate } = await import('./localJobPrivate')
-    return runLocalJobPrivate(jobSlug, opts)
+    try {
+        return await runLocalJobPrivate(jobSlug, opts)
+    } catch (e) {
+        // Exception NON gérée du solve (réseau local-payload / local-result,
+        // finalisation…) : sans local-fail le job restait awaiting_local à
+        // vie, quota consommé et slot de concurrence occupé (constat prod
+        // 2026-10-23 : 4 jobs bloqués depuis 2 à 7 semaines). 409 si le job
+        // est déjà terminé (done/cancelled) : ignoré, rien à corriger.
+        await $fetch(`/api/results/${jobSlug}/local-fail`, {
+            method: 'POST',
+            body: { error: 'crash', detail: String(e?.message || e || '').slice(0, 300) },
+        }).catch(() => {})
+        throw e
+    }
 }
 
 async function realCanceller(jobSlug) {

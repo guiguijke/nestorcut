@@ -84,8 +84,14 @@ export default defineEventHandler(async (event) => {
         }
     })
 
-    await db.collection('nesting_jobs').updateOne(
-        { slug },
+    // Transition ATOMIQUE : seul `awaiting_local` est légitime ici (nest.post.js
+    // et le worker local-prep créent le job dans ce statut, local-payload /
+    // local-quota / local-fail l'exigent aussi). Un local-fail, un cancel ou le
+    // sweeper concurrent a pu le basculer (error/cancelled, quota déjà
+    // remboursé) depuis la lecture : sans filtre, `done` écraserait ce statut
+    // et l'utilisateur garderait résultat ET remboursement.
+    const res = await db.collection('nesting_jobs').updateOne(
+        { slug, ownerId: userId, status: 'awaiting_local' },
         {
             $set: {
                 alternatives,
@@ -113,5 +119,8 @@ export default defineEventHandler(async (event) => {
             $unset: { progress: '', compute: '', localPayload: '' },
         }
     )
+    if (res?.matchedCount !== 1) {
+        throw createError({ statusCode: 409, statusMessage: 'Job is not awaiting local compute' })
+    }
     return { ok: true }
 })

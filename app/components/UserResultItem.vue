@@ -129,6 +129,7 @@ import { themeType } from '~~/constants/theme.constants';
 import { statusType } from "~~/constants/status.constants";
 import { trackEvent } from '~/utils/track';
 import { altDensityPctOf } from '~/utils/resultQuality';
+import { failureReasonKey } from '~/utils/failureReason';
 import { computed, ref } from "vue";
 
 const props = defineProps({
@@ -290,6 +291,7 @@ const isCapacityRefusal = computed(() =>
 // d'un échec muet qui bloque l'utilisateur en 409.
 const isOrphanExpired = computed(() =>
     props.result?.information === 'awaiting_local_expired')
+const failureKey = computed(() => failureReasonKey(props.result?.information))
 const failureTitle = computed(() =>
     isOrphanExpired.value ? t('results.orphanExpired.short')
     : isCapacityRefusal.value ? t('nest.capacity.title')
@@ -334,6 +336,9 @@ const resultTitle = computed(() => {
         // jamais un second « Échec du nesting ».
         if (isOrphanExpired.value) return t('results.orphanExpired')
         if (isCapacityRefusal.value) return t('nest.capacity.title')
+        // Code d'échec stable (local-fail / sweeper) → explication traduite,
+        // jamais le seul nom du projet sans raison.
+        if (failureKey.value) return t(failureKey.value)
         if (isNoFit.value) return t('result.failed.nofitHint')
         return projectName.value || t('result.failed.nofitHint')
     }

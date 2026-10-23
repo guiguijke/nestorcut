@@ -34,6 +34,10 @@ export default defineNuxtConfig({
         // takenAt) — annulation + remboursement au POST/à l'ouverture du
         // flux. Override : NUXT_AWAITING_LOCAL_TTL_MIN.
         awaitingLocalTtlMin: 10,
+        // Jobs awaiting_local PRIS (takenAt) mais jamais livrés (onglet
+        // fermé / crash) : passés en error `local_interrupted` + remboursés
+        // après ce délai (minutes). Override : NUXT_AWAITING_LOCAL_STALE_MIN.
+        awaitingLocalStaleMin: 120,
         stripeSecretKey: '',
         // Signing secret for the Stripe webhook endpoint (whsec_...). Set via
         // NUXT_STRIPE_WEBHOOK_SECRET. Empty string disables signature checks

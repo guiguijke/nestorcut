@@ -478,6 +478,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                 method: 'POST',
                 body: {
                     error: errorCode,
+                    // Le code seul ne dit rien d'un « payload_build » : le
+                    // message réel de l'exception part avec (borné serveur).
+                    detail: String(e?.message || e || '').slice(0, 300),
                     ...(isCapacity && e.__unfit ? { unfit: e.__unfit } : {}),
                 },
             }).catch(() => {})

@@ -28,21 +28,15 @@ export default defineEventHandler(async (event) => {
     // pool de workers est terminé côté client, le serveur finalise et
     // refunde le quota (miroir de local-fail.post.js / worker refund.py).
     if (job.status === 'awaiting_local') {
+        // Transition ATOMIQUE d'abord (même verrou que local-fail.post.js) :
+        // filtre sur `awaiting_local`. Un local-fail / local-result / sweeper
+        // concurrent a déjà finalisé le job → pas de match, aucun
+        // remboursement (pas de double), aucun écrasement d'un `done`/`error`.
+        // Le quota n'est remboursé que si CETTE transition a matché.
         const chargeType = job.charge?.type
         const alreadyRefunded = Boolean(job.charge?.refunded)
-        if (!alreadyRefunded && chargeType === 'free') {
-            await db.collection('users').updateOne(
-                { id: job.ownerId, freeNestingUsed: { $gt: 0 } },
-                { $inc: { freeNestingUsed: -1 } }
-            )
-        } else if (!alreadyRefunded && chargeType === 'demo' && !job.charge?.skippedQuota) {
-            await db.collection('users').updateOne(
-                { id: job.ownerId, demoNestingUsed: { $gt: 0 } },
-                { $inc: { demoNestingUsed: -1 } }
-            )
-        }
-        await db.collection('nesting_jobs').updateOne(
-            { _id: job._id },
+        const res = await db.collection('nesting_jobs').updateOne(
+            { _id: job._id, status: 'awaiting_local' },
             {
                 $set: {
                     status: 'cancelled',
@@ -55,12 +49,31 @@ export default defineEventHandler(async (event) => {
                 $unset: { progress: '', compute: '', localPayload: '', liveLayout: '' },
             }
         )
+        if (res?.matchedCount !== 1) {
+            // Même réponse que pour un job déjà terminé (le client l'ignore).
+            const current = await db.collection('nesting_jobs').findOne({ _id: job._id })
+            return { ok: false, status: current?.status ?? job.status }
+        }
+        if (!alreadyRefunded && chargeType === 'free') {
+            await db.collection('users').updateOne(
+                { id: job.ownerId, freeNestingUsed: { $gt: 0 } },
+                { $inc: { freeNestingUsed: -1 } }
+            )
+        } else if (!alreadyRefunded && chargeType === 'demo' && !job.charge?.skippedQuota) {
+            await db.collection('users').updateOne(
+                { id: job.ownerId, demoNestingUsed: { $gt: 0 } },
+                { $inc: { demoNestingUsed: -1 } }
+            )
+        }
         return { ok: true, status: 'cancelled' }
     }
 
     if (job.status === 'pending') {
-        await db.collection('nesting_jobs').updateOne(
-            { _id: job._id },
+        // Conditionnel : si un worker a réclamé le job entre-temps
+        // (pending → processing), on ne l'écrase pas en `cancelled` — on
+        // retombe sur le drapeau cancelRequested ci-dessous.
+        const res = await db.collection('nesting_jobs').updateOne(
+            { _id: job._id, status: 'pending' },
             {
                 $set: {
                     status: 'cancelled',
@@ -72,11 +85,11 @@ export default defineEventHandler(async (event) => {
                 $unset: { progress: '' },
             }
         )
-        return { ok: true, status: 'cancelled' }
+        if (res?.matchedCount === 1) return { ok: true, status: 'cancelled' }
     }
 
     await db.collection('nesting_jobs').updateOne(
-        { _id: job._id },
+        { _id: job._id, status: { $in: ['pending', 'processing'] } },
         { $set: { cancelRequested: true, update_ts: new Date() } }
     )
     return { ok: true, status: 'cancelling' }

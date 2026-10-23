@@ -309,9 +309,12 @@ def run_worker(config: WorkerConfig) -> None:
                 )
                 if config.refund:
                     config.refund(doc)
+                # Jamais de raison vide : un `assert` / `raise Exception()` /
+                # KeyError sans message laissait `error` = "" (job en échec
+                # sans aucune explication). Le type de l'exception reste.
                 error_update = {
                     config.status_field: "error",
-                    config.error_field: str(e),
+                    config.error_field: str(e).strip() or type(e).__name__,
                 }
                 if config.track_timing:
                     error_update["update_ts"] = datetime.now()

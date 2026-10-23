@@ -241,3 +241,24 @@ describe('localSolverRegistry — navigation isolée, file tier, idempotence', (
         expect(mod.progressFor('pA').frame.items).toEqual([1, 2])
     })
 })
+
+describe('localSolverRegistry — exception non gérée du solve', () => {
+    beforeEach(() => { vi.resetModules() })
+    afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.doUnmock('../composables/localJobPrivate') })
+
+    it('le runner réel poste local-fail (crash + détail) au lieu de laisser le job awaiting_local', async () => {
+        const calls = []
+        vi.stubGlobal('$fetch', vi.fn(async (url, opts) => { calls.push({ url, body: opts?.body }); return { ok: true } }))
+        vi.doMock('../composables/localJobPrivate', () => ({
+            runLocalJobPrivate: async () => { throw new Error('network down') },
+        }))
+        const mod = await import('../composables/localSolverRegistry')
+        mod.ensureJob(job('jx'), { projectSlug: 'p1', maxConcurrent: 1 })
+        await new Promise(r => setTimeout(r, 30))
+        expect(calls).toEqual([{
+            url: '/api/results/jx/local-fail',
+            body: { error: 'crash', detail: 'network down' },
+        }])
+        expect(mod.progressFor('p1')).toMatchObject({ phase: 'error', error: 'crash' })
+    })
+})

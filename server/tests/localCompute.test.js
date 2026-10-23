@@ -26,7 +26,9 @@ vi.mock('~~/server/features/payment/stripe', () => ({
 import nestHandler from '~~/server/api/project/[slug]/nest.post.js'
 import payloadHandler from '~~/server/api/results/[slug]/local-payload.get.js'
 import resultHandler from '~~/server/api/results/[slug]/local-result.post.js'
+import { expireStaleTakenAwaitingLocal } from '~~/server/utils/expireOrphanAwaitingLocal'
 import failHandler from '~~/server/api/results/[slug]/local-fail.post.js'
+import cancelHandler from '~~/server/api/results/[slug]/cancel.post.js'
 import quotaHandler from '~~/server/api/results/[slug]/local-quota.post.js'
 import { BROWSER_COMPUTE, resolveComputeLocation, resolveLocalMode } from '~~/server/utils/entitlement'
 import { fakeDb } from './helpers/fakeMongo'
@@ -300,6 +302,104 @@ describe('local-payload / local-result / local-fail routes (flag-gated)', () => 
         expect(jobDoc.charge.refunded).toBe(true)
     })
 
+    it('local-fail: stores a non-empty stable reason in error + errorCode (and keeps information)', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const j1 = localJob()
+        state.db = fakeDb({ nesting_jobs: [j1], users: [freeUser({ freeNestingUsed: 1 })] })
+        await failHandler(ev('u1', 'job-1', { error: 'payload_build', detail: 'local_geometry_missing' }))
+        expect(j1.error).toBe('payload_build: local_geometry_missing')
+        expect(j1.errorCode).toBe('payload_build')
+        expect(j1.information).toBe('payload_build')
+
+        // Texte moteur libre : code générique, texte brut conservé.
+        const j2 = localJob({ slug: 'job-2' })
+        state.db = fakeDb({ nesting_jobs: [j2], users: [freeUser({ freeNestingUsed: 1 })] })
+        await failHandler(ev('u1', 'job-2', { error: 'Rayon panic: strip-width is running away' }))
+        expect(j2.error).toBe('Rayon panic: strip-width is running away')
+        expect(j2.errorCode).toBe('engine_error')
+
+        // Corps vide : jamais de raison vide.
+        const j3 = localJob({ slug: 'job-3' })
+        state.db = fakeDb({ nesting_jobs: [j3], users: [freeUser({ freeNestingUsed: 1 })] })
+        await failHandler(ev('u1', 'job-3', {}))
+        expect(j3.status).toBe('error')
+        expect(j3.error).toBe('local_unknown')
+        expect(j3.errorCode).toBe('local_unknown')
+    })
+
+    it('local-fail: drops free-text detail (privacy: categories only, never file names)', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const j = localJob()
+        state.db = fakeDb({ nesting_jobs: [j], users: [freeUser({ freeNestingUsed: 1 })] })
+        await failHandler(ev('u1', 'job-1', { error: 'payload_build', detail: "Cannot read 'client-secret-plan.dxf'" }))
+        expect(j.error).toBe('payload_build')
+        expect(JSON.stringify(j)).not.toContain('client-secret')
+
+        // errorCode inconnu -> catégorie générique.
+        const j2 = localJob({ slug: 'job-2' })
+        state.db = fakeDb({ nesting_jobs: [j2], users: [freeUser({ freeNestingUsed: 1 })] })
+        await failHandler(ev('u1', 'job-2', { error: 'my_private_file_v2' }))
+        expect(j2.errorCode).toBe('engine_error')
+    })
+
+    it('local-fail: job already done -> 409, no refund, status stays done', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const done = localJob({ status: 'done' })
+        state.db = fakeDb({ nesting_jobs: [done], users: [userDoc] })
+        await expect(failHandler(ev('u1', 'job-1', { error: 'crash' }))).rejects.toMatchObject({ statusCode: 409 })
+        expect(done.status).toBe('done')
+        expect(done.charge.refunded).toBeUndefined()
+        expect(userDoc.freeNestingUsed).toBe(3)
+    })
+
+    it('local-fail racing the stale sweeper: one single refund', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob({ takenAt: new Date(Date.now() - 3 * 3600_000) })
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        const [sweep, fail] = await Promise.allSettled([
+            expireStaleTakenAwaitingLocal(state.db, 'u1', { staleMin: 120 }),
+            failHandler(ev('u1', 'job-1', { error: 'crash' })),
+        ])
+        expect(sweep.status).toBe('fulfilled')
+        expect(userDoc.freeNestingUsed).toBe(2) // jamais 1
+        expect(job.status).toBe('error')
+        expect(job.charge.refunded).toBe(true)
+        // Un seul des deux a gagné la transition.
+        expect(fail.status === 'rejected' ? sweep.value.length : 1 - sweep.value.length).toBe(1)
+    })
+
+    it('local-fail: sweeper wins between the read and the write -> 409, no second refund', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob({ takenAt: new Date(Date.now() - 3 * 3600_000) })
+        const inner = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        let swept = false
+        state.db = {
+            collection: (name) => {
+                const col = inner.collection(name)
+                if (name !== 'nesting_jobs') return col
+                return {
+                    ...col,
+                    // Instantané lu AVANT que le sweeper ne bascule le job.
+                    findOne: async (f) => {
+                        const live = await col.findOne(f)
+                        const snap = { ...live, charge: { ...live.charge } }
+                        if (!swept) {
+                            swept = true
+                            await expireStaleTakenAwaitingLocal(inner, 'u1', { staleMin: 120 })
+                        }
+                        return snap
+                    },
+                }
+            },
+        }
+        await expect(failHandler(ev('u1', 'job-1', { error: 'crash' }))).rejects.toMatchObject({ statusCode: 409 })
+        expect(userDoc.freeNestingUsed).toBe(2)
+        expect(job.errorCode).toBe('local_interrupted')
+    })
+
     it('local-fail: demo charge refunds the demo slot ; grant refunds nothing', async () => {
         const userDoc = freeUser({ demoNestingUsed: 4 })
         const demoJob = localJob({ projectSlug: 'demo', charge: { type: 'demo' } })
@@ -396,5 +496,230 @@ describe('POST local-quota — comptabilité seule, zéro géométrie (PR5, J-07
         state.config = { public: { localComputeEnabled: false } }
         state.db = fakeDb({ nesting_jobs: [localJob()], users: [freeUser()] })
         await expect(quotaHandler(ev('u1', 'job-1', {}))).rejects.toMatchObject({ statusCode: 404 })
+    })
+})
+
+describe('cancel / local-result — transitions atomiques (courses de remboursement)', () => {
+    const localJob = (overrides = {}) => ({
+        slug: 'job-1',
+        ownerId: 'u1',
+        projectSlug: 'p1',
+        status: 'awaiting_local',
+        requested: 10,
+        params: { sheets: [{ width: 3000, height: 1500, count: 1 }] },
+        charge: { type: 'free' },
+        ...overrides,
+    })
+    const alts = { alternatives: [{ solution: { layouts: [{ placed_items: [] }], density: 0.5 } }] }
+
+    it('cancel awaiting_local: cancelled + un seul remboursement', async () => {
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        const res = await cancelHandler(ev('u1', 'job-1'))
+        expect(res).toEqual({ ok: true, status: 'cancelled' })
+        expect(job.status).toBe('cancelled')
+        expect(job.charge.refunded).toBe(true)
+        expect(userDoc.freeNestingUsed).toBe(2)
+    })
+
+    it('cancel vs local-fail concurrents: un seul remboursement, statut cohérent', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        const [c, f] = await Promise.allSettled([
+            cancelHandler(ev('u1', 'job-1')),
+            failHandler(ev('u1', 'job-1', { error: 'crash' })),
+        ])
+        expect(userDoc.freeNestingUsed).toBe(2) // jamais 1
+        expect(job.charge.refunded).toBe(true)
+        if (f.status === 'rejected') {
+            expect(f.reason.statusCode).toBe(409)
+            expect(job.status).toBe('cancelled')
+        } else {
+            expect(c.value.ok).toBe(false)
+            expect(job.status).toBe('error')
+        }
+    })
+
+    it('cancel: le job passe en error entre la lecture et l\u2019écriture -> ok:false, pas de double refund, error conservé', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        const inner = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        let failed = false
+        state.db = {
+            collection: (name) => {
+                const col = inner.collection(name)
+                if (name !== 'nesting_jobs') return col
+                return {
+                    ...col,
+                    findOne: async (f) => {
+                        const snap = { ...(await col.findOne(f)) }
+                        if (!failed) {
+                            failed = true
+                            snap.charge = { ...snap.charge }
+                            await failHandler(ev('u1', 'job-1', { error: 'crash' }))
+                        }
+                        return snap
+                    },
+                }
+            },
+        }
+        const res = await cancelHandler(ev('u1', 'job-1'))
+        expect(res.ok).toBe(false)
+        expect(job.status).toBe('error')
+        expect(userDoc.freeNestingUsed).toBe(2)
+    })
+
+    it('cancel sur un job done: ok:false, aucun remboursement, reste done', async () => {
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob({ status: 'done' })
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        const res = await cancelHandler(ev('u1', 'job-1'))
+        expect(res).toEqual({ ok: false, status: 'done' })
+        expect(job.status).toBe('done')
+        expect(userDoc.freeNestingUsed).toBe(3)
+    })
+
+    it('cancel vs local-result: le done livré n\u2019est pas écrasé ni remboursé', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        await resultHandler(ev('u1', 'job-1', alts))
+        const res = await cancelHandler(ev('u1', 'job-1'))
+        expect(res.ok).toBe(false)
+        expect(job.status).toBe('done')
+        expect(userDoc.freeNestingUsed).toBe(3)
+    })
+
+    it('local-result sur un job error/cancelled: 409, aucun écrasement', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        for (const status of ['error', 'cancelled']) {
+            const job = localJob({ status, charge: { type: 'free', refunded: true } })
+            state.db = fakeDb({ nesting_jobs: [job], users: [freeUser()] })
+            await expect(resultHandler(ev('u1', 'job-1', alts))).rejects.toMatchObject({ statusCode: 409 })
+            expect(job.status).toBe(status)
+            expect(job.alternatives).toBeUndefined()
+        }
+    })
+
+    it('local-result: le job bascule entre la lecture et l\u2019écriture -> 409, rien stocké', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const job = localJob()
+        const inner = fakeDb({ nesting_jobs: [job], users: [freeUser({ freeNestingUsed: 3 })] })
+        let failed = false
+        state.db = {
+            collection: (name) => {
+                const col = inner.collection(name)
+                if (name !== 'nesting_jobs') return col
+                return {
+                    ...col,
+                    findOne: async (f) => {
+                        const snap = { ...(await col.findOne(f)) }
+                        if (!failed) {
+                            failed = true
+                            await failHandler(ev('u1', 'job-1', { error: 'crash' }))
+                        }
+                        return snap
+                    },
+                }
+            },
+        }
+        await expect(resultHandler(ev('u1', 'job-1', alts))).rejects.toMatchObject({ statusCode: 409 })
+        expect(job.status).toBe('error')
+        expect(job.alternatives).toBeUndefined()
+    })
+
+    it('local-result sur awaiting_local: done (chemin nominal inchangé)', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        expect(await resultHandler(ev('u1', 'job-1', alts))).toEqual({ ok: true })
+        expect(job.status).toBe('done')
+        expect(job.alternatives).toHaveLength(1)
+        expect(userDoc.freeNestingUsed).toBe(3)
+    })
+})
+
+describe('local-quota — écriture conditionnelle (filtre status awaiting_local)', () => {
+    const localJob = (overrides = {}) => ({
+        slug: 'job-1',
+        ownerId: 'u1',
+        projectSlug: 'p1',
+        status: 'awaiting_local',
+        requested: 10,
+        charge: { type: 'free' },
+        ...overrides,
+    })
+
+    it('awaiting_local: done avec placed/layoutCount/density, quota NON remboursé, filtre conditionnel', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 2 })
+        const job = localJob()
+        state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        const res = await quotaHandler(ev('u1', 'job-1', { placed: 10, layoutCount: 2, density: 0.4 }))
+        expect(res).toEqual({ ok: true })
+        expect(job.status).toBe('done')
+        expect(job.placed).toBe(10)
+        expect(job.layoutCount).toBe(2)
+        expect(job.density).toBe(0.4)
+        expect(job.finishedAt).toBeInstanceOf(Date)
+        expect(userDoc.freeNestingUsed).toBe(2)
+        expect(job.charge.refunded).toBeUndefined()
+        expect(state.db.collection('nesting_jobs').calls.updateOne.at(-1).filter)
+            .toEqual({ slug: 'job-1', ownerId: 'u1', status: 'awaiting_local' })
+    })
+
+    it('job déjà error/cancelled (remboursé) à la lecture: 409, statut et remboursement intacts, aucun done', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        for (const status of ['error', 'cancelled']) {
+            const userDoc = freeUser({ freeNestingUsed: 2 })
+            const job = localJob({ status, charge: { type: 'free', refunded: true } })
+            state.db = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+            await expect(quotaHandler(ev('u1', 'job-1', { placed: 10 }))).rejects.toMatchObject({ statusCode: 409 })
+            expect(job.status).toBe(status)
+            expect(job.placed).toBeUndefined()
+            expect(job.finishedAt).toBeUndefined()
+            expect(userDoc.freeNestingUsed).toBe(2)
+        }
+    })
+
+    it('annulé entre la lecture et l’écriture: 409, reste cancelled, rien stocké, un seul remboursement', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        const userDoc = freeUser({ freeNestingUsed: 3 })
+        const job = localJob()
+        const inner = fakeDb({ nesting_jobs: [job], users: [userDoc] })
+        let cancelled = false
+        state.db = {
+            collection: (name) => {
+                const col = inner.collection(name)
+                if (name !== 'nesting_jobs') return col
+                return {
+                    ...col,
+                    findOne: async (f) => {
+                        const snap = { ...(await col.findOne(f)) }
+                        if (!cancelled) {
+                            cancelled = true
+                            snap.charge = { ...snap.charge }
+                            await cancelHandler(ev('u1', 'job-1'))
+                        }
+                        return snap
+                    },
+                }
+            },
+        }
+        await expect(quotaHandler(ev('u1', 'job-1', { placed: 10, layoutCount: 2, density: 0.4 })))
+            .rejects.toMatchObject({ statusCode: 409 })
+        expect(job.status).toBe('cancelled')
+        expect(job.charge.refunded).toBe(true)
+        expect(job.placed).toBeUndefined()
+        expect(job.layoutCount).toBeUndefined()
+        expect(job.density).toBeUndefined()
+        expect(job.localOnly).toBeUndefined()
+        expect(userDoc.freeNestingUsed).toBe(2)
     })
 })

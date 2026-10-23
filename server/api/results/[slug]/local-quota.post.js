@@ -79,8 +79,13 @@ export default defineEventHandler(async (event) => {
         }
         : null
 
-    await db.collection('nesting_jobs').updateOne(
-        { slug },
+    // Écriture CONDITIONNELLE (même règle que local-result / local-fail) : entre
+    // la lecture ci-dessus et ici, une annulation, un local-fail ou le balai
+    // des jobs périmés peut avoir clos ET remboursé le job — sans le filtre de
+    // statut, ce `done` écrasait l'état final et l'utilisateur gardait le
+    // résultat ET le remboursement.
+    const res = await db.collection('nesting_jobs').updateOne(
+        { slug, ownerId: userId, status: 'awaiting_local' },
         {
             $set: {
                 status: 'done',
@@ -98,5 +103,8 @@ export default defineEventHandler(async (event) => {
             $unset: { progress: '', compute: '', localPayload: '', liveLayout: '' },
         },
     )
+    if (res.matchedCount !== 1) {
+        throw createError({ statusCode: 409, statusMessage: 'Job is not awaiting local compute' })
+    }
     return { ok: true }
 })
