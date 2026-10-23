@@ -8,27 +8,51 @@ noms de lots internes. La version affichée dans l'en-tête est le
 
 *FR*
 
-- Le menu de l'application parle votre langue : les liens Fonctionnalités, Comment ça marche et FAQ pointent vers le site dans votre langue, un lien Documentation apparaît dans le menu et à côté d'Espace de travail, et l'en-tête occupe toute la largeur de l'écran et s'adapte à la place disponible — menu complet quand tout tient, menu replié sinon — jamais un libellé coupé ni hors de l'écran. La promesse d'notifications par e-mail est retirée (elle n'a jamais fonctionné), ainsi que les crédits et la mention « layouts plus denses » du plan Pro : Pro livre le même résultat plus tôt, pas un autre.
+- Le menu de l'application parle votre langue : les liens Fonctionnalités, Comment ça marche et FAQ pointent vers le site dans votre langue, un lien Documentation apparaît dans le menu et à côté d'Espace, et l'en-tête occupe toute la largeur de l'écran et s'adapte à la place disponible — menu complet quand tout tient, menu replié sinon — jamais un libellé coupé ni hors de l'écran. La promesse de notifications par e-mail est retirée (elle n'a jamais fonctionné), ainsi que les crédits et la mention « layouts plus denses » du plan Pro : Pro livre le même résultat plus tôt, pas un autre.
+- Sécurité : les journaux techniques de l'application ne conservent plus le contenu des échanges et sont effacés au bout de 14 jours.
+- Facturation : les abonnés gèrent leur facturation (carte de paiement, factures, résiliation) depuis leur profil ; un problème de paiement est désormais signalé clairement, avec un bouton pour mettre à jour la carte. L'essai gratuit de 7 jours n'est proposé qu'une fois par compte. Le passage de Unlimited à Pro modifie désormais l'abonnement en cours au lieu d'en créer un second.
+- Échecs : lorsqu'un calcul échoue, la carte de résultat indique désormais la raison. Un calcul interrompu dans le navigateur ne laisse plus la tâche bloquée : il est clos et le calcul est remboursé.
+- Mentions légales : pages légales corrigées — hébergeur (Hetzner, Allemagne, derrière Cloudflare), licence du code (PolyForm Noncommercial ; les parties héritées de nest2d restent sous MIT), liste des sous-traitants, date de révision fixée, packs de crédits retirés.
 
 *EN*
 
-- The app menu now speaks your language: the Features, How it works and FAQ links point to the site in your language, a Documentation link appears in the menu and next to Workspace, and the header spans the full width of the screen and adapts to the available space — full menu when everything fits, collapsed menu otherwise — never a label wrapped or off-screen. The email notification promise is removed (it never worked), along with credits and the Pro "denser layouts" claim: Pro delivers the same result sooner, not a different one.
+- The app menu now speaks your language: the Features, How It Works and FAQ links point to the site in your language, a Documentation link appears in the menu and next to Workspace, and the header spans the full width of the screen and adapts to the available space — full menu when everything fits, collapsed menu otherwise — never a label wrapped or off-screen. The email notification promise is removed (it never worked), along with credits and the Pro "denser layouts" claim: Pro delivers the same result sooner, not a different one.
+- The application's technical logs no longer keep the content of exchanges and are erased after 14 days.
+- Subscribers can manage their billing (payment card, invoices, cancellation) from their profile; a payment problem is now clearly shown with a button to update the card. The 7-day free trial is offered once per account. Upgrading from Unlimited to Pro now changes the current subscription instead of creating a second one.
+- When a nesting fails, the result card now says why. A computation interrupted in the browser no longer leaves the job stuck: it is closed and the nesting is refunded.
+- Legal pages corrected: hosting provider (Hetzner, Germany, behind Cloudflare), code licence (PolyForm Noncommercial; parts inherited from nest2d remain MIT), list of sub-processors, fixed revision date, credit packs removed.
 
 *PT*
 
 - O menu da aplicação agora fala seu idioma: os links Recursos, Como funciona e FAQ apontam para o site no seu idioma, um link Documentação aparece no menu e ao lado de Meu espaço, e o cabeçalho ocupa toda a largura da tela e se adapta ao espaço disponível — menu completo quando tudo cabe, menu recolhido caso contrário — nunca um rótulo quebrado ou fora da tela. A promessa de notificações por e-mail foi retirada (nunca funcionou), junto com os créditos e a menção "arranjos mais densos" do Pro: o Pro entrega o mesmo resultado mais cedo, não outro.
+- Os registros técnicos da aplicação não guardam mais o conteúdo das trocas e são apagados após 14 dias.
+- Os assinantes podem gerenciar a cobrança (cartão de pagamento, faturas, cancelamento) pelo perfil; um problema de pagamento agora aparece com clareza, com um botão para atualizar o cartão. O teste gratuito de 7 dias é oferecido uma única vez por conta. Migrar do Unlimited para o Pro agora altera a assinatura atual em vez de criar uma segunda.
+- Quando um cálculo falha, o cartão de resultado agora informa o motivo. Um cálculo interrompido no navegador não deixa mais a tarefa travada: ela é encerrada e o cálculo é reembolsado.
+- Páginas legais corrigidas: provedor de hospedagem (Hetzner, Alemanha, atrás da Cloudflare), licença do código (PolyForm Noncommercial; partes herdadas do nest2d continuam sob MIT), lista de subprocessadores, data de revisão fixada, pacotes de créditos removidos.
 
 *IT*
 
 - Il menu dell'applicazione ora parla la tua lingua: i link Funzioni, Come funziona e FAQ puntano al sito nella tua lingua, un link Documentazione appare nel menu e accanto a Area di lavoro, e l'intestazione occupa tutta la larghezza dello schermo e si adatta allo spazio disponibile — menu completo quando tutto sta, menu richiuso altrimenti — mai un'etichetta spezzata o fuori dallo schermo. La promessa di notifiche via email è stata ritirata (non ha mai funzionato), insieme ai crediti e alla menzione "disposizioni più dense" del Pro: il Pro consegna lo stesso risultato prima, non un altro.
+- I log tecnici dell'applicazione non conservano più il contenuto degli scambi e vengono cancellati dopo 14 giorni.
+- Gli abbonati possono gestire la fatturazione (carta di pagamento, fatture, disdetta) dal proprio profilo; un problema di pagamento è ora segnalato chiaramente, con un pulsante per aggiornare la carta. La prova gratuita di 7 giorni è offerta una sola volta per account. Il passaggio da Unlimited a Pro ora modifica l'abbonamento in corso invece di crearne un secondo.
+- Quando un calcolo fallisce, la scheda del risultato ora spiega il motivo. Un calcolo interrotto nel browser non lascia più il lavoro bloccato: viene chiuso e il calcolo viene rimborsato.
+- Pagine legali corrette: fornitore di hosting (Hetzner, Germania, dietro Cloudflare), licenza del codice (PolyForm Noncommercial; le parti ereditate da nest2d restano MIT), elenco dei sub-responsabili, data di revisione fissata, pacchetti di crediti rimossi.
 
 *DE*
 
 - Das Anwendungsmenü spricht jetzt Ihre Sprache: die Links Funktionen, So funktioniert es und FAQ zeigen auf die Website in Ihrer Sprache, ein Dokumentations-Link erscheint im Menü und neben Arbeitsbereich, und die Kopfzeile nutzt die gesamte Bildschirmbreite und passt sich dem verfügbaren Platz an — volles Menü, wenn alles hineinpasst, sonst eingeklapptes Menü — nie eine Beschriftung umbrochen oder außerhalb des Bildschirms. Die E-Mail-Benachrichtigungs-Zusage wurde zurückgezogen (sie funktionierte nie), ebenso wie Credits und die "dichteren Layouts"-Aussage von Pro: Pro liefert dasselbe Ergebnis früher, kein anderes.
+- Die technischen Protokolle der Anwendung speichern keine Inhalte von Übertragungen mehr und werden nach 14 Tagen gelöscht.
+- Abonnenten können ihre Abrechnung (Zahlungskarte, Rechnungen, Kündigung) über ihr Profil verwalten; ein Zahlungsproblem wird jetzt deutlich angezeigt, mit einer Schaltfläche zum Aktualisieren der Karte. Die 7-tägige kostenlose Testphase wird pro Konto nur einmal angeboten. Der Wechsel von Unlimited zu Pro ändert jetzt das laufende Abonnement, statt ein zweites zu erstellen.
+- Wenn eine Berechnung fehlschlägt, nennt die Ergebniskarte jetzt den Grund. Eine im Browser unterbrochene Berechnung bleibt nicht mehr hängen: Sie wird abgeschlossen und die Berechnung wird erstattet.
+- Rechtliche Seiten korrigiert: Hosting-Anbieter (Hetzner, Deutschland, hinter Cloudflare), Lizenz des Codes (PolyForm Noncommercial; von nest2d übernommene Teile bleiben MIT), Liste der Unterauftragsverarbeiter, festes Revisionsdatum, Credit-Pakete entfernt.
 
 *ES*
 
 - El menú de la aplicación ahora habla tu idioma: los enlaces Funciones, Cómo funciona y FAQ apuntan al sitio en tu idioma, un enlace Documentación aparece en el menú y junto a Área de trabajo, y la cabecera ocupa todo el ancho de la pantalla y se adapta al espacio disponible — menú completo cuando todo cabe, menú plegado en caso contrario — nunca una etiqueta cortada ni fuera de la pantalla. La promesa de notificaciones por correo electrónico fue retirada (nunca funcionó), junto con los créditos y la mención "disposiciones más densas" de Pro: Pro entrega el mismo resultado antes, no otro.
+- Los registros técnicos de la aplicación ya no guardan el contenido de los intercambios y se borran tras 14 días.
+- Los suscriptores pueden gestionar su facturación (tarjeta de pago, facturas, cancelación) desde su perfil; un problema de pago se muestra ahora claramente, con un botón para actualizar la tarjeta. La prueba gratuita de 7 días se ofrece una sola vez por cuenta. Pasar de Unlimited a Pro ahora cambia la suscripción actual en lugar de crear una segunda.
+- Cuando un cálculo falla, la tarjeta de resultado ahora indica el motivo. Un cálculo interrumpido en el navegador ya no deja la tarea bloqueada: se cierra y el cálculo se reembolsa.
+- Páginas legales corregidas: proveedor de alojamiento (Hetzner, Alemania, detrás de Cloudflare), licencia del código (PolyForm Noncommercial; las partes heredadas de nest2d siguen bajo MIT), lista de subencargados, fecha de revisión fijada, paquetes de créditos eliminados.
 
 ## V0.9.7
 
