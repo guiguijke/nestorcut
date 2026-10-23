@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import './helpers/h3Shims'
 import { clientIp, rateLimitAllow, rateLimitPeek, rateLimitReset, denyRateLimit } from '~~/server/utils/ratelimit'
 
@@ -95,5 +95,30 @@ describe('denyRateLimit', () => {
         expect(err.data.code).toBe('rate_limited')
         expect(err.data.retryAfterSec).toBeGreaterThanOrEqual(1)
         expect(err.data.retryAfterSec).toBeLessThanOrEqual(60)
+    })
+})
+
+describe('balayage par fenêtre propre à chaque entrée (S-3)', () => {
+    afterEach(() => vi.useRealTimers())
+
+    it("un appel à fenêtre 60 s n'efface pas le compteur d'échecs de connexion (15 min)", () => {
+        vi.useFakeTimers()
+        const t0 = Date.now()
+        const login = { limit: 5, windowMs: 15 * 60_000 }
+        const key = `login-email:s3-${Math.random()}`
+        for (let i = 0; i < 5; i++) rateLimitAllow(key, login)
+        expect(rateLimitPeek(key, login).allowed).toBe(false)
+
+        // t0 + 121 s : un autre endpoint (fenêtre 60 s) déclenche le balayage.
+        vi.setSystemTime(t0 + 121_000)
+        rateLimitAllow(`autre:${Math.random()}`, { limit: 10, windowMs: 60_000 })
+        expect(rateLimitPeek(key, login).allowed).toBe(false)
+
+        // Toujours refusé juste avant la fin de la fenêtre de 15 min...
+        vi.setSystemTime(t0 + 15 * 60_000 - 1_000)
+        expect(rateLimitPeek(key, login).allowed).toBe(false)
+        // ... et autorisé de nouveau une fois la fenêtre écoulée.
+        vi.setSystemTime(t0 + 15 * 60_000 + 1_000)
+        expect(rateLimitPeek(key, login).allowed).toBe(true)
     })
 })

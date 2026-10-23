@@ -128,10 +128,11 @@ export async function deleteUserAccount(event, user) {
         'payment_failures',
         'supportMessages',
         'tracking',
-        'http',
     ]) {
         await db.collection(name).deleteMany({ userId })
     }
+    // `http` n'est plus balayé ici : depuis S-1 le journal HTTP ne porte plus
+    // aucun identifiant (ni userId, ni URL) et s'efface seul à 14 jours.
     await clearVaultSessions(userId)
 
     // 6. Admin audit trail — keep the actions, drop the personal reference.

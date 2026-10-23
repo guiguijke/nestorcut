@@ -4,10 +4,10 @@ definePageMeta({ middleware: ['admin-auth'] })
 const tab = ref<'http' | 'tracking'>('http')
 
 // ---- HTTP logs filters ----
-const httpFilters = reactive({ q: '', method: '', statusMin: '', windowDays: 1, page: 1 })
+const httpFilters = reactive({ route: '', method: '', statusMin: '', windowDays: 1, page: 1 })
 const limit = 100
 const httpQuery = computed(() => ({
-  q: httpFilters.q || undefined,
+  route: httpFilters.route || undefined,
   method: httpFilters.method || undefined,
   statusMin: httpFilters.statusMin || undefined,
   windowDays: httpFilters.windowDays,
@@ -85,8 +85,8 @@ function statusCls(code: number) {
     <template v-if="tab === 'http'">
       <div class="card flex flex-wrap items-end gap-3">
         <div class="min-w-[200px] flex-1">
-          <label class="label">Recherche (url / userId)</label>
-          <input v-model="httpFilters.q" class="input" placeholder="/api/…" />
+          <label class="label">Route (motif)</label>
+          <input v-model="httpFilters.route" class="input" placeholder="/api/files/…" />
         </div>
         <div class="w-full sm:w-auto">
           <label class="label">Méthode</label>
@@ -102,7 +102,7 @@ function statusCls(code: number) {
         <div class="w-full sm:w-auto">
           <label class="label">Fenêtre (jours)</label>
           <select v-model="httpFilters.windowDays" class="input">
-            <option :value="1">24 h</option><option :value="2">2 j</option><option :value="7">7 j</option>
+            <option :value="1">24 h</option><option :value="2">2 j</option><option :value="7">7 j</option><option :value="14">14 j</option>
           </select>
         </div>
       </div>
@@ -116,8 +116,8 @@ function statusCls(code: number) {
               <th class="px-3 py-2 font-medium">Heure</th>
               <th class="px-3 py-2 font-medium">Méthode</th>
               <th class="px-3 py-2 font-medium">Statut</th>
-              <th class="px-3 py-2 font-medium">URL</th>
-              <th class="px-3 py-2 font-medium">User</th>
+              <th class="px-3 py-2 font-medium">Route</th>
+              <th class="px-3 py-2 font-medium">SSE</th>
               <th class="px-3 py-2 font-medium">Durée</th>
             </tr>
           </thead>
@@ -126,8 +126,8 @@ function statusCls(code: number) {
               <td class="px-3 py-1.5 text-ink-300">{{ fmt(l.timestamp) }}</td>
               <td class="px-3 py-1.5 font-mono">{{ l.method }}</td>
               <td class="px-3 py-1.5"><span class="badge" :class="statusCls(l.statusCode)">{{ l.statusCode }}</span></td>
-              <td class="px-3 py-1.5 font-mono text-ink-200">{{ l.url }}</td>
-              <td class="px-3 py-1.5 font-mono text-ink-400">{{ l.userId ? l.userId.slice(0, 24) : '—' }}</td>
+              <td class="px-3 py-1.5 font-mono text-ink-200">{{ l.route }}</td>
+              <td class="px-3 py-1.5 font-mono text-ink-400">{{ l.isSSE ? 'oui' : '—' }}</td>
               <td class="px-3 py-1.5 font-mono text-ink-400">{{ l.duration }} ms</td>
             </tr>
             <tr v-if="!httpData.items.length"><td colspan="6" class="px-3 py-6 text-center text-ink-400">Aucune requête.</td></tr>
@@ -142,14 +142,14 @@ function statusCls(code: number) {
             <span class="font-mono">{{ l.method }}</span>
             <span class="badge" :class="statusCls(l.statusCode)">{{ l.statusCode }}</span>
           </div>
-          <div class="break-all font-mono text-ink-200">{{ l.url }}</div>
+          <div class="break-all font-mono text-ink-200">{{ l.route }}</div>
           <div class="flex items-center justify-between gap-2">
             <span class="text-ink-400">Heure</span>
             <span class="text-ink-300">{{ fmt(l.timestamp) }}</span>
           </div>
           <div class="flex items-center justify-between gap-2">
-            <span class="text-ink-400">User</span>
-            <span class="min-w-0 truncate font-mono text-ink-400">{{ l.userId ? l.userId.slice(0, 24) : '—' }}</span>
+            <span class="text-ink-400">SSE</span>
+            <span class="font-mono text-ink-400">{{ l.isSSE ? 'oui' : '—' }}</span>
           </div>
           <div class="flex items-center justify-between gap-2">
             <span class="text-ink-400">Durée</span>

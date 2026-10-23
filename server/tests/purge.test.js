@@ -14,7 +14,7 @@ vi.mock('../../server/utils/logger', () => ({
     default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-import { runPurgeOnce, PURGE_AFTER_MS } from '~~/server/features/purge/sweep'
+import { runPurgeOnce, PURGE_AFTER_MS, HTTP_LOG_RETENTION_MS } from '~~/server/features/purge/sweep'
 import { fakeDb } from './helpers/fakeMongo'
 
 const NOW = new Date('2026-08-10T12:00:00Z')
@@ -217,5 +217,24 @@ describe('runPurgeOnce — le strip retiré reste purgé (lot S, 2026-09-13)', (
         expect(files[0].polygonParts).toBeUndefined()
         expect(files[1].purgedAt).toBeUndefined() // trop récent
         expect(report.fileDocs).toBe(1)
+    })
+})
+
+describe('runPurgeOnce — journal HTTP 14 jours (S-1)', () => {
+    it('supprime les entrées de plus de 14 jours, garde les récentes', async () => {
+        const old = { _id: 'h1', route: '/api/x', timestamp: new Date(NOW.getTime() - HTTP_LOG_RETENTION_MS - 60_000) }
+        const edge = { _id: 'h2', route: '/api/y', timestamp: new Date(NOW.getTime() - HTTP_LOG_RETENTION_MS + 60_000) }
+        const fresh = { _id: 'h3', route: 'page', timestamp: FRESH }
+        const http = [old, edge, fresh]
+        state.db = fakeDb({
+            http,
+            user_dxf_files: [],
+            strip_user_dxf_files: [],
+            nesting_jobs: [],
+            strip_nesting_job_queue: [],
+        })
+        const report = await runPurgeOnce({ now: NOW, db: state.db, deleteBlob })
+        expect(http.map((d) => d._id)).toEqual(['h2', 'h3'])
+        expect(report.httpLogs).toBe(1)
     })
 })

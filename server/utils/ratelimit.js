@@ -33,12 +33,16 @@ export function clientIp(event) {
     )
 }
 
+// S-3 (audit 2026-09-27) : chaque entrée garde SA fenêtre. Le balayage jugeait
+// toutes les entrées avec la fenêtre de l'appelant : un appel à 60 s effaçait
+// le compteur d'échecs de connexion (fenêtre 15 min) dès 121 s, rendant la
+// limite contournable. Le déclenchement reste borné par la fenêtre appelante.
 function sweep(windowMs) {
     const now = Date.now()
     if (now - lastSweep < windowMs) return
     lastSweep = now
     for (const [key, entry] of buckets) {
-        if (now - entry.windowStart > windowMs * 2) buckets.delete(key)
+        if (now - entry.windowStart > entry.windowMs * 2) buckets.delete(key)
     }
 }
 
@@ -50,7 +54,7 @@ export function rateLimitAllow(key, { limit = 10, windowMs = 60_000 } = {}) {
     const now = Date.now()
     const entry = buckets.get(key)
     if (!entry || now - entry.windowStart >= windowMs) {
-        buckets.set(key, { windowStart: now, count: 1 })
+        buckets.set(key, { windowStart: now, count: 1, windowMs })
         return true
     }
     entry.count += 1

@@ -24,6 +24,9 @@ import logger from '../../utils/logger'
  * — files+chunks — un TTL sur .files laisserait les .chunks orphelins).
  */
 export const PURGE_AFTER_MS = 24 * 60 * 60 * 1000
+// S-1 (audit 2026-09-27) : le journal HTTP (forme des requêtes, sans contenu)
+// vit 14 jours. Balayé ici sans attendre un index TTL (écriture en prod).
+export const HTTP_LOG_RETENTION_MS = 14 * 24 * 60 * 60 * 1000
 const GRACE_MS = 60 * 60 * 1000
 
 // Buckets balayés par ancienneté (sources, copies canoniques mm, previews).
@@ -190,6 +193,14 @@ async function sweepJobArtifacts(db, jobsName, cutoff) {
     return cleaned
 }
 
+/** Passe 5 — journal HTTP : entrées plus vieilles que 14 jours. */
+async function sweepHttpLog(db, now) {
+    const res = await db
+        .collection('http')
+        .deleteMany({ timestamp: { $lt: new Date(now.getTime() - HTTP_LOG_RETENTION_MS) } })
+    return res?.deletedCount ?? 0
+}
+
 /**
  * Un run de purge. Injectable pour les tests (fakeDb + deleteBlob factice).
  * @param {{now?: Date, db?: any, deleteBlob?: (bucket: string, id: any) => Promise<void>}} opts
@@ -199,7 +210,7 @@ export async function runPurgeOnce({ now = new Date(), db = null, deleteBlob = n
     deleteBlob = deleteBlob || (async (bucket, id) => (await getBucket(bucket)).delete(id))
     const cutoff = new Date(now.getTime() - PURGE_AFTER_MS - GRACE_MS)
 
-    const report = { jobs: 0, blobs: 0, fileDocs: 0, artifacts: 0 }
+    const report = { jobs: 0, blobs: 0, fileDocs: 0, artifacts: 0, httpLogs: 0 }
     for (const jobsName of JOB_COLLECTIONS) {
         report.jobs += await sweepJobResults(db, jobsName, cutoff, now, deleteBlob)
     }
@@ -210,6 +221,7 @@ export async function runPurgeOnce({ now = new Date(), db = null, deleteBlob = n
     for (const jobsName of JOB_COLLECTIONS) {
         report.artifacts += await sweepJobArtifacts(db, jobsName, cutoff)
     }
+    report.httpLogs += await sweepHttpLog(db, now)
     logger.info(`purge: ${JSON.stringify(report)}`)
     return report
 }

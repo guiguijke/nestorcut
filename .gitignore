@@ -11,6 +11,9 @@ node_modules
 
 # Logs
 logs
+# …mais pas les routes API de l'admin (/api/logs/http, /api/logs/tracking) :
+# le motif nu ci-dessus les excluait du dépôt, donc de l'image CI (404 en prod).
+!admin/server/api/logs/
 *.log
 
 # Misc
@@ -94,3 +97,7 @@ spike/
 # prevue par OMC pour des skills propres au projet.
 .omc/
 !.omc/skills/
+
+# Brouillons locaux de l'implémenteur (S-9, audit 2026-09-27) : des scripts y
+# portent en clair des identifiants de comptes de test.
+.omo/
