@@ -15,9 +15,9 @@ async function liveCounts() {
   const db = await connectDB()
   const since24h = daysAgo(1)
   const [queued, processing, failed, signups24h, active5m, events24h] = await Promise.all([
-    db.collection(COL.nestingJobs).countDocuments({ status: 'queued' }),
+    db.collection(COL.nestingJobs).countDocuments({ status: 'pending' }),
     db.collection(COL.nestingJobs).countDocuments({ status: 'processing' }),
-    db.collection(COL.nestingJobs).countDocuments({ status: 'failed' }),
+    db.collection(COL.nestingJobs).countDocuments({ status: 'error' }),
     db.collection(COL.users).countDocuments({ createdAt: { $gte: since24h } }),
     db.collection(COL.users).countDocuments({ lastActiveAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) } }),
     db.collection(COL.tracking).countDocuments({ timestamp: { $gte: since24h } }),

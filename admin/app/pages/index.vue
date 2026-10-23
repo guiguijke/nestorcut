@@ -73,10 +73,10 @@ const queueTiers = [
       <section class="space-y-3">
         <h2 class="text-sm uppercase tracking-wide text-ink-400">Jobs</h2>
         <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <StatCard label="En file" :value="fmt(live?.queued ?? overview.jobs.queued)" accent="warn" :live="!!live" />
+          <StatCard label="En file" :value="fmt(live?.queued ?? overview.jobs.queued)" hint="status pending (hors awaiting_local)" accent="warn" :live="!!live" />
           <StatCard label="En traitement" :value="fmt(live?.processing ?? overview.jobs.processing)" :live="!!live" />
-          <StatCard label="Échoués" :value="fmt(live?.failed ?? overview.jobs.failed)" accent="err" :live="!!live" />
-          <StatCard label="Terminés 24h" :value="fmt(overview.jobs.done24h)" accent="ok" />
+          <StatCard label="Échoués" :value="fmt(live?.failed ?? overview.jobs.failed)" hint="status error" accent="err" :live="!!live" />
+          <StatCard label="Terminés 24h" :value="fmt(overview.jobs.done24h)" hint="status done, finishedAt < 24 h" accent="ok" />
         </div>
       </section>
 

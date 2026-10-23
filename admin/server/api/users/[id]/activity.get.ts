@@ -53,10 +53,24 @@ export default defineEventHandler(async (event) => {
                 $group: {
                     _id: null,
                     totalJobs: { $sum: 1 },
-                    totalTimeMin: { $sum: { $ifNull: ['$timeTaken', 0] } },
+                    // Browser-computed jobs have no timeTaken: fall back to finishedAt - (startAt ?? createdAt), done jobs only.
+                    totalTimeMin: {
+                        $sum: {
+                            $ifNull: [
+                                '$timeTaken',
+                                {
+                                    $cond: [
+                                        { $eq: ['$status', 'done'] },
+                                        { $divide: [{ $subtract: ['$finishedAt', { $ifNull: ['$startAt', '$createdAt'] }] }, 60000] },
+                                        0,
+                                    ],
+                                },
+                            ],
+                        },
+                    },
                     placed: { $sum: { $ifNull: ['$placed', 0] } },
                     finished: { $sum: { $cond: [{ $eq: ['$status', 'done'] }, 1, 0] } },
-                    failed: { $sum: { $cond: [{ $in: ['$status', ['error', 'failed']] }, 1, 0] } },
+                    failed: { $sum: { $cond: [{ $eq: ['$status', 'error'] }, 1, 0] } },
                     avgDensity: { $avg: { $ifNull: ['$density', null] } },
                     sheets: { $sum: { $ifNull: ['$layoutCount', 0] } },
                 },

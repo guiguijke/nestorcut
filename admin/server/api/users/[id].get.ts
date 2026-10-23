@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
   const [projects, jobsTotal, jobsFailed, dxfFiles, trackingEvents] = await Promise.all([
     db.collection(COL.projects).countDocuments({ ownerId: id }),
     db.collection(COL.nestingJobs).countDocuments({ ownerId: id }),
-    db.collection(COL.nestingJobs).countDocuments({ ownerId: id, status: 'failed' }),
+    db.collection(COL.nestingJobs).countDocuments({ ownerId: id, status: 'error' }),
     db.collection('user_dxf_files').countDocuments({ ownerId: id }),
     db.collection(COL.tracking).countDocuments({ userId: id }),
   ])

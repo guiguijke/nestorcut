@@ -22,10 +22,11 @@ function fmt(d: any) {
 }
 function statusCls(s: string) {
   switch (s) {
-    case 'queued': return 'bg-warn/15 text-warn'
+    case 'pending': return 'bg-warn/15 text-warn'
     case 'processing': return 'bg-blue/15 text-blue'
+    case 'awaiting_local': return 'bg-blue/15 text-blue'
     case 'done': return 'bg-ok/15 text-ok'
-    case 'failed': return 'bg-err/15 text-err'
+    case 'error': return 'bg-err/15 text-err'
     default: return 'bg-marine-700 text-ink-300'
   }
 }
@@ -46,7 +47,12 @@ function statusCls(s: string) {
         <label class="label">Statut</label>
         <select v-model="filters.status" class="input">
           <option value="">Actifs (défaut)</option>
-          <option>queued</option><option>processing</option><option>failed</option><option>done</option>
+          <option value="pending">En file (pending)</option>
+          <option value="processing">En traitement (processing)</option>
+          <option value="awaiting_local">En attente du navigateur (awaiting_local)</option>
+          <option value="error">Échoué (error)</option>
+          <option value="done">Terminé (done)</option>
+          <option value="cancelled">Annulé (cancelled)</option>
         </select>
       </div>
       <div class="min-w-[200px] flex-1">
@@ -75,8 +81,8 @@ function statusCls(s: string) {
             <td class="px-3 py-1.5"><span class="badge" :class="statusCls(j.status)">{{ j.status }}</span></td>
             <td class="px-3 py-1.5 font-mono text-ink-200">{{ j.slug || '—' }}</td>
             <td class="px-3 py-1.5 font-mono text-ink-400">{{ j.ownerId ? j.ownerId.slice(0, 24) : '—' }}</td>
-            <td class="px-3 py-1.5 text-ink-300">{{ fmt(j.updatedAt || j.createdAt) }}</td>
-            <td class="px-3 py-1.5 font-mono text-err max-w-[260px] truncate">{{ j.error || '—' }}</td>
+            <td class="px-3 py-1.5 text-ink-300">{{ fmt(j.update_ts || j.createdAt) }}</td>
+            <td class="px-3 py-1.5 font-mono text-err max-w-[260px] truncate" :title="j.reason || ''">{{ j.reason || '—' }}</td>
           </tr>
           <tr v-if="!data.items.length"><td colspan="6" class="px-3 py-6 text-center text-ink-400">Aucun job.</td></tr>
         </tbody>
@@ -100,11 +106,11 @@ function statusCls(s: string) {
         </div>
         <div class="flex items-center justify-between gap-2">
           <span class="text-ink-400">Mis à jour</span>
-          <span class="text-ink-300">{{ fmt(j.updatedAt || j.createdAt) }}</span>
+          <span class="text-ink-300">{{ fmt(j.update_ts || j.createdAt) }}</span>
         </div>
-        <div v-if="j.error" class="flex items-start justify-between gap-2">
+        <div v-if="j.reason" class="flex items-start justify-between gap-2">
           <span class="shrink-0 text-ink-400">Erreur</span>
-          <span class="break-all font-mono text-err">{{ j.error }}</span>
+          <span class="break-all font-mono text-err">{{ j.reason }}</span>
         </div>
       </div>
       <p v-if="!data.items.length" class="card p-3 text-center text-xs text-ink-400">Aucun job.</p>

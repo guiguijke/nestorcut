@@ -5,7 +5,7 @@ import { connectDB, COL } from '../../db/mongo'
 // le 2026-09-13 : sa file est figée, ses documents restent en base.)
 //
 // Query params:
-//   status  — queued | processing | done | failed (default: all non-done)
+//   status  — pending | processing | awaiting_local | done | error | cancelled (default: pending | processing | awaiting_local | error)
 //   ownerId — filter by user
 //   page, limit
 //
@@ -20,21 +20,29 @@ export default defineEventHandler(async (event) => {
 
   const baseQuery: any = {}
   if (q.status) baseQuery.status = String(q.status)
-  else baseQuery.status = { $in: ['queued', 'processing', 'failed'] }
+  else baseQuery.status = { $in: ['pending', 'processing', 'awaiting_local', 'error'] }
   if (q.ownerId) baseQuery.ownerId = String(q.ownerId)
 
-  const proj = { _id: 0, slug: 1, ownerId: 1, status: 1, processingStatus: 1, projectSlug: 1, createdAt: 1, updatedAt: 1, error: 1, priority: 1 }
+  // `information` : avant le 23/10, local-fail n'écrivait la cause d'un échec
+  // navigateur QUE là (jamais dans `error`) — sans ce champ, 81 échecs sur 87
+  // paraissaient sans motif. `reason` = la cause lisible, quel que soit le champ.
+  const proj = { _id: 0, slug: 1, ownerId: 1, status: 1, processingStatus: 1, projectSlug: 1, createdAt: 1, update_ts: 1, error: 1, errorCode: 1, information: 1, priority: 1 }
 
   const db = await connectDB()
   const merged = (
     await db
       .collection(COL.nestingJobs)
       .find(baseQuery, { projection: proj })
-      .sort({ updatedAt: -1, createdAt: -1 })
+      .sort({ update_ts: -1, createdAt: -1 })
       .skip((page - 1) * limit)
       .limit(limit)
       .toArray()
-  ).map((r) => ({ ...r, system: 'nesting' }))
+  ).map((r: any) => {
+    const info = r.status === 'error' && r.information != null
+      ? (typeof r.information === 'string' ? r.information : JSON.stringify(r.information))
+      : null
+    return { ...r, reason: r.error || info || r.errorCode || null, system: 'nesting' }
+  })
 
   return {
     items: merged.slice(0, limit),

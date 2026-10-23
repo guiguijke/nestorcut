@@ -31,6 +31,10 @@ export default defineEventHandler(async (event) => {
 
     // ---- Finished jobs ----
     const jobMatch = { finishedAt: { $gte: since }, status: 'done' }
+    // Browser-computed jobs have no timeTaken: fall back to finishedAt - (startAt ?? createdAt), in minutes.
+    const jobMinutes = {
+        $ifNull: ['$timeTaken', { $divide: [{ $subtract: ['$finishedAt', { $ifNull: ['$startAt', '$createdAt'] }] }, 60000] }],
+    }
     const classicJobs = await db
         .collection(COL.nestingJobs)
         .aggregate([
@@ -39,7 +43,7 @@ export default defineEventHandler(async (event) => {
                 $group: {
                     _id: null,
                     count: { $sum: 1 },
-                    totalTimeMin: { $sum: { $ifNull: ['$timeTaken', 0] } },
+                    totalTimeMin: { $sum: jobMinutes },
                     avgDensity: { $avg: { $ifNull: ['$density', null] } },
                 },
             },

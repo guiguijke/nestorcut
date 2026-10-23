@@ -30,6 +30,7 @@
                 return 'bg-ok/15 text-ok'
             case 'processing':
             case 'pending':
+            case 'awaiting_local':
                 return 'bg-warn/15 text-warn'
             case 'error':
             case 'failed':

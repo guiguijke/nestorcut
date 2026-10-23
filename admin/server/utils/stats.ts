@@ -49,12 +49,15 @@ export async function getOverviewStats() {
     db.collection(COL.admins).estimatedDocumentCount(),
   ])
 
-  // Job stats across both nesting systems.
+  // Job stats. Real statuses (written by the main app + workers):
+  // pending | processing | done | error | cancelled | awaiting_local.
+  // « En file » = pending only: awaiting_local (browser-computed jobs waiting
+  // for the user's browser) is NOT included — the UI says so.
   const [jobsQueued, jobsProcessing, jobsFailed, jobsDone24h] = await Promise.all([
-    jobs.countDocuments({ status: 'queued' }),
+    jobs.countDocuments({ status: 'pending' }),
     jobs.countDocuments({ status: 'processing' }),
-    jobs.countDocuments({ status: 'failed' }),
-    jobs.countDocuments({ status: 'done', updatedAt: { $gte: since24h } }),
+    jobs.countDocuments({ status: 'error' }),
+    jobs.countDocuments({ status: 'done', finishedAt: { $gte: since24h } }),
   ])
   // Signups per day for the last 30 days (for the sparkline).
   const signupsSeries = await users
