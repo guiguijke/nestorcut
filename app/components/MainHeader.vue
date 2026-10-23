@@ -613,7 +613,10 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             right: 0;
             bottom: 0;
             left: 0;
-            background-color: var(--menu-background);
+            /* Panneau OPAQUE dans les deux thèmes : la carte de connexion
+               et les liens de l'en-tête ne doivent pas transparaître.
+               Couleur explicite (piège 21/24), pas la var translucide. */
+            background-color: #1a2340;
         }
     }
 
