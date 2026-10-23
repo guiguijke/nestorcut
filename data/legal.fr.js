@@ -9,9 +9,11 @@
  * familier avec la juridiction de l'exploitant. Ce dernier reste responsable
  * de les faire valider avant une mise en service commerciale.
  */
-import { useSiteConfig } from '~~/data/siteConfig'
+import { useSiteConfig, LEGAL_REVISION_DATE } from '~~/data/siteConfig'
+import { TRIAL_DAYS, SUBSCRIPTION_PRICE_LABEL, PRO_PRICE_LABEL } from '~~/shared/constants/payment.constants'
 
-const TODAY = new Date().toLocaleDateString('fr-FR', {
+const REVISION_DATE = new Date(`${LEGAL_REVISION_DATE}T12:00:00Z`).toLocaleDateString('fr-FR', {
+    timeZone: 'UTC',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -22,7 +24,7 @@ export function useLegalNotice() {
     return {
         title: 'Mentions Légales',
         subtitle: 'Informations exigées par la loi française (article 6 de la LCEN).',
-        effectiveDate: TODAY,
+        effectiveDate: REVISION_DATE,
         sections: [
             {
                 heading: '1. Éditeur du Service',
@@ -48,14 +50,15 @@ export function useLegalNotice() {
                 heading: '3. Hébergement',
                 paragraphs: [
                     'Le site vitrine (nestorcut.com) est hébergé par Cloudflare, Inc., 101 Townsend St, San Francisco, CA 94107, États-Unis.',
-                    `L'application (app.nestorcut.com), sa base de données et les fichiers que vous importez sont hébergés sur une infrastructure exploitée par ${legal.entityName} (${legal.tradeName}), située en France.`,
+                    'L\'application (app.nestorcut.com), sa base de données et les fichiers que vous importez sont hébergés par Hetzner Online GmbH, Industriestr. 25, 91710 Gunzenhausen, Allemagne — téléphone : +49 9831 505-0. Le trafic vers l\'application transite par le réseau Cloudflare, Inc. (proxy et diffusion).',
+                    `Pour absorber les pics de charge, certains calculs d'imbrication peuvent être exécutés sur un serveur exploité par ${legal.entityName} (${legal.tradeName}) ; ce serveur ne conserve aucune donnée et lit et écrit dans la base hébergée chez Hetzner.`,
                 ],
             },
             {
                 heading: '4. Propriété intellectuelle',
                 paragraphs: [
                     `Le nom, le logo et l'identité visuelle NestorCut sont la propriété de ${legal.entityName} (${legal.tradeName}). La structure et le contenu de ce site ne peuvent être reproduits sans autorisation écrite préalable.`,
-                    'Le code source de l\'application est distribué sous Licence MIT et reste régi par celle-ci.',
+                    'Le code source publié sur le dépôt du projet n\'est pas un logiciel libre au sens de l\'Open Source Initiative : les contributions de NestorCut sont placées sous la licence PolyForm Noncommercial 1.0.0 (usage non commercial uniquement). Les parties héritées du projet nest2d restent sous licence MIT, et les composants tiers conservent leurs licences propres (voir le fichier THIRD-PARTY-NOTICES.md du dépôt). Les marques et logos ne sont concédés sous aucune de ces licences (fichier TRADEMARK.md).',
                 ],
             },
             {
@@ -78,7 +81,7 @@ export function useTerms() {
     return {
         title: 'Conditions Générales d\'Utilisation',
         subtitle: 'Les règles qui encadrent votre utilisation de NestorCut.',
-        effectiveDate: TODAY,
+        effectiveDate: REVISION_DATE,
         sections: [
             {
                 heading: '1. Acceptation des conditions',
@@ -103,11 +106,11 @@ export function useTerms() {
                 ],
             },
             {
-                heading: '4. Offres, facturation et crédits',
+                heading: '4. Offres et facturation',
                 paragraphs: [
-                    'Le Service propose une offre gratuite, un abonnement mensuel (« Unlimited ») et une offre supérieure (« Pro »). Les tarifs et quotas inclus sont décrits sur la page des tarifs et peuvent évoluer ; les changements ne prennent effet que pour les périodes de facturation futures.',
-                    'Les paiements sont traités par notre prestataire de paiement, Stripe. Nous ne recevons ni ne stockons jamais vos données bancaires complètes. Les abonnements débutent par une période d\'essai gratuite durant laquelle vous n\'êtes pas facturé ; à l\'issue de l\'essai, la facturation est récurrente jusqu\'à résiliation.',
-                    'Les packs de crédits, lorsqu\'ils sont proposés, sont consommés à chaque opération d\'imbrication. Sauf obligation légale, les crédits et abonnements ne sont pas remboursables, sauf dans les conditions prévues par notre Politique de remboursement.',
+                    `Le Service propose une offre gratuite et deux abonnements mensuels : « Unlimited » (${SUBSCRIPTION_PRICE_LABEL} par mois) et « Pro » (${PRO_PRICE_LABEL} par mois). Aucun pack de crédits n'est vendu. Les tarifs et quotas inclus sont décrits sur la page des tarifs et peuvent évoluer ; les changements ne prennent effet que pour les périodes de facturation futures.`,
+                    `Les paiements sont traités par notre prestataire de paiement, Stripe. Nous ne recevons ni ne stockons jamais vos données bancaires complètes. Les abonnements débutent par une période d'essai gratuite de ${TRIAL_DAYS} jours durant laquelle vous n'êtes pas facturé ; à l'issue de l'essai, la facturation est mensuelle et récurrente jusqu'à résiliation.`,
+                    'Sauf obligation légale, les abonnements ne sont pas remboursables, sauf dans les conditions prévues par notre Politique de remboursement.',
                     'Vous pouvez résilier un abonnement à tout moment depuis votre compte. La résiliation prend effet à la fin de la période de facturation en cours.',
                     `Les prix sont affichés en euros. ${legal.vatNote}.`,
                 ],
@@ -133,9 +136,9 @@ export function useTerms() {
                 ],
             },
             {
-                heading: '7. Licence open-source du code source',
+                heading: '7. Licence du code source',
                 paragraphs: [
-                    'Le code source de NestorCut est distribué sous licence MIT. Les présentes CGU régissent l\'utilisation du Service hébergé ; l\'utilisation, la modification et la redistribution du code source restent régies par la licence MIT, disponible sur le dépôt du projet.',
+                    'Les présentes CGU régissent l\'utilisation du Service hébergé. Le code source publié sur le dépôt du projet est régi par ses propres licences, et non par les présentes CGU : les contributions de NestorCut sont placées sous la licence PolyForm Noncommercial 1.0.0 (usage non commercial uniquement ; aucun usage commercial ni service hébergé dérivé sans licence séparée) ; les parties héritées du projet nest2d restent sous licence MIT ; les composants tiers (sparrow, jagua-rs, dxf-viewer, LibreDWG, etc.) conservent leurs licences respectives. Le détail figure dans les fichiers LICENSE, LICENSE-MIT-nest2d et THIRD-PARTY-NOTICES.md du dépôt. Les marques et logos NestorCut ne sont concédés par aucune de ces licences (fichier TRADEMARK.md).',
                 ],
             },
             {
@@ -181,13 +184,13 @@ export function usePrivacy() {
     return {
         title: 'Politique de confidentialité',
         subtitle: 'La manière dont NestorCut collecte, utilise et protège vos données.',
-        effectiveDate: TODAY,
+        effectiveDate: REVISION_DATE,
         sections: [
             {
                 heading: '1. Responsable du traitement',
                 paragraphs: [
                     `Le responsable du traitement de vos données à caractère personnel est ${legal.entityName} — nom commercial « ${legal.tradeName} », SIREN ${legal.siren}, éditeur de NestorCut (« NestorCut by ${legal.tradeName} »). Vous pouvez nous contacter à l'adresse ${supportEmail}.`,
-                    'Vos données sont hébergées et traitées en France.',
+                    'Vos données sont hébergées chez Hetzner Online GmbH (Allemagne). Certains calculs d\'imbrication peuvent être exécutés sur un serveur exploité par l\'éditeur, qui ne conserve aucune donnée (voir les Mentions légales).',
                 ],
             },
             {
@@ -235,10 +238,12 @@ export function usePrivacy() {
                     'Nous recourons aux tiers de confiance suivants, agissant chacun en qualité de sous-traitant :',
                 ],
                 list: [
-                    'Stripe — traitement des paiements (certifié PCI-DSS) ;',
+                    'Hetzner Online GmbH — hébergement de l\'application, de la base de données et des fichiers ;',
+                    'Cloudflare — proxy et diffusion du trafic de l\'application (app.nestorcut.com), hébergement et diffusion du site vitrine (nestorcut.com), et mesure d\'audience du site vitrine sans cookie (Cloudflare Web Analytics, aucun suivi inter-sites) ;',
+                    'Stripe — traitement des paiements et émission des factures (certifié PCI-DSS) ;',
+                    'Abby — tenue du livre des recettes comptable : pour chaque paiement encaissé, nom (ou email) du client, montant, date et numéro de facture ;',
                     'Google — connexion optionnelle via le compte Google, et mesure d\'audience sur le site vitrine (Google Analytics 4, IP anonymisée, fonctions publicitaires désactivées) ;',
-                    'Resend — délivrabilité des emails transactionnels ;',
-                    'Cloudflare — hébergement et diffusion du site vitrine (nestorcut.com).',
+                    'Resend — envoi des emails transactionnels.',
                 ],
             },
             {
@@ -298,7 +303,7 @@ export function useRefund() {
     return {
         title: 'Politique de remboursement',
         subtitle: 'Notre engagement pour des remboursements simples et équitables.',
-        effectiveDate: TODAY,
+        effectiveDate: REVISION_DATE,
         sections: [
             {
                 heading: '1. Garantie satisfait ou remboursé 30 jours',
@@ -309,9 +314,9 @@ export function useRefund() {
                 ],
             },
             {
-                heading: '2. Crédits et achats ponctuels',
+                heading: '2. Abonnements mensuels uniquement',
                 paragraphs: [
-                    'Les packs de crédits sont consommés au fur et à mesure de votre utilisation du Service. Les crédits non utilisés ne sont pas remboursables, sauf dans les 14 jours suivant l\'achat, à condition qu\'ils n\'aient pas été utilisés et que le droit de rétractation soit exercé.',
+                    'NestorCut ne propose que des abonnements mensuels (Unlimited et Pro) ; aucun pack de crédits ni achat ponctuel n\'est en vente.',
                 ],
             },
             {

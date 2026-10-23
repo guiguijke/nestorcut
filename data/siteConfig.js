@@ -10,6 +10,12 @@
  * These values are read client-side via useRuntimeConfig() so they can be
  * configured per-deployment without code changes.
  */
+/**
+ * Fixed revision date of the legal texts (ISO). Shown as "last updated" on the
+ * legal pages — bump it ONLY when the legal content actually changes.
+ */
+export const LEGAL_REVISION_DATE = '2026-10-23'
+
 export function useSiteConfig() {
     const config = useRuntimeConfig().public
     return {
