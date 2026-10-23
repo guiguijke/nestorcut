@@ -1,6 +1,7 @@
 import { connectDB } from '~~/server/db/mongo'
 import { getComputeProfile, getDemoEntitlement, getEntitlement } from '~~/server/utils/entitlement'
 import { isPromoActive } from '~~/server/utils/promo'
+import { isTrialEligible } from '~~/server/features/payment/eligibility'
 import { getVaultStatus } from '~~/server/utils/vault'
 
 export default defineEventHandler(async (event) => {
@@ -65,6 +66,8 @@ export default defineEventHandler(async (event) => {
         demoRemaining: demo.demoRemaining,
         demoUnlimited: Boolean(demo.demoUnlimited),
         subscriptionStatus: entitlement.subscriptionStatus,
+        // Faux dès qu'un abonnement a existé : les CTA ne promettent plus d'essai.
+        trialEligible: isTrialEligible(user),
         granted: Boolean(entitlement.granted),
         requiresPaywall: entitlement.requiresPaywall,
         compute: {

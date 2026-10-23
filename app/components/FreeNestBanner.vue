@@ -12,7 +12,7 @@
                 class="free-nest__link"
                 @click="openPaywall"
             >
-                {{ t('banner.cta') }}
+                {{ user.trialEligible === false ? t('banner.ctaSubscribe') : t('banner.cta') }}
             </button>
             <span v-else class="free-nest__link free-nest__link--disabled">
                 {{ t('banner.comingSoon') }}

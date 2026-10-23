@@ -109,6 +109,20 @@ export async function getSubscription(subscriptionId) {
 }
 
 /**
+ * Lists the subscriptions of a customer (all statuses, newest first).
+ * @param {string} customerId
+ * @returns {Promise<any[]>}
+ */
+export async function listCustomerSubscriptions(customerId) {
+    const response = await $fetch(`${STRIPE_BASE}/subscriptions`, {
+        method: 'GET',
+        headers: authHeaders('application/x-www-form-urlencoded'),
+        query: { customer: customerId, status: 'all', limit: 10 },
+    })
+    return response?.data || []
+}
+
+/**
  * Reads a charge with its balance transaction expanded. The balance
  * transaction carries the amount actually settled in the account currency
  * (EUR for a French account) — used to record non-EUR payments in the
@@ -217,6 +231,25 @@ export async function changeSubscriptionPrice(subscriptionId, newPriceId) {
         headers: authHeaders('application/x-www-form-urlencoded'),
         body: params,
     })
+}
+
+/**
+ * Creates a Stripe Billing Portal session (update card, invoices, cancel).
+ * Requires the Customer portal to be configured and saved in the Stripe
+ * dashboard (per mode, test/live) — otherwise Stripe answers 400.
+ * @param {{customerId: string, returnUrl: string}} options
+ * @returns {Promise<{url: string}>}
+ */
+export async function createBillingPortalSession({ customerId, returnUrl }) {
+    const params = new URLSearchParams()
+    params.append('customer', customerId)
+    params.append('return_url', returnUrl)
+    const response = await $fetch(`${STRIPE_BASE}/billing_portal/sessions`, {
+        method: 'POST',
+        headers: authHeaders('application/x-www-form-urlencoded'),
+        body: params,
+    })
+    return { url: response.url }
 }
 
 /**

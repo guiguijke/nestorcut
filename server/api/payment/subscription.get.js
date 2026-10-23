@@ -2,6 +2,7 @@ import { connectDB } from '~~/server/db/mongo'
 import { getCurrencyByCountry } from '~~/server/utils/currency'
 import { getEntitlement } from '~~/server/utils/entitlement'
 import { TRIAL_DAYS } from '~~/server/features/payment/const'
+import { isTrialEligible } from '~~/server/features/payment/eligibility'
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId
@@ -41,7 +42,7 @@ export default defineEventHandler(async (event) => {
     // Is the current subscription the privacy tier? (priceId match)
     const user = await db.collection('users').findOne(
         { id: userId },
-        { projection: { subscription: 1 } }
+        { projection: { subscription: 1, stripeCustomerId: 1 } }
     )
     const isPrivacyTier = Boolean(
         privacyPlan?.priceId && user?.subscription?.priceId === privacyPlan.priceId
@@ -51,6 +52,12 @@ export default defineEventHandler(async (event) => {
         plan: mapPlan(plan),
         privacyPlan: mapPlan(privacyPlan),
         isPrivacyTier,
+        // Essai gratuit une seule fois : false dès qu'un abonnement a existé.
+        trialEligible: isTrialEligible(user),
+        // Portail de facturation : il faut un customer ET un abonnement.
+        canManageBilling: Boolean(
+            user?.stripeCustomerId && user?.subscription?.stripeSubscriptionId
+        ),
         // Surface the cancellation schedule so the UI can show "will end on…"
         // after a self-serve unsubscribe, without waiting for the polling sync.
         cancelAtPeriodEnd: Boolean(user?.subscription?.cancelAtPeriodEnd),

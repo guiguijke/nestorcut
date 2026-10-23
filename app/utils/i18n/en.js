@@ -93,6 +93,17 @@ export default {
     'sub.error.start': 'Failed to start subscription. Please try again.',
     'sub.error.startPro': 'Failed to start Pro subscription. Please try again.',
     'sub.error.cancel': 'Failed to cancel the subscription. Please try again.',
+    'sub.manageBilling': 'Manage billing',
+    'sub.pastDue': 'Payment failed',
+    'sub.pastDueDesc': 'Your last payment could not be processed, so access is paused. Update your card to restore it.',
+    'sub.updateCard': 'Update payment method',
+    'sub.proActiveDesc': 'Maximum compute budget and priority queue are enabled on your account.',
+    'sub.proDesc': 'Maximum compute budget and priority queue.',
+    'sub.subscribe': 'Subscribe',
+    'sub.error.subscription_exists': 'You already have a subscription. Use the buttons above to manage or upgrade it.',
+    'sub.error.portal_unavailable': 'The billing portal is temporarily unavailable. Please try again later or contact support.',
+    'sub.error.portal': 'Failed to open the billing portal. Please try again.',
+    'banner.ctaSubscribe': 'Subscribe',
 
     // ── Plans (plans.vue) ──
     'plans.title': 'Plans & pricing',
@@ -602,6 +613,7 @@ export default {
     // A3 (lot 4) : awaiting_local orphelin expiré côté serveur.
     'results.orphanExpired': 'Not picked up by this device — the nesting was canceled and refunded after 10 minutes. Launch it again and keep this tab open.',
     'results.orphanExpired.short': 'Not picked up',
+    'results.localInterrupted': 'The calculation was interrupted before finishing (browser tab closed, crash or lost connection). The nesting was refunded — launch it again and keep this tab open.',
     'results.all': 'All results',
     'results.empty': 'Your nested results will be here',
     'results.nothingPlaced': 'No parts placed',

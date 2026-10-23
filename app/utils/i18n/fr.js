@@ -92,6 +92,17 @@ export default {
     'sub.error.start': 'Échec du démarrage de l\'abonnement. Veuillez réessayer.',
     'sub.error.startPro': 'Échec du démarrage de l\'abonnement Pro. Veuillez réessayer.',
     'sub.error.cancel': 'Échec de l\'annulation de l\'abonnement. Veuillez réessayer.',
+    'sub.manageBilling': 'Gérer la facturation',
+    'sub.pastDue': 'Paiement échoué',
+    'sub.pastDueDesc': "Votre dernier paiement n'a pas pu être traité, l'accès est suspendu. Mettez à jour votre carte pour le rétablir.",
+    'sub.updateCard': 'Mettre à jour le moyen de paiement',
+    'sub.proActiveDesc': 'Budget de calcul maximal et file prioritaire activés sur votre compte.',
+    'sub.proDesc': 'Budget de calcul maximal et file prioritaire.',
+    'sub.subscribe': "S'abonner",
+    'sub.error.subscription_exists': 'Vous avez déjà un abonnement. Utilisez les boutons ci-dessus pour le gérer ou le faire évoluer.',
+    'sub.error.portal_unavailable': 'Le portail de facturation est momentanément indisponible. Réessayez plus tard ou contactez le support.',
+    'sub.error.portal': "Impossible d'ouvrir le portail de facturation. Veuillez réessayer.",
+    'banner.ctaSubscribe': "S'abonner",
 
     // ── Plans (plans.vue) ──
     'plans.title': 'Offres & tarifs',
@@ -581,6 +592,7 @@ export default {
     // A3 (lot 4) : awaiting_local orphelin expiré côté serveur.
     'results.orphanExpired': "Non pris en charge par cet appareil — l'imbrication a été annulée et remboursée après 10 minutes. Relancez-la en gardant cet onglet ouvert.",
     'results.orphanExpired.short': 'Non pris en charge',
+    'results.localInterrupted': "Le calcul a été interrompu avant la fin (onglet fermé, plantage ou connexion perdue). L'imbrication a été remboursée — relancez-la en gardant cet onglet ouvert.",
     'results.all': 'Tous les résultats',
     'results.empty': "Vos résultats d'imbrication apparaîtront ici",
     'results.nothingPlaced': 'Aucune pièce posée',
