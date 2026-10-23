@@ -1,5 +1,7 @@
 import { connectDB } from '~~/server/db/mongo'
 import { MESSAGE_SENDER } from '~~/server/features/support/const'
+import { notifyAdminSupportMessage } from '~~/server/features/notification/adminNotify'
+import logger from '~~/server/utils/logger'
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId
@@ -27,6 +29,12 @@ export default defineEventHandler(async (event) => {
     }
 
     const email = user.email
+
+    // Notification admin (fire-and-forget) : ne concerne que le message d'un
+    // UTILISATEUR — les messages de bienvenue (welcomemessage.js) ne passent pas ici.
+    notifyAdminSupportMessage(event, { kind: 'chat', userId, name: user.name, email, message }).catch((err) => {
+        logger.warn('Error notifying admin of support message', err)
+    })
 
     
 

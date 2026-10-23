@@ -1,5 +1,6 @@
 import logger from '~~/server/utils/logger';
 import { clientIp } from '~~/server/utils/ratelimit';
+import { notifyAdminSupportMessage } from '~~/server/features/notification/adminNotify';
 
 /**
  * Public contact endpoint for the nestorcut.com static site.
@@ -107,6 +108,11 @@ export default defineEventHandler(async (event) => {
         logger.error('Failed to forward contact message:', error);
         throw createError({ statusCode: 502, statusMessage: 'Message could not be sent, please try again later.' });
     }
+
+    // Notification admin (fire-and-forget), une fois le message transmis au support.
+    notifyAdminSupportMessage(event, { kind: 'contact', name, email, message }).catch((err) => {
+        logger.warn('Error notifying admin of contact message', err);
+    });
 
     return { ok: true };
 });
