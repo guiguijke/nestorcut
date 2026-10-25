@@ -4,6 +4,56 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.9
+
+*FR*
+
+- Import : quand un fichier DWG ne peut pas être importé, la fiche du fichier en donne désormais la raison (version d'AutoCAD trop récente, fichier illisible, conversion trop longue…) et la marche à suivre, au lieu d'un simple « Échec de l'import ».
+- Résultats : après 24 heures, un résultat calculé sur nos serveurs s'affiche bien comme expiré, sans boutons de téléchargement qui ne mènent plus à rien. Télécharger les tôles d'un gros résultat une à une ne bloque plus au bout d'une trentaine de fichiers, et une archive ZIP n'est plus jamais livrée incomplète : en cas de problème, le téléchargement échoue clairement.
+- Fichiers .job SheetCam : la vue agrandie occupe toute la hauteur de l'écran.
+- Abonnement : après une résiliation, la date de fin de l'abonnement s'affiche correctement.
+- Sécurité et vie privée : vous restez connecté tant que vous utilisez l'application ; une session inutilisée pendant 90 jours expire. La suppression d'un compte efface désormais toutes ses données, y compris l'inscription à la newsletter, et les journaux techniques ne contiennent plus aucune adresse e-mail.
+
+*EN*
+
+- When a DWG file cannot be imported, its file card now gives the reason (AutoCAD version too recent, unreadable file, conversion taking too long…) and what to do next, instead of a simple "Import failed".
+- Results: after 24 hours, a result calculated on our servers now correctly shows as expired, with no download buttons leading nowhere. Downloading the sheets of a large result one by one no longer stalls after about thirty files, and a ZIP archive is never delivered incomplete any more: if something goes wrong, the download fails clearly.
+- SheetCam .job files: the enlarged view now fills the full height of the screen.
+- Subscription: after a cancellation, the subscription end date is now displayed correctly.
+- Security and privacy: you stay signed in as long as you use the application; a session unused for 90 days expires. Deleting an account now erases all its data, including its newsletter subscription, and technical logs no longer contain any email address.
+
+*PT*
+
+- Quando um arquivo DWG não pode ser importado, a ficha do arquivo agora informa o motivo (versão do AutoCAD muito recente, arquivo ilegível, conversão demorada demais…) e o que fazer, em vez de apenas "Falha na importação".
+- Resultados: após 24 horas, um resultado calculado em nossos servidores agora aparece corretamente como expirado, sem botões de download que não levam a lugar nenhum. Baixar as chapas de um resultado grande uma a uma não trava mais após cerca de trinta arquivos, e um arquivo ZIP nunca mais é entregue incompleto: se algo der errado, o download falha de forma clara.
+- Arquivos .job do SheetCam: a visualização ampliada ocupa toda a altura da tela.
+- Assinatura: após um cancelamento, a data de término da assinatura agora é exibida corretamente.
+- Segurança e privacidade: você permanece conectado enquanto usa o aplicativo; uma sessão sem uso por 90 dias expira. A exclusão de uma conta agora apaga todos os seus dados, inclusive a inscrição na newsletter, e os registros técnicos não contêm mais nenhum endereço de e-mail.
+
+*IT*
+
+- Quando un file DWG non può essere importato, la sua scheda ora indica il motivo (versione di AutoCAD troppo recente, file illeggibile, conversione troppo lunga…) e come procedere, invece di un semplice «Importazione non riuscita».
+- Risultati: dopo 24 ore, un risultato calcolato sui nostri server viene correttamente mostrato come scaduto, senza pulsanti di download che non portano più da nessuna parte. Scaricare le lamiere di un risultato grande una per una non si blocca più dopo una trentina di file, e un archivio ZIP non viene più consegnato incompleto: in caso di problema, il download fallisce in modo chiaro.
+- File .job di SheetCam: la vista ingrandita occupa tutta l'altezza dello schermo.
+- Abbonamento: dopo una disdetta, la data di fine dell'abbonamento ora viene mostrata correttamente.
+- Sicurezza e privacy: resti connesso finché usi l'applicazione; una sessione inutilizzata per 90 giorni scade. L'eliminazione di un account ora cancella tutti i suoi dati, compresa l'iscrizione alla newsletter, e i log tecnici non contengono più alcun indirizzo email.
+
+*DE*
+
+- Wenn eine DWG-Datei nicht importiert werden kann, nennt ihre Dateikarte jetzt den Grund (AutoCAD-Version zu neu, Datei nicht lesbar, Konvertierung dauert zu lange …) und das weitere Vorgehen, statt nur „Import fehlgeschlagen“ anzuzeigen.
+- Ergebnisse: Nach 24 Stunden wird ein auf unseren Servern berechnetes Ergebnis jetzt korrekt als abgelaufen angezeigt, ohne Download-Schaltflächen, die nirgendwohin mehr führen. Das einzelne Herunterladen der Bleche eines großen Ergebnisses bleibt nicht mehr nach etwa dreißig Dateien hängen, und ein ZIP-Archiv wird nie mehr unvollständig geliefert: Tritt ein Problem auf, bricht der Download klar sichtbar ab.
+- SheetCam-.job-Dateien: Die vergrößerte Ansicht nutzt die gesamte Bildschirmhöhe.
+- Abonnement: Nach einer Kündigung wird das Enddatum des Abonnements jetzt korrekt angezeigt.
+- Sicherheit und Datenschutz: Sie bleiben angemeldet, solange Sie die Anwendung nutzen; eine 90 Tage lang ungenutzte Sitzung läuft ab. Das Löschen eines Kontos entfernt jetzt alle seine Daten, einschließlich der Newsletter-Anmeldung, und die technischen Protokolle enthalten keine E-Mail-Adresse mehr.
+
+*ES*
+
+- Cuando un archivo DWG no se puede importar, su ficha ahora indica el motivo (versión de AutoCAD demasiado reciente, archivo ilegible, conversión demasiado larga…) y qué hacer, en lugar de un simple «Error al importar».
+- Resultados: tras 24 horas, un resultado calculado en nuestros servidores ahora aparece correctamente como caducado, sin botones de descarga que ya no lleven a ninguna parte. Descargar las chapas de un resultado grande una a una ya no se bloquea tras unos treinta archivos, y un archivo ZIP ya nunca llega incompleto: si algo falla, la descarga se interrumpe de forma clara.
+- Archivos .job de SheetCam: la vista ampliada ocupa toda la altura de la pantalla.
+- Suscripción: tras una cancelación, la fecha de fin de la suscripción ahora se muestra correctamente.
+- Seguridad y privacidad: sigues conectado mientras uses la aplicación; una sesión sin uso durante 90 días caduca. Al eliminar una cuenta se borran ahora todos sus datos, incluida la suscripción al newsletter, y los registros técnicos ya no contienen ninguna dirección de correo electrónico.
+
 ## V0.9.8
 
 *FR*
