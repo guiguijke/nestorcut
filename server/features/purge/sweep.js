@@ -51,6 +51,49 @@ const SVG_RESULT_BUCKET = 'nestSvg'
 const FILE_COLLECTIONS = ['user_dxf_files', 'strip_user_dxf_files']
 const JOB_COLLECTIONS = Object.keys(RESULT_BUCKET_FOR_JOBS)
 
+// Balayage des jobs par pages (curseur `_id`) : bornes mémoire/durée d'un run
+// quand le rattrapage porte sur beaucoup de jobs. Au-delà de MAX_PAGES le
+// reste est repris au run suivant (toutes les 15 min) — les jobs traités ne
+// matchent plus (purgedAt posé / artefacts retirés), les exemptés (vault) sont
+// simplement re-sautés.
+const PAGE_SIZE = 200
+const MAX_PAGES = 10
+
+/**
+ * Âge d'un job, sur les SEULS champs de date que les jobs portent vraiment
+ * (A-2, vérif 2026-09-27 : l'ancien filtre `updatedAt` n'existe sur aucun
+ * job → rien ne matchait jamais). `finishedAt` = fin du job (worker, local-
+ * result, cancel, expiration) ; sinon `update_ts` (heartbeat / dernière
+ * écriture d'un job jamais terminé) ; sinon `createdAt` (posé à la création).
+ * Forme $or plutôt que $ifNull : exploitable sans agrégation.
+ */
+function jobOlderThan(cutoff) {
+    return {
+        $or: [
+            { finishedAt: { $lt: cutoff } },
+            { finishedAt: { $exists: false }, update_ts: { $lt: cutoff } },
+            { finishedAt: { $exists: false }, update_ts: { $exists: false }, createdAt: { $lt: cutoff } },
+        ],
+    }
+}
+
+/** Parcourt les jobs d'un filtre par pages d'`_id` croissants. */
+async function* pagedJobs(db, collName, filter, projection) {
+    let lastId = null
+    for (let page = 0; page < MAX_PAGES; page++) {
+        const q = lastId == null ? filter : { $and: [filter, { _id: { $gt: lastId } }] }
+        const batch = await db
+            .collection(collName)
+            .find(q, { projection })
+            .sort({ _id: 1 })
+            .limit(PAGE_SIZE)
+            .toArray()
+        for (const job of batch) yield job
+        if (batch.length < PAGE_SIZE) return
+        lastId = batch[batch.length - 1]._id
+    }
+}
+
 function isPurgeableBlob(fileDoc, cutoff) {
     const md = fileDoc.metadata || {}
     return fileDoc.uploadDate < cutoff && !md.enc && md.ownerId !== DEMO_OWNER_ID
@@ -75,21 +118,46 @@ function jobBlobNames(job) {
  * Passe 1 — résultats pilotés par les jobs done > cutoff : supprime les
  * blobs listés par le job et pose `purgedAt` (l'UI affiche « expiré »).
  * Un job dont un blob est chiffré (vault) est intégralement exempté.
+ *
+ * Rattrapage (A-2) : la passe 2 a pu supprimer les blobs d'un job avant que
+ * cette passe ne le marque (ancien filtre cassé) — ces jobs n'ont pas de
+ * `purgedAt` et listent encore des noms de blobs. Ils matchent ici comme les
+ * autres : plus aucun blob à supprimer (`candidates` vide), le job est
+ * marqué. Idempotent (le filtre exige `purgedAt` absent). Un job sans aucun
+ * blob listé (résultat 100 % navigateur, rien côté serveur) n'est PAS marqué :
+ * « expiré » mentirait sur un résultat qui vit dans IndexedDB.
  */
 async function sweepJobResults(db, jobsName, cutoff, now, deleteBlob) {
-    const jobs = await db
-        .collection(jobsName)
-        .find({
-            status: 'done',
-            updatedAt: { $lt: cutoff },
-            purgedAt: { $exists: false },
-            ownerId: { $ne: DEMO_OWNER_ID },
-        })
-        .toArray()
+    const filter = {
+        $and: [
+            {
+                status: 'done',
+                purgedAt: { $exists: false },
+                // Coffre déjà constaté (marqué plus bas) : exclu dans la
+                // requête, sinon ces jobs rematchent à vie et épuisent le
+                // budget de pages au détriment des jobs serveur plus récents.
+                purgeExempt: { $exists: false },
+                ownerId: { $ne: DEMO_OWNER_ID },
+            },
+            // Seul un job qui liste au moins un blob serveur est concerné :
+            // un résultat 100 % navigateur (local-result n'écrit ni dxf_files
+            // ni svg_files) n'a rien à expirer et ne doit pas rematcher.
+            {
+                $or: [
+                    { 'dxf_files.0': { $exists: true } },
+                    { 'svg_files.0': { $exists: true } },
+                    { 'alternatives.dxf_files.0': { $exists: true } },
+                    { 'alternatives.svg_files.0': { $exists: true } },
+                ],
+            },
+            jobOlderThan(cutoff),
+        ],
+    }
+    const projection = { dxf_files: 1, svg_files: 1, 'alternatives.dxf_files': 1, 'alternatives.svg_files': 1 }
 
     const dxfBucket = RESULT_BUCKET_FOR_JOBS[jobsName]
     let purged = 0
-    for (const job of jobs) {
+    for await (const job of pagedJobs(db, jobsName, filter, projection)) {
         const { dxfs, svgs } = jobBlobNames(job)
         const candidates = []
         for (const [bucket, names] of [[dxfBucket, dxfs], [SVG_RESULT_BUCKET, svgs]]) {
@@ -102,7 +170,10 @@ async function sweepJobResults(db, jobsName, cutoff, now, deleteBlob) {
         }
         // Vault : le moindre blob chiffré exempte tout le job (la promesse
         // 24 h ne s'applique pas aux contenus chiffrés au repos).
-        if (candidates.some((c) => c.doc.metadata?.enc)) continue
+        if (candidates.some((c) => c.doc.metadata?.enc)) {
+            await db.collection(jobsName).updateOne({ _id: job._id }, { $set: { purgeExempt: 'vault' } })
+            continue
+        }
 
         for (const c of candidates) {
             try {
@@ -169,25 +240,46 @@ async function sweepFileGeometry(db, collName, cutoff, now) {
 /** Passe 4 — artefacts éphémères de jobs (tous users, vault incluse :
  * localPayload contient l'instance en clair, liveLayout une géométrie —
  * transports/snapshots sans valeur après le job ; piège #18 étendu aux
- * jobs orphelins qui n'ont jamais reçu le $unset final). */
+ * jobs orphelins qui n'ont jamais reçu le $unset final).
+ *
+ * A-2 : couvre les jobs navigateur abandonnés. `expireOrphanAwaitingLocal`
+ * retire `localPayload` à l'expiration, mais seulement quand le PROPRIÉTAIRE
+ * revient (POST nest / ouverture du flux SSE) — un compte qui ne revient
+ * jamais gardait l'instance en clair (pièces + géométrie) sur un job
+ * `awaiting_local`. Cette passe ne touche pas au statut (l'expiration reste
+ * à ce module : remboursement, slot de concurrence) : elle ne retire que les
+ * données lourdes d'un job sans activité depuis 25 h (et non pris depuis). */
 async function sweepJobArtifacts(db, jobsName, cutoff) {
-    const stale = await db
-        .collection(jobsName)
-        .find({
-            updatedAt: { $lt: cutoff },
-            $or: [
-                { localPayload: { $exists: true } },
-                { liveLayout: { $exists: true } },
-                { itemMap: { $exists: true } },
-            ],
-        })
-        .toArray()
+    // Jobs NON terminaux (ou en échec) : les trois artefacts. Jobs `done` :
+    // seul `localPayload` (instance en clair) — `liveLayout` d'un job local
+    // terminé est la trame finale que le modal lit (dimension de tôle quand
+    // le rapport manque), il reste.
+    const filter = {
+        $and: [
+            jobOlderThan(cutoff),
+            // Un onglet a pu prendre le payload récemment : calcul possible.
+            { $or: [{ takenAt: { $exists: false } }, { takenAt: { $lt: cutoff } }] },
+            {
+                $or: [
+                    {
+                        status: { $in: ['pending', 'processing', 'awaiting_local', 'error', 'cancelled'] },
+                        $or: [
+                            { localPayload: { $exists: true } },
+                            { liveLayout: { $exists: true } },
+                            { itemMap: { $exists: true } },
+                        ],
+                    },
+                    { status: 'done', localPayload: { $exists: true } },
+                ],
+            },
+        ],
+    }
     let cleaned = 0
-    for (const j of stale) {
-        await db.collection(jobsName).updateOne(
-            { _id: j._id },
-            { $unset: { localPayload: '', liveLayout: '', itemMap: '', progress: '', compute: '' } }
-        )
+    for await (const j of pagedJobs(db, jobsName, filter, { status: 1 })) {
+        const unset = j.status === 'done'
+            ? { localPayload: '' }
+            : { localPayload: '', liveLayout: '', itemMap: '', progress: '', compute: '' }
+        await db.collection(jobsName).updateOne({ _id: j._id }, { $unset: unset })
         cleaned++
     }
     return cleaned

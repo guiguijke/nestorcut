@@ -1,5 +1,30 @@
 import { connectDB } from "~~/server/db/mongo";
 
+// Champs de nesting_jobs réellement lus par le mapping ci-dessous (donc par
+// l'app via le flux SSE). Tout le reste du document (localPayload = instance
+// complète en clair, params, files, charge, engineConfig, thinParts, …) n'est
+// plus rapatrié à chaque seconde et par onglet. Ajouter ici tout champ lu
+// dans le mapping : server/tests/resultsList.test.js le verrouille.
+const RESULT_FIELDS = [
+    'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly',
+    'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
+    'information', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
+    'dxf_files', 'svg_files',
+    'alternatives.alt_id', 'alternatives.seed', 'alternatives.density',
+    'alternatives.usedSheetShare', 'alternatives.strategy', 'alternatives.offcut',
+    'alternatives.layoutCount', 'alternatives.report',
+    'alternatives.svg_files', 'alternatives.dxf_files',
+]
+const RESULT_PROJECTION = Object.fromEntries(RESULT_FIELDS.map((f) => [f, 1]))
+
+// Les N jobs les plus récents. L'aside n'a pas de pagination : c'est un
+// historique récent (le rapport et les téléchargements expirent à 24 h, D-PRV-10)
+// — 200 couvre largement l'usage réel tout en bornant le coût du balayage 1 Hz.
+// Limite réelle : un job en cours plus ancien que les 200 plus récents du
+// compte (ou du projet) n'apparaît plus tant qu'ils existent — cas rare, un
+// compte lance peu de jobs simultanés.
+export const RESULTS_LIMIT = 200
+
 /**
  * @param {string} userId 
  * @param {string} projectSlug 
@@ -7,10 +32,13 @@ import { connectDB } from "~~/server/db/mongo";
  */
 export async function getResults(userId, projectSlug) {
     const db = await connectDB();
+    // Index : nesting_jobs { ownerId: 1, createdAt: -1 } (scripts/mongo-indexes.*).
     const queueList = await db
         .collection("nesting_jobs")
-        .find({ ownerId: userId, ...(projectSlug && { projectSlug }) })
-        .sort({ createdAt: -1 })
+        .find(
+            { ownerId: userId, ...(projectSlug && { projectSlug }) },
+            { projection: RESULT_PROJECTION, sort: { createdAt: -1 }, limit: RESULTS_LIMIT },
+        )
         .toArray();
 
     const respnoseItems = queueList.map((queueItem) => {
