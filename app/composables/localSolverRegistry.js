@@ -258,7 +258,3 @@ export function activeJobs() {
         .filter((j) => ACTIVE_PHASES.has(j.phase))
         .map((j) => readonly(j))
 }
-
-export function solverState() {
-    return readonly(state)
-}

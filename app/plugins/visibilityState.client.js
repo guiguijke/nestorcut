@@ -1,4 +1,4 @@
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 // Lot M1 : le « Nest ready » suit la langue (meta.nestReady du dictionnaire).
 // M1-bis : le titre n'est posé QUE PENDANT le clignotement, avec
@@ -66,10 +66,6 @@ export default defineNuxtPlugin((nuxtApp) => {
     )
 
     nuxtApp.hook('app:suspense:resolve', () => {})
-    onBeforeUnmount(() => {
-        document.removeEventListener('visibilitychange', onVisibilityChange)
-        stopTitleCycle()
-    })
 
     nuxtApp.provide('isTabActive', isTabActive)
 })

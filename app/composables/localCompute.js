@@ -96,34 +96,3 @@ export function runInWorker(jobSlug, payload, { onLive } = {}) {
         })
     })
 }
-
-/**
- * Runs one prepared job locally end-to-end. Returns { ok, error? }.
- * Idempotence guard: the caller must invoke it once per job slug.
- */
-export async function runLocalJob(jobSlug) {
-    const payload = await $fetch(`/api/results/${jobSlug}/local-payload`)
-    const outcome = await runInWorker(jobSlug, payload)
-    if (!outcome.ok) {
-        await $fetch(`/api/results/${jobSlug}/local-fail`, {
-            method: 'POST',
-            body: { error: outcome.error === 'memory_cap' ? 'memory_cap' : String(outcome.error) },
-        })
-        return { ok: false, error: outcome.error, memory: outcome.memory }
-    }
-    const body = { alternatives: outcome.result.alternatives }
-    // PR4 (QA, flag-gaté) : le navigateur calcule aussi les artefacts
-    // (SVG/rapport) via le bundle géométrie, en champs additifs — le contrat
-    // local-result reste inchangé (le serveur ignore l'inconnu).
-    if (isLocalComputeEnabled()) {
-        try {
-            const geo = await import('./geometryClient')
-            const arts = await geo.computeClientArtifacts(outcome.result, payload)
-            if (arts) body.clientArtifacts = arts
-        } catch {
-            // jamais une rupture du flux de solve
-        }
-    }
-    await $fetch(`/api/results/${jobSlug}/local-result`, { method: 'POST', body })
-    return { ok: true }
-}

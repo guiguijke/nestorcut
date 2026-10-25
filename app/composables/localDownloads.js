@@ -20,15 +20,6 @@ function download(blob, filename) {
 
 const text = (s, type = 'text/plain') => new Blob([s], { type })
 
-/** SVG coloré d'une tôle d'une alternative du record. */
-export function downloadLocalSvg(record, altId = 0, sheetIndex = 0, filename = null) {
-    const alt = (record?.alternatives || [])[altId]
-    const svg = alt?.svgs?.[sheetIndex]
-    if (typeof svg !== 'string') throw new Error('svg_unavailable')
-    download(text(svg, 'image/svg+xml'),
-        filename || `${record.slug}_alt${altId}_part_${sheetIndex + 1}.svg`)
-}
-
 /** DXF combiné d'une tôle d'une alternative du record. */
 export function downloadLocalDxf(record, altId = 0, sheetIndex = 0) {
     const alt = (record?.alternatives || [])[altId]
@@ -71,12 +62,6 @@ export function downloadLocalJob(record, altId = 0, sheetIndex = 0) {
     const bytes = job.bytes instanceof Uint8Array ? job.bytes : new Uint8Array(job.bytes)
     download(new Blob([bytes], { type: 'application/octet-stream' }),
         job.fileName || `${record.slug}_tole${sheetIndex + 1}.job`)
-}
-
-/** Y a-t-il un `.job` à télécharger pour cette alternative ? (le bouton ne
- *  s'affiche que pour un projet issu d'un `.job` SheetCam). */
-export function hasLocalJobs(record, altId = 0) {
-    return Boolean((record?.alternatives || [])[altId]?.jobs?.length)
 }
 
 /**

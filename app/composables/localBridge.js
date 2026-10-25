@@ -888,9 +888,6 @@ const _materialDist = (a, b, limit = Infinity) => {
 export const materialDistance = (a, b) => _materialDist(a, b)
 
 /** Anneaux POSÉS d'une pièce : extérieur + trous. */
-export const placedMaterial = (item, rotDeg, tx, ty) => _placedMaterial(item, rotDeg, tx, ty)
-
-/** Anneaux POSÉS d'une pièce : extérieur + trous. */
 const _placedMaterial = (item, rotDeg, tx, ty) => ({
     outer: _placedPoly(_itemCoords(item), rotDeg, tx, ty),
     holes: (item.holes || []).map((h) => _placedPoly(h, rotDeg, tx, ty)),
