@@ -235,3 +235,27 @@ describe('createBillingPortalSession (REST helper)', () => {
         expect(calls[0].opts.body.get('return_url')).toBe('https://app.test/profile')
     })
 })
+
+describe('mapSubscription — period end', () => {
+    it('reads the period end from the item (API >= 2025-03-31)', async () => {
+        const { mapSubscription } = await vi.importActual('~~/server/features/payment/stripe')
+        const mapped = mapSubscription({
+            id: 'sub_1',
+            status: 'trialing',
+            items: { data: [{ current_period_end: 1793540758, price: { id: 'price_u' } }] },
+        })
+        expect(mapped.currentPeriodEnd).toEqual(new Date(1793540758 * 1000))
+        expect(mapped.priceId).toBe('price_u')
+    })
+
+    it('still honours the legacy top-level field', async () => {
+        const { mapSubscription } = await vi.importActual('~~/server/features/payment/stripe')
+        const mapped = mapSubscription({ id: 'sub_2', status: 'active', current_period_end: 1700000000, items: { data: [] } })
+        expect(mapped.currentPeriodEnd).toEqual(new Date(1700000000 * 1000))
+    })
+
+    it('is null when Stripe gives no period at all', async () => {
+        const { mapSubscription } = await vi.importActual('~~/server/features/payment/stripe')
+        expect(mapSubscription({ id: 'sub_3', status: 'incomplete' }).currentPeriodEnd).toBeNull()
+    })
+})

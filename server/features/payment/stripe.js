@@ -147,12 +147,14 @@ export async function getChargeBalanceTransaction(chargeId) {
  */
 export function mapSubscription(subscription) {
     const item = subscription?.items?.data?.[0]
+    // Since API version 2025-03-31 (basil) Stripe carries the period on the
+    // subscription ITEM; the top-level field is gone on this account, which
+    // left currentPeriodEnd null (blank "ends on" date, no expiry safety net).
+    const periodEnd = subscription.current_period_end ?? item?.current_period_end
     return {
         stripeSubscriptionId: subscription.id,
         status: subscription.status,
-        currentPeriodEnd: subscription.current_period_end
-            ? new Date(subscription.current_period_end * 1000)
-            : null,
+        currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
         cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
         priceId: item?.price?.id || null,
         updatedAt: new Date(),
