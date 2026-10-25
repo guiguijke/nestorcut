@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { defineEventHandler, readBody } from 'h3'
 import { connectDB } from '~~/server/db/mongo'
 import { DOMAINS } from '~~/server/core/domains'
@@ -12,6 +13,13 @@ import {
     DEMO_VCORES,
     resolveDemoWalks,
 } from '../../../../shared/constants/demo.constants'
+
+const concurrentLimitError = (activeJobs) =>
+    createError({
+        statusCode: 409,
+        statusMessage: 'concurrent_limit',
+        message: `You already have ${activeJobs} nesting job(s) in progress. Wait for them to finish — parallel nesting on several projects is a Pro feature.`,
+    })
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId
@@ -469,11 +477,7 @@ export default defineEventHandler(async (event) => {
             }).project({ _id: 1 }).toArray()).length
             const maxParallel = maxParallelNestsForTier(compute.level)
             if (activeJobs >= maxParallel) {
-                throw createError({
-                    statusCode: 409,
-                    statusMessage: 'concurrent_limit',
-                    message: `You already have ${activeJobs} nesting job(s) in progress. Wait for them to finish — parallel nesting on several projects is a Pro feature.`,
-                })
+                throw concurrentLimitError(activeJobs)
             }
         }
 
@@ -482,12 +486,18 @@ export default defineEventHandler(async (event) => {
         // demo files are plaintext and shared — a privacy-tier user with a locked
         // vault can still try the demo. Projets locaux (J-090) : gate sauté aussi
         // — aucun worker ne lit de fichier, la session DEK n'a pas à exister.
-        return await enqueueNestingJob(DOMAINS.bin, {
+        // N-14 : le comptage ci-dessus et l'insertion ne sont pas atomiques
+        // (deux onglets dans la même seconde passent tous deux). Un jeton
+        // propre à cette requête permet de retrouver NOTRE job après
+        // l'insertion et de re-vérifier la limite (voir plus bas).
+        const enqueueToken = randomUUID()
+        const enqueued = await enqueueNestingJob(DOMAINS.bin, {
             userId,
             projectSlug,
             fileMetadata,
             params: dbParams,
             extraFields: {
+                enqueueToken,
                 priority: isDemo ? DEMO_PRIORITY : compute.priority,
                 // J-090 : pas de worker pour renseigner `requested` plus tard.
                 // À l'enqueue, le serveur d'un projet « cet appareil » ne
@@ -518,6 +528,33 @@ export default defineEventHandler(async (event) => {
                   }
                 : null,
         })
+
+        // N-14 : contrôle APRÈS insertion. Les jobs actifs du propriétaire sont
+        // classés par _id (ordre d'insertion, total) : les `maxParallel`
+        // premiers passent, les suivants s'annulent. Un seul perdant par course
+        // suffit ; le catch ci-dessous rembourse la charge (même objet `charge`
+        // que celui stocké sur le job, drapeau refunded idempotent).
+        if (!isDemo) {
+            const maxParallel = maxParallelNestsForTier(compute.level)
+            const active = (await db.collection('nesting_jobs').find({
+                ownerId: userId,
+                status: { $in: ['pending', 'processing', 'awaiting_local'] },
+            }).project({ _id: 1, enqueueToken: 1 }).toArray())
+                .sort((a, b) => (String(a._id) < String(b._id) ? -1 : String(a._id) > String(b._id) ? 1 : 0))
+            const rank = active.findIndex((job) => job.enqueueToken === enqueueToken)
+            if (rank >= maxParallel) {
+                const removed = await db.collection('nesting_jobs').deleteOne({
+                    _id: active[rank]._id,
+                    status: { $in: ['pending', 'awaiting_local'] },
+                })
+                // Déjà pris par un worker (cas extrême) : on le laisse vivre,
+                // la charge reste consommée avec lui.
+                if (removed?.deletedCount) {
+                    throw concurrentLimitError(rank)
+                }
+            }
+        }
+        return enqueued
     } catch (error) {
         await refundNestCharge(userId, charge).catch(() => {})
         throw error

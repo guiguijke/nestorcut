@@ -131,6 +131,37 @@ async function refreshStaleSubscription(db) {
     return true;
 }
 
+// Un checkout 'processing' depuis plus longtemps que ça est orphelin (le
+// updateOne du catch a échoué, ou le process a été interrompu en cours de vie) :
+// on le remet dans la file.
+const PROCESSING_STALE_MS = 5 * 60 * 1000;
+
+/**
+ * Une itération de la boucle : jamais de rejet (une erreur Mongo/Stripe tuait
+ * silencieusement la boucle jusqu'au redémarrage). Retourne true si du travail
+ * a été fait (on enchaîne sans attendre), false sinon (attente IDLE_DELAY_MS —
+ * y compris après une erreur, pour ne pas tourner en boucle serrée).
+ */
+export async function runSyncIteration(db) {
+    try {
+        await db
+            .collection("subscription_checkouts")
+            .updateMany(
+                {
+                    status: "processing",
+                    updatedAt: { $lt: new Date(Date.now() - PROCESSING_STALE_MS) },
+                },
+                { $set: { status: "created", updatedAt: new Date() } }
+            );
+        const didCheckout = await resolvePendingCheckouts(db);
+        const didRefresh = await refreshStaleSubscription(db);
+        return didCheckout || didRefresh;
+    } catch (err) {
+        logger.error(`[${tag}] Sync iteration failed`, { err });
+        return false;
+    }
+}
+
 export default defineNitroPlugin(async () => {
     logger.info(`[${tag}] Subscription sync plugin start`);
     const db = await connectDB();
@@ -141,10 +172,9 @@ export default defineNitroPlugin(async () => {
         .updateMany({ status: "processing" }, { $set: { status: "created" } });
 
     while (true) {
-        const didCheckout = await resolvePendingCheckouts(db);
-        const didRefresh = await refreshStaleSubscription(db);
+        const didWork = await runSyncIteration(db);
 
-        if (!didCheckout && !didRefresh) {
+        if (!didWork) {
             await new Promise((resolve) => setTimeout(resolve, IDLE_DELAY_MS));
         }
     }

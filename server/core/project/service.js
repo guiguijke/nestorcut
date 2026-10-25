@@ -391,6 +391,10 @@ export async function enqueueNestingJob(
   // sans qu'aucun job n'existe — le refund worker ne peut pas les voir.
   // Refund puis relance de l'erreur ; le drapeau sur l'objet charge rend
   // le refund idempotent vis-à-vis du catch de la route appelante.
+  // Généré une seule fois : la réponse doit désigner le job réellement
+  // inséré (un second buildJobSlug tirait un autre suffixe aléatoire).
+  const jobSlug = buildJobSlug(domain, fileMetadata);
+
   try {
     // Encrypted vaults must be unlocked before a job can be enqueued — the
     // workers need an active session to read the source files. Also refreshes
@@ -399,8 +403,6 @@ export async function enqueueNestingJob(
     if (!skipVaultGate) {
       await requireFileAccess(userId);
     }
-
-    const jobSlug = buildJobSlug(domain, fileMetadata);
 
     await db.collection(domain.jobsCollection).insertOne({
       slug: jobSlug,
@@ -422,6 +424,6 @@ export async function enqueueNestingJob(
   }
 
   return {
-    slug: buildJobSlug(domain, fileMetadata),
+    slug: jobSlug,
   };
 }
