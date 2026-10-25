@@ -3,6 +3,7 @@ import { connectDB, COL } from '../../db/mongo'
 
 // Admin replies to a user. Inserts a support message (sender: 'support') and
 // emails the user a notification, mirroring the main app's behaviour.
+const MESSAGE_MAX_LENGTH = 5000
 const MESSAGE_SENDER = { USER: 'user', SUPPORT: 'support', WELCOME: 'welcome' } as const
 
 export default defineEventHandler(async (event) => {
@@ -11,8 +12,12 @@ export default defineEventHandler(async (event) => {
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'Missing userId' })
 
   const body = await readBody(event)
-  const message = String(body?.message || '').trim()
+  const raw = body?.message
+  const message = typeof raw === 'string' ? raw.trim() : ''
   if (!message) throw createError({ statusCode: 400, statusMessage: 'Message vide' })
+  if (message.length > MESSAGE_MAX_LENGTH) {
+    throw createError({ statusCode: 400, statusMessage: `Message trop long (${MESSAGE_MAX_LENGTH} caractères max)` })
+  }
 
   const db = await connectDB()
   const record = await db.collection(COL.supportMessages).insertOne({

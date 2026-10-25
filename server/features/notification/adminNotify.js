@@ -1,6 +1,7 @@
 import { COUNTRY_HEADER_NAME } from '../../tracking/const'
 import { connectDB } from '../../db/mongo'
 import logger from '../../utils/logger'
+import { clientIp } from '../../utils/ratelimit'
 
 // Notifies the platform administrator (by email) when a new user signs up.
 //
@@ -23,10 +24,9 @@ export async function notifyAdminNewUser(event, { id, email, name, provider }) {
   if (!notifyEmail) return
 
   const country = event.node.req.headers[COUNTRY_HEADER_NAME] || null
-  const ip =
-    event.node.req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() ||
-    event.node.req.socket?.remoteAddress ||
-    null
+  // clientIp : cf-connecting-ip, sinon DERNIER hop de x-forwarded-for (le
+  // premier est falsifiable par le client).
+  const ip = clientIp(event) || null
 
   const subject = `Nouvelle inscription — ${name} (${email})`
   const html = `
