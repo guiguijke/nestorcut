@@ -316,6 +316,9 @@ const mapBinFileToUi = async (userId, file) => {
     // fichiers importés avant n'en ont pas et s'affichent sans.
     findings: file.importReport?.findings ?? [],
     importRefusal: file.importRefusal ?? null,
+    // Cause stable d'un échec DWG (code, jamais le texte brut du worker) :
+    // la fiche affiche « pourquoi ». Champ ADDITIF, null hors DWG.
+    importErrorCode: file.importErrorCode ?? null,
   };
 };
 

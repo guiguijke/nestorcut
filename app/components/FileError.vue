@@ -9,8 +9,8 @@
         <!-- Lot 2c : la CAUSE du refus, avec ses nombres, quand le serveur
              l'a écrite (`importRefusal`, lot 2a). Sans elle, l'utilisateur
              ne lisait que « Échec de l'import ». -->
-        <p v-if="refusal" class="file__reason">
-            {{ refusal }}
+        <p v-if="reason" class="file__reason">
+            {{ reason }}
         </p>
         <MainButton
             :size="sizeType.s"
@@ -28,6 +28,7 @@
 import { sizeType } from "~~/constants/size.constants";
 import { themeType } from '~~/constants/theme.constants';
 import { refusalMessage } from '~/composables/importFindings';
+import { importErrorReasonKey } from '~/utils/importErrorReason';
 
 const { t, fmtNumber } = useLocale()
 
@@ -38,9 +39,14 @@ const props = defineProps({
     },
 })
 
-const refusal = computed(() =>
-    refusalMessage(props.file.importRefusal, t, (v) => fmtNumber(v, 0)),
-)
+// Cause lisible : le refus de la garde (lot 2a) d'abord, sinon la cause
+// stable d'un échec DWG. Sans l'une ni l'autre : aucune ligne (repli).
+const reason = computed(() => {
+    const refusal = refusalMessage(props.file.importRefusal, t, (v) => fmtNumber(v, 0))
+    if (refusal) return refusal
+    const key = importErrorReasonKey(props.file.importErrorCode)
+    return key ? t(key) : null
+})
 
 </script>
 

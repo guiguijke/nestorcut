@@ -255,6 +255,11 @@ export default {
     'file.quantity': 'Quantity for {name}',
     'files.expired': 'Expired (24 h purge) — re-upload this file to nest it again',
     'files.importFailed': 'Import failed',
+    'files.importError.dwgMissing': 'DWG conversion is not available on this server: export the file as DXF and upload it again.',
+    'files.importError.dwgTimeout': 'DWG conversion took too long (the drawing may be too complex): export the file as DXF and upload it again.',
+    'files.importError.dwgVersion': 'DWG file too recent (AutoCAD 2013 or later): save it as DXF or as DWG 2010 and upload it again.',
+    'files.importError.dwgCorrupt': 'DWG file could not be read (corrupted, or unsupported version): export it as DXF and upload it again.',
+    'files.importError.dwgOutput': 'DWG converted, but the DXF produced could not be read: export the file as DXF from your CAD software.',
     // Régime privacy (création + pastille projet).
     'privacy.choice': 'Where parts are stored',
     'privacy.device.title': 'This device',

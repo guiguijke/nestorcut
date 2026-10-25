@@ -24,7 +24,11 @@ from core.import_budget import (
 from worker_common.geometry.import_findings import build_findings, empty_stats
 from core.format_detect import detect_format
 from core.svg_to_drawing import svg_bytes_to_drawing
-from core.dwg_convert import dwg_bytes_to_dxf_bytes
+from core.dwg_convert import (
+    DWG_OUTPUT_UNREADABLE,
+    DwgConversionError,
+    dwg_bytes_to_dxf_bytes,
+)
 from worker_common.colors import pick_colors
 from worker_common.crypto import (
     encrypt_polygon_parts,
@@ -63,6 +67,29 @@ def _getting_drawing(doc) -> Drawing:
     
     return drawing
 
+def _record_import_error(doc, code: str):
+    """Cause stable d'un échec DWG, lue par l'UI (champ additif
+    `importErrorCode`). Le détail technique reste dans le journal."""
+    db["user_dxf_files"].update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"importErrorCode": code}},
+    )
+
+def _dwg_to_drawing(doc, dwg_bytes: bytes) -> Drawing:
+    logger = setup_logger("dwg_import")
+    try:
+        dxf_bytes = dwg_bytes_to_dxf_bytes(dwg_bytes)
+    except DwgConversionError as exc:
+        _record_import_error(doc, exc.code)
+        raise
+
+    drawing = read_dxf(io.BytesIO(dxf_bytes))
+    if drawing is None:
+        logger.error("DWG output is not a readable DXF", extra={"slug": doc["slug"]})
+        _record_import_error(doc, DWG_OUTPUT_UNREADABLE)
+        raise DwgConversionError(DWG_OUTPUT_UNREADABLE, "dwgread output unreadable as DXF")
+    return drawing
+
 def _make_dxf_copy(doc) -> Drawing:
     logger = setup_logger("dxf_copy_maker")
     dxf_file_slug = doc["slug"]
@@ -87,7 +114,7 @@ def _make_dxf_copy(doc) -> Drawing:
         dxf_copy = svg_bytes_to_drawing(dxf_bytes)
     elif source_format == "dwg":
         logger.info("DWG source detected, converting", extra={"slug": dxf_file_slug})
-        dxf_copy = read_dxf(io.BytesIO(dwg_bytes_to_dxf_bytes(dxf_bytes)))
+        dxf_copy = _dwg_to_drawing(doc, dxf_bytes)
     else:
         dxf_copy = read_dxf(io.BytesIO(dxf_bytes))
 
@@ -97,10 +124,8 @@ def _make_dxf_copy(doc) -> Drawing:
         # 'modelspace'" n'aide personne — échouer proprement avec un
         # message actionnable.
         raise Exception(
-            "The uploaded file could not be read as a DXF"
-            + (" (the DWG conversion produced an unreadable file)"
-               if source_format == "dwg" else "")
-            + ". Check that the file is a valid DXF/DWG export."
+            "The uploaded file could not be read as a DXF. "
+            "Check that the file is a valid DXF/DWG export."
         )
 
     logger.info("Make a copy Drawing info", extra={"entity_count": len(dxf_copy.modelspace())})

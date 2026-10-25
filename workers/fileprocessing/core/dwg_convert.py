@@ -21,14 +21,35 @@ DWGREAD_BIN = os.environ.get("DWGREAD_BIN", "dwgread")
 CONVERT_TIMEOUT_SEC = int(os.environ.get("DWG_CONVERT_TIMEOUT", "60"))
 
 
+DWG_CODE_CONVERTER_MISSING = "dwg_converter_missing"
+DWG_CODE_TIMEOUT = "dwg_timeout"
+DWG_CODE_VERSION_UNSUPPORTED = "dwg_version_unsupported"
+DWG_CODE_CONVERSION_FAILED = "dwg_conversion_failed"
+DWG_OUTPUT_UNREADABLE = "dwg_output_unreadable"
+
+# Dernière version DWG que LibreDWG lit correctement (R2010). Le magic
+# `AC10xx` (en-tête, 6 octets) est comparé en ordre lexical : AC1027 (R2013)
+# et au-delà sont rejetés proprement, sans toucher au reste du pipeline.
+_LAST_SUPPORTED_DWG_VERSION = b"AC1024"
+
+
 class DwgConversionError(Exception):
-    """Raised when a DWG cannot be converted — shown to the user as the
-    file-processing failure reason."""
+    """Raised when a DWG cannot be converted.
+
+    `code` is the stable cause (DWG_CODE_* above): it is stored on the file
+    document and mapped to a readable message by the app. `detail` is
+    internal (worker log only) and never reaches the document.
+    """
+
+    def __init__(self, code: str, detail: str):
+        super().__init__(code)
+        self.code = code
+        self.detail = detail
 
 
 def dwg_bytes_to_dxf_bytes(dwg_bytes: bytes) -> bytes:
     """Converts DWG bytes to DXF bytes via dwgread. Raises
-    DwgConversionError with a user-readable message on any failure."""
+    DwgConversionError (stable `code`) on any failure."""
     with tempfile.TemporaryDirectory() as tmpdir:
         src = os.path.join(tmpdir, "input.dwg")
         dst = os.path.join(tmpdir, "output.dxf")
@@ -41,22 +62,32 @@ def dwg_bytes_to_dxf_bytes(dwg_bytes: bytes) -> bytes:
                 timeout=CONVERT_TIMEOUT_SEC,
             )
         except FileNotFoundError:
-            raise DwgConversionError(
-                "DWG files are not supported on this server (converter missing) — "
-                "please export your file as DXF and upload it again."
+            raise _failure(
+                DWG_CODE_CONVERTER_MISSING,
+                f"dwgread binary not found ({DWGREAD_BIN})",
             )
         except subprocess.TimeoutExpired:
-            raise DwgConversionError(
-                "DWG conversion timed out — the file may be too complex. "
-                "Please export it as DXF and upload it again."
+            raise _failure(
+                DWG_CODE_TIMEOUT,
+                f"dwgread exceeded {CONVERT_TIMEOUT_SEC}s",
             )
 
         if result.returncode != 0 or not os.path.exists(dst):
             tail = (result.stderr or b"").decode("utf-8", "ignore")[-300:]
-            logger.error("dwgread failed", extra={"rc": result.returncode, "stderr": tail})
-            raise DwgConversionError(
-                "Could not read this DWG file (recent or unsupported version). "
-                "Please export it as DXF (R2000 or later) and upload it again."
+            version = bytes(dwg_bytes[:6])
+            if version > _LAST_SUPPORTED_DWG_VERSION:
+                raise _failure(
+                    DWG_CODE_VERSION_UNSUPPORTED,
+                    f"dwgread rc={result.returncode}, DWG version {version!r} "
+                    "newer than R2010",
+                    rc=result.returncode,
+                    stderr=tail,
+                )
+            raise _failure(
+                DWG_CODE_CONVERSION_FAILED,
+                f"dwgread rc={result.returncode}, no DXF produced",
+                rc=result.returncode,
+                stderr=tail,
             )
 
         with open(dst, "rb") as f:
@@ -64,3 +95,8 @@ def dwg_bytes_to_dxf_bytes(dwg_bytes: bytes) -> bytes:
 
     logger.info("DWG converted", extra={"dxf_bytes": len(dxf)})
     return dxf
+
+
+def _failure(code: str, detail: str, **extra) -> DwgConversionError:
+    logger.error("DWG conversion failed", extra={"code": code, "detail": detail, **extra})
+    return DwgConversionError(code, detail)

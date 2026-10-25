@@ -253,6 +253,11 @@ export default {
     'file.quantity': 'Quantité pour {name}',
     'files.expired': "Expiré (purge 24 h) — réimportez ce fichier pour le nester à nouveau",
     'files.importFailed': "Échec de l'import",
+    'files.importError.dwgMissing': 'Conversion DWG indisponible sur ce serveur : enregistrez le fichier en DXF puis réimportez-le.',
+    'files.importError.dwgTimeout': 'Conversion DWG trop longue (dessin très complexe) : enregistrez le fichier en DXF puis réimportez-le.',
+    'files.importError.dwgVersion': 'Fichier DWG trop récent (AutoCAD 2013 ou plus) : enregistrez-le en DXF ou en DWG 2010.',
+    'files.importError.dwgCorrupt': 'Fichier DWG illisible (fichier corrompu ou version non prise en charge) : enregistrez-le en DXF puis réimportez-le.',
+    'files.importError.dwgOutput': 'DWG converti, mais le DXF produit est illisible : enregistrez le fichier en DXF depuis votre logiciel de CAO.',
     // Régime privacy (création + pastille projet).
     'privacy.choice': "Où vivent les pièces",
     'privacy.device.title': "Cet appareil",
