@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { connectDB } from '~~/server/db/mongo'
-import { generateSession } from '~~/server/utils/auth'
+import { generateSession, storedSession } from '~~/server/utils/auth'
 import { setSessionCookie } from '~~/server/utils/user'
 import { sendWelcomeMessage } from '~~/server/features/support/welcomemessage'
 import { notifyAdminNewUser } from '~~/server/features/notification/adminNotify'
@@ -59,7 +59,7 @@ export default defineEventHandler(async (event) => {
         avatarFileName: null,
         avatarUrl: null,
         passwordHash,
-        sessions: [session],
+        sessions: [storedSession(session)],
         createdAt: new Date(),
         freeNestingUsed: 0,
         // Measurement unit preference ('mm' | 'inch') — default metric;

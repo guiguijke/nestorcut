@@ -1,18 +1,20 @@
 import { connectDB } from '~~/server/db/mongo'
-import { generateSession } from './auth'
+import { generateSession, purgeExpiredSessions, pushSessionUpdate, SESSION_TTL_MS } from './auth'
 import { sendWelcomeMessage } from '~~/server/features/support/welcomemessage'
 import { notifyAdminNewUser } from '~~/server/features/notification/adminNotify'
 import { COUNTRY_HEADER_NAME } from '~~/server/tracking/const'
 import { downloadAndStoreAvatar } from './avatar'
 import logger from './logger'
 import { clientIp } from './ratelimit'
+import { logRef } from './logRef'
 
 export async function createOrUpdateUser({ event, sessionId, providerId, email, name, avatarUrl }) {
     if (!providerId || !email || !name) {
         logger.error('Missing required user data', {
-            providerId,
-            email,
-            name,
+            userRef: logRef(providerId),
+            hasProviderId: !!providerId,
+            hasEmail: !!email,
+            hasName: !!name,
         })
         throw new Error('Missing required user data')
     }
@@ -47,7 +49,7 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
             emailVerified: true,
         },
         $push: {
-            sessions: session,
+            sessions: pushSessionUpdate(session),
         },
     }
 
@@ -59,6 +61,8 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
         throw new Error('This account has been suspended')
     }
 
+    // S-4 : purge des sessions expirées avant d'ajouter la nouvelle.
+    await purgeExpiredSessions(db, { id: userId })
     await db.collection('users').updateOne({ id: userId }, updateData, { upsert: true })
 
     if (!isUserExists) {
@@ -90,6 +94,7 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
 export function setSessionCookie(event, session) {
     setCookie(event, 'sessionId', session.sessionId, {
         expires: new Date(session.expiresAt),
+        maxAge: SESSION_TTL_MS / 1000,
         httpOnly: true,
         sameSite: 'lax',
         secure: process.env.NODE_ENV === 'production',

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { connectDB } from '~~/server/db/mongo'
-import { generateSession } from '~~/server/utils/auth'
+import { generateSession, purgeExpiredSessions, pushSessionUpdate } from '~~/server/utils/auth'
 import { setSessionCookie } from '~~/server/utils/user'
 import {
     clientIp,
@@ -72,11 +72,13 @@ export default defineEventHandler(async (event) => {
     }
 
     const session = generateSession()
+    // S-4 : purge des sessions expirées, puis ajout du hash (liste plafonnée).
+    await purgeExpiredSessions(db, { id: userId })
     await db.collection('users').updateOne(
         { id: userId },
         {
             $set: { lastActiveAt: new Date() },
-            $push: { sessions: session },
+            $push: pushSessionUpdate(session),
         }
     )
 
