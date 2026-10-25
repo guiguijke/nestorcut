@@ -37,14 +37,34 @@ jobs:
   app:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "24"
+          node-version: "24.11.0"
           cache: "npm"
       - name: Install
         run: npm ci
       - name: Tests server (vitest, db mockée)
         run: npx vitest run
       - name: Build Nuxt
+        run: npm run build
+
+  admin:
+    # A-10 : le panneau admin (admin/, app Nuxt séparée) était déclenché par
+    # le filtre `paths` mais jamais compilé ici ; un build cassé n'apparaissait
+    # qu'au build d'image.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.11.0"
+          cache: "npm"
+          cache-dependency-path: admin/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build Nuxt admin
         run: npm run build
