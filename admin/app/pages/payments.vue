@@ -115,6 +115,29 @@
                         </div>
                     </div>
                 </div>
+                <!-- Écritures comptables en échec (discret si 0) -->
+                <div
+                    v-if="health.accounting && (health.accounting.failed || health.accounting.stuckProcessing)"
+                    class="space-y-1 border-t border-marine-700 pt-2 text-xs"
+                >
+                    <div class="text-err">
+                        Comptabilité : {{ health.accounting.failed }} écriture(s) en échec,
+                        {{ health.accounting.stuckProcessing }} bloquée(s) en traitement depuis plus d'1 h
+                    </div>
+                    <ul class="space-y-0.5 text-ink-300">
+                        <li
+                            v-for="e in health.accounting.recent"
+                            :key="e.stripeInvoiceId"
+                        >
+                            <span class="font-mono">{{ e.stripeInvoiceId }}</span> · {{ e.status }} · {{ fmtDate(e.at) }}
+                            <span
+                                v-if="e.error"
+                                class="text-ink-400"
+                                >· {{ e.error }}</span
+                            >
+                        </li>
+                    </ul>
+                </div>
             </section>
 
             <!-- Financial KPIs -->

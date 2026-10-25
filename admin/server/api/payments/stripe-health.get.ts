@@ -1,5 +1,6 @@
 import { requireAdmin } from '../../utils/auth'
 import { connectDB } from '../../db/mongo'
+import { STRIPE_API_VERSION } from '../../utils/stripe'
 
 // Stripe health panel data.
 //
@@ -9,6 +10,11 @@ import { connectDB } from '../../db/mongo'
 //      is not enough).
 //   2. LIVE Stripe views: last events seen by Stripe and the account balance,
 //      for cross-checking when the heartbeat looks stale.
+//
+//   3. ACCOUNTING failures: accounting_entries stuck in 'failed' or in
+//      'processing' for over an hour (Abby push). No automatic replay — the
+//      owner decides; this only makes them visible. No personal data: invoice
+//      id, status, truncated error, date.
 //
 // Failures against the Stripe API degrade gracefully (error string) so the
 // page still renders with the local heartbeat.
@@ -26,6 +32,35 @@ const WEBHOOK_EVENT_TYPES = [
     'customer.subscription.deleted',
 ]
 
+const ACCOUNTING_STUCK_MS = 60 * 60 * 1000
+const ACCOUNTING_ERROR_MAX = 160
+
+async function accountingHealth(db: any) {
+    const entries = db.collection('accounting_entries')
+    const stuckBefore = new Date(Date.now() - ACCOUNTING_STUCK_MS)
+    const stuckFilter = { status: 'processing', createdAt: { $lt: stuckBefore } }
+    const [failed, stuckProcessing, recent] = await Promise.all([
+        entries.countDocuments({ status: 'failed' }),
+        entries.countDocuments(stuckFilter),
+        entries
+            .find({ $or: [{ status: 'failed' }, stuckFilter] })
+            .project({ stripeInvoiceId: 1, status: 1, error: 1, createdAt: 1, updatedAt: 1 })
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .toArray(),
+    ])
+    return {
+        failed,
+        stuckProcessing,
+        recent: recent.map((e: any) => ({
+            stripeInvoiceId: e.stripeInvoiceId,
+            status: e.status,
+            error: e.error ? String(e.error).slice(0, ACCOUNTING_ERROR_MAX) : null,
+            at: e.updatedAt || e.createdAt || null,
+        })),
+    }
+}
+
 export default defineEventHandler(async (event) => {
     requireAdmin(event)
     const db = await connectDB()
@@ -36,7 +71,7 @@ export default defineEventHandler(async (event) => {
     let stripe: any = null
     if (key) {
         try {
-            const auth = { Authorization: `Bearer ${key}` } as Record<string, string>
+            const auth = { Authorization: `Bearer ${key}`, 'Stripe-Version': STRIPE_API_VERSION } as Record<string, string>
             // Stripe list filter: types[]=… (repeated key, not a comma list).
             const eventsQuery = new URLSearchParams({ limit: '8' })
             for (const t of WEBHOOK_EVENT_TYPES) eventsQuery.append('types[]', t)
@@ -63,11 +98,15 @@ export default defineEventHandler(async (event) => {
         }
     }
 
+    // Degrades to null: a Mongo hiccup on this block must not hide the rest.
+    const accounting = await accountingHealth(db).catch(() => null)
+
     return {
         stripeConfigured: Boolean(key),
         lastWebhook: heartbeat
             ? { type: heartbeat.type, eventId: heartbeat.eventId, receivedAt: heartbeat.receivedAt }
             : null,
         stripe,
+        accounting,
     }
 })

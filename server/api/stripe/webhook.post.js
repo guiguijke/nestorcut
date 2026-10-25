@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { connectDB } from '~~/server/db/mongo'
-import { getChargeBalanceTransaction, mapSubscription } from '~~/server/features/payment/stripe'
+import { getChargeBalanceTransaction, getInvoiceChargeId, mapSubscription } from '~~/server/features/payment/stripe'
 import { createIncomeEntry } from '~~/server/features/accounting/abby'
 import logger from '~~/server/utils/logger'
 import { logRef } from '~~/server/utils/logRef'
@@ -165,7 +165,9 @@ async function handleInvoicePaymentFailed(db, invoice) {
                 userId: user?.id || null,
                 email: user?.email || invoice.customer_email || null,
                 stripeCustomerId: customerId,
-                stripeSubscriptionId: invoice.subscription || null,
+                // Basil+ : invoice.subscription est supprimé (parent.subscription_details).
+                stripeSubscriptionId:
+                    invoice.parent?.subscription_details?.subscription || invoice.subscription || null,
                 amountDue: invoice.amount_due ?? null,
                 currency: invoice.currency || null,
                 nextRetryAt: invoice.next_payment_attempt
@@ -224,10 +226,11 @@ async function handleInvoicePaid(db, invoice) {
         // account settles in EUR).
         let amountCents = amountPaid
         if (invoice.currency !== 'eur') {
-            // invoice.charge exists on pre-"Basil" API versions; on newer
-            // defaults it may be absent — the entry then stays 'failed' and
-            // visible instead of recording a wrong amount.
-            const chargeId = invoice.charge
+            // invoice.charge is gone since "Basil": the charge is reached via
+            // Invoice Payments (payment_intent.latest_charge). If neither path
+            // yields a settled amount the entry stays 'failed' and visible
+            // instead of recording a wrong amount.
+            const chargeId = invoice.charge || (await getInvoiceChargeId(stripeInvoiceId))
             const charge = chargeId ? await getChargeBalanceTransaction(chargeId) : null
             const settled = charge?.balance_transaction?.amount
             if (!settled) {

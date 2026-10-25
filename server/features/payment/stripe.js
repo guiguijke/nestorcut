@@ -1,9 +1,13 @@
 const STRIPE_BASE = 'https://api.stripe.com/v1'
+// Version d'API épinglée sur celle du compte et de l'endpoint webhook de
+// production : le comportement ne change plus si Stripe bouge la version par défaut.
+export const STRIPE_API_VERSION = '2025-10-29.clover'
 
 function authHeaders(contentType) {
     const stripeSecretKey = useRuntimeConfig().stripeSecretKey
     const headers = {
         'Authorization': `Bearer ${stripeSecretKey}`,
+        'Stripe-Version': STRIPE_API_VERSION,
     }
     if (contentType) {
         headers['Content-Type'] = contentType
@@ -138,6 +142,29 @@ export async function getChargeBalanceTransaction(chargeId) {
             'expand[]': 'balance_transaction',
         },
     })
+}
+
+/**
+ * Finds the charge that paid an invoice. Since API version basil the Invoice
+ * no longer carries `charge`: the link goes through Invoice Payments
+ * (GET /v1/invoice_payments), whose payment_intent holds `latest_charge`.
+ * Returns null when no paid PaymentIntent payment exists (out-of-band, credit).
+ * @param {string} invoiceId
+ * @returns {Promise<string|null>}
+ */
+export async function getInvoiceChargeId(invoiceId) {
+    const response = await $fetch(`${STRIPE_BASE}/invoice_payments`, {
+        method: 'GET',
+        headers: authHeaders(),
+        query: { invoice: invoiceId, status: 'paid', 'expand[]': 'data.payment.payment_intent' },
+    })
+    for (const ip of response?.data || []) {
+        if (ip?.payment?.type !== 'payment_intent') continue
+        const latest = ip.payment.payment_intent?.latest_charge
+        const id = typeof latest === 'string' ? latest : latest?.id
+        if (id) return id
+    }
+    return null
 }
 
 /**
