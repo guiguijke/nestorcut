@@ -103,7 +103,7 @@ export default defineEventHandler(async (event) => {
                 html: htmlBody,
             },
         });
-        logger.info(`Contact message forwarded from ${email}`);
+        logger.info(`Contact message forwarded`);
     } catch (error) {
         logger.error('Failed to forward contact message:', error);
         throw createError({ statusCode: 502, statusMessage: 'Message could not be sent, please try again later.' });

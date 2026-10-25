@@ -2,7 +2,8 @@ import logger from '~~/server/utils/logger'
 
 /**
  * Removes a subscriber from the self-hosted listmonk instance. Called on
- * account deletion (GDPR right to erasure) — the subscriber id is never
+ * account deletion (whatever the newsletter opt-in: an opted-out user stays
+ * in listmonk as a blocklisted record with e-mail and name) (GDPR right to erasure) — the subscriber id is never
  * stored on the user document, so we look it up by email first.
  *
  * Best-effort, mirroring subscribeToNewsletter: a listmonk outage must never
@@ -39,7 +40,7 @@ export async function unsubscribeFromNewsletter(event, { email }) {
             (s) => String(s.email).toLowerCase() === String(email).toLowerCase()
         )
         if (subscribers.length === 0) {
-            logger.info(`No listmonk subscriber found for ${email} — nothing to delete`)
+            logger.info(`No listmonk subscriber found — nothing to delete`)
             return false
         }
         for (const subscriber of subscribers) {
@@ -48,10 +49,10 @@ export async function unsubscribeFromNewsletter(event, { email }) {
                 headers,
             })
         }
-        logger.info(`Newsletter subscriber(s) deleted for ${email} (${subscribers.length})`)
+        logger.info(`Newsletter subscriber(s) deleted (${subscribers.length})`)
         return true
     } catch (err) {
-        logger.warn(`listmonk unsubscription failed for ${email}:`, err?.data || err?.message || err)
+        logger.warn(`listmonk unsubscription failed:`, err?.data || err?.message || err)
         return false
     }
 }

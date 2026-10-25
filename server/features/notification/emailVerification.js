@@ -31,7 +31,7 @@ export async function sendEmailVerification(event, userId, email) {
     const verifyUrl = `${config.public.baseUrl}/api/auth/local/verify-email?token=${token}`
     const { sendVerificationEmail } = await import('~~/server/features/notification/sendEmail')
     await sendVerificationEmail(email, verifyUrl)
-    logger.info(`Verification email sent to ${email}`)
+    logger.info(`Verification email sent`)
 }
 
 export async function consumeVerificationToken(token) {

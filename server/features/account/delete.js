@@ -11,6 +11,7 @@ import {
 import { unsubscribeFromNewsletter } from '~~/server/features/listmonk/unsubscribe'
 import { sendAccountDeletedEmail } from '~~/server/features/notification/sendEmail'
 import logger from '~~/server/utils/logger'
+import { logRef } from '~~/server/utils/logRef'
 
 /**
  * Full account deletion (GDPR right to erasure), self-serve from the profile
@@ -20,7 +21,8 @@ import logger from '~~/server/utils/logger'
  *  - Stripe: active/trialing subscription canceled IMMEDIATELY (the account
  *    disappears, so the usual cancel-at-period-end grace is meaningless),
  *    then the customer is deleted so late webhooks hit nothing.
- *  - listmonk: newsletter subscriber removed (when the user opted in).
+ *  - listmonk: subscriber record removed whatever the opt-in (an opted-out
+ *    user stays in listmonk as a blocklisted record with e-mail and name).
  *  - Running jobs: pending jobs are marked cancelled, processing jobs get
  *    cancelRequested (the bin-nesting worker polls it every ~2 s and stops
  *    cleanly; the strip worker ignores it — harmless). Compute-pool leases
@@ -31,15 +33,22 @@ import logger from '~~/server/utils/logger'
  *    works for vault-encrypted files — no DEK needed to delete ciphertext.
  *  - Mongo collections: owner-scoped (projects, files, jobs) and user-scoped
  *    (tokens with NO TTL index, vault sessions, checkouts, support messages,
- *    tracking, http logs).
- *  - adminActions: anonymized (targetUserId nulled) rather than deleted, so
- *    the admin audit trail keeps its shape without personal data.
+ *    tracking). payment_failures are matched by userId, e-mail AND Stripe
+ *    customer id (a failure recorded before the user was resolved carries
+ *    userId null).
+ *  - adminActions: anonymized (targetUserId nulled, summary and raw emptied)
+ *    rather than deleted, so the audit trail keeps the action itself (who,
+ *    what, when) without personal data.
+ *  - accounting_entries: KEPT — legal bookkeeping (see step 5). Holds only
+ *    the Stripe invoice id and amounts, no user reference.
  *  - users: the document itself, deleted LAST (every step above needs it).
  *
  * External calls (Stripe, listmonk, email) are best-effort: their failure
  * must never block the erasure. A tiny race remains with in-flight workers
  * (a job deleted mid-write can leave an ownerless GridFS file) — accepted
- * and bounded to a few seconds; orphan files carry no personal reference.
+ * and bounded to a few seconds. Such an orphan file is NOT anonymous: its
+ * metadata.ownerId is the user id, i.e. `local:<email>` for an e-mail account
+ * (the worker treats a vanished job document as a cancellation to avoid it).
  *
  * @param {object} event H3 event (runtime config access for listmonk)
  * @param {object} user the full user document (must include id, email,
@@ -48,6 +57,7 @@ import logger from '~~/server/utils/logger'
  */
 export async function deleteUserAccount(event, user) {
     const userId = user.id
+    const ref = logRef(userId)
     const db = await connectDB()
     const summary = { userId }
 
@@ -57,7 +67,7 @@ export async function deleteUserAccount(event, user) {
             await cancelSubscriptionImmediately(user.subscription.stripeSubscriptionId)
             summary.stripeSubscriptionCanceled = true
         } catch (err) {
-            logger.warn(`Account deletion: Stripe subscription cancel failed for ${userId}:`, err?.data || err?.message || err)
+            logger.warn(`Account deletion: Stripe subscription cancel failed for ${ref}:`, err?.data || err?.message || err)
         }
     }
     if (user.stripeCustomerId) {
@@ -65,12 +75,13 @@ export async function deleteUserAccount(event, user) {
             await deleteCustomer(user.stripeCustomerId)
             summary.stripeCustomerDeleted = true
         } catch (err) {
-            logger.warn(`Account deletion: Stripe customer delete failed for ${userId}:`, err?.data || err?.message || err)
+            logger.warn(`Account deletion: Stripe customer delete failed for ${ref}:`, err?.data || err?.message || err)
         }
     }
 
-    // 2. listmonk — remove the newsletter subscriber (opt-in users only).
-    if (user.newsletterOptIn && user.email) {
+    // 2. listmonk — remove the subscriber whatever the opt-in: an opted-out
+    //    user is only blocklisted there, e-mail and name included.
+    if (user.email) {
         summary.newsletterUnsubscribed = await unsubscribeFromNewsletter(event, { email: user.email })
     }
 
@@ -125,20 +136,32 @@ export async function deleteUserAccount(event, user) {
         'passwordResets',
         'emailVerifications',
         'subscription_checkouts',
-        'payment_failures',
         'supportMessages',
         'tracking',
     ]) {
         await db.collection(name).deleteMany({ userId })
     }
+    // payment_failures : un échec reçu avant la résolution du compte porte
+    // userId null mais l'e-mail (et le client Stripe) — on balaie les trois.
+    await db.collection('payment_failures').deleteMany({
+        $or: [
+            { userId },
+            ...(user.email ? [{ email: user.email }] : []),
+            ...(user.stripeCustomerId ? [{ stripeCustomerId: user.stripeCustomerId }] : []),
+        ],
+    })
+    // accounting_entries n'est PAS effacée : écritures comptables légales
+    // (conservation 10 ans, Code de commerce L123-22). Elles ne portent que
+    // l'id de facture Stripe et les montants, aucune référence à l'utilisateur.
     // `http` n'est plus balayé ici : depuis S-1 le journal HTTP ne porte plus
     // aucun identifiant (ni userId, ni URL) et s'efface seul à 14 jours.
     await clearVaultSessions(userId)
 
-    // 6. Admin audit trail — keep the actions, drop the personal reference.
+    // 6. Admin audit trail — keep the actions, drop the personal reference
+    //    and the free-text fields (summary/raw can carry names, reasons).
     await db.collection('adminActions').updateMany(
         { targetUserId: userId },
-        { $set: { targetUserId: null, targetUserDeleted: true } }
+        { $set: { targetUserId: null, targetUserDeleted: true, summary: null, raw: null } }
     )
 
     // 7. The user document itself, last.
@@ -150,10 +173,10 @@ export async function deleteUserAccount(event, user) {
         try {
             await sendAccountDeletedEmail(user.email)
         } catch (err) {
-            logger.warn(`Account deletion: confirmation email failed for ${userId}:`, err?.message || err)
+            logger.warn(`Account deletion: confirmation email failed for ${ref}:`, err?.message || err)
         }
     }
 
-    logger.info(`Account deleted: ${userId}`, summary)
+    logger.info(`Account deleted: ${ref}`)
     return summary
 }

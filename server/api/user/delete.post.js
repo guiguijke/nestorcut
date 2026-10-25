@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     setCookie(event, 'sessionId', '', {
         expires: new Date(0),
     })
-    setHeader(event, 'Clear-Site-Data', '"cache", "storage"')
+    setHeader(event, 'Clear-Site-Data', '"cache", "storage", "cookies"')
 
     return { ok: true, ...summary }
 })

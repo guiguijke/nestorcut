@@ -1,5 +1,6 @@
 import { connectDB } from '~~/server/db/mongo'
 import logger from '~~/server/utils/logger'
+import { logRef } from '~~/server/utils/logRef'
 import { createBillingPortalSession } from '~~/server/features/payment/stripe'
 
 /**
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
         return { url }
     } catch (err) {
         logger.warn('Stripe billing portal session failed', {
-            userId,
+            userRef: logRef(userId),
             customerId: user.stripeCustomerId,
             err: err?.data?.error?.message || err?.message || err,
         })

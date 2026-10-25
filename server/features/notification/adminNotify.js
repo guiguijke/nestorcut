@@ -147,7 +147,7 @@ export async function notifyAdminSupportMessage(event, { kind, userId, name, ema
   } catch (err) {
     // Échec d'envoi : on libère la fenêtre anti-spam pour le prochain message.
     if (kind === 'chat') lastChatNotifyAt.delete(userId)
-    logger.warn('Failed to notify admin of support message', { kind, userId, err: String(err) })
+    logger.warn('Failed to notify admin of support message', { kind, err: String(err) })
   }
 }
 

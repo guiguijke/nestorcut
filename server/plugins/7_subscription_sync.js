@@ -5,6 +5,7 @@ import {
     mapSubscription,
 } from "../features/payment/stripe";
 import logger from "../utils/logger";
+import { logRef } from "../utils/logRef";
 
 const tag = "subscriptionsync";
 
@@ -49,7 +50,7 @@ async function resolvePendingCheckouts(db) {
                     { $set: { status: "completed", updatedAt: new Date() } }
                 );
             logger.info(`[${tag}] Resolved checkout`, {
-                userId: checkout.userId,
+                userRef: logRef(checkout.userId),
                 status: mapped.status,
             });
         } else if (session?.status === "expired") {
@@ -110,12 +111,12 @@ async function refreshStaleSubscription(db) {
             .collection("users")
             .updateOne({ id: user.id }, { $set: { subscription: mapped } });
         logger.info(`[${tag}] Refreshed subscription`, {
-            userId: user.id,
+            userRef: logRef(user.id),
             status: mapped.status,
         });
     } catch (err) {
         logger.warn(`[${tag}] Failed to refresh subscription`, {
-            userId: user.id,
+            userRef: logRef(user.id),
             err,
         });
         // Bump updatedAt so a permanently failing id doesn't spin the loop.

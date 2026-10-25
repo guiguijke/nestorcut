@@ -5,6 +5,7 @@ import { isPromoActive } from './promo'
 import { DEMO_NESTING_LIMIT } from '../../shared/constants/demo.constants'
 import { ACTIVE_SUBSCRIPTION_STATUSES, getSubscription, mapSubscription } from '../features/payment/stripe'
 import logger from './logger'
+import { logRef } from './logRef'
 
 /**
  * Free quota is a MONTHLY allowance: 10 free nestings per calendar month
@@ -84,7 +85,7 @@ async function refreshSubscription(db, user) {
         return hasActiveSubscription({ subscription: mapped })
     } catch (err) {
         logger.warn('Failed to refresh subscription from Stripe', {
-            userId: user.id,
+            userRef: logRef(user.id),
             subscriptionId,
             err,
         })
@@ -549,20 +550,20 @@ export async function refundNestCharge(userId, charge) {
                 { id: userId, freeNestingUsed: { $gt: 0 } },
                 { $inc: { freeNestingUsed: -1 } },
             )
-            logger.info(`Refunded free nesting slot to user ${userId} (pre-enqueue failure)`)
+            logger.info(`Refunded free nesting slot to user ${logRef(userId)} (pre-enqueue failure)`)
         } else if (charge.type === 'demo' && !charge.skippedQuota) {
             await db.collection('users').updateOne(
                 { id: userId, demoNestingUsed: { $gt: 0 } },
                 { $inc: { demoNestingUsed: -1 } },
             )
-            logger.info(`Refunded demo nesting slot to user ${userId} (pre-enqueue failure)`)
+            logger.info(`Refunded demo nesting slot to user ${logRef(userId)} (pre-enqueue failure)`)
         } else {
             // grant / subscription / skippedQuota: nothing was consumed.
             charge.refunded = false
         }
     } catch (e) {
         charge.refunded = false
-        logger.error(`Failed to refund charge for user ${userId}: ${e}`)
+        logger.error(`Failed to refund charge for user ${logRef(userId)}: ${e}`)
     }
 }
 

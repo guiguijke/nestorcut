@@ -42,10 +42,10 @@ export async function subscribeToNewsletter(event, { email, name }) {
                 preconfirm_subscriptions: true,
             },
         })
-        logger.info(`Newsletter subscription created for ${email}`)
+        logger.info(`Newsletter subscription created`)
         return true
     } catch (err) {
-        logger.warn(`listmonk subscription failed for ${email}:`, err?.data || err?.message || err)
+        logger.warn(`listmonk subscription failed:`, err?.data || err?.message || err)
         return false
     }
 }
@@ -86,7 +86,7 @@ export async function unsubscribeFromNewsletter(event, { email }) {
             .filter((s) => String(s.email).toLowerCase() === String(email).toLowerCase())
             .map((s) => s.id)
         if (ids.length === 0) {
-            logger.info(`No listmonk subscriber found for ${email} — opt-out is a no-op`)
+            logger.info(`No listmonk subscriber found — opt-out is a no-op`)
             return true
         }
         await $fetch(`${base}/api/subscribers/blocklist`, {
@@ -94,10 +94,10 @@ export async function unsubscribeFromNewsletter(event, { email }) {
             headers,
             body: { ids },
         })
-        logger.info(`Newsletter opt-out recorded for ${email}`)
+        logger.info(`Newsletter opt-out recorded`)
         return true
     } catch (err) {
-        logger.warn(`listmonk opt-out failed for ${email}:`, err?.data || err?.message || err)
+        logger.warn(`listmonk opt-out failed:`, err?.data || err?.message || err)
         return false
     }
 }

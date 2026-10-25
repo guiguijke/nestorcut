@@ -4,6 +4,7 @@
 import { createError } from 'h3'
 import { connectDB, getBucket } from '../../db/mongo'
 import logger from '../../utils/logger'
+import { logRef } from '../../utils/logRef'
 
 /**
  * Suppression d'un projet et de toutes ses données (cascade), déclenchée
@@ -161,6 +162,6 @@ export async function deleteProjectCascade(domain, userId, slug) {
     counters.files = filesResult.deletedCount
     counters.jobs = jobsResult.deletedCount
 
-    logger.info(`Project deleted: ${domain.id}/${slug} (user ${userId})`, { ...counters })
+    logger.info(`Project deleted: ${domain.id}/${slug} (user ${logRef(userId)})`, { ...counters })
     return counters
 }

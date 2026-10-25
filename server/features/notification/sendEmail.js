@@ -67,7 +67,7 @@ export async function sendPasswordResetEmail(email, resetUrl) {
   `;
 
   await sendEmail(email, emailSubject, emailBody);
-  logger.info(`Password reset email sent to ${email}`);
+  logger.info(`Password reset email sent`);
 }
 
 export async function sendVerificationEmail(email, verifyUrl) {
@@ -89,7 +89,7 @@ export async function sendVerificationEmail(email, verifyUrl) {
   `;
 
   await sendEmail(email, emailSubject, emailBody);
-  logger.info(`Verification email sent to ${email}`);
+  logger.info(`Verification email sent`);
 }
 
 export async function sendAccountDeletedEmail(email) {
@@ -102,5 +102,5 @@ export async function sendAccountDeletedEmail(email) {
   `;
 
   await sendEmail(email, emailSubject, emailBody);
-  logger.info(`Account deletion confirmation email sent to ${email}`);
+  logger.info(`Account deletion confirmation email sent`);
 }

@@ -3,6 +3,7 @@ import { generateRandomString } from '~~/server/utils/strings'
 import { getCurrencyByCountry } from '~~/server/utils/currency'
 import { createCustomer, createSubscriptionCheckout, listCustomerSubscriptions } from '~~/server/features/payment/stripe'
 import logger from '~~/server/utils/logger'
+import { logRef } from '~~/server/utils/logRef'
 import { TRIAL_DAYS } from '~~/server/features/payment/const'
 import { LIVE_SUBSCRIPTION_STATUSES, hasLiveSubscription, isTrialEligible } from '~~/server/features/payment/eligibility'
 
@@ -48,7 +49,7 @@ export default defineEventHandler(async (event) => {
         } catch (err) {
             if (err?.statusCode === 409) throw err
             logger.warn('Stripe subscription lookup failed, continuing to Checkout', {
-                userId,
+                userRef: logRef(userId),
                 customerId: user.stripeCustomerId,
                 err: err?.data?.error?.message || err?.message || err,
             })

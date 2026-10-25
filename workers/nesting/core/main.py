@@ -1338,7 +1338,11 @@ def _nesting_process_impl(doc):
             current = db["nesting_jobs"].find_one(
                 {"_id": doc.get("_id")}, {"cancelRequested": 1}
             )
-            _cancel_state["flag"] = bool(current and current.get("cancelRequested"))
+            # A vanished job doc means the account was deleted mid-run
+            # (delete.js removes the job right after flagging it): stop, or
+            # the run would finish and write GridFS blobs owned by a gone
+            # user (ownerId = local:<email> for e-mail accounts).
+            _cancel_state["flag"] = current is None or bool(current.get("cancelRequested"))
         except Exception:
             pass
         return _cancel_state["flag"]

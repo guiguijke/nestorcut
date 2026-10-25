@@ -3,6 +3,7 @@ import { connectDB } from '~~/server/db/mongo'
 import { getChargeBalanceTransaction, mapSubscription } from '~~/server/features/payment/stripe'
 import { createIncomeEntry } from '~~/server/features/accounting/abby'
 import logger from '~~/server/utils/logger'
+import { logRef } from '~~/server/utils/logRef'
 
 const tag = 'stripe-webhook'
 
@@ -112,7 +113,7 @@ async function handleCheckoutCompleted(db, session) {
     if (userId && subscription) {
         const mapped = mapSubscription(subscription)
         await db.collection('users').updateOne({ id: userId }, { $set: { subscription: mapped } })
-        logger.info(`[${tag}] Checkout completed`, { userId, status: mapped.status })
+        logger.info(`[${tag}] Checkout completed`, { userRef: logRef(userId), status: mapped.status })
     }
 }
 
@@ -175,7 +176,7 @@ async function handleInvoicePaymentFailed(db, invoice) {
         },
         { upsert: true }
     )
-    logger.warn(`[${tag}] Invoice payment failed`, { stripeInvoiceId, attempt, userId: user?.id })
+    logger.warn(`[${tag}] Invoice payment failed`, { stripeInvoiceId, attempt, userRef: logRef(user?.id) })
 }
 
 /**

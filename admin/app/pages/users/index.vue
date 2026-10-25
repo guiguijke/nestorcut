@@ -385,7 +385,7 @@
                         :href="csvHref"
                         class="btn-secondary"
                         download
-                        >⬇ Export CSV</a
+                        >⬇ Export CSV (e-mails : abonnés newsletter uniquement)</a
                     >
                     <button
                         class="btn-secondary"
@@ -394,9 +394,9 @@
                     >
                         <span v-if="copyingAll">Copie…</span>
                         <span v-else-if="copyAllState === 'done'" class="text-ok">✓ Emails copiés</span>
-                        <span v-else-if="copyAllState === 'empty'">Aucun email</span>
+                        <span v-else-if="copyAllState === 'empty'">Aucun abonné newsletter</span>
                         <span v-else-if="copyAllState === 'error'" class="text-err">Échec de la copie</span>
-                        <span v-else>⧉ Copier les emails (filtre courant)</span>
+                        <span v-else>⧉ Copier les emails (filtre courant, abonnés newsletter uniquement)</span>
                     </button>
                     <button
                         class="btn-secondary"

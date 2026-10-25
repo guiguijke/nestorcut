@@ -16,8 +16,24 @@ const logger = winston.createLogger({
     ),
     transports: [
         new winston.transports.Console(),
-        new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-        new winston.transports.File({ filename: "logs/combined.log" })
+        // Rotation native winston (aucune dépendance) : 5 Mo par fichier, 5
+        // fichiers conservés (les anciens sont écrasés), le plus récent garde
+        // le nom de base (tailable). Les journaux ne portent aucune donnée
+        // personnelle (pas d'e-mail, pas d'identifiant de compte local) ;
+        // la rotation borne en plus leur durée de vie.
+        new winston.transports.File({
+            filename: "logs/error.log",
+            level: "error",
+            maxsize: 5 * 1024 * 1024,
+            maxFiles: 5,
+            tailable: true,
+        }),
+        new winston.transports.File({
+            filename: "logs/combined.log",
+            maxsize: 5 * 1024 * 1024,
+            maxFiles: 5,
+            tailable: true,
+        })
     ],
     exitOnError: false,
 });
