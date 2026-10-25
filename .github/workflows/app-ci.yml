@@ -53,10 +53,10 @@ jobs:
     # A-10 : le panneau admin (admin/, app Nuxt séparée) était déclenché par
     # le filtre `paths` mais jamais compilé ici ; un build cassé n'apparaissait
     # qu'au build d'image.
+    # Construit dans une copie isolée, comme le contexte Docker (admin/ seul) :
+    # dans le dépôt, le tsconfig.json racine (include **/*.vue) capte aussi les
+    # fichiers de l'admin et exige un .nuxt racine absent de ce job.
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: admin
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -64,7 +64,11 @@ jobs:
           node-version: "24.11.0"
           cache: "npm"
           cache-dependency-path: admin/package-lock.json
+      - name: Isolate admin (Docker build context)
+        run: cp -r admin "$RUNNER_TEMP/admin"
       - name: Install
+        working-directory: ${{ runner.temp }}/admin
         run: npm ci
       - name: Build Nuxt admin
+        working-directory: ${{ runner.temp }}/admin
         run: npm run build
