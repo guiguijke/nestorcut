@@ -19,6 +19,10 @@
 //  - tracking.timestamp / http.timestamp: admin log views filter by time window
 //    on large collections — without an index these are full-collection scans.
 //  - supportMessages.userId / sender: conversation list and admin support view.
+//  - nesting_jobs.{status, priority, createdAt}: claim du worker (worker_loop.py)
+//    — il trie la file par priority puis createdAt à chaque poll (1 s). Sans cet
+//    index, chaque claim scanne et trie toute la collection.
+//  - nesting_jobs.slug (NON unique): lookups cancel / zip / fichiers / local-*.
 
 import { MongoClient } from 'mongodb'
 
@@ -66,10 +70,27 @@ const indexes = [
   // be read up to a minute past its expiry before the TTL collector runs.
   ['emailVerifications', { expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl.expiresAt' }],
 
+  // ── accounting (Stripe → Abby income book) ──
+  // One Abby receipt per Stripe invoice, ever. The unique index is what makes
+  // webhook retries idempotent: the second concurrent insert loses the race
+  // with a duplicate key error instead of pushing a duplicate receipt.
+  ['accounting_entries', { stripeInvoiceId: 1 }, { unique: true, name: 'uniq.stripeInvoiceId' }],
+
+  // ── payment failures (invoice.payment_failed webhook) ──
+  // One doc per (invoice, retry attempt); upsert idempotency for webhook
+  // redeliveries.
+  ['payment_failures', { stripeInvoiceId: 1, attempt: 1 }, { unique: true, name: 'uniq.invoiceAttempt' }],
+  ['payment_failures', { createdAt: -1 }, { name: 'createdAt_desc' }],
+
   // ── nesting jobs (liste des résultats, SSE relu chaque seconde) ──
   // getResults : find({ ownerId[, projectSlug] }).sort({ createdAt: -1 }).limit(N)
   // — sans cet index, un scan complet de la collection par seconde et par onglet.
   ['nesting_jobs', { ownerId: 1, createdAt: -1 }, { name: 'owner_recent' }],
+  // Claim du worker : find({ status: 'pending' }).sort({ priority: 1, createdAt: 1 })
+  // — filtre d'égalité d'abord, puis tri : l'index sert les deux, sans tri en mémoire.
+  ['nesting_jobs', { status: 1, priority: 1, createdAt: 1 }, { name: 'claim_pending' }],
+  // Lookups par slug (cancel, zip, fichiers, local-*). NON unique.
+  ['nesting_jobs', { slug: 1 }, { name: 'slug' }],
 
   // ── support ──
   ['supportMessages', { userId: 1, createdAt: -1 }, { name: 'user_recent' }],

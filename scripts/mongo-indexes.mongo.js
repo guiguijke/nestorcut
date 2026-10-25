@@ -20,6 +20,10 @@
 //  - tracking.timestamp / http.timestamp: admin log views filter by time
 //    window on large collections — without an index these are full scans.
 //  - supportMessages.userId / sender: conversation list and admin support view.
+//  - nesting_jobs.{status, priority, createdAt}: claim du worker (worker_loop.py)
+//    — il trie la file par priority puis createdAt à chaque poll (1 s). Sans cet
+//    index, chaque claim scanne et trie toute la collection.
+//  - nesting_jobs.slug (NON unique): lookups cancel / zip / fichiers / local-*.
 //
 // `db` is the global provided by mongosh, bound to the database in the URI
 // (nest2d). Errors on unique-index creation (duplicate data, code 11000) are
@@ -57,6 +61,11 @@ const indexes = [
   // getResults : find({ ownerId[, projectSlug] }).sort({ createdAt: -1 }).limit(N)
   // — sans cet index, un scan complet de la collection par seconde et par onglet.
   ['nesting_jobs', { ownerId: 1, createdAt: -1 }, { name: 'owner_recent' }],
+  // Claim du worker : find({ status: 'pending' }).sort({ priority: 1, createdAt: 1 })
+  // — filtre d'égalité d'abord, puis tri : l'index sert les deux, sans tri en mémoire.
+  ['nesting_jobs', { status: 1, priority: 1, createdAt: 1 }, { name: 'claim_pending' }],
+  // Lookups par slug (cancel, zip, fichiers, local-*). NON unique.
+  ['nesting_jobs', { slug: 1 }, { name: 'slug' }],
 
   // ── support ──
   ['supportMessages', { userId: 1, createdAt: -1 }, { name: 'user_recent' }],
