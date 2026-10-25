@@ -24,6 +24,8 @@ vi.mock('~~/server/db/mongo', () => ({
 }))
 vi.mock('~~/server/utils/ratelimit', () => ({
     clientIp: () => state.ip,
+    rateLimitAllow: () => true,
+    denyRateLimit: () => {},
 }))
 
 import chatPost from '~~/server/api/support/messages/index.post.js'

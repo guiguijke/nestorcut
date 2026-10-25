@@ -235,8 +235,8 @@ export default defineNuxtConfig({
         externals: {
             inline: [/[/\\]shared[/\\]constants[/\\]/],
         },
-        // Bound multipart uploads (20 × 5 MB + overhead, pentest H-4).
-        maxRequestSize: '101mb',
+        // Pas de `maxRequestSize` : option inexistante dans nitropack/h3 (S-5,
+        // plafond inopérant). Plafonds réels : server/middleware/0_body_limit.js.
         compressPublicAssets: true,
         // Demo project assets (generated DXF + manifest, committed under
         // server/seed/demo): bundled into .output so the seed plugin works

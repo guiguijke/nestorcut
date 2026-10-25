@@ -2,6 +2,7 @@ import { defineEventHandler, getCookie, readBody } from 'h3'
 import { saveTrackRecordInBackground, type TrackDBRecord } from '~~/server/tracking/add'
 import { COUNTRY_HEADER_NAME, TRACKING_COOKIE_NAME } from '~~/server/tracking/const'
 import type { TrackRequest } from '~~/shared/types/track_body'
+import { clientIp, denyRateLimit, rateLimitAllow } from '~~/server/utils/ratelimit'
 
 // Strict allowlist of accepted tracking actions (snake_case), derived from the
 // trackEvent() call sites in app/. Anything else is rejected: this endpoint is
@@ -143,7 +144,21 @@ function validateTrackRequest(body: unknown): body is TrackRequest {
     return true
 }
 
+// S-5 : endpoint public sans limite de débit. Un usage humain normal émet un
+// événement par clic / vue de page (quelques par minute, rafales de ~10 à
+// l'ouverture d'une page) : 120/min par utilisateur (IP en repli — jamais le
+// cookie de session, que le client choisit) ne refuse aucun usage réel.
+const TRACK_LIMIT = 120
+const TRACK_WINDOW_MS = 60_000
+
 export default defineEventHandler(async (event) => {
+    const rateKey = event.context.auth?.userId
+        ? `track:user:${event.context.auth.userId}`
+        : `track:ip:${clientIp(event)}`
+    if (!rateLimitAllow(rateKey, { limit: TRACK_LIMIT, windowMs: TRACK_WINDOW_MS })) {
+        denyRateLimit(event, { windowMs: TRACK_WINDOW_MS })
+    }
+
     const trackRequest = await readBody<TrackRequest>(event)
 
     // Reject malformed or unexpected payloads early — no DB write.

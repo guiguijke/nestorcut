@@ -5,6 +5,7 @@ import { getRouterParam } from "#imports"; // fallback, adjust if needed
 import { trackEvent } from "~~/server/tracking/add"
 import { createDecryptStream } from "~~/server/utils/crypto";
 import { requireFileAccess } from "~~/server/utils/vault";
+import logger from "~~/server/utils/logger";
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId;
@@ -32,6 +33,16 @@ export default defineEventHandler(async (event) => {
 
     const dxfFiles = await nestDxfBucket.find({ filename: { $in: nestResult.dxf_files } }).toArray();
 
+    // Sources validées AVANT les en-têtes : un fichier manquant donne une
+    // erreur HTTP propre, jamais un ZIP « valide » auquel il manque une tôle.
+    const expectedNames = new Set(nestResult.dxf_files || []);
+    if (dxfFiles.length < expectedNames.size) {
+        throw createError({
+            statusCode: 404,
+            statusMessage: "Result files not found",
+        });
+    }
+
     // Results may be encrypted — the vault must be unlocked to read them.
     const hasEncrypted = dxfFiles.some((file) => file.metadata?.enc);
     let dek = null;
@@ -46,24 +57,44 @@ export default defineEventHandler(async (event) => {
     });
 
     const archive = archiver("zip", { zlib: { level: 9 } });
-    archive.on("error", (err) => {
-        throw createError({
-            statusCode: 500,
-            statusMessage: "Error creating zip archive",
-            data: err.message,
-        });
-    });
-
-    event.res.on("close", () => archive.destroy());
-    archive.pipe(event.res);
+    const res = event.res;
+    // Une erreur de flux (archiver OU lecture GridFS / déchiffrement) ne doit
+    // jamais finir en ZIP tronqué servi en 200. Avant le premier octet : 500
+    // propre ; après : on détruit la connexion pour que le client voie un
+    // échec réseau. Un throw dans un listener serait une exception non
+    // rattrapée — on journalise.
+    let failed = false;
+    const abort = (err) => {
+        if (failed) return;
+        failed = true;
+        logger.error(`Result zip ${nestSlug} failed: ${err?.message}`);
+        archive.destroy();
+        if (!res.headersSent) {
+            res.removeHeader("Content-Disposition");
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ statusCode: 500, statusMessage: "Error creating zip archive" }));
+        } else {
+            res.destroy();
+        }
+    };
+    archive.on("error", abort);
+    res.on("close", () => archive.destroy());
+    archive.pipe(res);
 
     for (const file of dxfFiles) {
         let stream = nestDxfBucket.openDownloadStreamByName(file.filename);
+        stream.on("error", abort);
         if (file.metadata?.enc) {
             stream = stream.pipe(createDecryptStream(dek, file.filename, userId));
+            stream.on("error", abort);
         }
         archive.append(stream, { name: file.filename });
     }
-    await archive.finalize();
-    return event.res;
+    try {
+        await archive.finalize();
+    } catch (err) {
+        abort(err);
+    }
+    return res;
 })

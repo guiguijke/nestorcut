@@ -2,6 +2,13 @@ import { connectDB } from '~~/server/db/mongo'
 import { MESSAGE_SENDER } from '~~/server/features/support/const'
 import { notifyAdminSupportMessage } from '~~/server/features/notification/adminNotify'
 import logger from '~~/server/utils/logger'
+import { denyRateLimit, rateLimitAllow } from '~~/server/utils/ratelimit'
+
+const MAX_MESSAGE_LENGTH = 5000
+// Chat de support : 20 messages/min par utilisateur est largement au-dessus
+// d'une conversation humaine et bloque le remplissage de la collection.
+const MESSAGE_LIMIT = 20
+const MESSAGE_WINDOW_MS = 60_000
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId
@@ -10,7 +17,15 @@ export default defineEventHandler(async (event) => {
         return
     }
 
-    const { message } = await readBody(event)
+    if (!rateLimitAllow(`support-msg:${userId}`, { limit: MESSAGE_LIMIT, windowMs: MESSAGE_WINDOW_MS })) {
+        denyRateLimit(event, { windowMs: MESSAGE_WINDOW_MS })
+    }
+
+    const body = await readBody(event)
+    const message = body?.message
+    if (typeof message !== 'string' || !message.trim() || message.length > MAX_MESSAGE_LENGTH) {
+        throw createError({ statusCode: 400, statusMessage: 'Invalid message' })
+    }
 
     const db = await connectDB()
     const record = await db.collection('supportMessages').insertOne({
