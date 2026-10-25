@@ -670,6 +670,28 @@ describe('J6 — libellés : EN et FR', () => {
 
 // --- J9 (§9.76) : sentinelle d'origine, lien par section originale ---------
 
+// Flux binaire minimal : le marqueur, puis un enregistrement 0x0025 (origine,
+// 2 × float64) par dessin, en-tête de 6 octets comme `jobDrawings` le lit.
+// Suffisant pour exercer la sentinelle, qui ne porte que sur l'origine.
+function originStream(...origins) {
+    const parts = [new TextEncoder().encode('[BinaryDataStart]')]
+    for (const [x, y] of origins) {
+        const head = new Uint8Array(6)
+        const hv = new DataView(head.buffer)
+        hv.setUint16(0, 0x0025, true)
+        hv.setUint16(4, 16, true)
+        const body = new Uint8Array(16)
+        const bv = new DataView(body.buffer)
+        bv.setFloat64(0, x, true)
+        bv.setFloat64(8, y, true)
+        parts.push(head, body)
+    }
+    const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+    let o = 0
+    for (const p of parts) { out.set(p, o); o += p.length }
+    return out
+}
+
 describe('J9 — un dessin, PLUSIEURS pièces, chacune son point de départ', () => {
     // j9-1 (identifiant neutre) : 4 sections ORIGINALES du même dessin, 4
     // blocs, origine réelle sur le premier, SENTINELLE ≈3×10³⁸ sur les
@@ -743,13 +765,22 @@ describe('J9 — un dessin, PLUSIEURS pièces, chacune son point de départ', ()
         const blocks = jobDrawings(parseSheetCamJob(SOURCE).binary)
         expect(blocks).toHaveLength(2)
         expect(blocks.every((b) => b.error === null)).toBe(true)
-        // Fabriquer un flux dont le PREMIER bloc porte la sentinelle : le
-        // lecteur doit refuser CE dessin, jamais rendre une géométrie à 10³⁸.
-        // (Le vrai j9-1 hérite toujours d'une origine réelle ; ce cas est
-        // défensif — le format pourrait l'écrire un jour.)
-        // → vérifié par la garde de seuil : toutes origines < 1e6 sur la
-        // série réelle ci-dessus ; la sentinelle seule est couverte par le
-        // code (lastRealOrigin null ⇒ erreur sentinelOrigin).
-        expect(true).toBe(true)
+        // Flux fabriqué : le PREMIER bloc porte la sentinelle. Le lecteur doit
+        // refuser CE dessin (erreur nommée, origine 0,0), jamais rendre une
+        // géométrie à 10³⁸. (Le vrai j9-1 hérite toujours d'une origine
+        // réelle ; ce cas est défensif.)
+        const orphan = jobDrawings(originStream([3e38, 3e38]))
+        expect(orphan).toHaveLength(1)
+        expect(orphan[0].error?.code).toBe('sheetcamJobDrawing.sentinelOrigin')
+        expect(orphan[0].origin).toEqual([0, 0])
+    })
+
+    it('une sentinelle HÉRITE de la dernière origine réelle, sans jamais la sommer', () => {
+        // Origine réelle (60 ; 60) puis deux sentinelles : elles prennent
+        // l'origine réelle, sans erreur ; additionner 3×10³⁸ rendrait 10³⁸.
+        const blocks = jobDrawings(originStream([60, 60], [3e38, 3e38], [3e38, 3e38]))
+        expect(blocks).toHaveLength(3)
+        expect(blocks.map((b) => b.origin)).toEqual([[60, 60], [60, 60], [60, 60]])
+        expect(blocks.every((b) => b.error === null)).toBe(true)
     })
 })

@@ -43,6 +43,11 @@ const indexes = [
   ['users', { grantedUntil: 1 }, { sparse: true, name: 'grantedUntil' }],
   ['users', { signupCountry: 1 }, { sparse: true, name: 'signupCountry' }],
   ['users', { lastActiveAt: 1 }, { sparse: true, name: 'lastActiveAt' }],
+  // S-4 : sessions stockées hachées — chemin chaud de chaque requête authentifiée.
+  ['users', { 'sessions.sessionHash': 1 }, { name: 'sessions_sessionHash' }],
+  // TRANSITOIRE (S-4) : anciennes entrées de session brutes. À SUPPRIMER après
+  // le 2027-01-25 (90 jours : plus aucune entrée brute ne survit alors).
+  ['users', { 'sessions.sessionId': 1 }, { sparse: true, name: 'sessions_sessionId_legacy' }],
 
   // ── admins ──
   ['admins', { id: 1 }, { unique: true, name: 'uniq.id' }],
@@ -60,6 +65,11 @@ const indexes = [
   // read-time expiry check in consumeVerificationToken stays — a token can
   // be read up to a minute past its expiry before the TTL collector runs.
   ['emailVerifications', { expiresAt: 1 }, { expireAfterSeconds: 0, name: 'ttl.expiresAt' }],
+
+  // ── nesting jobs (liste des résultats, SSE relu chaque seconde) ──
+  // getResults : find({ ownerId[, projectSlug] }).sort({ createdAt: -1 }).limit(N)
+  // — sans cet index, un scan complet de la collection par seconde et par onglet.
+  ['nesting_jobs', { ownerId: 1, createdAt: -1 }, { name: 'owner_recent' }],
 
   // ── support ──
   ['supportMessages', { userId: 1, createdAt: -1 }, { name: 'user_recent' }],

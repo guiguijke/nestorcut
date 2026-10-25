@@ -9,6 +9,8 @@ on:
     paths:
       - "app/**"
       - "server/**"
+      - "shared/**"
+      - "admin/**"
       - "package.json"
       - "package-lock.json"
       # `vitest.config.js` décide COMMENT les tests tournent : l'exclure des
@@ -21,6 +23,8 @@ on:
     paths:
       - "app/**"
       - "server/**"
+      - "shared/**"
+      - "admin/**"
       - "package.json"
       - "package-lock.json"
       - "vitest.config.js"

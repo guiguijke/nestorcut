@@ -175,16 +175,33 @@ const partsClasses = computed(() => ({
     padding: 8px;
     height: auto;
 
-    // La variante plein écran de `__display` fixe une hauteur calc() —
-    // le bloc enrichi la refuse aussi : sa colonne doit pouvoir GRANDIR.
+    // Plein écran : la colonne prend la même hauteur que `__display` en
+    // plein écran ; le dessin y remplit ce que le badge et la légende laissent.
     &.modal__display--is-fullscreen {
-        height: auto;
+        @media (min-width: 567px) {
+            height: calc(80vh - 148px);
+        }
     }
 }
 
 .modal__enriched-svg {
     width: 100%;
     max-height: 280px;
+}
+
+// Plein écran : le dessin occupe la hauteur disponible au lieu de la limite
+// de la vignette (280 px). `object-fit` garde les proportions.
+.modal__enriched.modal__display--is-fullscreen .modal__enriched-svg {
+    @media (min-width: 567px) {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+
+        :deep(img) {
+            height: 100%;
+            object-fit: contain;
+        }
+    }
 }
 
 // Le badge reste un BADGE : aligné au début de la colonne, jamais étiré
