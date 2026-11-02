@@ -51,13 +51,15 @@
     import { FREE_NESTING_LIMIT } from '~~/shared/constants/payment.constants'
     import { formatQuotaReset } from '~/utils/quotaReset'
     import { hasPaidAccess } from '~/utils/entitlementUi'
+    import { flagOn } from '~/utils/runtimeFlag'
 
     const { getters } = authStore
     const { t, locale } = useLocale()
 
     // Temporarily disable the "Start free trial" CTA until paid plans are
-    // re-enabled (NUXT_PUBLIC_PAID_PLANS_DISABLED).
-    const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
+    // re-enabled (NUXT_PUBLIC_PAID_PLANS_DISABLED). D19 : lecture string-safe
+    // (AGENTS #29 — l'override runtime arrive en chaîne).
+    const paidDisabled = computed(() => flagOn(useRuntimeConfig().public.paidPlansDisabled))
 
     const user = computed(() => unref(getters.user) || {})
 
@@ -98,9 +100,10 @@
         return 'free-nest__bar-fill--low'
     })
 
-    const buyCreditsDialog = useBuyCreditsDialog()
+    // D13 : le contexte dit pourquoi la fenêtre s'ouvre (quota épuisé).
+    const openBuyCredits = useBuyCreditsOpener()
     const openPaywall = () => {
-        buyCreditsDialog.value = true
+        openBuyCredits({ source: 'quota' })
     }
 </script>
 

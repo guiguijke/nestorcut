@@ -39,6 +39,8 @@ import { themeType } from '~~/constants/theme.constants' // eslint-disable-line 
 import { trackEvent } from '~/utils/track'
 
 const { t } = useLocale()
+// D13 : l'ouvreur de la fenêtre d'abonnement porte le contexte (source turbo).
+const openBuyCredits = useBuyCreditsOpener()
 
 const open = ref(false)
 const loading = ref(false)
@@ -62,9 +64,8 @@ async function onToggle(event) {
     if (next && isFree.value) {
         // Visible mais verrouillé : l'activation renvoie au paywall (le
         // serveur refuse aussi l'écriture — P3, double verrou).
-        const buyCreditsDialog = useBuyCreditsDialog()
         open.value = false
-        buyCreditsDialog.value = true
+        openBuyCredits({ source: 'turbo' })
         return
     }
     loading.value = true

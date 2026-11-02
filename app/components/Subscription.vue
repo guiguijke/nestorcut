@@ -39,6 +39,9 @@
                 <UiBadge tone="warn" dot>{{ t('sub.pastDue') }}</UiBadge>
             </div>
             <p class="subscription__cancel-notice">{{ t('sub.pastDueDesc') }}</p>
+            <p v-if="ctxMessage" class="subscription__context" data-testid="subscription-context">
+                {{ t(ctxMessage.key, ctxMessage.params) }}
+            </p>
             <MainButton
                 v-if="canManageBilling"
                 :label="t('sub.updateCard')"
@@ -93,16 +96,19 @@
         </div>
 
         <div v-else-if="!isGranted && !isPastDue" class="subscription__card">
+            <p v-if="ctxMessage" class="subscription__context" data-testid="subscription-context">
+                {{ t(ctxMessage.key, ctxMessage.params) }}
+            </p>
             <div v-if="data?.plan" class="subscription__plan">
                 <div class="subscription__plan-title">{{ data.plan.title || t('sub.monthlyPlan') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.plan.amount, data.plan.currency) }}
                     <span class="subscription__interval">/ {{ data.plan.interval }}</span>
                 </div>
-                <div class="subscription__free">
+                <div v-if="!ctxMessage" class="subscription__free">
                     {{ t('sub.freeLeft', { n: data.freeRemaining }) }}
                 </div>
-                <div class="subscription__reset">
+                <div v-if="!ctxMessage" class="subscription__reset">
                     {{ t('sub.resetsAt', { date: quotaResetLabel }) }}
                 </div>
                 <MainButton
@@ -142,8 +148,22 @@ import MainTitle from './MainTitle.vue'
 import { themeType } from '~~/constants/theme.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { formatQuotaReset } from '~/utils/quotaReset'
+import { hasPaidAccess } from '~/utils/entitlementUi'
+import { flagOn } from '~/utils/runtimeFlag'
+import { trackEvent } from '~/utils/track'
+import { writeCheckoutIntent } from '~/utils/checkoutReturn'
+import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
+
+// D13 : pourquoi la fenêtre s'ouvre (useBuyCreditsContext, posé par
+// BuyCreditsDialog) — null sur la carte du profil et pour les ouvreurs sans
+// contexte : la carte est alors identique à celle d'avant le lot.
+const props = defineProps({
+    context: { type: Object, default: null },
+})
 
 const { t, locale } = useLocale()
+const config = useRuntimeConfig()
+const route = useRoute()
 // Relecture L4 : la date suit la langue de l'app, pas celle du navigateur.
 import { intlTag } from '~/utils/i18n'
 
@@ -152,8 +172,12 @@ import { intlTag } from '~/utils/i18n'
 const quotaResetLabel = computed(() => formatQuotaReset(new Date(), locale.value))
 
 // Temporarily disable paid-plan CTAs (Unlimited trial + Pro upgrade) until
-// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
-const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
+// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED. D19 : lecture string-safe
+// (AGENTS #29 — l'override runtime arrive en chaîne).
+const paidDisabled = computed(() => flagOn(config.public.paidPlansDisabled))
+
+// O3 : phrase « ce résultat compte N tôles… » (cartes Free et past_due).
+const ctxMessage = computed(() => contextMessage(props.context))
 
 const { data, refresh } = await useFetch('/api/payment/subscription')
 
@@ -179,12 +203,14 @@ const isGranted = computed(() => {
     return level === 'standard' || level === 'privacy'
 })
 const isActive = computed(() => isStripeActive.value || isGranted.value)
-// past_due / unpaid : le paiement a échoué, l'accès est coupé tant que la
-// carte n'est pas mise à jour (via le portail Stripe). `unpaid` = relances
-// épuisées mais l'abonnement existe encore : jamais la carte « s'abonner ».
+// past_due / unpaid / incomplete : le paiement a échoué, l'accès est coupé tant
+// que la carte n'est pas mise à jour (via le portail Stripe). `unpaid` =
+// relances épuisées mais l'abonnement existe encore : jamais la carte
+// « s'abonner ». D16 : `incomplete` (premier paiement inabouti) se lit comme
+// `past_due` — le serveur refuse déjà un second Checkout (409).
 const isPastDue = computed(() => {
     const status = unref(data)?.subscriptionStatus
-    return status === 'past_due' || status === 'unpaid'
+    return status === 'past_due' || status === 'unpaid' || status === 'incomplete'
 })
 // L'essai n'est offert qu'une fois (serveur : trialEligible) — sinon le CTA ne
 // doit pas promettre d'essai gratuit.
@@ -207,28 +233,77 @@ const formatPrice = (amount, currency) => {
     }).format(amount)
 }
 
+// O3 « sans recharger » : le palier de l'interface (useNuxtData('user')) se
+// rafraîchit dès que l'abonnement est actif côté Stripe alors que l'interface
+// croit encore à un compte Free (paiement fait dans un autre onglet, webhook
+// en retard) — une fois par passage à vrai. Côté client seulement.
+const refreshUser = async () => {
+    try {
+        await refreshNuxtData('user')
+    } catch {
+        // Le palier se mettra à jour au prochain chargement.
+    }
+}
+if (import.meta.client) {
+    watch(
+        isStripeActive,
+        (active) => {
+            if (active && !hasPaidAccess(unref(userMe))) refreshUser()
+        },
+        { immediate: true },
+    )
+}
+
 // Les statusMessage serveur sont des codes stables : traduits ici, repli
 // générique sinon.
-const SERVER_ERROR_CODES = ['subscription_exists', 'portal_unavailable']
+const SERVER_ERROR_CODES = ['subscription_exists', 'portal_unavailable', 'email_not_verified']
 const errorMessage = (err, fallbackKey) => {
     const code = err?.data?.statusMessage
     return SERVER_ERROR_CODES.includes(code) ? t(`sub.error.${code}`) : t(fallbackKey)
+}
+
+// Abonnement déjà vivant (autre onglet / webhook en retard) : on recharge la
+// carte ET le palier de l'interface plutôt que de laisser un CTA d'achat et
+// des cadenas périmés.
+const syncAfterExistingSubscription = async () => {
+    await refresh()
+    await refreshUser()
+}
+
+// Chemin Checkout commun à l'essai Unlimited et à Pro sans abonnement Stripe.
+// D14/D15 : le retour se fait sur le PROJET du résultat quand le contexte le
+// porte ; l'intention (source + slugs) reste dans le navigateur, jamais dans
+// l'URL Stripe.
+const startCheckout = async (tier, fallbackKey) => {
+    const source = checkoutSourceOf(props.context)
+    trackEvent('checkout_start', { source, tier, trial: String(trialEligible.value) })
+    const returnTo = checkoutReturnPath(props.context, route.path)
+    try {
+        const query = tier === 'privacy' ? { tier, returnTo } : { returnTo }
+        const response = await $fetch('/api/payment/subscribe', { query })
+        try {
+            writeCheckoutIntent(window.sessionStorage, {
+                source,
+                resultSlug: props.context?.lockedSheets?.resultSlug ?? null,
+                projectSlug: props.context?.lockedSheets?.projectSlug ?? null,
+            })
+        } catch {
+            // Stockage indisponible : le retour fonctionne, sans réouverture.
+        }
+        navigateTo(response.url, { external: true })
+    } catch (err) {
+        trackEvent('checkout_start_error', { source, tier, code: checkoutErrorCode(err, SERVER_ERROR_CODES) })
+        error.value = errorMessage(err, fallbackKey)
+        isLoading.value = false
+        if (err?.data?.statusMessage === 'subscription_exists') await syncAfterExistingSubscription()
+    }
 }
 
 const subscribe = async () => {
     if (isLoading.value) return
     error.value = ''
     isLoading.value = true
-    try {
-        const response = await $fetch('/api/payment/subscribe')
-        navigateTo(response.url, { external: true })
-    } catch (err) {
-        error.value = errorMessage(err, 'sub.error.start')
-        isLoading.value = false
-        // Abonnement déjà vivant (autre onglet / webhook en retard) : on
-        // recharge la carte plutôt que de laisser un CTA d'achat périmé.
-        if (err?.data?.statusMessage === 'subscription_exists') await refresh()
-    }
+    await startCheckout('standard', 'sub.error.start')
 }
 
 // Abonné Stripe vivant : la montée en Pro modifie l'abonnement EN PLACE
@@ -238,23 +313,22 @@ const subscribePro = async () => {
     if (isLoading.value) return
     error.value = ''
     isLoading.value = true
+    if (!isStripeActive.value) {
+        await startCheckout('privacy', 'sub.error.startPro')
+        return
+    }
     try {
-        if (isStripeActive.value) {
-            await $fetch('/api/payment/subscription/change', {
-                method: 'POST',
-                body: { targetTier: 'privacy' },
-            })
-            await refresh()
-            await refreshNuxtData('user')
-            isLoading.value = false
-            return
-        }
-        const response = await $fetch('/api/payment/subscribe?tier=privacy')
-        navigateTo(response.url, { external: true })
+        await $fetch('/api/payment/subscription/change', {
+            method: 'POST',
+            body: { targetTier: 'privacy' },
+        })
+        await refresh()
+        await refreshNuxtData('user')
+        isLoading.value = false
     } catch (err) {
         error.value = errorMessage(err, 'sub.error.startPro')
         isLoading.value = false
-        if (err?.data?.statusMessage === 'subscription_exists') await refresh()
+        if (err?.data?.statusMessage === 'subscription_exists') await syncAfterExistingSubscription()
     }
 }
 
@@ -367,6 +441,14 @@ const cancelSubscription = async () => {
         margin-top: 12px;
         font-size: var(--fs-14);
         color: var(--label-secondary);
+    }
+
+    // O3 : phrase de contexte (« ce résultat compte N tôles… »).
+    &__context {
+        margin: 0 0 14px;
+        font-size: var(--fs-14);
+        line-height: 1.45;
+        color: var(--label-primary);
     }
 
     &__note {

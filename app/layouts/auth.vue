@@ -51,6 +51,11 @@ const supportDialog = useSupportDialog();
 const buyCreditsDialog = useBuyCreditsDialog();
 const vaultUnlockDialog = useVaultUnlockDialog();
 
+// O3 : retour de Stripe Checkout sur n'importe quelle page de ce layout
+// (/home ne le traite plus) — palier rafraîchi sans recharger, fenêtre du
+// résultat rouverte.
+useCheckoutReturn();
+
 // Auto-open the unlock modal whenever the vault is enabled but locked
 // (e.g. after the 2h session TTL expired or on a fresh browser).
 const { getters: authGetters } = authStore;

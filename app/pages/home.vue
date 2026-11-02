@@ -74,28 +74,14 @@
 
     const router = useRouter()
 
-    onMounted(async () => {
+    // O3 : le retour de Checkout (?subscriptionInternalId=…) n'est plus traité
+    // ici mais par useCheckoutReturn, appelé depuis layouts/auth.vue — le
+    // paiement ramène désormais sur le projet du résultat, pas toujours /home.
+    onMounted(() => {
         trackEvent('page_view', { page: 'dashboard' })
-        const route = useRoute()
-
-        const subscriptionInternalId = route.query.subscriptionInternalId
-        if (subscriptionInternalId) {
-            try {
-                await $fetch('/api/payment/subscription/check?subscriptionInternalId=' + subscriptionInternalId, {
-                    method: 'POST',
-                })
-                // Refresh the cached user so freeRemaining / subscriptionStatus update.
-                await setUser()
-            } catch (err) {
-                console.error('Subscription confirmation failed:', err)
-            }
-            // Drop the query param so a refresh doesn't re-trigger the check.
-            router.replace({ path: '/home' })
-        }
     })
 
-    const { getters: authGetters, actions: authActions } = authStore
-    const { setUser } = authActions
+    const { getters: authGetters } = authStore
     const { user } = authGetters
 
     const userName = computed(() => unref(user)?.name || '')

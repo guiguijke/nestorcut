@@ -42,7 +42,6 @@
                     :theme="tier.highlighted ? themeType.primary : themeType.secondary"
                     :label="userIsSet ? t('plans.cta.manageInProfile') : tier.cta"
                     :isDisable="Boolean(tier.comingSoon && !userIsSet)"
-                    :trackingTag="tier.trackingTag"
                     @click="onTierClick(tier)"
                     class="cards__cta"
                 />
@@ -89,7 +88,14 @@ definePageMeta({
     middleware: 'auth-optional',
 })
 import { themeType } from '~~/constants/theme.constants'
-import { FREE_NESTING_LIMIT, TRIAL_DAYS, SUBSCRIPTION_PRICE_LABEL, PRO_PRICE_LABEL } from '~~/shared/constants/payment.constants'
+import {
+    FREE_NESTING_LIMIT,
+    FREE_DOWNLOAD_SHEET_CAP,
+    TRIAL_DAYS,
+    SUBSCRIPTION_PRICE_LABEL,
+    PRO_PRICE_LABEL,
+} from '~~/shared/constants/payment.constants'
+import { flagOn } from '~/utils/runtimeFlag'
 
 onMounted(() => {
     trackEvent('page_view', { page: 'plans' })
@@ -101,8 +107,9 @@ const { t } = useLocale()
 const userIsSet = computed(() => Boolean(unref(authGetters.userIsSet)))
 
 // Temporarily disable paid-plan CTAs (Unlimited trial + Pro upgrade) until
-// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED.
-const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
+// Toggle via NUXT_PUBLIC_PAID_PLANS_DISABLED. D19 : lecture string-safe
+// (AGENTS #29 — l'override runtime arrive en chaîne).
+const paidDisabled = computed(() => flagOn(useRuntimeConfig().public.paidPlansDisabled))
 
 // Shared with the landing via the 'payment-plans' cache key (deduplicated +
 // cached for a few minutes). See composables/usePlans.js.
@@ -179,7 +186,9 @@ const tiers = computed(() => {
             features: [
                 t('plans.free.f1', { n: FREE_NESTING_LIMIT }),
                 t('plans.free.f2'),
-                t('plans.free.f3'),
+                // O1/O2 : calcul sans plafond, téléchargement des 2 premières tôles.
+                t('plans.free.allSheets'),
+                t('plans.free.f3', { n: FREE_DOWNLOAD_SHEET_CAP }),
                 t('plans.free.f4'),
             ],
             cta: t('plans.cta.startFree'),
@@ -236,6 +245,16 @@ const comparisonRows = computed(() => [
     { label: t('plans.compare.vcores'), values: ['1', '4', '8'] },
     { label: t('plans.compare.priority'), values: [false, t('plans.value.standard'), t('plans.value.priority')] },
     { label: t('plans.compare.multiSheet'), values: [true, true, true] },
+    // O2 : le calcul multi-tôles est ouvert à tous ; c'est le téléchargement
+    // qui distingue les offres.
+    {
+        label: t('plans.compare.sheetDownloads'),
+        values: [
+            t('plans.value.firstSheets', { n: FREE_DOWNLOAD_SHEET_CAP }),
+            t('plans.value.allSheets'),
+            t('plans.value.allSheets'),
+        ],
+    },
     { label: t('plans.compare.heterogeneous'), values: [true, true, true] },
     { label: t('plans.compare.export'), values: [true, true, true] },
     // Email de fin de nesting : chaîne inatteignable (AGENTS #38) — pas de claim.

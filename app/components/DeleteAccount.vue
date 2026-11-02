@@ -98,6 +98,9 @@ import MainButton from './MainButton.vue'
 import MainTitle from './MainTitle.vue'
 import { themeType } from '~~/constants/theme.constants'
 import { trackEvent } from '~/utils/track'
+import { flagOn } from '~/utils/runtimeFlag'
+import { writeCheckoutIntent } from '~/utils/checkoutReturn'
+import { checkoutErrorCode } from '~/utils/buyCreditsContext'
 
 const { t, locale } = useLocale()
 // Relecture L4 : la date suit la langue de l'app, pas celle du navigateur.
@@ -107,7 +110,8 @@ const router = useRouter()
 const { getters, actions } = authStore
 
 // Paid CTAs follow the same kill-switch as the subscription card.
-const paidDisabled = computed(() => useRuntimeConfig().public.paidPlansDisabled === true)
+// D19 : lecture string-safe (AGENTS #29 — l'override runtime arrive en chaîne).
+const paidDisabled = computed(() => flagOn(useRuntimeConfig().public.paidPlansDisabled))
 
 const { data, refresh } = await useFetch(API_ROUTES.SUBSCRIPTION)
 
@@ -215,15 +219,39 @@ async function switchToPrivacy() {
     }
 }
 
+// Codes stables de /api/payment/subscribe suivis tels quels (checkout_start_error).
+const CHECKOUT_ERROR_CODES = ['subscription_exists', 'email_not_verified']
+
 async function discoverPlan() {
     if (loading.value) return
     loading.value = true
     error.value = ''
+    // D18 : étape du tunnel, comme Subscription.vue (source « account »).
+    // Pas de returnTo : le retour de Checkout reste /home.
+    trackEvent('checkout_start', {
+        source: 'account',
+        tier: 'standard',
+        trial: String(unref(getters.user)?.trialEligible !== false),
+    })
     try {
         const response = await $fetch(API_ROUTES.SUBSCRIBE)
+        try {
+            writeCheckoutIntent(window.sessionStorage, { source: 'account' })
+        } catch {
+            // Stockage indisponible : le retour fonctionne, sans intention.
+        }
         navigateTo(response.url, { external: true })
     } catch (err) {
-        error.value = err?.data?.statusMessage || t('sub.error.start')
+        trackEvent('checkout_start_error', {
+            source: 'account',
+            tier: 'standard',
+            code: checkoutErrorCode(err, CHECKOUT_ERROR_CODES),
+        })
+        // d9 : compte local non vérifié — message clair plutôt que le code brut.
+        const code = err?.data?.statusMessage
+        error.value = code === 'email_not_verified'
+            ? t('sub.error.email_not_verified')
+            : code || t('sub.error.start')
         loading.value = false
     }
 }
