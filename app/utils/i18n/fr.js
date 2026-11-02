@@ -102,6 +102,15 @@ export default {
     'sub.error.subscription_exists': 'Vous avez déjà un abonnement. Utilisez les boutons ci-dessus pour le gérer ou le faire évoluer.',
     'sub.error.portal_unavailable': 'Le portail de facturation est momentanément indisponible. Réessayez plus tard ou contactez le support.',
     'sub.error.portal': "Impossible d'ouvrir le portail de facturation. Veuillez réessayer.",
+    // Lot V1 (02/11) : achat depuis un résultat verrouillé — garde e-mail,
+    // phrase de contexte de la carte Free, retour de Checkout (sub.return.*).
+    'sub.error.email_not_verified': "Confirmez d'abord votre adresse e-mail — le lien de vérification est dans votre boîte de réception.",
+    'sub.ctx.lockedSheets': "Ce résultat compte {n} tôles. Avec l'offre Free, vous téléchargez les {cap} premières ; Unlimited les débloque toutes.",
+    'sub.return.activated': 'Votre abonnement est actif — le téléchargement de toutes les tôles est débloqué.',
+    'sub.return.pending': "Merci — votre paiement est en cours de confirmation ; les téléchargements se débloquent dès qu'il l'est.",
+    'sub.return.slow': 'La confirmation du paiement prend plus de temps que prévu — actualisez la page dans une minute.',
+    'sub.return.failed': "Le paiement n'a pas abouti — voyez l'état de votre abonnement.",
+    'sub.return.activating': 'Activation en cours…',
     'banner.ctaSubscribe': "S'abonner",
 
     // ── Plans (plans.vue) ──
@@ -120,12 +129,13 @@ export default {
     'plans.free.desc': 'Essayez le moteur sur vos propres pièces, chaque mois.',
     'plans.free.f1': '{n} imbrications gratuites chaque mois',
     'plans.free.f2': 'Même résultat optimisé que les offres payantes',
-    'plans.free.f3': 'Export DXF & ZIP',
+    'plans.free.allSheets': 'Imbrication sur autant de tôles que nécessaire',
+    'plans.free.f3': 'Export DXF & ZIP des {n} premières tôles de chaque tâche',
     'plans.free.f4': "Coffre-fort zero-knowledge (optionnel)",
     'plans.unlimited.desc': 'Pour les fabricants et ateliers qui imbriquent chaque semaine.',
     'plans.unlimited.f1': 'Imbrications illimitées',
     'plans.unlimited.f2': "3 sens d'optimisation par tâche",
-    'plans.unlimited.f3': 'Tâches multi-tôles',
+    'plans.unlimited.f3': 'Téléchargement de toutes les tôles de chaque tâche',
     'plans.unlimited.f4': '4 cœurs de calcul — livraison plus rapide',
     'plans.unlimited.f5': "Coffre-fort zero-knowledge (optionnel)",
     'plans.pro.desc': 'Budget moteur maximal et livraison prioritaire.',
@@ -142,6 +152,7 @@ export default {
     'plans.compare.vcores': 'Cœurs de calcul (vitesse de livraison)',
     'plans.compare.priority': 'Priorité de traitement',
     'plans.compare.multiSheet': 'Tâches multi-tôles',
+    'plans.compare.sheetDownloads': 'Tôles téléchargeables par tâche',
     'plans.compare.heterogeneous': 'Types de tôles hétérogènes',
     'plans.compare.export': 'Export DXF & ZIP',
     'plans.compare.zeroKnowledge': 'Chiffrement zero-knowledge',
@@ -150,6 +161,8 @@ export default {
     'plans.value.perMonth': '{n} / mois',
     'plans.value.standard': 'Standard',
     'plans.value.priority': 'Prioritaire',
+    'plans.value.firstSheets': 'Les {n} premières',
+    'plans.value.allSheets': 'Toutes',
     'plans.measured.wait': "Attente mesurée : médiane {p50} · p95 {p95}",
     'plans.measured.wall': "Temps de calcul : médiane {p50} · p95 {p95} ({n} nestings, 30 j)",
     'plans.measured.collecting': "Mesures réelles en cours de collecte",
@@ -236,8 +249,7 @@ export default {
     'settings.demoPower.proHint': '8 walks — vitesse Pro',
     'settings.directions.paidHint': 'Un sens = un meilleur layout. Cochez-en plusieurs pour comparer plusieurs propositions.',
     'nest.computing': 'Calcul en cours…',
-    'nest.sheetCapHint': "2 tôles max avec l'offre Free — Unlimited supprime la limite",
-    'nest.error.sheetCap': "Limite de tôles dépassée : l'offre Free permet jusqu'à 2 tôles par tâche.",
+    'nest.error.maxSheets': 'Trop de tôles : {n} tôles au maximum par tâche.',
     'nest.error.concurrent': "Un calcul d'imbrication est déjà en cours — attendez sa fin avant d'en lancer un autre.",
     'nest.error.generic': "La requête d'imbrication a échoué — veuillez réessayer.",
     // Z1 (vérif 2026-09-05) : bandeau refus capacité (leviers + actions).
@@ -248,6 +260,9 @@ export default {
     // AF1 (L3-bis) : le panneau remplace le bandeau rouge — la mention
     // de remboursement vit DANS le panneau.
     'nest.capacity.refunded': "L'imbrication n'a pas été facturée.",
+    // Lot V1 (02/11) : information Free avant le calcul (sans bouton) —
+    // un compte verrouillé télécharge les premières tôles seulement.
+    'nest.capacity.freeDownloadNote': "Avec l'offre Free, vous téléchargez les {cap} premières tôles ; Unlimited les débloque toutes.",
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': "Expiré (purge 24 h)",
     'file.quantity': 'Quantité pour {name}',
@@ -337,6 +352,7 @@ export default {
     'jobImport.downloadHint': "Un fichier .job par tôle, prêt à ouvrir dans SheetCam : même ordre de coupe, mêmes outils.",
     'jobImport.downloadJob': "Télécharger le .job",
     'jobImport.downloadAllJobs': "Télécharger tous les .job",
+    'jobImport.downloadFirstJobs': 'Télécharger les {n} premiers .job',
     'jobImport.holeTooSmallForLeadIn': "Le trou de {name} est trop petit pour que l'amorce y tienne : rien n'y sera niché. Il est bien coupé.",
     // Erreurs du lecteur / ecrivain `.job` (lot J1) - `code` EST la cle.
     'sheetcamJob.notBytes': "Ce fichier n'a pas pu être lu comme un fichier .job SheetCam.",
@@ -494,8 +510,10 @@ export default {
     'report.unfit.sheetsNeeded': 'Environ {n} tôles nécessaires à cet espacement',
     'report.unfit.maxParts': 'Environ {n} pièces max à cet espacement',
     'report.unfit.maxSpacing': 'Environ {v} mm d’espacement maximum qui tient',
-    'report.unfit.addSheet': 'Ajouter une tôle',
+    'report.unfit.addSheets.one': 'Ajouter {n} tôle et relancer',
+    'report.unfit.addSheets.other': 'Ajouter environ {n} tôles et relancer',
     'report.unfit.reduceSpacing': 'Réduire l’espacement à {v} mm',
+    'report.unfit.openProject': 'Ouvrir le projet',
     'report.partial.title': 'Imbrication partielle — {n} pièces non placées',
     'report.partial.detail': 'Tout ce qui est placé tient et est découpage ; pour imbriquer le reste :',
     // C12 (audit UX 2026-09-05) : honnête — ce sont les itérations du
@@ -605,6 +623,12 @@ export default {
     'results.downloadDxf': 'Télécharger le DXF',
     'results.downloadAllDxf': 'Tout télécharger (DXF)',
     'results.downloadAll': 'Tout télécharger',
+    // Lot V1 (02/11) : verrou de téléchargement Free (tôles 3+) — libellés
+    // courts de la carte (colonne de 260 px) et libellés complets.
+    'results.unlockSheets': 'Débloquer les {n} tôles',
+    'results.downloadFirstSheets': 'Télécharger les {n} premières tôles',
+    'results.downloadFirstSheetsShort': 'Tôles 1–{n}',
+    'results.unlockShort': 'Tout débloquer',
     'result.nestingReport': "Rapport de nesting",
 
     'result.option': 'Option {n}',
@@ -634,6 +658,9 @@ export default {
     'result.colorView': "Aperçu couleur",
     'result.dxfView': "Vue DXF",
     'result.dxfMissing': "Le fichier DXF n'est pas disponible pour ce résultat.",
+    'result.sheetLocked': 'Téléchargement avec Unlimited',
+    'result.dxfViewLocked': "La vue DXF de cette tôle est réservée à Unlimited — l'aperçu couleur montre tout le placement.",
+    'result.sheetLockedNoPreview': "Pas d'aperçu pour cette tôle — téléchargez-la avec Unlimited.",
 
     'progress.stage.preparing': 'Préparation de la géométrie',
     'progress.stage.explore': 'Exploration des imbrications',

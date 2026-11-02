@@ -103,6 +103,15 @@ export default {
     'sub.error.subscription_exists': 'You already have a subscription. Use the buttons above to manage or upgrade it.',
     'sub.error.portal_unavailable': 'The billing portal is temporarily unavailable. Please try again later or contact support.',
     'sub.error.portal': 'Failed to open the billing portal. Please try again.',
+    // Lot V1 (02/11) : achat depuis un résultat verrouillé — garde e-mail,
+    // phrase de contexte de la carte Free, retour de Checkout (sub.return.*).
+    'sub.error.email_not_verified': 'Confirm your email address first — the verification link is in your inbox.',
+    'sub.ctx.lockedSheets': 'This result has {n} sheets. On the Free plan, you download the first {cap}; Unlimited unlocks them all.',
+    'sub.return.activated': 'Your subscription is active — downloading every sheet is unlocked.',
+    'sub.return.pending': 'Thank you — your payment is being confirmed; downloads unlock as soon as it is.',
+    'sub.return.slow': 'Payment confirmation is taking longer than usual — reload the page in a minute.',
+    'sub.return.failed': 'The payment did not go through — see your subscription status.',
+    'sub.return.activating': 'Activating…',
     'banner.ctaSubscribe': 'Subscribe',
 
     // ── Plans (plans.vue) ──
@@ -121,12 +130,13 @@ export default {
     'plans.free.desc': 'Try the engine on your own parts, every month.',
     'plans.free.f1': '{n} free nestings every month',
     'plans.free.f2': 'Same fully optimized result as paid plans',
-    'plans.free.f3': 'DXF & ZIP export',
+    'plans.free.allSheets': 'Nesting on as many sheets as the job needs',
+    'plans.free.f3': 'DXF & ZIP export of the first {n} sheets of each job',
     'plans.free.f4': 'Zero-knowledge vault (opt-in)',
     'plans.unlimited.desc': 'For makers and workshops that nest every week.',
     'plans.unlimited.f1': 'Unlimited nesting operations',
     'plans.unlimited.f2': '3 layout directions per job',
-    'plans.unlimited.f3': 'Multi-sheet jobs',
+    'plans.unlimited.f3': 'Download every sheet of every job',
     'plans.unlimited.f4': '4 compute cores — faster delivery',
     'plans.unlimited.f5': 'Zero-knowledge vault (opt-in)',
     'plans.pro.desc': 'Maximum engine budget and priority delivery.',
@@ -143,6 +153,7 @@ export default {
     'plans.compare.vcores': 'Compute cores (delivery speed)',
     'plans.compare.priority': 'Processing priority',
     'plans.compare.multiSheet': 'Multi-sheet jobs',
+    'plans.compare.sheetDownloads': 'Downloadable sheets per job',
     'plans.compare.heterogeneous': 'Heterogeneous sheet types',
     'plans.compare.export': 'DXF & ZIP export',
     'plans.compare.zeroKnowledge': 'Zero-knowledge encryption',
@@ -151,6 +162,8 @@ export default {
     'plans.value.perMonth': '{n} / month',
     'plans.value.standard': 'Standard',
     'plans.value.priority': 'Priority',
+    'plans.value.firstSheets': 'First {n}',
+    'plans.value.allSheets': 'All',
     'plans.measured.wait': 'Measured queue wait: median {p50} · p95 {p95}',
     'plans.measured.wall': 'Compute time: median {p50} · p95 {p95} ({n} nestings, 30 days)',
     'plans.measured.collecting': 'Live measurements being collected',
@@ -238,8 +251,7 @@ export default {
     'settings.demoPower.proHint': '8 walks — Pro plan speed',
     'settings.directions.paidHint': 'One direction = one best layout. Check more to compare several proposals.',
     'nest.computing': 'Computing…',
-    'nest.sheetCapHint': '2 sheets max on the Free plan — Unlimited removes the cap',
-    'nest.error.sheetCap': 'Sheet limit exceeded: the Free plan allows up to 2 sheets per job.',
+    'nest.error.maxSheets': 'Too many sheets: at most {n} sheets per job.',
     'nest.error.concurrent': 'A nesting job is already running — wait for it to finish before starting another.',
     'nest.error.generic': 'The nesting request failed — please try again.',
     // Z1 (vérif 2026-09-05) : bandeau refus capacité (leviers + actions).
@@ -250,6 +262,9 @@ export default {
     // AF1 (L3-bis) : le panneau remplace le bandeau rouge — la mention
     // de remboursement vit DANS le panneau.
     'nest.capacity.refunded': 'The nesting was not charged.',
+    // Lot V1 (02/11) : information Free avant le calcul (sans bouton) —
+    // un compte verrouillé télécharge les premières tôles seulement.
+    'nest.capacity.freeDownloadNote': 'On the Free plan, you download the first {cap} sheets; Unlimited unlocks them all.',
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': 'Expired (24 h purge)',
     'file.quantity': 'Quantity for {name}',
@@ -349,6 +364,7 @@ export default {
     'jobImport.downloadHint': 'One job file per sheet, ready to open in SheetCam: same cut order, same tools.',
     'jobImport.downloadJob': 'Download the .job',
     'jobImport.downloadAllJobs': 'Download all the .job files',
+    'jobImport.downloadFirstJobs': 'Download the first {n} .job files',
     'jobImport.holeTooSmallForLeadIn': 'The cutout in {name} is too small for the lead-in to fit: nothing will be nested inside it. It is still cut.',
     // Erreurs du lecteur / ecrivain `.job` (lot J1) - `code` EST la cle.
     'sheetcamJob.notBytes': 'This file could not be read as a SheetCam job file.',
@@ -509,8 +525,10 @@ export default {
     'report.unfit.sheetsNeeded': 'About {n} sheets needed at this spacing',
     'report.unfit.maxParts': 'About {n} parts max at this spacing',
     'report.unfit.maxSpacing': 'About {v} mm max spacing that fits',
-    'report.unfit.addSheet': 'Add a sheet',
+    'report.unfit.addSheets.one': 'Add {n} sheet and re-run',
+    'report.unfit.addSheets.other': 'Add about {n} sheets and re-run',
     'report.unfit.reduceSpacing': 'Reduce spacing to {v} mm',
+    'report.unfit.openProject': 'Open the project',
     // Z3 (vérif 2026-09-05) : solution partielle utile — leviers sous
     // le badge « n pièces non placées ».
     'report.partial.title': 'Partial layout — {n} parts not placed',
@@ -628,6 +646,12 @@ export default {
     'results.downloadDxf': 'Download the DXF',
     'results.downloadAllDxf': 'Download All (DXF)',
     'results.downloadAll': 'Download All',
+    // Lot V1 (02/11) : verrou de téléchargement Free (tôles 3+) — libellés
+    // courts de la carte (colonne de 260 px) et libellés complets.
+    'results.unlockSheets': 'Unlock all {n} sheets',
+    'results.downloadFirstSheets': 'Download the first {n} sheets',
+    'results.downloadFirstSheetsShort': 'Sheets 1–{n}',
+    'results.unlockShort': 'Unlock all',
     'result.nestingReport': 'Nesting report',
 
     'result.option': 'Option {n}',
@@ -657,6 +681,9 @@ export default {
     'result.colorView': 'Color preview',
     'result.dxfView': 'DXF view',
     'result.dxfMissing': 'DXF file is not available for this result.',
+    'result.sheetLocked': 'Download with Unlimited',
+    'result.dxfViewLocked': 'The DXF view of this sheet comes with Unlimited — the color preview shows the whole layout.',
+    'result.sheetLockedNoPreview': 'No preview for this sheet — download it with Unlimited.',
 
     'progress.stage.preparing': 'Preparing geometry',
     'progress.stage.explore': 'Exploring layouts',
