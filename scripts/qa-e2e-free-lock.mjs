@@ -16,6 +16,14 @@
 //            `sheet-unlock` → `subscription-context` ; `report-unlock`.
 //            Captures de la carte en FR et en DE (deux lignes de boutons,
 //            aucun libellé rogné — mesuré, pas seulement regardé).
+//            Fenêtre d'abonnement (§6.4, §2.5) : prix + bouton d'essai (ou
+//            « S'abonner ») affichés, `sub.freeLeft` / `sub.resetsAt` masqués
+//            dans ce contexte — le bouton n'est JAMAIS cliqué (aucun appel
+//            Stripe). Exige un document `subscription_plan` en base (voir
+//            CONFIGURATION). En FR et en DE : fenêtre du résultat sur la
+//            tôle 3 (badge, déblocage de la visionneuse, rangée d'actions)
+//            et fenêtre d'abonnement ouverte par `sheet-unlock`, libellés
+//            traduits et mesure « rien de rogné » (`surfaceLayout`).
 //   retour   retour de paiement simulé (annulation) : intention posée en
 //            sessionStorage, `?checkout=cancelled` → URL nettoyée, fenêtre
 //            du résultat rouverte, aucun toast ; rechargement → pas rouverte.
@@ -24,7 +32,10 @@
 //            → `report-capacity` + `capacity-add-sheet` (pas « Ouvrir le
 //            projet ») ; clic → fenêtre fermée, count + k, `live-cancel`
 //            visible puis annulé ; sur /home : `capacity-open-project` →
-//            /project/<slug>, réglages inchangés.
+//            /project/<slug>, réglages inchangés. Sur la fenêtre refusée, le
+//            bouton mono-tôle « Download » est désactivé (attribut, fix
+//            6a711818) ; panneau de capacité de la fenêtre capturé et mesuré
+//            en FR et en DE.
 //   plans    /plans : ligne « tôles téléchargeables » et puces Free.
 //   demo     /project/demo : total ≥ 3 au pager EXIGÉ (sinon « démo < 3
 //            tôles : assertion vide »), tôle 3 sans badge, carte sans
@@ -61,6 +72,16 @@
 //   (vérifié dans la config runtime servie), Mongo local joignable
 //   (QA_MONGO_URI, défaut mongodb://127.0.0.1:27017/nest2d) et un worker de
 //   nesting local pour le scénario « serveur ».
+//   Fenêtre d'abonnement : sans clé Stripe, le plugin
+//   `server/plugins/6_subscription_plan_sync.ts` ne synchronise rien et
+//   `Subscription.vue:102` (`v-if="data?.plan"`) affiche « plan unavailable ».
+//   Semer en base QA le document minimal lu par
+//   `server/api/payment/subscription.get.js:14` :
+//     subscription_plan.updateOne({ id: 'subscription' }, { $set: { id:
+//       'subscription', tier: 'standard', title: 'NestorCut Standard',
+//       interval: 'month', prices: { eur: 1900 }, priceId: '…', productId: '…' } },
+//       { upsert: true })
+//   Le harnais le lit par l'API et échoue en le disant s'il manque.
 //
 // Usage :
 //   QA_OUT=<dossier hors OneDrive> node scripts/qa-e2e-free-lock.mjs
@@ -74,7 +95,7 @@ import { MongoClient } from 'mongodb'
 import { unzipSync } from 'fflate'
 import fs from 'node:fs'
 import path from 'node:path'
-import { translate } from '../app/utils/i18n/index.js'
+import { translate, pluralSelect } from '../app/utils/i18n/index.js'
 import { FREE_DOWNLOAD_SHEET_CAP } from '../shared/constants/payment.constants.js'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
@@ -496,6 +517,187 @@ async function setLocale(page, loc) {
     await page.context().addCookies([{ name: 'locale', value: loc, url: BASE }])
 }
 
+/** Mesure « rien de rogné » d'une surface de fenêtre (D27 étendu aux
+ * fenêtres, même principe que `cardLayout`). Pour chaque cible visible
+ * `{ name, sel, within, optional }` :
+ *   - outside : la boîte de la cible sort de son conteneur (`within`, un
+ *     ancêtre trouvé par closest, sinon le parent) ou de la largeur de la
+ *     fenêtre du navigateur ;
+ *   - clipped : un nœud de la cible (elle comprise) coupe son contenu —
+ *     overflow ≠ visible avec scroll > client (+1 px), ou text-overflow
+ *     ellipsis ;
+ *   - spill : un texte de la cible déborde de son élément ou de la cible
+ *     (mesuré par Range sur chaque nœud texte : un texte nowrap qui
+ *     « dépasse » sans être coupé est attrapé ici).
+ * `missing` liste les cibles obligatoires absentes. */
+const surfaceLayout = (page, targets) => page.evaluate(async (targets) => {
+    try { await document.fonts?.ready } catch { /* sans polices */ }
+    const R = (r) => ({ l: Math.round(r.left), t: Math.round(r.top), r: Math.round(r.right), b: Math.round(r.bottom) })
+    const inside = (a, b, tol = 1) => a.left >= b.left - tol && a.right <= b.right + tol
+        && a.top >= b.top - tol && a.bottom <= b.bottom + tol
+    const shown = (el) => {
+        const r = el.getBoundingClientRect()
+        const cs = getComputedStyle(el)
+        return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'
+    }
+    const cut = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 50)
+    const res = { checked: 0, missing: [], outside: [], clipped: [], spill: [], items: [] }
+    for (const t of targets) {
+        const els = [...document.querySelectorAll(t.sel)].filter(shown)
+        if (!els.length) {
+            if (!t.optional) res.missing.push(t.name)
+            continue
+        }
+        els.forEach((el, i) => {
+            const name = els.length > 1 ? `${t.name}[${i}]` : t.name
+            const box = el.getBoundingClientRect()
+            const cont = t.within ? el.closest(t.within) : el.parentElement
+            res.checked++
+            res.items.push({ name, text: cut(el.innerText), box: R(box) })
+            if (!cont) {
+                res.missing.push(`${name} : conteneur ${t.within} absent`)
+            } else if (!inside(box, cont.getBoundingClientRect())) {
+                res.outside.push(`${name} ${JSON.stringify(R(box))} hors de ${t.within || 'parent'} ${JSON.stringify(R(cont.getBoundingClientRect()))}`)
+            }
+            if (box.left < -1 || box.right > window.innerWidth + 1) {
+                res.outside.push(`${name} ${JSON.stringify(R(box))} hors de la fenêtre (largeur ${window.innerWidth})`)
+            }
+            for (const n of [el, ...el.querySelectorAll('*')]) {
+                if (!shown(n)) continue
+                const cs = getComputedStyle(n)
+                const cutX = cs.overflowX !== 'visible' && n.clientWidth > 0 && n.scrollWidth > n.clientWidth + 1
+                const cutY = cs.overflowY !== 'visible' && n.clientHeight > 0 && n.scrollHeight > n.clientHeight + 1
+                const ellipsis = cs.textOverflow === 'ellipsis' && n.clientWidth > 0 && n.scrollWidth > n.clientWidth + 1
+                if (cutX || cutY || ellipsis) {
+                    res.clipped.push(`${name} :: <${n.tagName.toLowerCase()} class="${cut(n.className?.baseVal ?? n.className)}"> `
+                        + `« ${cut(n.textContent)} » scroll ${n.scrollWidth}×${n.scrollHeight} > client ${n.clientWidth}×${n.clientHeight}`
+                        + ` (overflow ${cs.overflowX}/${cs.overflowY}${ellipsis ? ', ellipsis' : ''})`)
+                }
+                const own = n.getBoundingClientRect()
+                for (const tn of n.childNodes) {
+                    if (tn.nodeType !== 3 || !tn.textContent.trim()) continue
+                    const rg = document.createRange()
+                    rg.selectNodeContents(tn)
+                    const tr = rg.getBoundingClientRect()
+                    if (!tr.width) continue
+                    if (!inside(tr, own) || !inside(tr, box)) {
+                        res.spill.push(`${name} :: « ${cut(tn.textContent)} » texte ${JSON.stringify(R(tr))} / élément ${JSON.stringify(R(own))} / cible ${JSON.stringify(R(box))}`)
+                    }
+                }
+            }
+        })
+    }
+    return res
+}, targets)
+
+/** Consigne la mesure d'une surface : vert si au moins une cible mesurée et
+ * aucune absence, aucun débordement, aucun rognage. */
+function checkSurface(label, lay) {
+    return check(`${label} : aucun élément débordant ni texte rogné (mesuré)`,
+        lay && lay.checked > 0 && lay.missing.length === 0 && lay.outside.length === 0
+            && lay.clipped.length === 0 && lay.spill.length === 0,
+        JSON.stringify({ checked: lay?.checked, missing: lay?.missing, outside: lay?.outside, clipped: lay?.clipped, spill: lay?.spill })
+            .slice(0, 1500))
+}
+
+// Surfaces mesurées (cibles `surfaceLayout`).
+const SHEET3_SURFACE = [
+    { name: 'toolbar', sel: '[data-testid="viewer-toolbar"]', within: '.modal-body' },
+    { name: 'pager', sel: '[data-testid="sheet-label"]', within: '[data-testid="viewer-toolbar"]' },
+    { name: 'badge', sel: '[data-testid="sheet-locked-badge"]', within: '[data-testid="viewer-toolbar"]' },
+    { name: 'mode', sel: '[data-testid="viewer-toolbar"] .viewer__mode', within: '[data-testid="viewer-toolbar"]' },
+    { name: 'viewer-unlock', sel: '[data-testid="sheet-unlock"]', within: '[data-testid="viewer-stage"]' },
+    { name: 'actions', sel: '[data-testid="report-actions"]', within: '.modal-body' },
+    { name: 'action', sel: '[data-testid="report-actions"] > *', within: '[data-testid="report-actions"]' },
+]
+const SUB_SURFACE = [
+    { name: 'carte', sel: '.subscription .subscription__card', within: '.modal-body' },
+    { name: 'contexte', sel: '[data-testid="subscription-context"]', within: '.subscription__card' },
+    { name: 'offre', sel: '.subscription .subscription__plan-title', within: '.subscription__card' },
+    { name: 'prix', sel: '.subscription .subscription__price', within: '.subscription__card' },
+    { name: 'bouton', sel: '.subscription .subscription__card .subscription__btn', within: '.subscription__card' },
+    { name: 'note', sel: '.subscription .subscription__note', within: '.subscription__card', optional: true },
+]
+const CAPACITY_SURFACE = [
+    { name: 'panneau', sel: '[data-testid="report-capacity"]', within: '.modal-body' },
+    { name: 'titre', sel: '[data-testid="report-capacity"] .capacity-panel__title', within: '[data-testid="report-capacity"]' },
+    { name: 'levier', sel: '[data-testid="report-capacity"] .capacity-panel__levers li', within: '[data-testid="report-capacity"]' },
+    { name: 'note-free', sel: '[data-testid="report-capacity"] [data-testid="capacity-free-note"]', within: '[data-testid="report-capacity"]' },
+    { name: 'ajouter', sel: '[data-testid="report-capacity"] [data-testid="capacity-add-sheet"]', within: '[data-testid="report-capacity"]' },
+    { name: 'actions', sel: '[data-testid="report-actions"]', within: '.modal-body' },
+    { name: 'action', sel: '[data-testid="report-actions"] > *', within: '[data-testid="report-actions"]' },
+]
+
+/** Fenêtre d'abonnement ouverte depuis un « Débloquer » (§2.5, §6.4) :
+ * phrase de contexte, prix et bouton d'essai / d'abonnement présents,
+ * compteur Free et date de remise à zéro masqués. Le bouton n'est JAMAIS
+ * cliqué : il ouvrirait le Checkout Stripe. */
+async function subscriptionChecks(page, loc, total) {
+    const L = loc.toUpperCase()
+    const api = await page.evaluate(async () => {
+        const r = await fetch('/api/payment/subscription', { credentials: 'same-origin' })
+        return r.ok ? r.json() : { httpStatus: r.status }
+    })
+    const plan = api?.plan || null
+    check(`abonnement ${L} : /api/payment/subscription rend une offre (document subscription_plan semé)`, Boolean(plan),
+        JSON.stringify({ plan, trialEligible: api?.trialEligible, httpStatus: api?.httpStatus }))
+    const sub = page.locator('.subscription').last()
+    await sub.locator('.subscription__price').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {})
+    const ctxText = (await sub.locator('[data-testid="subscription-context"]').innerText().catch(() => '')).trim()
+    check(`abonnement ${L} : phrase de contexte traduite (N tôles, les 2 premières)`,
+        ctxText === T('sub.ctx.lockedSheets', { n: total, cap: CAP }, loc), ctxText)
+    const priceTxt = (await sub.locator('.subscription__price').innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    // Même formatage que Subscription.vue (formatPrice : Intl 'en-US').
+    const wantPrice = plan ? new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: plan.currency, minimumFractionDigits: 0, maximumFractionDigits: 2,
+    }).format(plan.amount) : null
+    check(`abonnement ${L} : prix affiché (§6.4)`,
+        Boolean(plan) && priceTxt.includes(wantPrice) && priceTxt.includes(`/ ${plan.interval}`),
+        `« ${priceTxt} » (attendu ${wantPrice} / ${plan?.interval})`)
+    const btn = sub.locator('.subscription__card .subscription__btn')
+    const btnCount = await btn.count()
+    const btnLabel = btnCount ? (await btn.first().innerText().catch(() => '')).trim() : ''
+    const btnEnabled = btnCount ? await btn.first().isEnabled().catch(() => false) : false
+    const wantBtn = !plan ? null : api.trialEligible !== false
+        ? T('sub.startTrial', { days: plan.trialDays }, loc)
+        : T('sub.subscribe', {}, loc)
+    check(`abonnement ${L} : bouton d’essai (ou « S’abonner ») présent et actif (§6.4, non cliqué)`,
+        btnCount === 1 && btnEnabled && btnLabel === wantBtn,
+        `${btnCount} bouton(s), « ${btnLabel} », actif=${btnEnabled}, attendu « ${wantBtn} » (trialEligible=${api?.trialEligible})`)
+    const txt = (await sub.innerText().catch(() => '')).replace(/\s+/g, ' ')
+    const longest = (s) => s.split(/\{[a-z]+\}/).map((x) => x.trim()).sort((a, b) => b.length - a.length)[0]
+    const freeLeftTxt = longest(T('sub.freeLeft', {}, loc))
+    const resetTxt = longest(T('sub.resetsAt', {}, loc))
+    const freeEl = await sub.locator('.subscription__free').count()
+    const resetEl = await sub.locator('.subscription__reset').count()
+    check(`abonnement ${L} : sub.freeLeft et sub.resetsAt masqués dans ce contexte (§2.5)`,
+        freeEl === 0 && resetEl === 0 && !txt.includes(freeLeftTxt) && !txt.includes(resetTxt),
+        `.subscription__free=${freeEl} .subscription__reset=${resetEl} texte « ${freeLeftTxt} » ${txt.includes(freeLeftTxt) ? 'PRÉSENT' : 'absent'}, `
+        + `« ${resetTxt} » ${txt.includes(resetTxt) ? 'PRÉSENT' : 'absent'}`)
+    check(`abonnement ${L} : pas de « plan indisponible »`, !txt.includes(T('sub.unavailable', {}, loc)))
+    return { plan, priceTxt, btnLabel }
+}
+
+/** Boutons mono-tôle « Download » / « Download the DXF » de la rangée
+ * d'actions et leur état (fix 6a711818 : grisés sur un résultat refusé). */
+const singleDownloadButtons = (page, loc) => page.locator('[data-testid="report-actions"]').first().evaluate((row, labels) => {
+    return [...row.querySelectorAll('button, a')]
+        .filter((b) => labels.includes((b.innerText || '').trim()))
+        .map((b) => ({
+            tag: b.tagName.toLowerCase(),
+            label: (b.innerText || '').trim(),
+            disabled: b.hasAttribute('disabled'),
+            aria: b.getAttribute('aria-disabled'),
+            tabindex: b.getAttribute('tabindex'),
+            href: b.getAttribute('href'),
+            classDisabled: b.classList.contains('button--disabled'),
+        }))
+}, [T('results.download', {}, loc), T('results.downloadDxf', {}, loc)]).catch((e) => [{ error: String(e).slice(0, 120) }])
+
+function checkSingleDownloadDisabled(label, list) {
+    return check(label, list.length > 0 && list.every((b) => !b.error && (b.disabled || b.aria === 'true')), JSON.stringify(list))
+}
+
 let freeCtx = null
 let freePage = null
 let paidCtx = null
@@ -690,6 +892,9 @@ try {
             dxfAttrs?.disabled === true && dxfAttrs?.aria === 'true', JSON.stringify(dxfAttrs))
         await shot(P, 'a4-local-modal-sheet3.png', P.locator('.modal-body').first(),
             'fenêtre du résultat local, tôle 3 verrouillée (badge, Vue DXF inactive, bouton Débloquer)')
+        const sheet3En = await surfaceLayout(P, SHEET3_SURFACE)
+        log('fenêtre tôle 3 EN :', JSON.stringify(sheet3En.items))
+        checkSurface('fenêtre EN tôle 3 (badge, déblocage, rangée d’actions)', sheet3En)
 
         // Clic RÉEL sur « Débloquer » de la visionneuse.
         await P.locator('[data-testid="sheet-unlock"]').click()
@@ -699,9 +904,64 @@ try {
         check('clic sheet-unlock → subscription-context visible', ctxOk, ctxText)
         check('phrase de contexte : N tôles, les 2 premières',
             ctxText === T('sub.ctx.lockedSheets', { n: p1.total, cap: CAP }), ctxText)
+        // §6.4 / §2.5 : prix + bouton d'essai, compteur Free masqué (gap a
+        // du passage r2 : la base QA n'avait aucun subscription_plan).
+        await subscriptionChecks(P, 'en', p1.total)
+        await P.waitForTimeout(600)
+        const subEn = await surfaceLayout(P, SUB_SURFACE)
+        log('fenêtre d’abonnement EN :', JSON.stringify(subEn.items))
+        checkSurface('fenêtre d’abonnement EN (contexte, prix, essai)', subEn)
         await shot(P, 'a5-subscription-context.png', P.locator('.modal-body').last(),
-            'fenêtre d’abonnement ouverte depuis « Débloquer », phrase de contexte')
+            'fenêtre d’abonnement ouverte depuis « Débloquer » : phrase de contexte, prix, bouton d’essai')
         await closeDialogs(P)
+
+        // Fenêtres en FR puis en DE (gap b du passage r2) : tôle 3 (badge,
+        // déblocage de la visionneuse, rangée d'actions) puis fenêtre
+        // d'abonnement ouverte par un clic RÉEL sur sheet-unlock.
+        try {
+            for (const loc of ['fr', 'de']) {
+                const L = loc.toUpperCase()
+                await setLocale(P, loc)
+                await P.reload({ waitUntil: 'domcontentloaded' })
+                await waitFirstCardDone(P)
+                await openCard(P, firstCard(P))
+                const q = await gotoSheet(P, 3)
+                check(`fenêtre ${L} : pager sur la tôle 3`, q.n === 3 && q.total === p1.total, q.text)
+                const badgeTxt = (await P.locator('[data-testid="sheet-locked-badge"]').innerText().catch(() => '')).trim()
+                check(`fenêtre ${L} tôle 3 : badge traduit`, badgeTxt === T('result.sheetLocked', {}, loc), badgeTxt)
+                const vUnlock = (await P.locator('[data-testid="sheet-unlock"]').innerText().catch(() => '')).trim()
+                check(`fenêtre ${L} tôle 3 : déblocage de la visionneuse traduit`,
+                    vUnlock === T('results.unlockSheets', { n: p1.total }, loc), vUnlock)
+                check(`fenêtre ${L} tôle 3 : téléchargement de la tôle absent`,
+                    !(await P.locator('[data-testid="viewer-stage"] .modal__part-download')
+                        .filter({ hasText: T('result.downloadSheet', { n: 3 }, loc) }).count()))
+                const rUnlock = (await P.locator('[data-testid="report-unlock"]').innerText().catch(() => '')).trim()
+                const rZip = await P.locator('[data-testid="report-actions"] button, [data-testid="report-actions"] a')
+                    .filter({ hasText: T('results.downloadFirstSheets', { n: CAP }, loc) }).count()
+                check(`fenêtre ${L} : rangée d’actions traduite (Débloquer + 2 premières tôles)`,
+                    rUnlock === T('results.unlockSheets', { n: p1.total }, loc) && rZip > 0, `« ${rUnlock} », ZIP 1-2 : ${rZip}`)
+                const lay = await surfaceLayout(P, SHEET3_SURFACE)
+                log(`fenêtre tôle 3 ${L} :`, JSON.stringify(lay.items))
+                checkSurface(`fenêtre ${L} tôle 3 (badge, déblocage, rangée d’actions)`, lay)
+                await shot(P, `a6-local-modal-sheet3-${loc}.png`, P.locator('.modal-body').first(),
+                    `fenêtre du résultat local en ${L}, tôle 3 verrouillée (badge, déblocage, rangée d’actions)`)
+
+                await P.locator('[data-testid="sheet-unlock"]').click()
+                const ok = await P.locator('[data-testid="subscription-context"]').waitFor({ state: 'visible', timeout: 15000 })
+                    .then(() => true).catch(() => false)
+                check(`clic sheet-unlock ${L} → subscription-context visible`, ok)
+                await subscriptionChecks(P, loc, p1.total)
+                await P.waitForTimeout(600)
+                const sl = await surfaceLayout(P, SUB_SURFACE)
+                log(`fenêtre d’abonnement ${L} :`, JSON.stringify(sl.items))
+                checkSurface(`fenêtre d’abonnement ${L} (contexte, prix, essai)`, sl)
+                await shot(P, `a7-subscription-${loc}.png`, P.locator('.modal-body').last(),
+                    `fenêtre d’abonnement en ${L} ouverte depuis « Débloquer » : contexte, prix, bouton d’essai`)
+                await closeDialogs(P)
+            }
+        } finally {
+            await setLocale(P, 'en')
+        }
     })
 
     // =====================================================================
@@ -807,8 +1067,62 @@ try {
         check('fenêtre : information D26 dans le panneau', await rc.locator('[data-testid="capacity-free-note"]').isVisible().catch(() => false))
         check('fenêtre : plus de code brut capacity_exceeded',
             !(await P.locator('.modal-body').first().innerText()).includes('capacity_exceeded'))
+        // Fix 6a711818 (ResultReport.vue, garde isHaveError || isUnfit sur
+        // la paire mono-tôle) : plus de « Download » primaire et mort à côté
+        // du panneau de capacité (gap c du passage r2).
+        checkSingleDownloadDisabled('fenêtre refusée EN : bouton mono-tôle « Download » désactivé (disabled ou aria-disabled, fix 6a711818)',
+            await singleDownloadButtons(P, 'en'))
+        await P.waitForTimeout(400)
+        const capEn = await surfaceLayout(P, CAPACITY_SURFACE)
+        log('panneau de capacité (fenêtre) EN :', JSON.stringify(capEn.items))
+        checkSurface('panneau de capacité de la fenêtre EN', capEn)
         await shot(P, 'c2-report-capacity-projet.png', P.locator('.modal-body').first(),
             'fenêtre d’un job refusé, sur la page du projet : panneau de capacité + « Ajouter environ k tôles et relancer »')
+
+        // Panneau de capacité de la fenêtre en FR puis en DE (gap b du
+        // passage r2), AVANT le clic de relance qui consomme le refus.
+        const kShown = Number(await addBtn.getAttribute('data-add-sheets'))
+        await closeDialogs(P)
+        try {
+            for (const loc of ['fr', 'de']) {
+                const L = loc.toUpperCase()
+                await setLocale(P, loc)
+                await P.reload({ waitUntil: 'domcontentloaded' })
+                await waitFiles(P, 1)
+                await firstCard(P).waitFor({ state: 'visible', timeout: 60000 })
+                await P.waitForTimeout(2500)
+                const cardL = P.locator('.results__item').filter({
+                    has: P.locator('[data-testid="result-name"]', { hasText: T('nest.capacity.title', {}, loc) }),
+                }).first()
+                await openCard(P, cardL)
+                const rcL = P.locator('[data-testid="report-capacity"]')
+                check(`fenêtre refusée ${L} : report-capacity visible`, await rcL.isVisible())
+                const addL = (await rcL.locator('[data-testid="capacity-add-sheet"]').innerText().catch(() => '')).trim()
+                const wantAdd = T(`report.unfit.addSheets.${pluralSelect(loc, kShown)}`, { n: kShown }, loc)
+                check(`fenêtre refusée ${L} : « Ajouter … tôles et relancer » traduit (k=${kShown})`, addL === wantAdd,
+                    `« ${addL} » (attendu « ${wantAdd} »)`)
+                const noteL = (await rcL.locator('[data-testid="capacity-free-note"]').innerText().catch(() => '')).trim()
+                check(`fenêtre refusée ${L} : information D26 traduite`,
+                    noteL === T('nest.capacity.freeDownloadNote', { cap: CAP }, loc), noteL)
+                checkSingleDownloadDisabled(`fenêtre refusée ${L} : bouton mono-tôle désactivé (fix 6a711818)`,
+                    await singleDownloadButtons(P, loc))
+                await P.waitForTimeout(400)
+                const lay = await surfaceLayout(P, CAPACITY_SURFACE)
+                log(`panneau de capacité (fenêtre) ${L} :`, JSON.stringify(lay.items))
+                checkSurface(`panneau de capacité de la fenêtre ${L}`, lay)
+                await shot(P, `c4-report-capacity-${loc}.png`, P.locator('.modal-body').first(),
+                    `fenêtre du job refusé en ${L}, sur la page du projet : panneau de capacité, D26, rangée d’actions`)
+                await closeDialogs(P)
+            }
+        } finally {
+            await setLocale(P, 'en')
+        }
+        await P.reload({ waitUntil: 'domcontentloaded' })
+        await waitFiles(P, 1)
+        await firstCard(P).waitFor({ state: 'visible', timeout: 60000 })
+        await P.waitForTimeout(2500)
+        await openCard(P, refusedCard)
+        check('fenêtre refusée rouverte en EN : capacity-add-sheet présent', await addBtn.isVisible())
 
         const k = Number(await addBtn.getAttribute('data-add-sheets'))
         check('data-add-sheets entier ≥ 1', Number.isInteger(k) && k >= 1, String(k))
