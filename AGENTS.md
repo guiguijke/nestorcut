@@ -906,9 +906,9 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     `localDownloads`, `resultNav`, `checkoutReturn`, `capacityPanel`,
     `trackParity` (`app/tests/`) ; `sheetCap`, `downloadSheetCap`,
     `resultZip`, `resultDxfGate`, `billing`, `trackAllowlist`
-    (`server/tests/`) ; harnais navigateur `scripts/qa-e2e-free-lock.mjs` (à
-    livrer par WP-QA : absent de l'arbre à la fusion du 02/11 — retirer cette
-    mention si le lot QA ne le crée pas).
+    (`server/tests/`) ; harnais navigateur `scripts/qa-e2e-free-lock.mjs` (huit
+    scénarios ; la base locale doit contenir un document `subscription_plan`,
+    recette en tête du script).
 
 ## 3. Banc d'essai (workers/nesting/bench/)
 

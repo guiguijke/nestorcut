@@ -6,8 +6,6 @@ noms de lots internes. La version affichée dans l'en-tête est le
 
 ## V0.9.10
 
-<!-- [spéc] Entrée rédigée AVANT le déploiement (AGENTS #35) : à relire contre le code déployé, puis retirer cette ligne à la promotion en production. La phrase « relance depuis la fenêtre » de la 2e puce est prouvée par qa-e2e-free-lock (scénario relance, 02/11). Le déblocage sans rechargement après un paiement réussi n'est couvert que par les tests unitaires (pas de Stripe sur la pile de QA). -->
-
 *FR*
 
 - Offre Free : le calcul n'est plus limité à 2 tôles par tâche. Une tâche s'imbrique sur autant de tôles qu'il le faut et vous voyez tout le résultat ; vous téléchargez les 2 premières tôles de chaque tâche (DXF, ZIP, .job), et Unlimited débloque toutes les tôles (essai gratuit de 7 jours pour un premier abonnement). Avant de lancer un calcul de plus de 2 tôles, l'offre Free vous le rappelle. Après le paiement, vous revenez sur votre projet ; les téléchargements se débloquent dès que le paiement est confirmé, sans recharger la page.

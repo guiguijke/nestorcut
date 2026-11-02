@@ -46,10 +46,9 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
   [prod].
 - Calcul sur autant de tôles que nécessaire ; téléchargement des **2 premières
   tôles de chaque job** (constante `FREE_DOWNLOAD_SHEET_CAP`), le reste avec
-  Unlimited [spéc — décision du propriétaire du 02/11 (O1-O3), `[prod]` au
-  déploiement du lot V0.9.10 seulement ; jusque-là le plafond de 2 tôles par
-  job reste en vigueur] ; borne technique 1000 tôles/job, tous plans (démo
-  comprise) [spéc]. Le verrou est serveur pour un calcul sur nos machines,
+  Unlimited [prod, lot V0.9.10 du 02/11 — décision du propriétaire du 02/11
+  (O1-O3)] ; borne technique 1000 tôles/job, tous plans (démo comprise)
+  [prod]. Le verrou est serveur pour un calcul sur nos machines,
   d'interface pour un calcul dans le navigateur (même précédent que l'export
   du rapport, §3).
 - Calcul **navigateur uniquement** (Mode Local forcé : solve WASM
@@ -64,8 +63,7 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
 ### Unlimited — 19 €/mois
 
 - Nestings illimités [prod] ; téléchargement de toutes les tôles de chaque job
-  (aujourd'hui « tôles illimitées » [prod]) [spéc — lot V0.9.10, `[prod]` au
-  déploiement].
+  [prod, lot V0.9.10].
 - Calcul serveur **ou** navigateur [prod, flags ON] : le choix visible
   est **à la création du projet** (cartes Cet appareil / Nos serveurs),
   pas un toggle « Lieu de calcul » séparé (clés i18n `localMode.*`
@@ -125,7 +123,7 @@ produit sans protéger l'utilisateur.
 - **Exports CSV / presse-papier = Unlimited+** [prod, PR#19] — état
   verrouillé explicite en free (jamais un bouton qui disparaît).
   **Export PDF : pas implémenté** [spéc].
-- **Téléchargement des tôles = même famille d'état verrouillé** [spéc, lot
+- **Téléchargement des tôles = même famille d'état verrouillé** [prod, lot
   V0.9.10] : un Free voit TOUT le résultat (aperçus, rapport) mais ne
   télécharge que les 2 premières tôles de chaque alternative (DXF, ZIP,
   .job) ; au-delà, un cadenas explicite mène à Unlimited (« Débloquer »),
@@ -187,7 +185,7 @@ Quatre chantiers **indépendants, à traiter en PR séparées** :
    orphelins), vault et démo exemptés, scalaires de rapport conservés.
 4. **Cap 2 tôles/job en free** [prod, PR#18] (démo exemptée, D-DEM-11)
    — remplacé le 2026-11-02 par le verrou de téléchargement (voir
-   specs/90-decisions.md) [spéc jusqu'au déploiement du lot V0.9.10].
+   specs/90-decisions.md), en production depuis le lot V0.9.10 [prod].
 
 Déjà livrés : codes promo partenaires [prod], rapport matière [prod],
 admin mobile + tracking + métriques file mesurée [prod, PR#47-#49, #52],
