@@ -358,6 +358,13 @@ function setProjectFiles(files, path) {
         // Reset the "already nested" marker so the Nest button reflects the
         // newly loaded project rather than the previous one.
         state.lastParams = ''
+        // Constat 5 (revue lot V1, 02/11) : le refus de capacité (422) et
+        // l'erreur de soumission appartiennent au projet SOUMIS. Sans cette
+        // remise à zéro, le panneau à leviers de A s'affichait sur B, et son
+        // bouton « Ajouter k tôles et relancer » modifiait B puis le
+        // relançait (un crédit consommé) avec les chiffres de A.
+        state.nestUnfit = null
+        state.nestError = ''
         // Params du projet visité : son snapshot s'il existe (l'utilisateur
         // était déjà passé), sinon les curated defaults posés au montage
         // (démo), sinon les défauts d'usine.
@@ -1134,6 +1141,11 @@ async function nest(slug) {
                 // Z1 (vérif 2026-09-05) : refus 422 du pré-contrôle de
                 // capacité (SANS quota consommé) — le bandeau à leviers de
                 // la page prend le relais du message générique.
+                // Course (constat 5) : le 422 de A qui arrive APRÈS le
+                // chargement de B ne se range pas — l'utilisateur n'est plus
+                // sur le projet soumis (state.projectSlug porte le CHEMIN
+                // d'API, cf. AGENTS #63).
+                if (state.projectSlug !== API_ROUTES.PROJECT(slug)) return
                 state.nestUnfit = error?.data?.data?.unfit || null
                 return
             }
