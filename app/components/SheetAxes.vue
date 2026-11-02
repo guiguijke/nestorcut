@@ -95,9 +95,12 @@ const props = defineProps({
 
 const { t } = useLocale()
 
+// useId() : unique par instance (piège 22) ET identique serveur/client —
+// Math.random() donnait deux ids différents, mismatch d'hydratation.
+const uid = useId()
 const ids = {
-    x: `ax-x-${Math.random().toString(36).slice(2, 9)}`,
-    y: `ax-y-${Math.random().toString(36).slice(2, 9)}`,
+    x: `ax-x-${uid}`,
+    y: `ax-y-${uid}`,
 }
 
 const axes = computed(() => sheetAxesDisplay(props.width, props.height))

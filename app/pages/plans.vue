@@ -120,7 +120,10 @@ const { data: plans } = usePlans()
 const { data: queueTimes, status: queueTimesStatus } = useFetch('/api/metrics/queue-times', {
     server: false,
 })
-const queueTimesReady = computed(() => unref(queueTimesStatus) !== 'pending')
+// Ready = a response arrived. `!== 'pending'` was true on the server
+// ('idle', server: false) but false at hydration (the client fetch is
+// already pending): hydration mismatch on the measured block.
+const queueTimesReady = computed(() => ['success', 'error'].includes(unref(queueTimesStatus)))
 
 // Below this sample size a percentile is noise — show the honest fallback.
 const MIN_MEASURED_JOBS = 5
