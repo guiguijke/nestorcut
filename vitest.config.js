@@ -16,10 +16,13 @@ export default defineConfig({
     // de tsconfig pour les tests : ils n'en ont aucun besoin, le code testé est
     // du JavaScript.
     esbuild: { tsconfigRaw: '{}' },
+    // `~` = srcDir de Nuxt 4, c'est-à-dire `app/` : tout import `~/utils/…`
+    // ou `~/composables/…` du code de l'app y pointe (lot V1 téléchargement,
+    // tests de composables). `~~` reste la racine du dépôt.
     resolve: {
         alias: {
             '~~': root,
-            '~': root,
+            '~': `${root}app`,
         },
     },
     test: {
