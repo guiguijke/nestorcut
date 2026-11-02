@@ -16,38 +16,34 @@ et sorties de QA restent dans `qa/<campagne>/`.
 | [`dwg-license.md`](dwg-license.md) | Licence et périmètre DWG |
 | `cam-validation/` | Fiche de test CAM + DXF de validation |
 | `upstream-wasm-proposal/` | Patches proposés en amont (jagua-rs, sparrow) |
+| [`../doc/encryption-premium.spec.md`](../doc/encryption-premium.spec.md) | Coffre zero-knowledge (fichier-clé), livré en opt-in sur tous les plans : référence crypto et cycle de vie (hors `docs/`) |
 
 ## Pilotage (en cours)
 
 | Fichier | Contenu |
 |---|---|
-| `specs/POINT-GLOBAL-2026-09-27.md` (privé) | **Point global du 27/09** (vérificateur) : état de la production, contrôle avant déploiement de la V0.9.8, audit (constats confirmés, sécurité renvoyée au document privé `specs/AUDIT-SECURITE-2026-09-27.md`), promesses publiques contre le code, features restantes vérifiées dans le code, admin et suivi d'usage sans données personnelles, lots S0 / M4 / P / A1-A2 / U1-U7, décisions du propriétaire |
 | [`MASTERPLAN-2026-09-05.md`](MASTERPLAN-2026-09-05.md) | **Boussole** : la référence du nesting dans le navigateur (§0), séquenciation T0-T5, registre des décisions, forme des instructions à l'implémenteur (§8) |
-| [`PLAN-PERF-UX-2026-09-05.md`](archive/2026-09-perf-ux/PLAN-PERF-UX-2026-09-05.md) | Plan perf/UX en 6 lots (lots 1-3 livrés, 4 en cours, 5-6 cadrés) |
-| [`FICHE-LOT4-T2-2026-09-06.md`](archive/2026-09-perf-ux/FICHE-LOT4-T2-2026-09-06.md) | Lot 4 (T2) : verrous par chantier, décision Rust/Python, contrôles intermédiaires, recentrage navigateur |
-| [`PLAN-CORRECTIF-PERF-UX-L4-PHASE-A-2026-09-07.md`](archive/2026-09-perf-ux/PLAN-CORRECTIF-PERF-UX-L4-PHASE-A-2026-09-07.md) | Vérification de la phase A du lot 4 (GO déploiement, verrou 15 s reporté en phase B, AI0-AI4) |
 | [`PLAN-UI-PRO-2026-09-07.md`](PLAN-UI-PRO-2026-09-07.md) | Interface « atelier » professionnelle : diagnostic D1-D10, direction unique, six lots U0-U5 avec verrous et sélecteurs QA à migrer |
-| [`RESTE-A-LIVRER-2026-09-10.html`](RESTE-A-LIVRER-2026-09-10.html) | Page de synthèse pour le propriétaire (10/09) : décisions en attente, chantiers restants par horizon avec effort à l'échelle, dette connue, clos — à ouvrir dans un navigateur |
-| [`ETUDE-JOB-SHEETCAM-2026-09-11.md`](archive/2026-09-sheetcam-job/ETUDE-JOB-SHEETCAM-2026-09-11.md) | Nester directement un `.job` SheetCam : format décortiqué (INI + bloc binaire), neuf règles acquises par essais (pose = centre de boîte, angle horaire en radians, copies `copyOf`, ordre de coupe par `[OpOrder]`), flux produit et consigne de Phase 1 |
-| [`PLAN-DERNIERE-TOLE-2026-09-09.md`](archive/2026-09-import-eclatement/PLAN-DERNIERE-TOLE-2026-09-09.md) | Lot 5-moteur tranche 1 : la direction choisie s'applique à la tôle partielle — constat démo, cause à trois niveaux (coût SA sans direction, biais constructif faible, compaction −X), décision « SPP de la même direction dans le moteur », verrous L1-L6 |
-| [`PLAN-TAGS-IMAGES-2026-09-13.md`](archive/2026-09-reprise-lots-clos/PLAN-TAGS-IMAGES-2026-09-13.md) | `:latest` ne designe plus que ce qui a recu un GO (constat du 13/09 : la CI le deplacait a chaque poussee, donc un `compose pull` nu deployait des lots sans GO) ; lot D1, workflow manuel `promote-latest` |
-| [`REPRISE-2026-09-13.md`](archive/2026-09-reprise-lots-clos/REPRISE-2026-09-13.md) | **Passation (13/09)** : état de la production, chantiers clos, priorité 4 en cours (J1-J3 GO, J4 à faire, recette SheetCam), première action (restaurer 86 fichiers QA), règles de la maison, outils, questions ouvertes |
-| [`PLAN-RETRAIT-STRIP-2026-09-13.md`](archive/2026-09-reprise-lots-clos/PLAN-RETRAIT-STRIP-2026-09-13.md) | Retrait du pipeline « strip » (décision owner 13/09) : inventaire des références, consigne du lot S (sweep, retrait des services/routes/pages, données conservées, purge maintenue) |
-| [`PLAN-ECLATEMENT-2026-09-12.md`](archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md) | Priorité 1 (owner 12/09) : éclatement d'un DXF en pièces unitaires et mise à l'échelle à l'import (« import avancé »), et robustesse du moteur aux traits plus fins que l'espacement (diagnostic mesuré du « stopped unexpectedly », lots E0-E2) |
 | [`PLAN-IMPORT-2026-09-09.md`](PLAN-IMPORT-2026-09-09.md) | Phase C import (tête de T3) : corpus ≥ 30 DXF, coureurs wasm et ezdxf sur une grille JSON commune, classement des causes, spécification du rapport de réparation — lots A-E parallélisables, aucun code produit |
-| [`PLAN-COMPTE-INSCRIPTION-2026-09-07.md`](archive/2026-09-reprise-lots-clos/PLAN-COMPTE-INSCRIPTION-2026-09-07.md) | Lot C1 « inscription » : audit de la vérification d'e-mail (existante, à rendre visible), doublon d'e-mail administrateur (digest sans marqueur), newsletter proposée tous les 90 j — décisions D1-D8, périmètre fermé, verrous |
-| [`AUDIT-LICENCE-DEPOT-2026-09-07.md`](archive/2026-09-reprise-lots-clos/AUDIT-LICENCE-DEPOT-2026-09-07.md) | Dépôt public : part héritée de nest2d mesurée, tiers (jagua MPL sans LICENSE vendorisé), documents internes exposés, options de licence non commerciale, instruction du lot L1 — décision propriétaire |
-| `specs/JALON-UTILISATEURS-T1-2026-09-06.md` (privé) | Guide d'entretiens et grille de décision du jalon utilisateurs |
+| [`RECETTE-PROPRIETAIRE-2026-09-14.md`](RECETTE-PROPRIETAIRE-2026-09-14.md) | Recette des priorités 3 et 4 en production, à faire par le propriétaire avant toute nouvelle feature |
 | [`PLAN-coupe-commune.md`](PLAN-coupe-commune.md) | Coupe commune en grappes : dette d'abord (kerf explicite livré), lignes communes ensuite |
 
 ## Archives (cycles clos)
 
+Les captures et sorties des campagnes archivées restent dans `qa/<campagne>/`.
+
 | Dossier | Cycle | Issue |
 |---|---|---|
+| `archive/2026-07-moteur/` | Feuille de route des trous dans jagua-rs (28/07), plan warm-start et alternatives directionnelles du BPP (01/08) | Alternatives directionnelles (B) et plomberie warm-start (A2) implémentées ; séquence intercalée (A1) annulée après un A/B négatif. Les trous passent par le canal capillaire (`AGENTS.md` piège 2) ; la spec de support natif des trous dans jagua-rs n'a pas été implémentée |
 | `archive/2026-08-audits/` | Audits du 29 et 31 août, plans A / P-Q, poids wasm PR2, Mode Local PR5 | Correctifs livrés (voir `AGENTS.md` §5) |
 | `archive/2026-09-bpp/` | BPP : bandes résiduelles, poches, livraisons des 1er et 2 septembre | Déployé |
 | `archive/2026-09-multitoles/` | Audit multi-tôles du 3 septembre, plans correctifs 1-4, infaisable & alternatives | Déployé |
-| `archive/2026-09-perf-ux/` | Mesure P3, lots 1 → 3 (rapports, vérifications L1 → L3-bis), proposition du lot 4 | Déployé en prod le 06/09 (T1 clos) |
+| `archive/2026-09-perf-ux/` | Plan perf/UX en 6 lots, mesure P3, lots 1 → 3 (rapports, vérifications L1 → L3-bis), lot 4 (proposition, fiche, vérification de la phase A) | Lots 1-3 déployés en prod le 06/09 (T1 clos) ; lot 4 clos le 09/09, phase C livrée le 10/09 |
+| `archive/2026-09-import-eclatement/` | Dernière tôle (lot 5-moteur, tranche 1) et éclatement des DXF en pièces unitaires (import avancé, lots E0-E4) | Dernière tôle : tranches 1, 1-bis, 1-ter, 2 et correctifs hole-fill déployés les 10-11/09 (règle vivante : `AGENTS.md` piège 54). Éclatement : E0-E4 déployés le 14/09, E4-e (enveloppe concave) gelé |
+| `archive/2026-09-sheetcam-job/` | Étude du format `.job` SheetCam (lots J1-J11), audit UX du flux `.job` et lot J11, correctif de la vue DXF figée (H1), audit de bout en bout des priorités 3 et 4 | Livré : J11-ter GO le 16/09, H1 déployé le 14/09 (règle vivante : `AGENTS.md` piège 62), audit exécuté le 14/09 |
+| `archive/2026-09-documentation-langues/` | Documentation dans le site vitrine (Starlight, lots D1-D5) et chantier des langues (pt-BR, it, de, es) | D1-D5 livrés (D5 fusionné le 16/09) ; langues closes le 23/09 (six langues, V0.9.7) |
+| `archive/2026-09-reprise-lots-clos/` | Passation du 13/09, retrait du pipeline « strip », tags d'images (`promote-latest`), lot C1 « inscription », audit de licence du dépôt | Retrait « strip » (lot S, 13/09) et lot D1 livrés (`:latest` ne bouge que par `promote-latest`, `AGENTS.md` §6) ; C1 clos le 08/09 ; licence close le 08/09 (dépôt neuf à historique unique, PolyForm Noncommercial) ; §3-§5 de la passation périmés |
+| `archive/2026-09-stabilisation/` | Retrait de la promesse e-mail (M2) et vague d'audit de stabilisation (AUD-1 à AUD-3) | M2, M2-bis, M3, M3-bis et M3-ter déployés (V0.9.8) ; AUD-1 à AUD-3 absorbés par le point global du 27/09 (privé), M4 déployé en V0.9.9 |
 
 Convention de nommage : `AUDIT-`, `PLAN-`, `RAPPORT-` (implémenteur),
 `PLAN-CORRECTIF-` (vérification + plan correctif du vérificateur),
@@ -55,16 +51,17 @@ Convention de nommage : `AUDIT-`, `PLAN-`, `RAPPORT-` (implémenteur),
 
 ## Documents privés (hors dépôt)
 
-`specs/` (gitignoré) : `THREAT-MODEL.md` (promesses privacy exactes),
-`CYBERSECURITY.md` (posture pentest), `infra/stripe-go-live.md`,
-`infra/DEPLOY-HETZNER.md`, adresses du homelab. Les hashes de commits
-cités dans les documents antérieurs à la re-création du dépôt (2026-09)
-renvoient au dépôt archivé privé.
+`specs/` (gitignoré, jamais commité) : référence des décisions et documents internes. Pas de lien depuis ici.
 
-| `docs/archive/2026-09-documentation-langues/PLAN-DOCUMENTATION-2026-09-15.md` | La documentation NestorCut (15/09) : Starlight dans le site vitrine, FR + EN, recherche, menu ; architecture en huit sections et lots D1 à D5. |
-| `docs/archive/2026-09-documentation-langues/PLAN-LANGUES-2026-09-16.md` | Quatre langues de plus (16/09) : portugais du Brésil, italien, allemand, espagnol — décision owner ; règle « complète ou rien », glossaire d'atelier et relecteur natif, socle L0, lots L1 à L4, après D4. |
-- [PLAN-AUDIT-STABILISATION-2026-09-24.md](archive/2026-09-stabilisation/PLAN-AUDIT-STABILISATION-2026-09-24.md) — retrait de la promesse e-mail (M2), puis vague d'audit de stabilisation (AUD-1 à AUD-3) ; décision du propriétaire du 24/09
-| `docs/archive/2026-09-sheetcam-job/PLAN-UX-JOB-VERSION-2026-09-15.md` | Audit UI/UX du flux `.job` (15/09) et lot J11 : carte groupée pour un `.job` multi-pièces, version affichée « NestorCut V2.x », badges « Nouveau » à expiration. |
-| `docs/archive/2026-09-sheetcam-job/PLAN-CORRECTIF-VUE-DXF-2026-09-14.md` | Vue DXF d'un résultat local figée : reproduction, cause, correctif H1 | vivant |
-| `RECETTE-PROPRIETAIRE-2026-09-14.md` | Recette des priorités 3 et 4 en production, à faire par le propriétaire avant toute nouvelle feature | vivant |
-| `docs/archive/2026-09-sheetcam-job/AUDIT-E2E-PRIO3-4-2026-09-14.md` | Consigne d'audit de bout en bout des priorités 3 et 4, exécuté par l'implémenteur, rapport en §5 | vivant |
+| Fichier | Contenu |
+|---|---|
+| `specs/ROADMAP-V1-2026-11.md` | **Reste-à-faire V1** (état au 02/11/2026) : la feuille de route de la V1 |
+| `specs/POINT-GLOBAL-2026-09-27.md` | Point global du 27/09 (vérificateur) : état de la production, audit, features restantes, décisions du propriétaire (§8, recopiées dans `specs/90-decisions.md`). Sorti du dépôt public le 02/11 |
+| `specs/JALON-UTILISATEURS-T1-2026-09-06.md` | Guide d'entretiens et grille de décision du jalon utilisateurs. Sorti du dépôt public le 02/11 |
+| `specs/90-decisions.md` | Journal chronologique des décisions du propriétaire |
+| `specs/AUDIT-SECURITE-2026-09-27.md`, `specs/AUDIT-SECURITE-2026-10-25.md` | Constats de sécurité (le dépôt est public) |
+| `specs/THREAT-MODEL.md`, `specs/CYBERSECURITY.md` | Promesses privacy exactes, posture pentest |
+| `specs/infra/` | `stripe-go-live.md`, `DEPLOY-HETZNER.md`, adresses du homelab, procédure du dépôt neuf |
+
+Les hashes de commits cités dans les documents antérieurs à la re-création du dépôt (2026-09)
+renvoient au dépôt archivé privé.
