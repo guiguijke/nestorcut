@@ -6,42 +6,42 @@ noms de lots internes. La version affichée dans l'en-tête est le
 
 ## V0.9.10
 
-<!-- [spéc] Entrée rédigée AVANT le déploiement (AGENTS #35) : à relire contre le code déployé, puis retirer cette ligne à la promotion en production. Une phrase reste à ajouter à la 2e puce FR/EN/PT/IT/DE/ES une fois le parcours « relance depuis la fenêtre » prouvé par le harnais (spec LOT-V1-TELECHARGEMENT-FREE-2026-11, WP-DOCS-SITE). -->
+<!-- [spéc] Entrée rédigée AVANT le déploiement (AGENTS #35) : à relire contre le code déployé, puis retirer cette ligne à la promotion en production. La phrase « relance depuis la fenêtre » de la 2e puce est prouvée par qa-e2e-free-lock (scénario relance, 02/11). Le déblocage sans rechargement après un paiement réussi n'est couvert que par les tests unitaires (pas de Stripe sur la pile de QA). -->
 
 *FR*
 
 - Offre Free : le calcul n'est plus limité à 2 tôles par tâche. Une tâche s'imbrique sur autant de tôles qu'il le faut et vous voyez tout le résultat ; vous téléchargez les 2 premières tôles de chaque tâche (DXF, ZIP, .job), et Unlimited débloque toutes les tôles (essai gratuit de 7 jours pour un premier abonnement). Avant de lancer un calcul de plus de 2 tôles, l'offre Free vous le rappelle. Après le paiement, vous revenez sur votre projet ; les téléchargements se débloquent dès que le paiement est confirmé, sans recharger la page.
-- Pièces qui ne tiennent pas sur les tôles déclarées : le bouton ajoute en une fois le nombre de tôles estimé nécessaire et relance le calcul.
+- Pièces qui ne tiennent pas sur les tôles déclarées : le bouton ajoute en une fois le nombre de tôles estimé nécessaire et relance le calcul. Le même bouton apparaît dans la fenêtre du résultat refusé ; depuis l'accueil, « Ouvrir le projet » vous ramène aux réglages.
 - Abonnement : un compte dont l'adresse e-mail n'est pas encore confirmée reçoit un message clair au lieu d'ouvrir le paiement ; un premier paiement inabouti propose de mettre à jour le moyen de paiement.
 
 *EN*
 
 - Free plan: nesting is no longer limited to 2 sheets per job. A job nests on as many sheets as it needs and you see the whole result; you download the first 2 sheets of each job (DXF, ZIP, .job), and Unlimited unlocks every sheet (7-day free trial for a first subscription). Before you start a nesting of more than 2 sheets, the Free plan reminds you of this. After payment, you come back to your project; downloads unlock as soon as the payment is confirmed, without reloading the page.
-- Parts that do not fit on the declared sheets: the button adds the estimated number of sheets in one go and re-runs the nesting.
+- Parts that do not fit on the declared sheets: the button adds the estimated number of sheets in one go and re-runs the nesting. The same button appears in the window of the refused result; from the home page, “Open the project” takes you back to the settings.
 - Subscription: an account whose email address is not yet confirmed now gets a clear message instead of opening the payment; a first payment that did not complete offers to update the payment method.
 
 *PT*
 
 - Plano Free: o cálculo deixa de ser limitado a 2 chapas por trabalho. Um trabalho é aninhado em quantas chapas forem necessárias e você vê o resultado completo; você baixa as 2 primeiras chapas de cada trabalho (DXF, ZIP, .job), e o Unlimited libera todas as chapas (avaliação gratuita de 7 dias para uma primeira assinatura). Antes de iniciar um cálculo com mais de 2 chapas, o plano Free avisa você. Após o pagamento, você volta ao seu projeto; os downloads são liberados assim que o pagamento é confirmado, sem recarregar a página.
-- Peças que não cabem nas chapas declaradas: o botão adiciona de uma vez o número de chapas estimado como necessário e reinicia o cálculo.
+- Peças que não cabem nas chapas declaradas: o botão adiciona de uma vez o número de chapas estimado como necessário e reinicia o cálculo. O mesmo botão aparece na janela do resultado recusado; a partir da página inicial, “Abrir o projeto” leva você de volta às configurações.
 - Assinatura: uma conta cujo endereço de e-mail ainda não foi confirmado recebe agora uma mensagem clara em vez de abrir o pagamento; um primeiro pagamento não concluído propõe atualizar a forma de pagamento.
 
 *IT*
 
 - Piano Free: il calcolo non è più limitato a 2 lamiere per lavoro. Un lavoro viene annidato su tutte le lamiere necessarie e vedi l'intero risultato; scarichi le prime 2 lamiere di ogni lavoro (DXF, ZIP, .job), e Unlimited sblocca tutte le lamiere (prova gratuita di 7 giorni per un primo abbonamento). Prima di avviare un calcolo di oltre 2 lamiere, il piano Free te lo ricorda. Dopo il pagamento torni al tuo progetto; i download si sbloccano non appena il pagamento è confermato, senza ricaricare la pagina.
-- Pezzi che non stanno sulle lamiere dichiarate: il pulsante aggiunge in una volta il numero di lamiere stimato necessario e rilancia il calcolo.
+- Pezzi che non stanno sulle lamiere dichiarate: il pulsante aggiunge in una volta il numero di lamiere stimato necessario e rilancia il calcolo. Lo stesso pulsante compare nella finestra del risultato rifiutato; dalla pagina iniziale, «Apri il progetto» ti riporta alle impostazioni.
 - Abbonamento: un account il cui indirizzo email non è ancora confermato riceve ora un messaggio chiaro invece di aprire il pagamento; un primo pagamento non andato a buon fine propone di aggiornare il metodo di pagamento.
 
 *DE*
 
 - Free-Plan: Die Berechnung ist nicht mehr auf 2 Bleche pro Auftrag begrenzt. Ein Auftrag wird auf so vielen Blechen verschachtelt, wie nötig, und Sie sehen das gesamte Ergebnis; Sie laden die ersten 2 Bleche jedes Auftrags herunter (DXF, ZIP, .job), und Unlimited schaltet alle Bleche frei (kostenlose 7-Tage-Testphase bei einem ersten Abonnement). Bevor Sie eine Berechnung mit mehr als 2 Blechen starten, weist der Free-Plan Sie darauf hin. Nach der Zahlung kehren Sie zu Ihrem Projekt zurück; die Downloads werden freigeschaltet, sobald die Zahlung bestätigt ist, ohne die Seite neu zu laden.
-- Teile, die nicht auf die angegebenen Bleche passen: Die Schaltfläche fügt auf einmal die geschätzt benötigte Anzahl Bleche hinzu und startet die Berechnung neu.
+- Teile, die nicht auf die angegebenen Bleche passen: Die Schaltfläche fügt auf einmal die geschätzt benötigte Anzahl Bleche hinzu und startet die Berechnung neu. Dieselbe Schaltfläche erscheint im Fenster des abgelehnten Ergebnisses; von der Startseite führt „Projekt öffnen“ Sie zu den Einstellungen zurück.
 - Abonnement: Ein Konto, dessen E-Mail-Adresse noch nicht bestätigt ist, erhält jetzt eine klare Meldung, statt die Zahlung zu öffnen; eine nicht abgeschlossene erste Zahlung bietet an, die Zahlungsmethode zu aktualisieren.
 
 *ES*
 
 - Plan Free: el cálculo ya no está limitado a 2 chapas por trabajo. Un trabajo se anida en tantas chapas como haga falta y ves todo el resultado; descargas las 2 primeras chapas de cada trabajo (DXF, ZIP, .job), y Unlimited desbloquea todas las chapas (prueba gratuita de 7 días para una primera suscripción). Antes de lanzar un cálculo de más de 2 chapas, el plan Free te lo recuerda. Tras el pago vuelves a tu proyecto; las descargas se desbloquean en cuanto se confirma el pago, sin recargar la página.
-- Piezas que no caben en las chapas declaradas: el botón añade de una vez el número de chapas estimado como necesario y vuelve a lanzar el cálculo.
+- Piezas que no caben en las chapas declaradas: el botón añade de una vez el número de chapas estimado como necesario y vuelve a lanzar el cálculo. El mismo botón aparece en la ventana del resultado rechazado; desde la página de inicio, «Abrir el proyecto» te devuelve a los ajustes.
 - Suscripción: una cuenta cuya dirección de correo electrónico aún no está confirmada recibe ahora un mensaje claro en lugar de abrir el pago; un primer pago no completado propone actualizar el método de pago.
 
 ## V0.9.9
