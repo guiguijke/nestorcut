@@ -2,7 +2,7 @@
 
 Implémenteur : relais (l'agent précédent a posé le code et les captures
 puis s'est arrêté au contraste). Destinataire : vérificateur (GO avant
-déploiement app + admin). Plan : `docs/PLAN-COMPTE-INSCRIPTION-2026-09-07.md`
+déploiement app + admin). Plan : `docs/archive/2026-09-reprise-lots-clos/PLAN-COMPTE-INSCRIPTION-2026-09-07.md`
 §3–§5.
 
 Hash de livraison : **`0c44248`** (`feat(compte): lot C1`). Les verrous

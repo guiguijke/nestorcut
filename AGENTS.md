@@ -715,7 +715,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     des DEUX côtés — parité chiffrée moved/AABB JS == Python.
 
 54. **La direction d'un job BPP est un objectif de SOLVEUR, jamais de
-    post-pass (constat 2026-09-09, plan `docs/PLAN-DERNIERE-TOLE-2026-09-09.md`).**
+    post-pass (constat 2026-09-09, plan `docs/archive/2026-09-import-eclatement/PLAN-DERNIERE-TOLE-2026-09-09.md`).**
     Trois niveaux se cumulaient : (a) le coût du recuit n'a AUCUNE
     direction — `sa.rs::layout_remnant` est la plus grande bande ou L
     libre autour de l'AABB, donc il minimise l'AIRE de l'AABB de la tôle

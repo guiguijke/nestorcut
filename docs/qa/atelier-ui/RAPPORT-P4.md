@@ -1,6 +1,6 @@
 # Rapport P4 — worker de finalisation navigateur — 2026-09-08
 
-Fiche `docs/FICHE-LOT4-T2-2026-09-06.md` chantier B, masterplan §4 T2.
+Fiche `docs/archive/2026-09-perf-ux/FICHE-LOT4-T2-2026-09-06.md` chantier B, masterplan §4 T2.
 Hash : **`3c3ad80`**. Vitest **511/511**. Pas de déploiement
 (attendre GO vérificateur). U3 n’a pas démarré.
 

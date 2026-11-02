@@ -1,7 +1,7 @@
 # Vérification de la phase A du lot 4 (dette) + suite — 2026-09-07, 8 h
 
 Vérification indépendante du rapport
-[`RAPPORT-PERF-UX-L4-PHASE-A-2026-09-07.md`](archive/2026-09-perf-ux/RAPPORT-PERF-UX-L4-PHASE-A-2026-09-07.md)
+[`RAPPORT-PERF-UX-L4-PHASE-A-2026-09-07.md`](RAPPORT-PERF-UX-L4-PHASE-A-2026-09-07.md)
 (commits `381d2b8` → `d313e38`), contre la fiche
 [`FICHE-LOT4-T2-2026-09-06.md`](FICHE-LOT4-T2-2026-09-06.md) §3, §5, §6, §7.
 Méthode : `assert_images_head.sh` OK (2026-09-07T06:10:53Z, HEAD

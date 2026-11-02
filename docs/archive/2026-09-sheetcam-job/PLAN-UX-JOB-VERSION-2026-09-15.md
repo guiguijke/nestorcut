@@ -68,7 +68,7 @@ connaissance de cause — je la déconseille, pour la raison ci-dessus.
 rapport à ma remarque sur le grouping des `.job` : on éclate par défaut ». Le
 modèle reste donc une fiche par section originale ; la carte groupée du
 point 2 ci-dessous est une PRÉSENTATION, et le comportement est EXPLIQUÉ dans
-la documentation (voir `docs/PLAN-DOCUMENTATION-2026-09-15.md`, section
+la documentation (voir `docs/archive/2026-09-documentation-langues/PLAN-DOCUMENTATION-2026-09-15.md`, section
 « Fichiers de travail SheetCam »).
 
 ## 3. Lot J11 — consigne fermée

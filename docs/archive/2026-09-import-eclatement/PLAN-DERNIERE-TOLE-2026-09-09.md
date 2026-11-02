@@ -164,7 +164,7 @@ partielle est finie en SPP dans le moteur) et nouveau piège : « **la
 direction d'un job BPP est un objectif de solveur** : le remnant du recuit
 est sans direction (aire d'AABB), le biais du constructif est un
 multiplicateur ≤ +10 % et le tie-break `BL_X` pousse tout vers −X — jamais
-un post-pass −X pour corriger ça ». `docs/PLAN-DERNIERE-TOLE-2026-09-09.md`
+un post-pass −X pour corriger ça ». `docs/archive/2026-09-import-eclatement/PLAN-DERNIERE-TOLE-2026-09-09.md`
 (ce fichier) reçoit le rapport en §7.
 
 ## 4. Verrous chiffrés et commandes

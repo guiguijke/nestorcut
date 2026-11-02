@@ -1,6 +1,6 @@
 # Rapport d'implémentation — Lot 1 (L1) — 2026-09-05
 
-Rapport constat-par-constat pour vérification, plan `docs/PLAN-PERF-UX-2026-09-05.md`
+Rapport constat-par-constat pour vérification, plan `docs/archive/2026-09-perf-ux/PLAN-PERF-UX-2026-09-05.md`
 (§1 P1-P2, §2.1.1-2.1.3, §3.1.1-3.1.2). Implémenté sur `b3a06eb` par étapes
 (6 commits). **Non déployé** — attend la vérification.
 

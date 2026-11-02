@@ -158,7 +158,7 @@ non inclus.
 
 > **Mission : « Nester un fichier .job SheetCam » (priorité 3, après les réparations d'import de `PLAN-IMPORT` §9).**
 >
-> **Lis d'abord** `docs/ETUDE-JOB-SHEETCAM-2026-09-11.md` en entier : les neuf règles du §2 sont des faits mesurés, pas des hypothèses ; le flux du §3 est la cible ; le §7 fixe le kerf, les amorces, le disque de perçage et l'aperçu.
+> **Lis d'abord** `docs/archive/2026-09-sheetcam-job/ETUDE-JOB-SHEETCAM-2026-09-11.md` en entier : les neuf règles du §2 sont des faits mesurés, pas des hypothèses ; le flux du §3 est la cible ; le §7 fixe le kerf, les amorces, le disque de perçage et l'aperçu.
 >
 > **Objectif** : un utilisateur SheetCam dépose son `.job` (une pièce de chaque dessin, opérations faites) et les DXF correspondants, donne ses quantités, lance le nesting, et télécharge un `.job` nesté qu'il ouvre tel quel dans SheetCam : mêmes opérations, mêmes amorces, kerf de l'outil, ordre de coupe garanti (pièces nichées avant leur hôte), aucun double offset.
 >
@@ -567,8 +567,8 @@ raison voyage dans `part.reserve`, prête pour un constat d'UI au lot J4.
    étaient versionnés AVANT le lot J3** (`docs/qa/atelier-ui/` 69,
    `docs/qa/pr5-acceptation/` 12, `docs/qa/audit-multitoles-2026-09-03/` 5 —
    dont `RAPPORT-P4/P5/U2.md` et des mesures référencées par
-   `FICHE-LOT4-T2-2026-09-06.md`). À **restaurer en un commit** (commande dans
-   `docs/REPRISE-2026-09-13.md` §4) avant tout autre travail.
+   `docs/archive/2026-09-perf-ux/FICHE-LOT4-T2-2026-09-06.md`). À **restaurer en un commit** (commande dans
+   `docs/archive/2026-09-reprise-lots-clos/REPRISE-2026-09-13.md` §4) avant tout autre travail.
 2. **Normaliser l'angle écrit dans (−π, π]** : la recette porte
    `Angle=-6.283` pour un θ = 2π émis par le moteur ; SheetCam le lira
    probablement, mais un fichier propre ne porte pas −2π. Une ligne, au
@@ -2175,7 +2175,7 @@ La règle `2 × kerf + sécurité` avec un kerf de 1,5 ne fait plus tenir quatre
 propriétaire s'il veut revoir le moulinet — pas un défaut du lot.
 
 **Une hygiène à corriger dans le même commit que les documents** : le commit
-`2e4109a5` a ré-enregistré `docs/ETUDE-JOB-SHEETCAM-2026-09-11.md` en fins de
+`2e4109a5` a ré-enregistré `docs/archive/2026-09-sheetcam-job/ETUDE-JOB-SHEETCAM-2026-09-11.md` en fins de
 ligne **CRLF** (4 150 lignes « changées » pour 331 ajoutées ; git le voit
 désormais comme non-texte). Le contenu est intact (vérifié en ignorant les
 blancs, toutes les sections du vérificateur présentes). À remettre en LF,

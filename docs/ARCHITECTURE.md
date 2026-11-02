@@ -56,7 +56,7 @@ la cartographie fine du pipeline géométrique dans `docs/PIPELINE-MAP.md`.
 | **file-processing** | upload → copie canonique mm (`validDxf`) → `polygonParts` (shapely) + SVG aperçu ; détecte DXF/SVG/DWG par magic bytes ; signature → reroute `1k_entity_count` |
 | **nesting** | orchestrateur Python → moteur Rust **nest-engine** (natif) → DXF/SVG résultats, alternatives, rapport matière, vue live (frames en Mongo `liveLayout`, lues par l'app en SSE) |
 
-> **Retiré le 2026-09-13** (lot S, `docs/PLAN-RETRAIT-STRIP-2026-09-13.md`) :
+> **Retiré le 2026-09-13** (lot S, `docs/archive/2026-09-reprise-lots-clos/PLAN-RETRAIT-STRIP-2026-09-13.md`) :
 > les deux workers `strip-file-processing` / `strip-nesting` (variante
 > « bande » sur spyrrow, images préconstruites sans source dans ce dépôt) ne
 > tournent plus et leurs routes, pages et domaine serveur sont supprimés. Les
