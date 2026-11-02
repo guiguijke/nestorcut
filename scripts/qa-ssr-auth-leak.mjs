@@ -20,10 +20,16 @@
  * Comptes : --register crée deux comptes jetables (base JETABLE uniquement,
  * jamais la base QA partagée) ; sinon SSR_PROBE_USERS="mail:mdp,mail:mdp" ;
  * à défaut, le compte de dev (AGENTS.md §4) seul — la variante concurrente
- * est alors sautée.
+ * est alors sautée (sortie 3, jamais « vert »). <html data-vault-active> est
+ * comparé à l'état du coffre de chaque compte : pour le couvrir vraiment, un
+ * des deux comptes doit avoir un coffre déverrouillé.
+ *
+ * Cible : UN process Nitro (un conteneur). Derrière plusieurs workers, deux
+ * requêtes peuvent ne jamais partager de process — un vert n'y prouve rien.
  *
  * Usage : node scripts/qa-ssr-auth-leak.mjs [baseUrl] [--register] [--rounds N]
- * Sortie : 0 = aucune fuite, 1 = fuite constatée, 2 = sonde invalide.
+ * Sortie : 0 = aucune fuite, 1 = fuite constatée, 2 = sonde invalide,
+ * 3 = partiel (un seul compte).
  */
 
 const args = process.argv.slice(2)
@@ -60,7 +66,8 @@ async function whoAmI(label, cookie) {
     const res = await fetch(`${BASE}/api/user`, { headers: { cookie } })
     const user = await res.json()
     if (!user?.id || !user?.name) throw new ProbeError(`${label} : /api/user sans utilisateur (${res.status})`)
-    return { label, cookie, name: user.name, email: user.email }
+    const vault = Boolean(user.encryption?.enabled && !user.encryption?.locked)
+    return { label, cookie, name: user.name, email: user.email, vault }
 }
 
 async function accounts() {
@@ -95,25 +102,37 @@ async function render(path, user) {
 
 // Ce qu'un rendu laisse voir des utilisateurs : <img class="avatar__img">
 // (MainHeader → Avatar.vue), nom / e-mail n'importe où dans le HTML (alt de
-// l'avatar, payload), CTA connecté de /plans.
+// l'avatar, payload), CTA connecté de /plans, et <html data-vault-active>
+// (layout auth : en-tête résolu APRÈS le rendu, hors contexte Nuxt).
 function inspect(html, users) {
+    const avatars = html.match(/<img[^>]*class="[^"]*\bavatar__img\b[^>]*>/g) || []
     return {
-        avatars: (html.match(/<img[^>]*class="[^"]*\bavatar__img\b/g) || []).length,
+        avatars: avatars.length,
+        alts: [...new Set(avatars.map((tag) => tag.match(/\balt="([^"]*)"/)?.[1] ?? ''))],
         manage: html.split('Manage in profile').length - 1,
+        vault: /<html[^>]*\bdata-vault-active="true"/.test(html),
         seen: users.filter((u) => html.includes(u.name) || (u.email && html.includes(u.email))).map((u) => u.label),
     }
 }
 
-const fmt = (s) => `avatar=${s.avatars} manage=${s.manage} users=[${s.seen.join(',')}]`
+const fmt = (s) =>
+    `avatar=${s.avatars}${s.avatars ? `(alt=${s.alts.join('|')})` : ''} manage=${s.manage} vault=${s.vault ? 1 : 0} users=[${s.seen.join(',')}]`
 
 async function sequential(users) {
     const [a] = users
     let leaks = 0
     for (const page of PUBLIC_PAGES) {
+        // Témoin : la page connecté A. Sans avatar, le détecteur ne voit pas
+        // un rendu connecté (sonde invalide) ; avec l'avatar d'un AUTRE que
+        // A, c'est déjà la fuite.
         const witness = await render(page, a)
         const w = inspect(witness.html, users)
-        if (witness.status !== 200 || !w.avatars || !w.seen.includes('A')) {
+        if (witness.status !== 200 || !w.avatars) {
             throw new ProbeError(`témoin ${page} connecté A : ${witness.status} ${fmt(w)} — le détecteur ne voit pas un rendu connecté`)
+        }
+        if (w.alts.some((alt) => alt !== a.name)) {
+            leaks++
+            console.log(`[seq] ${page.padEnd(11)} témoin connecté A      : ${witness.status} ${fmt(w)} → FUITE (avatar d'un autre)`)
         }
         const primed = await render('/home', a)
         if (primed.status !== 200 || !inspect(primed.html, users).seen.includes('A')) {
@@ -147,9 +166,11 @@ async function concurrent(users) {
             row.renders++
             const s = inspect(html, users)
             const others = s.seen.filter((l) => l !== job.user?.label)
+            const vaultWrong = PROTECTED_PAGES.includes(job.page) ? s.vault !== Boolean(job.user?.vault) : s.vault
+            const foreignAvatar = job.user && s.alts.some((alt) => alt !== job.user.name)
             const bad = job.user
-                ? status !== 200 || others.length > 0 || !s.seen.includes(job.user.label)
-                : status !== 200 || s.avatars > 0 || s.manage > 0 || s.seen.length > 0
+                ? status !== 200 || others.length > 0 || foreignAvatar || !s.seen.includes(job.user.label) || vaultWrong
+                : status !== 200 || s.avatars > 0 || s.manage > 0 || s.seen.length > 0 || vaultWrong
             if (bad) {
                 row.bad++
                 leaks++
@@ -165,20 +186,27 @@ async function concurrent(users) {
 }
 
 async function main() {
+    if (!Number.isInteger(ROUNDS) || ROUNDS < 1) throw new ProbeError(`--rounds ${option('--rounds')} : entier ≥ 1 attendu`)
     console.log(`Sonde fuite d'auth SSR — ${BASE}`)
     const users = await accounts()
-    for (const u of users) console.log(`  utilisateur ${u.label} : ${u.name}`)
+    for (const u of users) console.log(`  utilisateur ${u.label} : ${u.name}${u.vault ? ' (coffre déverrouillé)' : ''}`)
+    if (!users.some((u) => u.vault)) console.log('  data-vault-active : contrôle d\'absence seulement (aucun coffre déverrouillé)')
 
     const seqLeaks = await sequential(users)
     let concLeaks = 0
-    if (users.length < 2) {
-        console.log('[conc] sautée : un seul compte (--register ou SSR_PROBE_USERS pour deux)')
+    const partial = users.length < 2
+    if (partial) {
+        console.log('[conc] SAUTÉE : un seul compte (--register ou SSR_PROBE_USERS pour deux)')
     } else {
         concLeaks = await concurrent(users)
     }
     const total = seqLeaks + concLeaks
-    console.log(total ? `ROUGE : ${seqLeaks} fuite(s) séquentielle(s), ${concLeaks} rendu(s) concurrent(s) faux` : 'VERT : aucune fuite')
-    process.exit(total ? 1 : 0)
+    if (total) {
+        console.log(`ROUGE : ${seqLeaks} fuite(s) séquentielle(s), ${concLeaks} rendu(s) concurrent(s) faux`)
+        process.exit(1)
+    }
+    console.log(partial ? 'PARTIEL : aucune fuite séquentielle, concurrence NON testée' : 'VERT : aucune fuite')
+    process.exit(partial ? 3 : 0)
 }
 
 main().catch((err) => {

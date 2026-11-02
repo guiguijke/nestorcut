@@ -18,10 +18,12 @@ const serverStates = new WeakMap()
 
 function authState() {
     if (import.meta.client) return clientState
+    // Server reads belong in middleware, setup or render. Outside of those
+    // (after an await in a plain function, head resolution after render —
+    // see layouts/auth.vue) unctx may still hold ANOTHER request's nuxtApp
+    // (asyncContext is off): capture the value during setup instead.
     const nuxtApp = tryUseNuxtApp()
-    // No Nuxt context (module scope, after an await in a plain function):
-    // there is no way to tell which request this is — read as anonymous,
-    // never as someone else.
+    // No Nuxt context at all: read as anonymous.
     if (!nuxtApp) return reactive(emptyState())
     let state = serverStates.get(nuxtApp)
     if (!state) {

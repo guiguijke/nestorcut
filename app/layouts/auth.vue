@@ -74,9 +74,13 @@ const vaultActive = computed(() => {
     const encryption = unref(authGetters.user)?.encryption;
     return Boolean(encryption?.enabled && !encryption?.locked);
 });
+// On the server the head is resolved AFTER render (renderSSRHead), outside
+// any Nuxt context: authStore would read no request's state there, or
+// another one's. Freeze the value now, during this request's setup.
+const vaultActiveAttr = computed(() => (vaultActive.value ? 'true' : null));
 useHead({
     htmlAttrs: {
-        'data-vault-active': computed(() => (vaultActive.value ? 'true' : null)),
+        'data-vault-active': import.meta.server ? vaultActiveAttr.value : vaultActiveAttr,
     },
 });
 const projectsIsOpen = ref(false);
