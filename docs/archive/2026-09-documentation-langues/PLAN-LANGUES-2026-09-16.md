@@ -1,11 +1,9 @@
 # Plan — quatre langues de plus : portugais, italien, allemand, espagnol (16/09)
 
 Décision du propriétaire (16/09) : ajouter **l'italien, l'allemand, le
-portugais et l'espagnol** ; le polonais est écarté. Les mesures qui ont nourri
-la discussion : inscrits par pays (France 18, Inde 9, États-Unis 8, puis
-Pologne, Turquie, Égypte, Azerbaïdjan, Brésil à 4), Search Console (Brésil
-4 clics / 10 apparitions, Italie 3 / 52, Espagne 2 / 47, Allemagne 1 / 51),
-sessions (Brésil 54 % d'engagement, Allemagne 0 %). Le Brésil converge
+portugais et l'espagnol** ; le polonais est écarté. La décision s'appuie sur
+les inscrits par pays, la Search Console et l'engagement des sessions
+(chiffres conservés hors du dépôt public, dans `specs/`) : le Brésil converge
 partout ; Italie, Allemagne et Espagne ont la visibilité Google sans la
 conversion — la langue est le levier de conversion, pas de visibilité.
 

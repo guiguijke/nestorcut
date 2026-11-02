@@ -92,8 +92,8 @@ ces outils.
   la cible 40/40 d'AGENTS date d'une autre grille ; à re-cibler au lot
   5-moteur.
 - **Colonne navigateur de /benchmarks** (0,5 j) : non faite.
-- **Business** : chiffres du 28/08 (43 inscrits, 0 payant, rétention 7 %)
-  jamais re-mesurés ; **webhook Stripe live : statut inconnu du
+- **Business** : chiffres d'audience tenus hors du dépôt public
+  (`specs/ROADMAP-V1-2026-11.md`, privé) ; **webhook Stripe live : statut inconnu du
   vérificateur** ; jalon utilisateurs (5 entretiens + campagne) non
   démarré — l'ordre T3-T5 reste une hypothèse.
 
@@ -321,7 +321,7 @@ utilisateurs prime.
 |---|---|---|
 | Arbitrages techniques du lot 4 et du plan UI | — | **Délégués au vérificateur** (propriétaire, 07/09) : il tranche et informe |
 | Webhook Stripe live | — | **Confirmé fonctionnel par le propriétaire le 10/09** ; reste à voir passer un premier paiement réel |
-| Infra homelab | Il y a DEUX WireGuard : (1) le VPN personnel du propriétaire vers l'interface admin (LXC maison, pair `10.8.0.3`) — pas concerné ; (2) le conteneur `linuxserver/wireguard` du dossier `/containers/nestorcut-overflow` du homelab (pair `10.8.0.6`), qui relie les trois workers de débordement au Mongo de Hetzner. Le `pull` du 08/09 a téléchargé une nouvelle image de (2) sans recréer le conteneur : le recréer = quelques secondes de coupure pour les workers, rien pour l'admin. Split workers reporté | Ouverte (op à froid, feu vert owner à donner) |
+| Infra homelab | Il y a DEUX WireGuard : (1) le VPN personnel du propriétaire vers l'interface admin (LXC maison) — pas concerné ; (2) le conteneur `linuxserver/wireguard` du dossier `/containers/nestorcut-overflow` du homelab (adresses dans le runbook privé `specs/infra/`), qui relie les trois workers de débordement au Mongo de Hetzner. Le `pull` du 08/09 a téléchargé une nouvelle image de (2) sans recréer le conteneur : le recréer = quelques secondes de coupure pour les workers, rien pour l'admin. Split workers reporté | Ouverte (op à froid, feu vert owner à donner) |
 | **Verrou job T-A** (phase B) | Essai plancher P3 20 **manqué** (chute compaction 0,1 : 606,5 contre 520,7 ; temps inchangé) → plancher 30 gardé, **verrou écrit ≤ 16 s** | **Clos 07/09** (vérificateur, arbitrage délégué) |
 | **Lot C1 inscription** (vérification visible, doublon admin, newsletter 90 j) | Décisions D1-D8 du plan (mécanisme inchangé ; carte, jamais modale répétée ; 90 j ; `adminNotifiedAt`) | **Tranché 07/09** (vérificateur, arbitrage délégué) — à implémenter après U1 passe 2 |
 | **Licence du dépôt public** (`docs/archive/2026-09-reprise-lots-clos/AUDIT-LICENCE-DEPOT-2026-09-07.md`) | Option A + dépôt neuf à historique unique, ancien dépôt privé archivé | **Clos 08/09** ; relecture juridique : le propriétaire fait confiance au montage (10/09), aucune relecture externe engagée — l'objectif est de protéger le travail, la licence non commerciale + les secrets hors dépôt public le font |
