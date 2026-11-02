@@ -306,7 +306,7 @@ export default defineEventHandler(async (event) => {
                       height: params.height,
                       width: params.width,
                       space: params.space,
-                      sheetCount: params.sheetCount,
+                      sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
@@ -346,7 +346,7 @@ export default defineEventHandler(async (event) => {
                       height: params.height,
                       width: params.width,
                       space: params.space,
-                      sheetCount: params.sheetCount,
+                      sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
@@ -372,7 +372,7 @@ export default defineEventHandler(async (event) => {
                       height: params.height,
                       width: params.width,
                       space: params.space,
-                      sheetCount: params.sheetCount,
+                      sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }

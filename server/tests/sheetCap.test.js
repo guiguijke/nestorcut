@@ -3,7 +3,8 @@ import { Readable } from 'node:stream'
 import './helpers/h3Shims'
 
 // The mocked db is swapped per test through this hoisted state.
-const state = vi.hoisted(() => ({ db: null, enqueued: [] }))
+const state = vi.hoisted(() => ({ db: null, enqueued: [], config: { public: {} } }))
+globalThis.useRuntimeConfig = () => state.config
 
 vi.mock('~~/server/db/mongo', () => ({
     connectDB: async () => state.db,
@@ -70,6 +71,7 @@ const freeUser = (overrides = {}) => ({
 beforeEach(() => {
     state.db = null
     state.enqueued = []
+    state.config = { public: {} }
 })
 
 // Démo : projet partagé, quota démo dédié (J-056).
@@ -139,6 +141,7 @@ describe('POST /api/project/[slug]/nest — plus de plafond Free (O1), borne tec
         }
         await nestHandler(ev('u1', 'p1', body))
         expect(state.enqueued).toHaveLength(1)
+        expect(state.enqueued[0].params.sheetCount).toBe(3)
         expect(userDoc.freeNestingUsed).toBe(1)
     })
 
@@ -182,6 +185,48 @@ describe('POST /api/project/[slug]/nest — plus de plafond Free (O1), borne tec
         })
         expect(state.enqueued).toHaveLength(0)
         expect(userDoc.freeNestingUsed).toBe(0)
+    })
+
+    // Le serveur contrôle la valeur normalisée (Number('5_000') -> NaN -> 1) :
+    // il doit ENREGISTRER cette valeur, pas la chaîne brute que Python
+    // int('5_000') / int('٥٠٠٠') lirait comme 5000 tôles côté worker.
+    describe.each(['5_000', '٥٠٠٠'])('ancien format, sheetCount en chaîne %s', (raw) => {
+        const legacyBody = (files) => ({
+            files,
+            params: { width: 3000, height: 1500, sheetCount: raw, space: 2 },
+        })
+
+        it('Free, projet cloud -> enregistre la valeur contrôlée (entier 1), pas la chaîne', async () => {
+            const userDoc = freeUser()
+            state.db = baseDb([userDoc])
+            await nestHandler(ev('u1', 'p1', legacyBody([{ slug: 'f1', count: 10 }])))
+            expect(state.enqueued).toHaveLength(1)
+            expect(state.enqueued[0].params.sheetCount).toBe(1)
+            expect(userDoc.freeNestingUsed).toBe(1)
+        })
+
+        it('démo -> enregistre la valeur contrôlée (entier 1), pas la chaîne', async () => {
+            const userDoc = freeUser({ demoNestingUsed: 0, demoNestingPeriod: currentPeriod() })
+            state.db = demoDb(userDoc)
+            await nestHandler(ev('u1', 'demo', legacyBody([{ slug: 'f1', count: 10 }])))
+            expect(state.enqueued).toHaveLength(1)
+            expect(state.enqueued[0].params.sheetCount).toBe(1)
+            expect(userDoc.demoNestingUsed).toBe(1)
+        })
+
+        it('projet local -> enregistre la valeur contrôlée (entier 1), pas la chaîne', async () => {
+            state.config = { public: { localComputeEnabled: true, localImportEnabled: true } }
+            const userDoc = freeUser()
+            state.db = fakeDb({
+                users: [userDoc],
+                projects: [{ slug: 'p1', ownerId: 'u1', local: true }],
+                user_dxf_files: [],
+            })
+            await nestHandler(ev('u1', 'p1', legacyBody([{ slug: 'f-aabbccddeeff.dxf', count: 4 }])))
+            expect(state.enqueued).toHaveLength(1)
+            expect(state.enqueued[0].params.sheetCount).toBe(1)
+            expect(userDoc.freeNestingUsed).toBe(1)
+        })
     })
 
     it('standard, 5 tôles -> job créé, palier standard (inchangé)', async () => {
