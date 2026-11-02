@@ -4,6 +4,8 @@ import { processingType } from '~~/constants/files.constants'
 import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
 import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
+import { exceedsMaxSheets } from '~/utils/capacityPanel'
+import { flagOn } from '~/utils/runtimeFlag'
 import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 
 const { actions } = globalStore
@@ -137,10 +139,6 @@ const state = reactive({
     // Set when a demo nesting hits the monthly demo quota — shown on the
     // project page instead of the paywall (demo 402s are reason=demo_quota).
     demoQuotaReached: false,
-    // Set when the server-side free sheet cap actually fired (403
-    // sheet_cap_exceeded) — defense-in-depth: the project page mirror
-    // normally disables the launch before this can happen.
-    sheetCapError: false,
     // R-2 (audit 2026-08-31 §R-1) : clé i18n de la dernière erreur de
     // soumission non gérée ailleurs (409 concurrent_limit, 5xx…) — avant,
     // l'erreur était avalée ET lastParams marqué → bouton grisé muet.
@@ -1120,7 +1118,6 @@ async function nest(slug) {
             state.nestError = ''
             state.nestUnfit = null
             state.demoQuotaReached = false
-            state.sheetCapError = false
             const data = await $fetch(API_ROUTES.NEST(slug), {
                 method: 'POST',
                 headers: {
@@ -1140,9 +1137,11 @@ async function nest(slug) {
                 state.nestUnfit = error?.data?.data?.unfit || null
                 return
             }
-            if (error?.data?.statusMessage === 'sheet_cap_exceeded') {
-                // Server-side free sheet cap fired (client mirror bypassed).
-                state.sheetCapError = true
+            if (error?.data?.statusMessage === 'too_many_sheets') {
+                // d6 (02/11) : borne technique serveur (400, avant toute
+                // charge) — le miroir client (sheetCountTooHigh) grise Nest
+                // d'ordinaire avant ; ici le client a été contourné.
+                state.nestError = 'nest.error.maxSheets'
                 return
             }
             if (error?.response?.status === 402) {
@@ -1154,8 +1153,11 @@ async function nest(slug) {
                 }
                 // Skip the paywall dialog when paid plans are temporarily
                 // disabled — it would only offer a "Coming soon" CTA.
-                const paidDisabled = useRuntimeConfig().public.paidPlansDisabled === true
+                // AGENTS #29 : l'override runtime arrive en CHAÎNE ('true').
+                const paidDisabled = flagOn(useRuntimeConfig().public.paidPlansDisabled)
                 if (!paidDisabled) {
+                    // D13 : la fenêtre sait pourquoi elle s'ouvre (quota épuisé).
+                    useBuyCreditsContext().value = { source: 'quota' }
                     const buyCreditsDialog = useBuyCreditsDialog();
                     buyCreditsDialog.value = true;
                 }
@@ -1222,7 +1224,8 @@ export const filesStore = readonly({
         ),
         isNewParams: computed(() => state.requestBody !== state.lastParams),
         demoQuotaReached: computed(() => state.demoQuotaReached),
-        sheetCapError: computed(() => state.sheetCapError),
+        // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
+        sheetCountTooHigh: computed(() => exceedsMaxSheets(normalizedSheets(state.params))),
         nestError: computed(() => state.nestError),
         nestUnfit: computed(() => state.nestUnfit),
         nestBusy: computed(() => state.nestBusy),

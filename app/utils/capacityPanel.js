@@ -1,3 +1,5 @@
+import { MAX_SHEETS_PER_JOB } from '~~/shared/constants/payment.constants'
+
 /**
  * Z1 (vérif 2026-09-05) : modèle du bandeau « refus capacité » de la page
  * projet — les trois leviers chiffrés du pré-contrôle (tôles nécessaires,
@@ -10,6 +12,56 @@
  * solution partielle (reason 'partial').
  */
 
+const finiteOrNull = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null)
+
+/**
+ * Σ des `count` > 0 (entiers tronqués) — même règle que le serveur
+ * (nest.post.js : `Math.floor(count)`, puis `count >= 1`) et que le « premier
+ * format actif » de addSheetsPlan. PAS la règle `Number(c) || 1` de
+ * capacityClient.js, qui compte un format sans quantité pour une tôle.
+ * @param {Array<{count?: any}>} sheets
+ * @returns {number}
+ */
+export function declaredSheetCount(sheets) {
+    if (!Array.isArray(sheets)) return 0
+    return sheets.reduce((sum, s) => sum + Math.max(0, Math.trunc(Number(s?.count) || 0)), 0)
+}
+
+/**
+ * d6 : miroir UX de la borne technique serveur (400 `too_many_sheets`) —
+ * grise Nest avant le POST. L'autorité reste le serveur.
+ */
+export function exceedsMaxSheets(sheets, max = MAX_SHEETS_PER_JOB) {
+    return declaredSheetCount(sheets) > max
+}
+
+/**
+ * d7 : « Ajouter environ k tôles et relancer ».
+ * k = max(1, ceil(sheetsNeeded) − déclaré) ; sans `sheetsNeeded` fini > 0
+ * (cas `strip`, refus partiel), k = 1. Le ceil porte sur une ESTIMATION
+ * (ratio d'aire ; plusieurs formats = approximation) d'où « environ ».
+ * @param {object|null} unfit payload de refus ({sheetsNeeded?, …})
+ * @param {Array<{count?: any}>} sheets réglages courants (chaînes d'unité d'affichage)
+ * @param {number} [max] borne technique
+ * @returns {{ k: number, nextSheets: object[] } | null}
+ *   null si aucun format actif (rien à incrémenter) ou si déclaré + k > max.
+ *   nextSheets = sheets avec le count du PREMIER format actif augmenté de k,
+ *   en CHAÎNE (les champs de réglage sont des chaînes) ; les autres inchangés.
+ */
+export function addSheetsPlan(unfit, sheets = [], max = MAX_SHEETS_PER_JOB) {
+    if (!Array.isArray(sheets)) return null
+    const firstIdx = sheets.findIndex((s) => Math.trunc(Number(s?.count) || 0) > 0)
+    if (firstIdx < 0) return null
+    const declared = declaredSheetCount(sheets)
+    const needed = finiteOrNull(unfit?.sheetsNeeded)
+    const k = needed != null && needed > 0 ? Math.max(1, Math.ceil(needed) - declared) : 1
+    if (declared + k > max) return null
+    const nextSheets = sheets.map((s, i) => (i === firstIdx
+        ? { ...s, count: String(Math.trunc(Number(s.count) || 0) + k) }
+        : s))
+    return { k, nextSheets }
+}
+
 /**
  * @param {object|null} unfit {reason, ratio?, sheetsNeeded?,
  *   maxPartsAtSpacing?, maxSpacingForFitMm?, unplaced?}
@@ -19,7 +71,7 @@
  */
 export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm = null } = {}) {
     if (!unfit || !unfit.reason) return null
-    const num = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null)
+    const num = finiteOrNull
     const sheetsNeeded = num(unfit.sheetsNeeded)
     const maxParts = num(unfit.maxPartsAtSpacing)
     const maxSpacingMm = num(unfit.maxSpacingForFitMm)
@@ -27,15 +79,10 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
         && num(unfit.unplaced) == null) {
         return null
     }
-    // « Ajouter une tôle » : count+1 sur le premier format actif — les
-    // leviers disent « ≈ N tôles », un clic ajoute une tôle, l'utilisateur
-    // itère visuellement (même action que le bandeau unfit du modal).
-    const firstIdx = sheets.findIndex((s) => (Number(s?.count) || 0) > 0)
-    const nextSheets = firstIdx >= 0
-        ? sheets.map((s, i) => (i === firstIdx
-            ? { ...s, count: String((Number(s.count) || 0) + 1) }
-            : s))
-        : null
+    // « Ajouter environ k tôles et relancer » (d7) : k tôles d'un coup sur le
+    // premier format actif — les leviers disent « environ N tôles », le
+    // bouton ajoute l'écart estimé (au moins une) et l'utilisateur relance.
+    const plan = addSheetsPlan(unfit, sheets)
     // « Réduire l'espacement » (C04) : utile seulement si le levier existe
     // ET abaisse réellement l'espacement courant (un maxSpacing ≥ space
     // n'est pas une action) ET qu'il reste quelque chose à gagner —
@@ -53,7 +100,8 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
         reason: unfit.reason,
         unplaced: num(unfit.unplaced),
         levers: { sheetsNeeded, maxParts, maxSpacingMm },
-        nextSheets,
+        nextSheets: plan?.nextSheets ?? null,
+        addSheets: plan?.k ?? null,
         reduceSpacingToMm: canReduceSpacing ? maxSpacingMm : null,
         // C04 : espacement courant déjà au plancher (≤ 0,5 mm) ou kerf
         // bloquant — la page affiche « même sans espacement, ça ne tient

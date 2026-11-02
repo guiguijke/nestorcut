@@ -106,10 +106,16 @@
                     </template>
                 </MainButton>
                 <p v-if="ctaHint" class="atelier__cta-hint">{{ ctaHint }}</p>
+                <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
+                     les premières tôles seulement ; le dire avant le calcul. -->
+                <p v-if="ctaFreeNote" class="atelier__cta-hint" data-testid="free-download-note">
+                    {{ ctaFreeNote }}
+                </p>
                 </div>
                 <div v-if="capacityPanel" ref="capacityPanelEl">
                 <CapacityPanel
                     :panel="capacityPanel"
+                    :free-note="capacityFreeNote"
                     @add-sheet="onCapacityAddSheet"
                     @reduce-spacing="onCapacityReduceSpacing"
                     @retry="startsNest"
@@ -145,16 +151,15 @@
             {{ t(nestRequestError) }}
         </div>
         <div v-if="nestSubmitError" class="content__error">
-            {{ t(nestSubmitError) }}
+            {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
         <div v-if="localImportError" class="content__error">
             {{ localImportErrorText }}
         </div>
-        <div v-if="sheetCapExceeded" class="content__error">
-            {{ t('nest.sheetCapHint') }}
-        </div>
-        <div v-else-if="sheetCapServerError" class="content__error">
-            {{ t('nest.error.sheetCap') }}
+        <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
+             paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
+        <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
+            {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
         <div v-if="!sizesIsAvailable && !nestRequestError" class="content__error">
             {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
@@ -174,6 +179,9 @@ import { themeType } from "~~/constants/theme.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { capacityPanelModel } from "~/utils/capacityPanel";
+import { hasPaidAccess } from "~/utils/entitlementUi";
+import { freeDownloadNoteVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
+import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB } from "~~/shared/constants/payment.constants";
 import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
 import { isLocalComputeEnabled } from "~/composables/localCompute";
 import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
@@ -829,46 +837,100 @@ watch(capacityPanel, (v) => {
         capacityPanelEl.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     });
 });
-const onCapacityAddSheet = () => {
-    const next = unref(capacityPanel)?.nextSheets;
+// D26 / d1 : palier COURANT pour l'information « Free : les 2 premières
+// tôles ». `useNuxtData('user')` (cache réactif, AGENTS #30) prime sur le store
+// auth, qui ne bouge qu'à setUser() : une souscription confirmée ailleurs
+// (refreshNuxtData) retire l'information sans recharger. K et démo passent
+// AVANT l'utilisateur (sheetDownloadState) — le contexte est explicite.
+const config = useRuntimeConfig();
+const { data: userData } = useNuxtData('user');
+const downloadUser = computed(() => unref(userData) || unref(user));
+const downloadState = computed(() => sheetDownloadState(unref(downloadUser), {
+    paidPlansDisabled: config.public.paidPlansDisabled,
+    projectSlug: unref(pageSlug),
+}));
+const freeDownloadNoteText = computed(() =>
+    t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP }));
+// Sous le bouton Nest : pré-vol (tôles nécessaires estimées avant le calcul).
+const ctaFreeNote = computed(() =>
+    freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
+        ? unref(freeDownloadNoteText) : '');
+// Dans le panneau de capacité : levier « environ N tôles nécessaires ».
+const capacityFreeNote = computed(() =>
+    freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
+        ? unref(freeDownloadNoteText) : '');
+// D11 : « Ajouter environ k tôles et relancer » — ajoute k au premier format
+// actif (le plan est calculé par capacityPanelModel), ferme le panneau, trace
+// le clic, puis RELANCE : le bouton Nest respecte ses gardes (btnIsDisable).
+const onCapacityAddSheet = async () => {
+    const panel = unref(capacityPanel);
+    const next = panel?.nextSheets;
     if (!next) return;
+    trackEvent('capacity_add_sheets_click', {
+        surface: 'project',
+        k: String(panel.addSheets ?? 1),
+        plan: hasPaidAccess(unref(downloadUser)) ? 'paid' : 'free',
+    });
     actions.updateParams({ sheets: next });
     localComputeError.value = null;
     actions.dismissNestUnfit();
+    // Laisser le temps aux calculs dérivés (isNewParams, pré-vol) de voir les
+    // nouveaux réglages avant de relancer.
+    await nextTick();
+    startsNest();
 };
-const onCapacityReduceSpacing = () => {
-    const mm = unref(capacityPanel)?.reduceSpacingToMm;
-    if (mm == null) return;
+// Réduction de l'espacement (logique inchangée) : rend true si les réglages
+// ont été modifiés. Appelée par le bouton du panneau de la page ET par la
+// demande posée depuis la fenêtre de résultat (useCapacityActionRequest).
+const applyReduceSpacing = (mm) => {
+    if (mm == null || !Number.isFinite(Number(mm))) return false;
     const p = unref(params);
     // B.4 : le levier réduit la SÉCURITÉ — le kerf décrit l'outil physique,
     // on n'y touche pas. Effectif cible = kerf + 2 × nouvelle sécurité ;
     // si la cible ne permet même pas le kerf, le levier est masqué en
     // amont (capacityPanel), on ne fait rien ici.
     const kerfMm = displayToMm(Number(String(p.kerf ?? '0').replace(',', '.')) || 0);
-    if (mm <= kerfMm) return;
+    if (mm <= kerfMm) return false;
     const disp = mmToDisplay((mm - kerfMm) / 2, unit.value);
     actions.updateKerfSafety({
         safety: unit.value === 'inch' ? String(Math.round(disp * 10000) / 10000) : String(disp),
     });
+    return true;
+};
+const onCapacityReduceSpacing = () => {
+    if (!applyReduceSpacing(unref(capacityPanel)?.reduceSpacingToMm)) return;
     localComputeError.value = null;
     actions.dismissNestUnfit();
 };
-// Sheet cap mirror (D-PAY-9): the Free plan is capped at 2 sheets TOTAL per
-// job (sum of counts over every format). The SERVER enforces the cap at
-// enqueue (403 sheet_cap_exceeded, before any quota is consumed) — this is
-// only the UX mirror so a free user gets a hint instead of a surprise 403.
-// The demo is exempt (dedicated quota, J-056).
-const sheetCapExceeded = computed(() => {
-    if (unref(isDemo)) return false
-    const level = unref(user)?.compute?.level
-    if (level !== 'free') return false
-    const total = unref(currentSheets).reduce((sum, sheet) => sum + (Number(sheet.count) || 0), 0)
-    return total > 2
-})
-// Server-side defense actually fired (client mirror bypassed) — from the store.
-const sheetCapServerError = computed(() => filesGetters.sheetCapError)
+// D11 : la fenêtre de résultat (UserResults) n'écrit AUCUN réglage — elle pose
+// une demande, que seule la page du projet du job applique avec SES fonctions
+// (ajout + relance ; réduction par updateKerfSafety, sans relance — comme les
+// boutons du panneau de la page). [slug].vue est réutilisé entre projets
+// (#47) : une demande pour un autre projet est laissée telle quelle.
+const capacityActionRequest = useCapacityActionRequest();
+watch(capacityActionRequest, async (req) => {
+    if (!req || req.projectSlug !== unref(pageSlug)) return;
+    capacityActionRequest.value = null;
+    if (req.action === 'add_sheets') {
+        if (!Array.isArray(req.nextSheets)) return;
+        actions.updateParams({ sheets: req.nextSheets });
+        localComputeError.value = null;
+        actions.dismissNestUnfit();
+        await nextTick();
+        startsNest();
+    } else if (req.action === 'reduce_spacing') {
+        if (!applyReduceSpacing(Number(req.mm))) return;
+        localComputeError.value = null;
+        actions.dismissNestUnfit();
+    }
+});
+// d6 (02/11) : le plafond Free de 2 tôles par job n'existe plus (O1) ; reste
+// la borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), la même pour tous les
+// paliers, démo comprise. Le SERVEUR la refuse à l'enqueue (400
+// too_many_sheets, avant toute charge) — ceci n'est que le miroir UX.
+const sheetCountTooHigh = computed(() => filesGetters.sheetCountTooHigh)
 const btnIsDisable = computed(() => {
-    return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(sheetCapExceeded) || unref(nestBusy)
+    return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(sheetCountTooHigh) || unref(nestBusy)
 })
 const addFiles = (files) => {
     actions.addFiles(files, unref(slug))

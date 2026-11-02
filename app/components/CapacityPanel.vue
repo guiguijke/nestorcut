@@ -24,17 +24,35 @@
         <p v-if="panel.noSpacingGain" class="capacity-panel__floor">
             {{ t('nest.capacity.noSpacingGain') }}
         </p>
+        <!-- D26 : information, SANS bouton — un compte Free télécharge les
+             premières tôles seulement ; le dire avant de relancer un calcul
+             qui en produira beaucoup. Texte déjà traduit par l'appelant. -->
+        <p v-if="freeNote" class="capacity-panel__note" data-testid="capacity-free-note">
+            {{ freeNote }}
+        </p>
         <div class="capacity-panel__actions">
+            <!-- D12 : hors du projet du job, ajouter des tôles ou réduire
+                 l'espacement agirait sur les réglages d'un AUTRE projet —
+                 un seul bouton, qui mène au projet. -->
             <MainButton
-                v-if="panel.nextSheets"
-                :label="t('report.unfit.addSheet')"
+                v-if="openProject"
+                :label="t('report.unfit.openProject')"
+                :size="sizeType.s"
+                :theme="themeType.primary"
+                data-testid="capacity-open-project"
+                @click="$emit('open-project')"
+            />
+            <MainButton
+                v-if="!openProject && panel.nextSheets"
+                :label="tp('report.unfit.addSheets', panel.addSheets ?? 1)"
+                :data-add-sheets="panel.addSheets ?? 1"
                 :size="sizeType.s"
                 :theme="themeType.primary"
                 data-testid="capacity-add-sheet"
                 @click="$emit('add-sheet')"
             />
             <MainButton
-                v-if="panel.reduceSpacingToMm != null"
+                v-if="!openProject && panel.reduceSpacingToMm != null"
                 :label="t('report.unfit.reduceSpacing', { v: panel.reduceSpacingToMm })"
                 :size="sizeType.s"
                 :theme="themeType.secondary"
@@ -67,9 +85,15 @@ defineProps({
     title: { type: String, default: '' },
     detail: { type: String, default: '' },
     showRetry: { type: Boolean, default: true },
+    // D12 : hors de la page du projet du job (fenêtre de résultat ouverte
+    // depuis /home ou un autre projet), le panneau ne propose qu'« Ouvrir le
+    // projet » — pas d'ajout de tôles ni de réduction d'espacement.
+    openProject: { type: Boolean, default: false },
+    // D26 : texte d'information déjà traduit (vide = rien d'affiché).
+    freeNote: { type: String, default: '' },
 })
-defineEmits(['add-sheet', 'reduce-spacing', 'retry'])
-const { t } = useLocale()
+defineEmits(['add-sheet', 'reduce-spacing', 'retry', 'open-project'])
+const { t, tp } = useLocale()
 </script>
 
 <style lang="scss" scoped>
@@ -114,6 +138,15 @@ const { t } = useLocale()
         line-height: 1.5;
         color: var(--label-secondary);
         font-style: italic;
+    }
+
+    /* D26 : information Free (téléchargement des premières tôles) — sans
+       bouton, lisible comme une note et non comme une erreur. */
+    &__note {
+        margin: 10px 0 0;
+        font-size: var(--fs-13);
+        line-height: 1.5;
+        color: var(--label-secondary);
     }
 
     &__actions {

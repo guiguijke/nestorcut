@@ -300,16 +300,54 @@ try {
             .screenshot({ path: path.join(OUT, 'u3-refus.png') })
             .then(() => log('screenshot: u3-refus.png'))
             .catch((e) => log('u3-refus FAILED (non fatal):', String(e).slice(0, 120)))
-        // Le clic « Ajouter une tôle » incrémente le compte du 1er format
-        // et fait disparaître le bandeau (le refus devient re-essayable).
+        // d7 : « Ajouter environ k tôles et relancer » — ajoute k (lu sur
+        // `data-add-sheets`, plus +1), ferme le bandeau ET RELANCE le calcul ;
+        // le harnais observe le POST /nest de la relance, puis ANNULE cette
+        // relance (live-cancel) : sans cela le job relancé reste
+        // awaiting_local/processing et la configuration suivante prend un 409
+        // concurrent_limit (palier standard : 1 job à la fois).
+        const addBtn = page.locator('[data-testid="capacity-add-sheet"]').first()
+        const k = Number(await addBtn.getAttribute('data-add-sheets'))
+        if (!Number.isInteger(k) || k < 1) throw new Error(`capacity-add-sheet carries no valid data-add-sheets (${k})`)
         const cntBefore = await page.locator('.size__sheet > .input__value, .size__sheet > label.input .input__value').first().inputValue()
-        await page.locator('[data-testid="capacity-add-sheet"]').first().click()
+        // Armé AVANT le clic : la relance part dans le même tick que l'ajout.
+        const relaunchPost = page.waitForResponse(
+            (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/nest'),
+            { timeout: 15000 },
+        )
+        relaunchPost.catch(() => {}) // le rejet éventuel est levé plus bas par l'await
+        await addBtn.click()
         await page.waitForTimeout(500)
         const cntAfter = await page.locator('.size__sheet > .input__value, .size__sheet > label.input .input__value').first().inputValue()
         const panelGone = !(await page.locator('[data-testid="capacity-panel"]').count())
-        log(`ADD-SHEET ACTION: count ${cntBefore} -> ${cntAfter}, panel dismissed=${panelGone}`)
-        if (Number(cntAfter) !== Number(cntBefore) + 1) throw new Error(`add-sheet did not increment (${cntBefore} -> ${cntAfter})`)
+        log(`ADD-SHEET ACTION: count ${cntBefore} -> ${cntAfter} (k=${k}), panel dismissed=${panelGone}`)
+        if (Number(cntAfter) !== Number(cntBefore) + k) throw new Error(`add-sheet did not add k=${k} (${cntBefore} -> ${cntAfter})`)
         if (!panelGone) throw new Error('capacity panel not dismissed after action')
+        // La relance a bien eu lieu : POST /nest dans les 15 s, statut 200.
+        const relaunchResp = await relaunchPost.catch(() => null)
+        if (!relaunchResp) throw new Error('add-sheet did not relaunch: no POST /nest within 15 s')
+        if (relaunchResp.status() !== 200) throw new Error(`relaunch POST /nest answered ${relaunchResp.status()} (expected 200)`)
+        // Aucun orphelin : attendre (30 s) que la relance soit annulable
+        // (live-cancel visible) OU qu'elle ait été elle-même refusée (le
+        // bandeau réapparaît : job déjà terminé, rien à annuler).
+        const liveCancel = page.locator('[data-testid="live-cancel"]')
+        let cancelled = false
+        const tCancel = Date.now()
+        let settled = null
+        while (Date.now() - tCancel < 30000) {
+            if (await liveCancel.isVisible().catch(() => false)) { settled = 'live'; break }
+            if (await page.locator('[data-testid="capacity-panel"]').count()) { settled = 'refused-again'; break }
+            await page.waitForTimeout(300)
+        }
+        if (!settled) throw new Error('relaunched job neither cancellable (live-cancel) nor refused within 30 s: orphan risk')
+        if (settled === 'live') {
+            await liveCancel.click()
+            // Annulé côté serveur quand le bouton disparaît (le job local est
+            // retiré de file / le pool arrêté, cancelJob → POST /cancel).
+            await liveCancel.waitFor({ state: 'hidden', timeout: 30000 })
+            cancelled = true
+        }
+        log(`RELAUNCH: POST /nest ${relaunchResp.status()}, cancelled=${cancelled}`)
         flushLogs()
         await browser.close()
         console.log('\nGO — refusal with levers + actions, detected in '
