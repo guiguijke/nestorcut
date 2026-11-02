@@ -5,7 +5,7 @@ import './helpers/h3Shims'
 // N-11 / N-11b / M-2 : les flux SSE ne poussent plus après fermeture et
 // nettoient leurs timers sur erreur initiale.
 
-const state = vi.hoisted(() => ({ db: null, results: null, streams: [] }))
+const state = vi.hoisted(() => ({ db: null, results: null, streams: [], backpressure: false }))
 
 vi.mock('~~/server/db/mongo', () => ({ connectDB: async () => state.db }))
 vi.mock('../db/mongo', () => ({ connectDB: async () => state.db }))
@@ -33,6 +33,29 @@ globalThis.createEventStream = () => {
         close: vi.fn(async () => { stream.closedCalls++ }),
         send: vi.fn(async () => 'sent'),
         fireClosed: () => onClosed(),
+    }
+    if (state.backpressure) {
+        // Comme h3 : push() écrit dans un TransformStream dont la face
+        // lisible n'est lue qu'à partir de send(). Avant send(), le premier
+        // write reste en attente (incident du 02/11).
+        const ts = new TransformStream()
+        const writer = ts.writable.getWriter()
+        stream.received = []
+        stream.push = vi.fn(async (msg) => {
+            await writer.write(msg)
+            stream.pushed.push(msg)
+        })
+        stream.send = vi.fn(async () => {
+            const reader = ts.readable.getReader()
+            ;(async () => {
+                for (;;) {
+                    const { done, value } = await reader.read()
+                    if (done) return
+                    stream.received.push(value)
+                }
+            })()
+            return 'sent'
+        })
     }
     state.streams.push(stream)
     return stream
@@ -161,5 +184,43 @@ describe('SSE - pas de push après fermeture, timers nettoyés', () => {
         await expect(supportHandler(evt)).rejects.toThrow('mongo down')
         expect(state.streams[1].closedCalls).toBe(1)
         expect(vi.getTimerCount()).toBe(0)
+    })
+})
+
+describe('SSE - le handler atteint send() sans lecteur branché (incident du 02/11)', () => {
+    beforeEach(() => {
+        state.streams.length = 0
+        state.backpressure = true
+    })
+    afterEach(async () => {
+        state.backpressure = false
+        for (const stream of state.streams) await stream.fireClosed()
+    })
+
+    // Le handler doit rendre send() : s'il attend le premier push, il reste
+    // bloqué et le délai l'emporte.
+    const settle = (p) => Promise.race([p, new Promise((r) => setTimeout(() => r('bloqué'), 500))])
+    const tick = () => new Promise((r) => setTimeout(r, 0))
+
+    for (const [label, handler] of [['results', resultsHandler], ['project results', projectResultsHandler]]) {
+        it(`${label} : send() atteint, message initial reçu par le lecteur`, async () => {
+            state.results = vi.fn(async () => ({ items: [{ slug: 'a', isInProgress: false }] }))
+            await expect(settle(handler(evt))).resolves.toBe('sent')
+            await tick()
+            const stream = state.streams[0]
+            expect(stream.received).toHaveLength(1)
+            expect(JSON.parse(stream.received[0]).type).toBe('initial')
+        })
+    }
+
+    it('support : send() atteint, messages initiaux reçus par le lecteur', async () => {
+        const docs = [{ message: 'hi', timestamp: new Date(5) }]
+        const cursor = () => ({ sort() { return this }, project() { return this }, toArray: async () => docs })
+        state.db = { collection: () => ({ find: cursor }) }
+        await expect(settle(supportHandler(evt))).resolves.toBe('sent')
+        await tick()
+        const stream = state.streams[0]
+        expect(stream.received).toHaveLength(1)
+        expect(JSON.parse(stream.received[0]).type).toBe('initial')
     })
 })

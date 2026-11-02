@@ -52,7 +52,11 @@ export default defineEventHandler(async (event) => {
         throw err
     }
 
-    await safePush({
+    // Pas d'await avant send() : tant que send() n'a pas branché la face
+    // lisible du TransformStream de h3, le premier write reste en attente,
+    // le handler n'atteint jamais send() et le client ne reçoit rien
+    // (incident du 02/11). safePush absorbe déjà les rejets.
+    safePush({
         type: 'initial',
         data: {
             items: result.items,

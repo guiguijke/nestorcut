@@ -51,7 +51,8 @@ export default defineEventHandler(async (event) => {
 
     let lastTimestamp = new Date(0)
     if (messages.length > 0) {
-        await safePush({ type: 'initial', data: messages })
+        // Pas d'await avant send() : voir server/api/results.get.js.
+        safePush({ type: 'initial', data: messages })
         lastTimestamp = messages[messages.length - 1].timestamp
     }
 
