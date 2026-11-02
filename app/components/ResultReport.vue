@@ -389,6 +389,7 @@
                     :label="t('results.download')"
                     tag="a"
                     download
+                    :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="themeType.primary"
                     trackingTag="result_download"
@@ -396,6 +397,7 @@
                 <MainButton
                     v-if="!resultModalData.isMultiSheet && isLocal"
                     :label="t(resultModalData.hasJobs ? 'results.downloadDxf' : 'results.download')"
+                    :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="resultModalData.hasJobs ? themeType.secondary : themeType.primary"
                     trackingTag="result_download"
