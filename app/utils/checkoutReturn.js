@@ -7,8 +7,14 @@ export const CHECKOUT_INTENT_TTL_MS = 2 * 60 * 60 * 1000
 export const CHECKOUT_SOURCES = ['locked_sheets', 'quota', 'export', 'turbo', 'profile', 'account', 'other']
 export const CHECKOUT_ID_RE = /^[0-9a-f]{24}$/ // generateRandomString(24), strings.js:10-13
 
-// Slug de résultat ou de projet : jamais d'autre forme dans le stockage.
-const INTENT_SLUG_RE = /^[A-Za-z0-9_-]{1,200}$/
+// Slug de projet : <adjectif>-<nom>-<12 hex> ou 'demo' — jamais d'autre forme
+// dans le stockage.
+const INTENT_PROJECT_SLUG_RE = /^[A-Za-z0-9_-]{1,200}$/
+// Slug de résultat = slug de job (buildJobSlug, service.js:356) : trois noms de
+// fichier jusqu'à 200 car. chacun + compteurs, donc bien au-delà de 200. Une
+// borne de 200 faisait taire la réouverture pour tout job aux longs noms de
+// fichier. Ne sort jamais du navigateur : la borne ne protège que le stockage.
+const INTENT_RESULT_SLUG_RE = /^[A-Za-z0-9_-]{1,1024}$/
 // Une horloge qui retarde de plus d'une minute n'est plus une horloge.
 const INTENT_FUTURE_SKEW_MS = 60 * 1000
 
@@ -16,12 +22,13 @@ export function normalizeCheckoutSource(source) {
     return CHECKOUT_SOURCES.includes(source) ? source : 'other'
 }
 
-function cleanSlug(value) {
-    return typeof value === 'string' && INTENT_SLUG_RE.test(value) ? value : null
+function cleanSlug(value, re) {
+    return typeof value === 'string' && re.test(value) ? value : null
 }
 
-/** Écrit { v: 1, source, resultSlug, projectSlug, at: now } (slugs validés
- * /^[A-Za-z0-9_-]{1,200}$/, sinon null). Jamais d'exception (rend false). */
+/** Écrit { v: 1, source, resultSlug, projectSlug, at: now } (resultSlug validé
+ * /^[A-Za-z0-9_-]{1,1024}$/, projectSlug /^[A-Za-z0-9_-]{1,200}$/, sinon null).
+ * Jamais d'exception (rend false). */
 export function writeCheckoutIntent(storage, { source, resultSlug = null, projectSlug = null } = {}, now = Date.now()) {
     try {
         storage.setItem(
@@ -29,8 +36,8 @@ export function writeCheckoutIntent(storage, { source, resultSlug = null, projec
             JSON.stringify({
                 v: 1,
                 source: normalizeCheckoutSource(source),
-                resultSlug: cleanSlug(resultSlug),
-                projectSlug: cleanSlug(projectSlug),
+                resultSlug: cleanSlug(resultSlug, INTENT_RESULT_SLUG_RE),
+                projectSlug: cleanSlug(projectSlug, INTENT_PROJECT_SLUG_RE),
                 at: now,
             }),
         )
@@ -69,8 +76,8 @@ export function takeCheckoutIntent(storage, now = Date.now()) {
     if (at - now > INTENT_FUTURE_SKEW_MS) return null
     return {
         source: normalizeCheckoutSource(parsed.source),
-        resultSlug: cleanSlug(parsed.resultSlug),
-        projectSlug: cleanSlug(parsed.projectSlug),
+        resultSlug: cleanSlug(parsed.resultSlug, INTENT_RESULT_SLUG_RE),
+        projectSlug: cleanSlug(parsed.projectSlug, INTENT_PROJECT_SLUG_RE),
     }
 }
 

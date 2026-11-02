@@ -237,11 +237,19 @@ const formatPrice = (amount, currency) => {
 // rafraîchit dès que l'abonnement est actif côté Stripe alors que l'interface
 // croit encore à un compte Free (paiement fait dans un autre onglet, webhook
 // en retard) — une fois par passage à vrai. Côté client seulement.
+// Deux sources du palier côté client, à rafraîchir ensemble (comme
+// useCheckoutReturn) : le cache `user` (cadenas) ET le store d'authentification
+// (bannière Free, bouton Turbo), un instantané que seul setUser() remet à jour.
 const refreshUser = async () => {
     try {
         await refreshNuxtData('user')
     } catch {
         // Le palier se mettra à jour au prochain chargement.
+    }
+    try {
+        await authStore.actions.setUser()
+    } catch {
+        // Bannière : se mettra à jour au prochain setUser().
     }
 }
 if (import.meta.client) {

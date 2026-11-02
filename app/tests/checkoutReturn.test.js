@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import {
     CHECKOUT_INTENT_KEY,
@@ -118,6 +120,48 @@ describe('intention de checkout (sessionStorage)', () => {
         const s = fakeStorage()
         writeCheckoutIntent(s, { source: 'n_importe_quoi', resultSlug: '../etc', projectSlug: 'a b' }, NOW)
         expect(takeCheckoutIntent(s, NOW)).toEqual({ source: 'other', resultSlug: null, projectSlug: null })
+    })
+
+    it('slug de résultat de plus de 200 caractères (job aux longs noms de fichier) : conservé', () => {
+        // buildJobSlug : trois noms de fichier jusqu'à 200 car. chacun + compteurs.
+        const long = 'nested-' + 'a'.repeat(200) + '_2-abc123'
+        expect(long.length).toBeGreaterThan(200)
+        const s = fakeStorage()
+        writeCheckoutIntent(
+            s,
+            { source: 'locked_sheets', resultSlug: long, projectSlug: 'brave-otter-0123456789ab' },
+            NOW,
+        )
+        expect(JSON.parse(s.map.get(CHECKOUT_INTENT_KEY)).resultSlug).toBe(long)
+        expect(takeCheckoutIntent(s, NOW)).toEqual({
+            source: 'locked_sheets',
+            resultSlug: long,
+            projectSlug: 'brave-otter-0123456789ab',
+        })
+    })
+
+    it('slug de résultat : borné à 1024 caractères ; slug de projet : borné à 200', () => {
+        const s = fakeStorage()
+        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(1024), projectSlug: 'b'.repeat(200) }, NOW)
+        expect(takeCheckoutIntent(s, NOW)).toEqual({
+            source: 'quota',
+            resultSlug: 'a'.repeat(1024),
+            projectSlug: 'b'.repeat(200),
+        })
+        // Au-delà : null, à l'écriture comme à la lecture d'une valeur trafiquée.
+        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(1025), projectSlug: 'b'.repeat(201) }, NOW)
+        expect(takeCheckoutIntent(s, NOW)).toEqual({ source: 'quota', resultSlug: null, projectSlug: null })
+        s.map.set(
+            CHECKOUT_INTENT_KEY,
+            JSON.stringify({
+                v: 1,
+                source: 'quota',
+                resultSlug: 'a'.repeat(1025),
+                projectSlug: 'b'.repeat(201),
+                at: NOW,
+            }),
+        )
+        expect(takeCheckoutIntent(s, NOW)).toEqual({ source: 'quota', resultSlug: null, projectSlug: null })
     })
 
     it('une valeur de stockage trafiquée est re-validée à la lecture', () => {
@@ -310,5 +354,76 @@ describe('pollCheckoutStatus', () => {
             },
         })
         expect(res).toEqual({ status: 'active', attempts: 4, timedOut: false })
+    })
+})
+
+// O3 « sans recharger » : Subscription.vue n'est pas importable sous vitest (pas
+// de plugin Vue). On en lit donc la source : `refreshUser` est extrait du
+// <script setup> et rejoué avec des doubles, et les deux chemins qui s'en
+// servent (409 subscription_exists, watch sur l'abonnement actif) sont vérifiés.
+describe('Subscription.vue : rafraîchissement du palier client', () => {
+    const source = readFileSync(fileURLToPath(new URL('../components/Subscription.vue', import.meta.url)), 'utf8')
+
+    // Corps `{ … }` (accolades appariées) qui suit `const <name> = async () =>`.
+    function arrowFunctionSource(name) {
+        const start = source.indexOf(`const ${name} = async () => {`)
+        expect(start).toBeGreaterThanOrEqual(0)
+        const open = source.indexOf('{', start)
+        let depth = 0
+        for (let i = open; i < source.length; i += 1) {
+            if (source[i] === '{') depth += 1
+            if (source[i] === '}') depth -= 1
+            if (depth === 0) return source.slice(start, i + 1)
+        }
+        throw new Error(`${name} : accolade fermante introuvable`)
+    }
+
+    function loadRefreshUser({ refreshNuxtData, setUser }) {
+        const factory = new Function(
+            'refreshNuxtData',
+            'authStore',
+            `${arrowFunctionSource('refreshUser')}
+return refreshUser`,
+        )
+        return factory(refreshNuxtData, { actions: { setUser } })
+    }
+
+    it('refreshUser rafraîchit le cache `user` PUIS le store (bannière Free, Turbo)', async () => {
+        const calls = []
+        const refreshUser = loadRefreshUser({
+            refreshNuxtData: vi.fn(async (key) => void calls.push(`refreshNuxtData:${key}`)),
+            setUser: vi.fn(async () => void calls.push('setUser')),
+        })
+        await refreshUser()
+        expect(calls).toEqual(['refreshNuxtData:user', 'setUser'])
+    })
+
+    it("un rafraîchissement du cache qui échoue n'empêche pas setUser, et rien ne lève", async () => {
+        const setUser = vi.fn(async () => {})
+        const refreshUser = loadRefreshUser({
+            refreshNuxtData: vi.fn(async () => {
+                throw new Error('réseau')
+            }),
+            setUser,
+        })
+        await expect(refreshUser()).resolves.toBeUndefined()
+        expect(setUser).toHaveBeenCalledTimes(1)
+    })
+
+    it('un setUser qui échoue ne lève pas', async () => {
+        const refreshUser = loadRefreshUser({
+            refreshNuxtData: vi.fn(async () => {}),
+            setUser: vi.fn(async () => {
+                throw new Error('réseau')
+            }),
+        })
+        await expect(refreshUser()).resolves.toBeUndefined()
+    })
+
+    it('le chemin 409 et le watch « abonnement actif » passent par refreshUser', () => {
+        expect(arrowFunctionSource('syncAfterExistingSubscription')).toContain('await refreshUser()')
+        const watchBlock = /watch\(\s*isStripeActive[\s\S]*?\{ immediate: true \},?\s*\)/.exec(source)?.[0]
+        expect(watchBlock).toContain('refreshUser()')
+        expect(watchBlock).not.toContain('refreshNuxtData')
     })
 })
