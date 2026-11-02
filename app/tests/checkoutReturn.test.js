@@ -140,23 +140,33 @@ describe('intention de checkout (sessionStorage)', () => {
         })
     })
 
-    it('slug de résultat : borné à 1024 caractères ; slug de projet : borné à 200', () => {
+    it('slug de résultat de plus de 1024 caractères (щ → shch, ß → ss : slugify allonge) : conservé', () => {
+        // Trois noms de 196 car. en щ : chacun donne 784 car. une fois slugifié,
+        // soit ~2350 car. de slug de job — au-delà de l'ancienne borne de 1024.
+        const long = 'nested-' + 'shch'.repeat(196 * 3) + '_2-abc123'
+        expect(long.length).toBeGreaterThan(1024)
         const s = fakeStorage()
-        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(1024), projectSlug: 'b'.repeat(200) }, NOW)
+        writeCheckoutIntent(s, { source: 'locked_sheets', resultSlug: long }, NOW)
+        expect(takeCheckoutIntent(s, NOW)).toEqual({ source: 'locked_sheets', resultSlug: long, projectSlug: null })
+    })
+
+    it('slug de résultat : borné à 4096 caractères ; slug de projet : borné à 200', () => {
+        const s = fakeStorage()
+        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(4096), projectSlug: 'b'.repeat(200) }, NOW)
         expect(takeCheckoutIntent(s, NOW)).toEqual({
             source: 'quota',
-            resultSlug: 'a'.repeat(1024),
+            resultSlug: 'a'.repeat(4096),
             projectSlug: 'b'.repeat(200),
         })
         // Au-delà : null, à l'écriture comme à la lecture d'une valeur trafiquée.
-        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(1025), projectSlug: 'b'.repeat(201) }, NOW)
+        writeCheckoutIntent(s, { source: 'quota', resultSlug: 'a'.repeat(4097), projectSlug: 'b'.repeat(201) }, NOW)
         expect(takeCheckoutIntent(s, NOW)).toEqual({ source: 'quota', resultSlug: null, projectSlug: null })
         s.map.set(
             CHECKOUT_INTENT_KEY,
             JSON.stringify({
                 v: 1,
                 source: 'quota',
-                resultSlug: 'a'.repeat(1025),
+                resultSlug: 'a'.repeat(4097),
                 projectSlug: 'b'.repeat(201),
                 at: NOW,
             }),
@@ -425,5 +435,13 @@ return refreshUser`,
         const watchBlock = /watch\(\s*isStripeActive[\s\S]*?\{ immediate: true \},?\s*\)/.exec(source)?.[0]
         expect(watchBlock).toContain('refreshUser()')
         expect(watchBlock).not.toContain('refreshNuxtData')
+    })
+
+    it('la montée en Pro en place (subscribePro) passe aussi par refreshUser, pas par le cache seul', () => {
+        // Sans le store d'authentification, maxParallelLocalNests restait à 1
+        // (palier « standard ») jusqu'au rechargement de la page.
+        const body = arrowFunctionSource('subscribePro')
+        expect(body).toContain('await refreshUser()')
+        expect(body).not.toContain('refreshNuxtData')
     })
 })

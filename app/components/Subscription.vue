@@ -331,7 +331,9 @@ const subscribePro = async () => {
             body: { targetTier: 'privacy' },
         })
         await refresh()
-        await refreshNuxtData('user')
+        // Montée en Pro en place : le palier change (3 nestings parallèles,
+        // Turbo) — cache `user` ET store d'authentification, comme ailleurs.
+        await refreshUser()
         isLoading.value = false
     } catch (err) {
         error.value = errorMessage(err, 'sub.error.startPro')

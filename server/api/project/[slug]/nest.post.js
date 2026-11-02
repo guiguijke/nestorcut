@@ -176,6 +176,22 @@ export default defineEventHandler(async (event) => {
         }
     }
 
+    // Une tôle exploitable : largeur et hauteur finies > 0, count fini ≥ 1.
+    // Même règle pour le nouveau format (les tôles invalides sont écartées)
+    // et pour l'ancien (la tôle unique invalide est refusée en 400).
+    const isValidSheet = (sheet) =>
+        Number.isFinite(sheet.width) &&
+        sheet.width > 0 &&
+        Number.isFinite(sheet.height) &&
+        sheet.height > 0 &&
+        Number.isFinite(sheet.count) &&
+        sheet.count >= 1
+    const invalidSheetError = () =>
+        createError({
+            statusCode: 400,
+            statusMessage: 'Please provide at least one valid sheet (width, height, count).',
+        })
+
     // Multi-sheet: the client sends params.sheets (list of sheet types with
     // their own dimensions and stock). Legacy clients send a single
     // width/height/sheetCount — normalized to the same shape. Demo nestings
@@ -190,21 +206,10 @@ export default defineEventHandler(async (event) => {
                 height: Number(sheet.height),
                 count: Math.floor(Number(sheet.count)),
             }))
-            .filter(
-                (sheet) =>
-                    Number.isFinite(sheet.width) &&
-                    sheet.width > 0 &&
-                    Number.isFinite(sheet.height) &&
-                    sheet.height > 0 &&
-                    Number.isFinite(sheet.count) &&
-                    sheet.count >= 1,
-            )
+            .filter(isValidSheet)
             .slice(0, 10)
         if (sheets.length === 0) {
-            throw createError({
-                statusCode: 400,
-                statusMessage: 'Please provide at least one valid sheet (width, height, count).',
-            })
+            throw invalidSheetError()
         }
     }
 
@@ -233,6 +238,15 @@ export default defineEventHandler(async (event) => {
         height: Number(params.height),
         count: Math.floor(Number(params.sheetCount) || 1),
     }]
+    // Ancien format (sans `sheets[]`) : la tôle unique obéit à la même règle
+    // que le nouveau — 400 AVANT toute charge. Sans cela, `width:'3_000'`
+    // (NaN ici, 3000 pour le float() Python du worker) sautait le 422
+    // capacité, et un `sheetCount` négatif partait au worker sans aucune
+    // tôle. Un `sheetCount` absent, 0 ou illisible garde son défaut historique
+    // (1) : la valeur contrôlée est celle qui est ENREGISTRÉE (cf. dbParams).
+    if (!sheets && !isValidSheet(normalizedSheets[0])) {
+        throw invalidSheetError()
+    }
     // d6 : borne technique, tous paliers, démo comprise — avant le 422 et toute charge.
     assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (Number(s.count) || 0), 0))
     if (!project.local) {
@@ -303,8 +317,10 @@ export default defineEventHandler(async (event) => {
                       fillHoles: params.fillHoles !== false,
                   }
                 : {
-                      height: params.height,
-                      width: params.width,
+                      // Valeurs CONTRÔLÉES (nombres finis > 0), pas les chaînes
+                      // brutes que le worker lirait autrement qu'ici.
+                      height: normalizedSheets[0].height,
+                      width: normalizedSheets[0].width,
                       space: params.space,
                       sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,
@@ -343,8 +359,8 @@ export default defineEventHandler(async (event) => {
                       fillHoles: params.fillHoles !== false,
                   }
                 : {
-                      height: params.height,
-                      width: params.width,
+                      height: normalizedSheets[0].height,
+                      width: normalizedSheets[0].width,
                       space: params.space,
                       sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,
@@ -369,8 +385,8 @@ export default defineEventHandler(async (event) => {
                       fillHoles: params.fillHoles !== false,
                   }
                 : {
-                      height: params.height,
-                      width: params.width,
+                      height: normalizedSheets[0].height,
+                      width: normalizedSheets[0].width,
                       space: params.space,
                       sheetCount: normalizedSheets[0].count,
                       addOutShape: params.addOutShape,

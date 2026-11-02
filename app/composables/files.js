@@ -1120,6 +1120,14 @@ async function nest(slug) {
     // et pouvait doubler la charge de quota.
     if (state.nestBusy) return
     state.nestBusy = true
+    // Course (constat 5 + reliquats de la revue adverse) : tout ce que nest()
+    // écrit dans le store MODULE après un await (nestError, nestUnfit,
+    // lastParams, fenêtre de résultat) ne vaut que si l'utilisateur est
+    // toujours sur le projet soumis. state.projectSlug porte le CHEMIN d'API
+    // complet (cf. AGENTS #63), pas le slug nu. Sinon la réponse tardive de
+    // A abîmerait B : erreur rouge, bouton Nest grisé (lastParams prend le
+    // corps de B), fenêtre de résultat de A.
+    const stillOnSubmittedProject = () => state.projectSlug === API_ROUTES.PROJECT(slug)
     try {
         try {
             state.nestError = ''
@@ -1132,7 +1140,7 @@ async function nest(slug) {
                 },
                 body: state.requestBody
             })
-            setModalNestData(data)
+            if (stillOnSubmittedProject()) setModalNestData(data)
             // Refresh the cached user so the free-quota banner reflects the
             // operation that was just consumed.
             await authStore.actions.setUser()
@@ -1143,9 +1151,8 @@ async function nest(slug) {
                 // la page prend le relais du message générique.
                 // Course (constat 5) : le 422 de A qui arrive APRÈS le
                 // chargement de B ne se range pas — l'utilisateur n'est plus
-                // sur le projet soumis (state.projectSlug porte le CHEMIN
-                // d'API, cf. AGENTS #63).
-                if (state.projectSlug !== API_ROUTES.PROJECT(slug)) return
+                // sur le projet soumis.
+                if (!stillOnSubmittedProject()) return
                 state.nestUnfit = error?.data?.data?.unfit || null
                 return
             }
@@ -1153,7 +1160,7 @@ async function nest(slug) {
                 // d6 (02/11) : borne technique serveur (400, avant toute
                 // charge) — le miroir client (sheetCountTooHigh) grise Nest
                 // d'ordinaire avant ; ici le client a été contourné.
-                state.nestError = 'nest.error.maxSheets'
+                if (stillOnSubmittedProject()) state.nestError = 'nest.error.maxSheets'
                 return
             }
             if (error?.response?.status === 402) {
@@ -1192,6 +1199,7 @@ async function nest(slug) {
             // lastParams marqué → bouton grisé jusqu'à modifier les
             // réglages à la main. Message visible + sortie propre :
             // isNewParams reste vrai, le bouton reste utilisable.
+            if (!stillOnSubmittedProject()) return
             state.nestError = error?.data?.statusMessage === 'concurrent_limit'
                 ? 'nest.error.concurrent'
                 : 'nest.error.generic'
@@ -1200,7 +1208,9 @@ async function nest(slug) {
 
         await Promise.all([getProjects()])
 
-        state.lastParams = state.requestBody
+        // Succès tardif de A alors que B est chargé : state.requestBody est
+        // celui de B — le ranger dans lastParams grisait le bouton Nest de B.
+        if (stillOnSubmittedProject()) state.lastParams = state.requestBody
     } catch (err) {
         console.error('Nest operation failed:', err)
     } finally {

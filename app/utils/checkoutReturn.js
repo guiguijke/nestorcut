@@ -13,8 +13,10 @@ const INTENT_PROJECT_SLUG_RE = /^[A-Za-z0-9_-]{1,200}$/
 // Slug de résultat = slug de job (buildJobSlug, service.js:356) : trois noms de
 // fichier jusqu'à 200 car. chacun + compteurs, donc bien au-delà de 200. Une
 // borne de 200 faisait taire la réouverture pour tout job aux longs noms de
-// fichier. Ne sort jamais du navigateur : la borne ne protège que le stockage.
-const INTENT_RESULT_SLUG_RE = /^[A-Za-z0-9_-]{1,1024}$/
+// fichier ; 1024 la faisait encore taire pour des noms de 196 car. en щ/ß/æ/ж,
+// que standard-slugify allonge jusqu'à 4× (shch, ss, ae, zh : jusqu'à ~2400 car.
+// au pire). Ne sort jamais du navigateur : la borne ne protège que le stockage.
+const INTENT_RESULT_SLUG_RE = /^[A-Za-z0-9_-]{1,4096}$/
 // Une horloge qui retarde de plus d'une minute n'est plus une horloge.
 const INTENT_FUTURE_SKEW_MS = 60 * 1000
 
@@ -27,7 +29,7 @@ function cleanSlug(value, re) {
 }
 
 /** Écrit { v: 1, source, resultSlug, projectSlug, at: now } (resultSlug validé
- * /^[A-Za-z0-9_-]{1,1024}$/, projectSlug /^[A-Za-z0-9_-]{1,200}$/, sinon null).
+ * /^[A-Za-z0-9_-]{1,4096}$/, projectSlug /^[A-Za-z0-9_-]{1,200}$/, sinon null).
  * Jamais d'exception (rend false). */
 export function writeCheckoutIntent(storage, { source, resultSlug = null, projectSlug = null } = {}, now = Date.now()) {
     try {
