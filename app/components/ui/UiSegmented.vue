@@ -12,7 +12,9 @@
             :class="['ui-seg__opt', { 'ui-seg__opt--active': opt.value === modelValue }]"
             :data-testid="testid ? `${testid}-${opt.value}` : undefined"
             :title="opt.hint || undefined"
-            @click="$emit('update:modelValue', opt.value)"
+            :disabled="opt.disabled || undefined"
+            :aria-disabled="opt.disabled ? 'true' : undefined"
+            @click="!opt.disabled && $emit('update:modelValue', opt.value)"
         >
             <UiIcon v-if="opt.icon" :name="opt.icon" :size="14" />
             <span>{{ opt.label }}</span>
@@ -23,7 +25,10 @@
 <script setup>
 defineProps({
     modelValue: { type: [String, Number], default: '' },
-    options: { type: Array, required: true }, // [{value,label,hint,icon}]
+    // D20 (02/11) : `disabled` optionnel — attribut ET aria-disabled (AGENTS
+    // #24e), aucun clic émis. L'infobulle `hint` d'un bouton désactivé est un
+    // complément (absente au tactile) : l'explication qui fait foi est ailleurs.
+    options: { type: Array, required: true }, // [{value,label,hint,icon,disabled}]
     label: { type: String, default: '' },
     // U3 : chaque option porte `${testid}-${value}` — les harnais QA lisent
     // un identifiant stable, pas une classe de style.
@@ -69,6 +74,10 @@ defineEmits(['update:modelValue'])
         &:focus-visible {
             outline: none;
             box-shadow: var(--focus-ring);
+        }
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
     }
 }

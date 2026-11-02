@@ -30,6 +30,15 @@
                     <span class="viewer__sheet-label" data-testid="sheet-label">
                         {{ t('result.sheet', { n: activePart + 1, total: currentDxfs.length }) }}
                     </span>
+                    <!-- O2 (02/11) : tôle verrouillée d'un résultat utilisable
+                         (D25). Le badge fait foi : l'infobulle de la Vue DXF
+                         désactivée n'existe pas au tactile (D20). -->
+                    <UiBadge
+                        v-if="sheetUnlockOffered"
+                        tone="accent"
+                        dot
+                        data-testid="sheet-locked-badge"
+                    >{{ t('result.sheetLocked') }}</UiBadge>
                     <MainButton
                         :theme="themeType.secondary"
                         :icon="iconType.arrowNext"
@@ -111,6 +120,17 @@
                         :style="zoomStyle"
                         class="modal__display modal__svg-preview"
                     />
+                    <!-- O2/D24 (02/11) : tôle verrouillée sans aperçu couleur
+                         (cas hérité) — un texte, JAMAIS la Vue DXF (aucune
+                         requête du DXF verrouillé). -->
+                    <div
+                        v-else-if="currentSheetLocked"
+                        :class="placeholderClasses"
+                        class="modal__placeholder modal__placeholder--locked"
+                        data-testid="sheet-locked-placeholder"
+                    >
+                        {{ t('result.sheetLockedNoPreview') }}
+                    </div>
                     <DxfViewerComponent
                         v-else
                         :key="`dxf-${activeAlt}-${activePart}-${isFullScreen}`"
@@ -119,9 +139,11 @@
                         :class="displayClasses"
                         class="modal__display"
                     />
+                    <!-- D21 : @pointerdown.stop — sinon setPointerCapture de
+                         la scène peut avaler le clic. -->
                     <MainButton
                         class="modal__part-download"
-                        v-if="resultModalData.isMultiSheet && !isLocal"
+                        v-if="resultModalData.isMultiSheet && !isLocal && !currentSheetLocked"
                         :href="currentDxfs[activePart]"
                         :label="t('result.downloadSheet', { n: activePart + 1 })"
                         tag="a"
@@ -129,16 +151,32 @@
                         :size="sizeType.s"
                         :theme="themeType.primary"
                         trackingTag="result_part_download"
+                        @pointerdown.stop
                     />
                     <MainButton
                         class="modal__part-download"
-                        v-if="resultModalData.isMultiSheet && isLocal"
+                        v-if="resultModalData.isMultiSheet && isLocal && !currentSheetLocked"
                         :label="t('result.downloadSheet', { n: activePart + 1 })"
                         :isDisable="isHaveError || isUnfit"
                         :size="sizeType.s"
                         :theme="themeType.primary"
                         trackingTag="result_part_download"
+                        @pointerdown.stop
                         @click="downloadLocalSheet"
+                    />
+                    <!-- O2 (02/11) : sur une tôle verrouillée, le téléchargement
+                         cède la place au déblocage (résultat utilisable, D25). -->
+                    <MainButton
+                        v-if="sheetUnlockOffered"
+                        class="modal__part-download"
+                        :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockSheets', { n: viewGate.total })"
+                        :icon="iconType.lock"
+                        :isDisable="checkoutChecking"
+                        :size="sizeType.s"
+                        :theme="themeType.primary"
+                        data-testid="sheet-unlock"
+                        @pointerdown.stop
+                        @click="$emit('unlock-sheets', 'modal_viewer')"
                     />
                 </template>
                 <SheetSvgPreview
@@ -151,6 +189,17 @@
                     :style="zoomStyle"
                     class="modal__display modal__svg-preview"
                 />
+                <!-- Filet : en mono-tôle la tôle 1 n'est jamais verrouillée,
+                     mais la Vue DXF ne s'ouvre en aucun cas sur un nom
+                     verrouillé. -->
+                <div
+                    v-else-if="currentSheetLocked"
+                    :class="placeholderClasses"
+                    class="modal__placeholder modal__placeholder--locked"
+                    data-testid="sheet-locked-placeholder"
+                >
+                    {{ t('result.sheetLockedNoPreview') }}
+                </div>
                 <DxfViewerComponent
                     v-else
                     :key="`dxf-${activeAlt}-0-${isFullScreen}`"
@@ -169,7 +218,7 @@ import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
 
 const props = defineProps({ d: { type: Object, required: true } })
-const emit = defineEmits(['view-mode', 'toggle-fullscreen', 'download-sheet', 'part'])
+const emit = defineEmits(['view-mode', 'toggle-fullscreen', 'download-sheet', 'part', 'unlock-sheets'])
 
 const t = (...a) => props.d.t(...a)
 const resultModalData = computed(() => props.d.resultModalData)
@@ -188,10 +237,22 @@ const activePart = computed(() => props.d.activePart)
 const previewSheet = computed(() => props.d.previewSheet)
 const displayClasses = computed(() => props.d.displayClasses)
 const placeholderClasses = computed(() => props.d.placeholderClasses)
+// O2 (02/11) : verrou de la tôle affichée (alternative affichée, d4).
+const currentSheetLocked = computed(() => Boolean(props.d.currentSheetLocked))
+const sheetUnlockOffered = computed(() => Boolean(props.d.sheetUnlockOffered))
+const viewGate = computed(() => props.d.viewGate || { total: 0 })
+const checkoutChecking = computed(() => Boolean(props.d.checkoutChecking))
 
+// D20 : sur une tôle verrouillée, « Vue DXF » est désactivée (attribut +
+// aria-disabled) ; l'infobulle n'est qu'un complément, le badge fait foi.
 const viewOptions = computed(() => ([
     { value: 'color', label: t('result.colorView') },
-    { value: 'dxf', label: t('result.dxfView') },
+    {
+        value: 'dxf',
+        label: t('result.dxfView'),
+        disabled: unref(currentSheetLocked),
+        hint: unref(currentSheetLocked) ? t('result.dxfViewLocked') : undefined,
+    },
 ]))
 const selectViewMode = (mode) => emit('view-mode', mode)
 
@@ -385,6 +446,14 @@ const downloadLocalSheet = () => emit('download-sheet')
         background-color: var(--error-background);
         border: solid 1px var(--error-border);
         color: var(--label-primary);
+    }
+
+    /* O2 (02/11) : tôle verrouillée sans aperçu — information, pas erreur. */
+    &__placeholder--locked {
+        padding: var(--sp-3);
+        background-color: var(--fill-tertiary);
+        border-color: var(--separator-secondary);
+        color: var(--label-secondary);
     }
 
     &__part-download {

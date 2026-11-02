@@ -21,13 +21,16 @@
                     @toggle-fullscreen="updateFullScreen"
                     @download-sheet="downloadLocalSheet"
                     @part="updatePartPage"
+                    @unlock-sheets="onUnlockSheets"
                 />
                 <ResultReport
                     ref="reportChild"
                     class="result-space__report"
                     :d="bundle"
-                    @unfit-add-sheet="$emit('unfit-add-sheet')"
-                    @unfit-reduce-spacing="$emit('unfit-reduce-spacing', $event)"
+                    @unfit-add-sheet="onUnfitAddSheet"
+                    @unfit-reduce-spacing="onUnfitReduceSpacing"
+                    @unfit-open-project="onUnfitOpenProject"
+                    @unlock-sheets="onUnlockSheets"
                     @export="onExportIntent"
                     @download-all="downloadLocalAll"
                     @download-single="downloadLocalSingle"
@@ -55,10 +58,23 @@ import { displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
 import { capacityPanelModel } from '~/utils/capacityPanel'
+import { flagOn } from '~/utils/runtimeFlag'
+import { freeDownloadNoteVisible, maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
+import {
+    altJobNames,
+    altLayoutCount,
+    altSheetNames,
+    lockedSheetsTrackData,
+    sheetGateModel,
+} from '~/utils/sheetDownloadGate'
+import { isOnJobProject } from '~/utils/resultNav'
+import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
 
 // Z1/Z3 (vérif 2026-09-05) : actions correctives des bandeaux unfit /
 // partiel — écoutées par UserResults (ajout tôle / réduction espacement).
-const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing'])
+// D11/D12 (02/11) : chaque action porte le projet du job (UserResults ne
+// relance que sur la page de CE projet, sinon « Ouvrir le projet »).
+const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing', 'unfit-open-project'])
 
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
@@ -70,25 +86,37 @@ const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = use
 // serveur (il n'y a pas de fichiers GridFS pour ces jobs).
 const isLocal = computed(() => Boolean(unref(resultModalData)?.isLocal))
 const localRecord = computed(() => unref(resultModalData)?.localRecord || null)
+// O2/d4 (02/11) : chaque téléchargement local passe le plafond du palier
+// COURANT (`maxSheet`, lu au clic) au point d'étranglement localDownloads.
+// `sheet_locked` est un filet (l'interface ne propose jamais une tôle
+// verrouillée) : il ouvre la fenêtre d'abonnement au lieu d'un échec muet.
+const currentMaxSheet = () => maxDownloadableSheet(unref(downloadState))
+const onLocalDownloadError = (e, label = 'local download failed') => {
+    if (e?.message === 'sheet_locked') {
+        onUnlockSheets('modal_actions')
+        return
+    }
+    console.warn(label, e)
+}
 const downloadLocalSingle = () => {
     try {
-        downloadLocalDxf(unref(localRecord), unref(activeAlt), 0)
+        downloadLocalDxf(unref(localRecord), unref(activeAlt), 0, { maxSheet: currentMaxSheet() })
     } catch (e) {
-        console.warn('local download failed', e)
+        onLocalDownloadError(e)
     }
 }
 const downloadLocalSheet = () => {
     try {
-        downloadLocalDxf(unref(localRecord), unref(activeAlt), unref(activePart))
+        downloadLocalDxf(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
     } catch (e) {
-        console.warn('local download failed', e)
+        onLocalDownloadError(e)
     }
 }
 const downloadLocalAll = () => {
     try {
-        downloadLocalZip(unref(localRecord))
+        downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet() })
     } catch (e) {
-        console.warn('local download failed', e)
+        onLocalDownloadError(e)
     }
 }
 // Lot J4 : le `.job` SheetCam de la TOLE A L'ECRAN (`activePart`), comme le
@@ -96,16 +124,16 @@ const downloadLocalAll = () => {
 // seule `[Work]`, donc une tole = un fichier.
 const downloadLocalAllJobs = () => {
     try {
-        downloadLocalJobs(unref(localRecord))
+        downloadLocalJobs(unref(localRecord), 0, { maxSheet: currentMaxSheet() })
     } catch (e) {
-        console.warn('local job download failed', e)
+        onLocalDownloadError(e, 'local job download failed')
     }
 }
 const downloadLocalSheetJob = () => {
     try {
-        downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart))
+        downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
     } catch (e) {
-        console.warn('local job download failed', e)
+        onLocalDownloadError(e, 'local job download failed')
     }
 }
 
@@ -117,21 +145,26 @@ const downloadLocalSheetJob = () => {
 // useUnit.js); unref'ing the wrapper itself never sees .compute and locks
 // every tier, paid included.
 const { data: userData } = useNuxtData('user')
+// D19 (02/11) : flag lu string-safe (AGENTS #29 : l'override runtime arrive
+// en chaîne 'true').
+const config = useRuntimeConfig()
 const exportState = computed(() =>
     reportExportState(
         unref(userData)?.compute?.level ?? null,
-        useRuntimeConfig().public.paidPlansDisabled === true,
+        flagOn(config.public.paidPlansDisabled),
     )
 )
 const exportLocked = computed(() => unref(exportState) === 'locked')
 const exportDisabled = computed(() => unref(exportState) === 'disabled')
-const buyCreditsDialog = useBuyCreditsDialog()
+// D13 (02/11) : ouvreur de la fenêtre d'abonnement AVEC son contexte
+// (capturé dans le setup, appelé dans les gestionnaires de clic).
+const openBuyCredits = useBuyCreditsOpener()
 // Locked state: the click opens the EXISTING paywall dialog (explicit label
 // + CTA, J-054) instead of running the export.
 const onExportClick = (action, trackingTag) => {
     if (unref(exportLocked)) {
         trackEvent(trackingTag)
-        buyCreditsDialog.value = true
+        openBuyCredits({ source: 'export' })
         return
     }
     action()
@@ -229,6 +262,13 @@ watch(resultDialog, async (isOpen) => {
         activePart.value = 0
         activeAlt.value = 0
         viewMode.value = 'color'
+        // §2.4 (02/11) : `locked_sheets_view` au plus une fois par ouverture.
+        // La session de suivi n'est ARMÉE qu'ici, après la remise à zéro de
+        // l'alternative et de la tôle : le watcher des verrous, s'il passe
+        // avant celui-ci, ne juge jamais un état périmé.
+        viewTracked = false
+        viewSession = true
+        trackLockedView()
         if (scrollToReportFlag.value) {
             scrollToReportFlag.value = false
             await nextTick()
@@ -237,6 +277,8 @@ watch(resultDialog, async (isOpen) => {
                 reportChild.value?.reportEl?.scrollIntoView({ block: 'start', behavior: 'smooth' })
             }, 120)
         }
+    } else {
+        viewSession = false
     }
 })
 
@@ -270,7 +312,10 @@ const currentSvgs = computed(() => {
 })
 // Legacy jobs have no server SVGs — they silently stay on the DXF viewer.
 const hasColorPreview = computed(() => !unref(isInProgress) && !unref(isHaveError) && unref(currentSvgs).length > 0)
-const showColorPreview = computed(() => unref(hasColorPreview) && unref(viewMode) === 'color')
+// d5 (02/11) : la Vue DXF d'une tôle verrouillée est indisponible — le mode
+// EFFECTIF y est forcé en couleur ; le choix de l'utilisateur (`viewMode`)
+// est gardé et revient sur une tôle autorisée.
+const showColorPreview = computed(() => unref(hasColorPreview) && unref(effectiveViewMode) === 'color')
 const selectViewMode = (mode) => {
     viewMode.value = mode
     trackEvent('result_view_mode', { mode })
@@ -690,6 +735,121 @@ const updatePartPage = (partIndex) => {
     if (partIndex < 0 || partIndex >= unref(currentDxfs).length) return
     activePart.value = partIndex
 }
+
+// ---------------------------------------------------------------------------
+// O2 (02/11) : verrou de téléchargement des tôles (spec §2.4, §3.13). Le
+// palier est celui du MOMENT (useNuxtData('user'), d1) ; K et démo passent
+// explicitement (les défauts verrouilleraient en silence). L'identité d'une
+// tôle se lit dans son NOM (d4). Trois modèles :
+//  - downloadGate : DXF de l'alternative 0, celle que « tout télécharger »
+//    livre (D4, parité route ZIP serveur) ;
+//  - jobGate : `.job` de l'alternative 0, avec LEUR ordre (D23) ;
+//  - viewGate : DXF de l'alternative affichée (visionneuse, Vue DXF, badge).
+// ---------------------------------------------------------------------------
+const route = useRoute()
+const downloadState = computed(() => sheetDownloadState(unref(userData), {
+    paidPlansDisabled: config.public.paidPlansDisabled,
+    projectSlug: unref(resultModalData)?.projectSlug ?? null,
+}))
+const downloadGate = computed(() => sheetGateModel(
+    altSheetNames(unref(resultModalData), 0),
+    unref(downloadState),
+    altLayoutCount(unref(resultModalData), 0),
+))
+const jobGate = computed(() => sheetGateModel(altJobNames(unref(resultModalData), 0), unref(downloadState)))
+const viewGate = computed(() => sheetGateModel(
+    altSheetNames(unref(resultModalData), unref(activeAlt)),
+    unref(downloadState),
+    altLayoutCount(unref(resultModalData), unref(activeAlt)),
+))
+const currentSheetLocked = computed(() => Boolean(unref(viewGate).locked[unref(activePart)]))
+// D25 : pas de vente sur un résultat inutilisable (même condition que les
+// boutons de téléchargement) — le verrou, lui, reste en place. Un résultat
+// serveur PURGÉ (24 h, D-PRV-10) n'a plus de fichiers : « Débloquer » y
+// vendrait un téléchargement qui n'existe plus (C2-9).
+const usable = computed(() =>
+    !unref(isHaveError) && !unref(isUnfit) && !unref(resultModalData)?.purgedAt)
+const unlockOffered = computed(() =>
+    unref(usable) && (unref(downloadGate).anyLocked || unref(jobGate).anyLocked))
+const sheetUnlockOffered = computed(() =>
+    unref(usable) && unref(currentSheetLocked) && Boolean(unref(resultModalData)?.isMultiSheet))
+const unlockTotal = computed(() => Math.max(unref(downloadGate).total, unref(jobGate).total))
+// D17 : retour de Checkout en cours de vérification — les « Débloquer » sont
+// désactivés (un second clic finirait en 409 subscription_exists).
+const checkoutReturnState = useCheckoutReturnState()
+const checkoutChecking = computed(() => unref(checkoutReturnState) === 'checking')
+const effectiveViewMode = computed(() => (unref(currentSheetLocked) ? 'color' : unref(viewMode)))
+// D12 : la page affichée est-elle celle du projet du job ? (le store porte
+// le CHEMIN d'API, jamais le slug nu — resultNav.js).
+const onJobProject = computed(() => isOnJobProject(
+    route.params.slug,
+    filesStore.getters.projectSlug,
+    unref(resultModalData)?.projectSlug,
+))
+// D10 : refus de capacité rouvert depuis la carte — panneau d'actions au
+// lieu des lignes brutes (« capacity_exceeded »).
+const capacityErrorPanel = computed(() =>
+    unref(isHaveError) && Boolean(unref(capacityPanel)) && unref(unfitData)?.reason === 'capacity')
+// D26 : information Free avant de relancer un calcul de plus de 2 tôles.
+const freeDownloadNote = computed(() =>
+    (freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
+        ? t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP })
+        : ''))
+
+const onUnlockSheets = (surface) => {
+    if (unref(checkoutChecking)) return
+    const gate = surface === 'modal_viewer'
+        ? unref(viewGate)
+        : { ...unref(downloadGate), total: unref(unlockTotal) }
+    trackEvent('locked_sheets_unlock_click', lockedSheetsTrackData(surface, gate, unref(isLocal)))
+    // La fenêtre de résultat RESTE ouverte sous la fenêtre d'abonnement
+    // (précédent de l'export verrouillé).
+    openBuyCredits({
+        source: 'locked_sheets',
+        lockedSheets: {
+            total: gate.total,
+            cap: gate.cap,
+            resultSlug: unref(resultModalData)?.slug,
+            projectSlug: unref(resultModalData)?.projectSlug ?? null,
+        },
+    })
+}
+
+// `locked_sheets_view` au plus une fois par ouverture : « modal » quand le
+// bouton « Débloquer » de la rangée est affiché, sinon « modal_viewer » à la
+// première tôle verrouillée d'un résultat utilisable. Surveiller les DEUX
+// garantit qu'aucun `locked_sheets_unlock_click` ne part sans vue préalable
+// (alternative ≠ 0, ou alternative utilisable choisie après l'ouverture).
+let viewTracked = false
+let viewSession = false
+const trackLockedView = () => {
+    if (!viewSession || viewTracked || !unref(resultDialog)) return
+    if (unref(unlockOffered)) {
+        viewTracked = true
+        trackEvent('locked_sheets_view', lockedSheetsTrackData('modal', unref(downloadGate), unref(isLocal)))
+    } else if (unref(sheetUnlockOffered)) {
+        viewTracked = true
+        trackEvent('locked_sheets_view', lockedSheetsTrackData('modal_viewer', unref(viewGate), unref(isLocal)))
+    }
+}
+watch([unlockOffered, sheetUnlockOffered], trackLockedView)
+
+// D11/D12 : la fenêtre n'écrit AUCUN réglage — elle transmet l'intention et
+// le projet du job ; UserResults décide (page du projet ou « Ouvrir »).
+const onUnfitAddSheet = () => {
+    const panel = unref(capacityPanel)
+    emit('unfit-add-sheet', {
+        projectSlug: unref(resultModalData)?.projectSlug ?? null,
+        nextSheets: panel?.nextSheets ?? null,
+        addSheets: panel?.addSheets ?? null,
+    })
+}
+const onUnfitReduceSpacing = (mm) => {
+    emit('unfit-reduce-spacing', { projectSlug: unref(resultModalData)?.projectSlug ?? null, mm })
+}
+const onUnfitOpenProject = () => {
+    emit('unfit-open-project', { projectSlug: unref(resultModalData)?.projectSlug ?? null })
+}
 // ---------------------------------------------------------------------------
 // U3 passe 1 : les trois enfants sont PUREMENT presentatifs — toute la
 // logique reste ici et leur est passee dans un objet unique, qu'ils
@@ -720,7 +880,21 @@ const bundle = computed(() => ({
     capacityPanel: unref(capacityPanel),
     hasColorPreview: unref(hasColorPreview),
     showColorPreview: unref(showColorPreview),
-    viewMode: unref(viewMode),
+    // O2 (02/11) : valeur EFFECTIVE (couleur forcée sur une tôle verrouillée).
+    viewMode: unref(effectiveViewMode),
+    // O2 (02/11) : verrou des tôles (§3.13).
+    downloadGate: unref(downloadGate),
+    jobGate: unref(jobGate),
+    viewGate: unref(viewGate),
+    currentSheetLocked: unref(currentSheetLocked),
+    usable: unref(usable),
+    unlockOffered: unref(unlockOffered),
+    sheetUnlockOffered: unref(sheetUnlockOffered),
+    unlockTotal: unref(unlockTotal),
+    checkoutChecking: unref(checkoutChecking),
+    onJobProject: unref(onJobProject),
+    capacityErrorPanel: unref(capacityErrorPanel),
+    freeDownloadNote: unref(freeDownloadNote),
     currentSvgs: unref(currentSvgs),
     currentDxfs: unref(currentDxfs),
     previewSheet: unref(previewSheet),

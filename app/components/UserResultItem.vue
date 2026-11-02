@@ -79,7 +79,13 @@
             <p v-if="result.purgedAt" class="result__expired">
                 {{ t('results.expired') }}
             </p>
-            <div class="result__controls controls">
+            <!-- D27 (02/11) : la classe `controls--locked` n'existe QUE si le
+                 verrou s'applique (seconde ligne pour « Débloquer ») — la
+                 carte d'un payant reste identique au pixel près. -->
+            <div
+                class="result__controls controls"
+                :class="{ 'controls--locked': lockedControls }"
+            >
                 <MainButton
                     v-if="hasReport"
                     :label="t('result.nestingReport')"
@@ -92,7 +98,9 @@
                 <!-- Job serveur : href GridFS. Job local (J-082) : contenus
                      persistés en IndexedDB, téléchargement 100 % navigateur.
                      C05 : job localOnly calculé ailleurs — RIEN à télécharger
-                     ici (l'ancien « Download All » sans contenu masqué). -->
+                     ici (l'ancien « Download All » sans contenu masqué).
+                     O2 (02/11) : href inchangé — la route ZIP sert elle-même
+                     les seules tôles 1-2 à un compte verrouillé. -->
                 <MainButton
                     v-if="isResultCompleted && !isLocal && !result.purgedAt && !result.localElsewhere"
                     :href="downloadUrl"
@@ -101,6 +109,7 @@
                     :size="sizeType.s"
                     :theme="themeType.primary"
                     class="controls__download"
+                    v-bind="downloadButtonAttrs"
                     @click="onDownload"
                 />
                 <MainButton
@@ -109,7 +118,25 @@
                     :size="sizeType.s"
                     :theme="themeType.primary"
                     class="controls__download"
+                    v-bind="downloadButtonAttrs"
                     @click="downloadLocal"
+                />
+                <!-- O2 (02/11) : déblocage des tôles 3+ (alternative 0, celle
+                     que le bouton télécharge). Libellé court visible, libellé
+                     complet en aria-label/title (D27). Pas de trackingTag
+                     (D18) : l'événement est tracé avec ses données. -->
+                <MainButton
+                    v-if="showUnlock"
+                    :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockShort')"
+                    :aria-label="t('results.unlockSheets', { n: gate.total })"
+                    :title="t('results.unlockSheets', { n: gate.total })"
+                    :icon="iconType.lock"
+                    :isDisable="checkoutChecking"
+                    :size="sizeType.s"
+                    :theme="themeType.secondary"
+                    class="controls__unlock"
+                    data-testid="result-unlock"
+                    @click="onUnlock"
                 />
             </div>
             <UiButton
@@ -131,6 +158,9 @@ import { trackEvent } from '~/utils/track';
 import { altDensityPctOf } from '~/utils/resultQuality';
 import { failureReasonKey } from '~/utils/failureReason';
 import { computed, ref } from "vue";
+import { iconType } from '~~/constants/icon.constants'
+import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
+import { altLayoutCount, altSheetNames, lockedSheetsTrackData, sheetGateModel } from '~/utils/sheetDownloadGate'
 
 const props = defineProps({
     result: {
@@ -182,17 +212,64 @@ const isMultiSheet = computed(() => {
 // artefacts ne viennent JAMAIS du serveur pour ces jobs.
 const isLocal = computed(() => Boolean(props.result?.isLocal));
 
+// O2 (02/11) : verrou de téléchargement des tôles sur la carte, calculé sur
+// l'ALTERNATIVE 0 (celle que le bouton télécharge, D4). Palier du moment
+// (d1) ; K et démo passés EXPLICITEMENT — la carte ne lisait que globalStore
+// et les défauts verrouilleraient la démo et K en silence (C1-4).
+const { data: userData } = useNuxtData('user')
+const config = useRuntimeConfig()
+const downloadState = computed(() => sheetDownloadState(unref(userData), {
+    paidPlansDisabled: config.public.paidPlansDisabled,
+    projectSlug: props.result?.projectSlug ?? null,
+}))
+const gate = computed(() => sheetGateModel(altSheetNames(props.result, 0), unref(downloadState),
+    altLayoutCount(props.result, 0)))
+// D17 : retour de Checkout en cours de vérification — « Débloquer » inactif.
+const checkoutReturnState = useCheckoutReturnState()
+const checkoutChecking = computed(() => unref(checkoutReturnState) === 'checking')
+const openBuyCredits = useBuyCreditsOpener()
+
+// Mêmes conditions que les deux boutons de téléchargement du gabarit : pas de
+// déblocage proposé sur une carte en échec, purgée ou « autre appareil ».
+const hasDownloadButton = computed(() => isResultCompleted.value
+    && (isLocal.value || (!props.result?.purgedAt && !props.result?.localElsewhere)))
+const showUnlock = computed(() => hasDownloadButton.value && gate.value.anyLocked)
+const lockedControls = computed(() => showUnlock.value)
+
+// §3.12 : données en chaînes, sans slug de job.
+const downloadTrackData = () => ({
+    isMultiSheet: String(Boolean(isMultiSheet.value)),
+    isLocal: String(isLocal.value),
+    locked: String(gate.value.anyLocked),
+})
+
+const onUnlock = () => {
+    if (checkoutChecking.value) return
+    const g = gate.value
+    trackEvent('locked_sheets_unlock_click', lockedSheetsTrackData('card', g, isLocal.value))
+    openBuyCredits({
+        source: 'locked_sheets',
+        lockedSheets: {
+            total: g.total,
+            cap: g.cap,
+            resultSlug: props.result?.slug,
+            projectSlug: props.result?.projectSlug ?? null,
+        },
+    })
+}
+
 const downloadLocal = () => {
     const record = props.result?.localRecord;
     if (!record) return;
-    trackEvent('click_download_button', {
-        slug: props.result?.slug,
-        isMultiSheet: isMultiSheet.value,
-        isLocal: true,
-    });
+    trackEvent('click_download_button', downloadTrackData());
     try {
-        downloadLocalResult(record);
+        downloadLocalResult(record, 0, { maxSheet: maxDownloadableSheet(unref(downloadState)) });
     } catch (e) {
+        // §3.11 : filet (l'archive écarte déjà les tôles verrouillées).
+        if (e?.message === 'sheet_locked') {
+            onUnlock()
+            return
+        }
         console.warn('local download failed', e);
     }
 };
@@ -201,8 +278,16 @@ const downloadUrl = computed(() => {
     return props.result?.downloadUrl ?? '';
 });
 
+// D27 : libellé court visible quand le verrou s'applique (colonne de 260 px),
+// libellé complet en aria-label/title ; sinon libellés inchangés.
 const downloadButtonText = computed(() => {
+    if (gate.value.anyLocked) return t('results.downloadFirstSheetsShort', { n: gate.value.cap })
     return isMultiSheet.value ? t('results.downloadAll') : t('results.download');
+});
+const downloadButtonAttrs = computed(() => {
+    if (!gate.value.anyLocked) return {}
+    const full = t('results.downloadFirstSheets', { n: gate.value.cap })
+    return { 'aria-label': full, title: full }
 });
 
 const hasMultipleSvgs = computed(() => {
@@ -422,10 +507,7 @@ const openReport = () => {
 };
 
 const onDownload = () => {
-    trackEvent('click_download_button', {
-        slug: props.result?.slug,
-        isMultiSheet: isMultiSheet.value
-    });
+    trackEvent('click_download_button', downloadTrackData());
 };
 </script>
 <style lang="scss" scoped>
@@ -672,6 +754,17 @@ const onDownload = () => {
 
     &__report {
         margin-right: 5px;
+    }
+
+    /* D27 (02/11) : carte verrouillée — « Débloquer » prend une seconde
+       ligne (colonne de 260 px, rien d'écrasé). Classe absente sans verrou. */
+    &--locked {
+        flex-wrap: wrap;
+        row-gap: 5px;
+    }
+
+    &__unlock {
+        flex-basis: 100%;
     }
 }
 </style>

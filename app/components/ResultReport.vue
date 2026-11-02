@@ -73,7 +73,24 @@
                 </span>
             </div>
         </header>
-            <div v-if="isHaveError" class="modal__name modal__info info">
+            <!-- D10 (02/11) : refus de capacité rouvert (le panneau de la page
+                 disparaît au rechargement) — les leviers et l'action au lieu
+                 des lignes brutes et du code `capacity_exceeded`. -->
+            <CapacityPanel
+                v-if="capacityErrorPanel"
+                :panel="reportCapacityPanel"
+                tone="danger"
+                :title="t('nest.capacity.title')"
+                :detail="t('nest.capacity.refunded')"
+                :show-retry="false"
+                :open-project="capacityOpenProject"
+                :free-note="freeDownloadNote"
+                data-testid="report-capacity"
+                @add-sheet="$emit('unfit-add-sheet')"
+                @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
+                @open-project="$emit('unfit-open-project')"
+            />
+            <div v-if="isHaveError && !capacityErrorPanel" class="modal__name modal__info info">
                 <span class="info__label">
                     {{ t('result.noSolution') }}
                 </span>
@@ -207,25 +224,31 @@
                      Le partiel garde son ton ambre (Z3). -->
                 <CapacityPanel
                     v-if="isUnfit && capacityPanel"
-                    :panel="capacityPanel"
+                    :panel="reportCapacityPanel"
                     tone="danger"
                     :title="t('report.unfit.title')"
                     :detail="unfitDetail"
                     :show-retry="false"
+                    :open-project="capacityOpenProject"
+                    :free-note="freeDownloadNote"
                     data-testid="report-unfit"
                     @add-sheet="$emit('unfit-add-sheet')"
                     @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
+                    @open-project="$emit('unfit-open-project')"
                 />
                 <CapacityPanel
                     v-else-if="isPartial && partialHasLevers && capacityPanel"
-                    :panel="capacityPanel"
+                    :panel="reportCapacityPanel"
                     tone="warn"
                     :title="t('report.partial.title', { n: partialUnplacedCount })"
                     :detail="t('report.partial.detail')"
                     :show-retry="false"
+                    :open-project="capacityOpenProject"
+                    :free-note="freeDownloadNote"
                     data-testid="report-partial"
                     @add-sheet="$emit('unfit-add-sheet')"
                     @reduce-spacing="$emit('unfit-reduce-spacing', capacityPanel.reduceSpacingToMm)"
+                    @open-project="$emit('unfit-open-project')"
                 />
                 <!-- Lot E2 : pièces plus fines que l'espacement demandé. Le
                      moteur les a préparées autrement et le job est livré :
@@ -300,10 +323,25 @@
                     trackingTag="report_csv"
                     @click="onExportClick(exportCsv, 'report_csv_locked_click')"
                 />
+                <!-- O2 (02/11) : le compte télécharge les tôles 1-2 de
+                     l'alternative 0 (D4) ; le reste se débloque ici. Pas de
+                     trackingTag (D18) : l'orchestrateur trace l'événement
+                     avec ses données. Désactivé pendant la vérification d'un
+                     retour de paiement (D17). -->
+                <MainButton
+                    v-if="unlockOffered"
+                    :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockSheets', { n: unlockTotal })"
+                    :icon="iconType.lock"
+                    :isDisable="checkoutChecking"
+                    :size="sizeType.s"
+                    :theme="themeType.primary"
+                    data-testid="report-unlock"
+                    @click="$emit('unlock-sheets', 'modal_actions')"
+                />
                 <MainButton
                     v-if="resultModalData.isMultiSheet && !isLocal"
                     :href="resultModalData.zipDownloadUrl"
-                    :label="t('results.downloadAll')"
+                    :label="downloadGate.anyLocked ? t('results.downloadFirstSheets', { n: downloadGate.cap }) : t('results.downloadAll')"
                     tag="a"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
@@ -318,7 +356,7 @@
                 <NewBadge feature="job-download-primary" />
                 <MainButton
                     v-if="isLocal && resultModalData.hasJobs && resultModalData.isMultiSheet"
-                    :label="t('jobImport.downloadAllJobs')"
+                    :label="jobGate.anyLocked ? t('jobImport.downloadFirstJobs', { n: jobGate.cap }) : t('jobImport.downloadAllJobs')"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="themeType.primary"
@@ -336,7 +374,9 @@
                 />
                 <MainButton
                     v-if="resultModalData.isMultiSheet && isLocal"
-                    :label="t(resultModalData.hasJobs ? 'results.downloadAllDxf' : 'results.downloadAll')"
+                    :label="downloadGate.anyLocked
+                        ? t('results.downloadFirstSheets', { n: downloadGate.cap })
+                        : t(resultModalData.hasJobs ? 'results.downloadAllDxf' : 'results.downloadAll')"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="resultModalData.hasJobs ? themeType.secondary : themeType.primary"
@@ -381,6 +421,7 @@ const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
     'download-single', 'download-job', 'download-all-jobs', 'close', 'copy-slug',
+    'unlock-sheets', 'unfit-open-project',
 ])
 
 const t = (...a) => props.d.t(...a)
@@ -432,6 +473,26 @@ const name = computed(() => props.d.name)
 const exportLocked = computed(() => props.d.exportLocked)
 const exportDisabled = computed(() => props.d.exportDisabled)
 const copied = computed(() => props.d.copied)
+// O2 (02/11) : verrou des tôles, calculé par l'orchestrateur (§3.13).
+const EMPTY_GATE = { anyLocked: false, cap: 0, total: 0 }
+const downloadGate = computed(() => props.d.downloadGate || EMPTY_GATE)
+const jobGate = computed(() => props.d.jobGate || EMPTY_GATE)
+const unlockOffered = computed(() => Boolean(props.d.unlockOffered))
+const unlockTotal = computed(() => props.d.unlockTotal)
+const checkoutChecking = computed(() => Boolean(props.d.checkoutChecking))
+const freeDownloadNote = computed(() => props.d.freeDownloadNote || '')
+const onJobProject = computed(() => Boolean(props.d.onJobProject))
+const capacityErrorPanel = computed(() => Boolean(props.d.capacityErrorPanel))
+// D12 (02/11) : hors du projet du job, un seul bouton « Ouvrir le projet »
+// (ajouter des tôles ou réduire l'espacement agirait sur les réglages d'un
+// AUTRE projet) ; job sans projet connu : aucun bouton, les leviers restent.
+const jobProjectSlug = computed(() => props.d.resultModalData?.projectSlug || null)
+const capacityOpenProject = computed(() => !unref(onJobProject) && Boolean(unref(jobProjectSlug)))
+const reportCapacityPanel = computed(() => {
+    const p = unref(capacityPanel)
+    if (!p || unref(onJobProject) || unref(jobProjectSlug)) return p
+    return { ...p, nextSheets: null, addSheets: null, reduceSpacingToMm: null }
+})
 
 // L'orchestrateur garde la politique d'export (paywall) : on lui passe
 // l'intention, il decide.

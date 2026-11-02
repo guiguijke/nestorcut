@@ -20,14 +20,16 @@
             v-model:isModalOpen="resultDialog"
             @unfit-add-sheet="onUnfitAddSheet"
             @unfit-reduce-spacing="onUnfitReduceSpacing"
+            @unfit-open-project="onUnfitOpenProject"
         />
     </MainAside>
 </template>
 
 <script setup>
 import { projectPrivacyMode } from '~/utils/privacyMode'
-import { mmToDisplay } from '~/utils/units'
-import { capacityPanelModel } from '~/utils/capacityPanel'
+import { hasPaidAccess } from '~/utils/entitlementUi'
+import { findReopenItem, isOnJobProject } from '~/utils/resultNav'
+import { trackEvent } from '~/utils/track'
 
 const route = useRoute();
 const resultDialog = useResultDialog();
@@ -92,25 +94,67 @@ const openModal = (result) => {
     resultDialog.value = true
 }
 
-// Z1/Z3 (vérif 2026-09-05) : les boutons « Ajouter une tôle » / « Réduire
-// l'espacement » du modal (bandeaux unfit/partiel) modifient les réglages
-// du projet courant — mêmes règles que le bandeau capacité de la page.
-const onUnfitAddSheet = () => {
-    const sheets = filesStore.getters.params?.sheets || []
-    const next = capacityPanelModel({ reason: 'capacity' }, { sheets })?.nextSheets
-    if (!next) return
-    filesStore.actions.updateParams({ sheets: next })
+// Z1/Z3 (vérif 2026-09-05) puis D11/D12 (02/11) : les boutons « Ajouter
+// environ k tôles et relancer » / « Réduire l'espacement » du modal
+// n'écrivent AUCUN réglage ici. Sur la page du projet du job, ils posent une
+// demande que `[slug].vue` applique avec SES fonctions (ajout + relance ;
+// réduction de la SÉCURITÉ par updateKerfSafety, jamais `space` brut).
+// Ailleurs (/home, autre projet), un seul bouton « Ouvrir le projet ».
+// « Sur le projet du job » = route ET store, qui porte le CHEMIN d'API —
+// jamais `filesStore.getters.projectSlug === ps` (toujours faux, C2-1).
+const onJob = (ps) => isOnJobProject(route.params.slug, filesStore.getters.projectSlug, ps)
+const capacityActionRequest = useCapacityActionRequest()
+const { data: userData } = useNuxtData('user')
+
+const onUnfitOpenProject = (payload) => {
+    const ps = payload?.projectSlug
+    trackEvent('capacity_open_project_click', { surface: 'modal' })
     resultDialog.value = false
+    if (ps) navigateTo('/project/' + ps)
 }
-const onUnfitReduceSpacing = (mm) => {
-    if (mm == null || !Number.isFinite(Number(mm))) return
-    const { unit } = useUnit()
-    const disp = mmToDisplay(Number(mm), unit.value)
-    filesStore.actions.updateParams({
-        space: unit.value === 'inch' ? String(Math.round(disp * 1000) / 1000) : String(disp),
+const onUnfitAddSheet = (payload) => {
+    if (!onJob(payload?.projectSlug)) return onUnfitOpenProject(payload)
+    if (!payload?.nextSheets) return
+    trackEvent('capacity_add_sheets_click', {
+        surface: 'modal',
+        k: String(payload.addSheets ?? 1),
+        plan: hasPaidAccess(unref(userData)) ? 'paid' : 'free',
     })
     resultDialog.value = false
+    capacityActionRequest.value = {
+        projectSlug: payload.projectSlug,
+        action: 'add_sheets',
+        nextSheets: payload.nextSheets,
+        at: Date.now(),
+    }
 }
+const onUnfitReduceSpacing = (payload) => {
+    const mm = Number(payload?.mm)
+    if (payload?.mm == null || !Number.isFinite(mm)) return
+    // Hors du projet du job, le bouton n'est pas affiché (D12) : rien.
+    if (!onJob(payload?.projectSlug)) return
+    resultDialog.value = false
+    capacityActionRequest.value = {
+        projectSlug: payload.projectSlug,
+        action: 'reduce_spacing',
+        mm,
+        at: Date.now(),
+    }
+}
+
+// d10 (02/11) : retour de Checkout — la fenêtre du résultat se rouvre dès
+// que son slug est dans la liste SSE, une seule fois (cible vidée ensuite,
+// et au changement de page).
+const reopenTarget = useCheckoutReopenTarget()
+watch(
+    [() => getters.resultsList, reopenTarget],
+    ([list, target]) => {
+        const item = findReopenItem(list, target)
+        if (!item) return
+        reopenTarget.value = null
+        openModal(item)
+    },
+)
 
 const isHomePage = computed(() => {
     return route.path === '/home'
@@ -124,7 +168,10 @@ onBeforeUnmount(() => {
 
 watch(
     () => route.path,
-    () => updateResults(),
+    () => {
+        reopenTarget.value = null
+        updateResults()
+    },
 );
 
 </script>
