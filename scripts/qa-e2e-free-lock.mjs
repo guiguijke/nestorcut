@@ -765,11 +765,27 @@ try {
         const pageAdd = panel.locator('[data-testid="capacity-add-sheet"]')
         log('bouton du panneau :', (await pageAdd.innerText().catch(() => '')).trim(),
             'data-add-sheets=', await pageAdd.getAttribute('data-add-sheets').catch(() => null))
+        const job = await waitJob(nest.jobSlug, 120000)
+        // Un refus NAVIGATEUR est persisté `status: 'error'` en base
+        // (server/api/results/[slug]/local-fail.post.js:99) ; c'est l'API qui
+        // le présente `failed` (server/features/results/resultcontroller.js:46-47).
+        // Le harnais lit la BASE : il attend donc `error`.
+        check('job refusé (status « error » en base = « failed » à l’API, unfit capacity)',
+            job.status === 'error' && job.unfit?.reason === 'capacity',
+            `statut=${job.status} unfit=${JSON.stringify(job.unfit || null)}`)
+        // Capture APRÈS la fin du job : le panneau apparaît dès le refus côté
+        // client, alors que le bouton Nest dit encore « Computing… » tant que le
+        // flux SSE liste le job awaiting_local (`runningJob` ← pickRunningJob,
+        // app/pages/project/[slug].vue:103-106 et :269-273).
+        const nestBtn = P.locator('.atelier__nest')
+        const computing = T('nest.computing')
+        for (let i = 0; i < 20 && (await nestBtn.innerText().catch(() => '')).includes(computing.replace(/[.…]+$/, '')); i++) {
+            await P.waitForTimeout(500)
+        }
+        log('bouton Nest après le refus :', JSON.stringify((await nestBtn.innerText().catch(() => '')).trim()),
+            'disabled=', await nestBtn.isDisabled().catch(() => null))
         await shot(P, 'c1-capacity-panel-d26.png', P.locator('.atelier__params').first(),
             'panneau de capacité de la page projet avec l’information D26')
-        const job = await waitJob(nest.jobSlug, 120000)
-        check('job refusé (failed, unfit capacity)', job.status === 'failed' && job.unfit?.reason === 'capacity',
-            `statut=${job.status} unfit=${JSON.stringify(job.unfit || null)}`)
         const before = await readSheet(P)
 
         // Rechargement : le panneau de la page disparaît.
