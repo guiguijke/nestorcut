@@ -44,7 +44,14 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
 - 10 nestings **réussis** / mois calendaire UTC — un job échoué ne consomme
   pas de quota (charge refundée par le worker, `worker_common/refund.py`)
   [prod].
-- Cap **2 tôles par job** (somme des counts, identiques ou différentes) [prod, PR#18].
+- Calcul sur autant de tôles que nécessaire ; téléchargement des **2 premières
+  tôles de chaque job** (constante `FREE_DOWNLOAD_SHEET_CAP`), le reste avec
+  Unlimited [spéc — décision du propriétaire du 02/11 (O1-O3), `[prod]` au
+  déploiement du lot V0.9.10 seulement ; jusque-là le plafond de 2 tôles par
+  job reste en vigueur] ; borne technique 1000 tôles/job, tous plans (démo
+  comprise) [spéc]. Le verrou est serveur pour un calcul sur nos machines,
+  d'interface pour un calcul dans le navigateur (même précédent que l'export
+  du rapport, §3).
 - Calcul **navigateur uniquement** (Mode Local forcé : solve WASM
   mono-walk, résultats 100 % navigateur, refund à l'échec) [prod, PR#33-38 —
   flag ON 2026-08-08].
@@ -56,7 +63,9 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
 
 ### Unlimited — 19 €/mois
 
-- Nestings illimités, tôles illimitées [prod].
+- Nestings illimités [prod] ; téléchargement de toutes les tôles de chaque job
+  (aujourd'hui « tôles illimitées » [prod]) [spéc — lot V0.9.10, `[prod]` au
+  déploiement].
 - Calcul serveur **ou** navigateur [prod, flags ON] : le choix visible
   est **à la création du projet** (cartes Cet appareil / Nos serveurs),
   pas un toggle « Lieu de calcul » séparé (clés i18n `localMode.*`
@@ -116,6 +125,12 @@ produit sans protéger l'utilisateur.
 - **Exports CSV / presse-papier = Unlimited+** [prod, PR#19] — état
   verrouillé explicite en free (jamais un bouton qui disparaît).
   **Export PDF : pas implémenté** [spéc].
+- **Téléchargement des tôles = même famille d'état verrouillé** [spéc, lot
+  V0.9.10] : un Free voit TOUT le résultat (aperçus, rapport) mais ne
+  télécharge que les 2 premières tôles de chaque alternative (DXF, ZIP,
+  .job) ; au-delà, un cadenas explicite mène à Unlimited (« Débloquer »),
+  jamais un bouton qui disparaît sans explication. Démo et
+  `NUXT_PUBLIC_PAID_PLANS_DISABLED` exemptées du verrou.
 - **Historique des rapports** et **coût matière** (prix/tôle → coût job) :
   candidats Pro futurs [spéc].
 - Rappel canonique : la densité du rapport est **mesurée** sur les
@@ -170,7 +185,9 @@ Quatre chantiers **indépendants, à traiter en PR séparées** :
    actif vérifié en prod 2026-08-12, log `purge: {...}` au boot] : blobs
    sources + résultats supprimés par bucket (jamais de TTL seul — chunks
    orphelins), vault et démo exemptés, scalaires de rapport conservés.
-4. **Cap 2 tôles/job en free** [prod, PR#18] (démo exemptée, D-DEM-11).
+4. **Cap 2 tôles/job en free** [prod, PR#18] (démo exemptée, D-DEM-11)
+   — remplacé le 2026-11-02 par le verrou de téléchargement (voir
+   specs/90-decisions.md) [spéc jusqu'au déploiement du lot V0.9.10].
 
 Déjà livrés : codes promo partenaires [prod], rapport matière [prod],
 admin mobile + tracking + métriques file mesurée [prod, PR#47-#49, #52],

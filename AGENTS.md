@@ -859,6 +859,57 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     résultat local et exige la page réactive à +5 s — aucun harnais ne
     l'ouvrait, c'est le trou qui a laissé passer le défaut.
 
+63. **Téléchargement Free = les 2 premières tôles, lues dans le NOM du
+    fichier, jamais dans l'index d'un tableau (lot V1, 02/11 ; spec
+    `specs/LOT-V1-TELECHARGEMENT-FREE-2026-11.md`).** Le calcul Free n'a plus
+    de plafond (O1) : `MAX_SHEETS_PER_JOB` (1000, 400 `too_many_sheets`) est
+    la seule borne, démo comprise. Le verrou porte sur le TÉLÉCHARGEMENT :
+    - **Identité de tôle** : `_part_N.dxf` / `_toleN.job`, parseur unique
+      `shared/constants/sheetDownload.constants.js`, plafond
+      `FREE_DOWNLOAD_SHEET_CAP` (≥ 2, `payment.constants.js`). Côté
+      navigateur `dxfs[]` SAUTE les tôles dont le DXF n'a pas été construit
+      (`finalizeLocal.js`) : un index mentirait. Un nom illisible n'est
+      jamais verrouillé. Le rang `_altN_` du nom n'est pas le rang affiché
+      (#44).
+    - **Deux verrous, pour deux lieux de calcul.** Navigateur = verrou
+      d'INTERFACE au point d'étranglement `app/composables/localDownloads.js`
+      (option `maxSheet`, ouverte par défaut : un appelant oublié livrerait
+      tout, d'où le test statique des appelants dans `localDownloads.test.js`)
+      — contournable (DevTools, IndexedDB), assumé comme J-057. Serveur =
+      verrou RÉEL : route DXF 403 `sheet_download_locked`, route ZIP tronquée
+      (`nesting-<slug>-sheets-1-2.zip`), SVG ouvert, Vue DXF masquée sur une
+      tôle verrouillée.
+    - **Plafond serveur** = `downloadSheetCapForUser` (`entitlement.js`, #34,
+      seul lecteur serveur de la constante). Il reprend chez Stripe un
+      abonnement stocké actif mais à période échue (comme `assertCanNest`) :
+      sans cela un payant dont le webhook est en retard reçoit un ZIP tronqué
+      EN SILENCE. Le job est retrouvé par le slug lu dans le nom (index
+      `slug`), jamais par un `$or` sur `dxf_files` (aucun index, déclenchable
+      à 180/min).
+    - **Client** : `sheetDownloadState(user, { paidPlansDisabled, projectSlug })`
+      — l'appelant passe TOUJOURS les deux (les défauts verrouillent la démo
+      et K en silence). Les `.job` sont jugés sur LEURS noms (`jobGate`), pas
+      sur ceux des DXF : l'alternative k d'un `.job` ne suit pas l'ordre des
+      DXF (`localJobPrivate.js`, désalignement préexistant).
+    - **`filesStore.getters.projectSlug` porte le CHEMIN d'API**
+      (`/api/project/<slug>`, `files.js`), jamais le slug nu : « suis-je sur
+      le projet du job ? » se teste par `isOnJobProject`
+      (`app/utils/resultNav.js`), jamais `=== slug` (toujours faux : le bouton
+      « Ajouter k tôles » de la fenêtre de résultat est resté inopérant ainsi).
+    - **Suivi** : la liste blanche est `shared/constants/trackActions.js`
+      (serveur ET test de parité `app/tests/trackParity.test.js` : un nom émis
+      mais absent est rejeté 400 en silence, 38 l'étaient) ; toute valeur
+      `data` passe en chaîne (`toTrackData`, `app/utils/track.ts`) — un
+      booléen ou un nombre est refusé par l'API. Aucun slug de job dans un
+      événement ni dans une URL Stripe.
+    Verrous : `sheetIdentity`, `sheetDownloadState`, `sheetDownloadGate`,
+    `localDownloads`, `resultNav`, `checkoutReturn`, `capacityPanel`,
+    `trackParity` (`app/tests/`) ; `sheetCap`, `downloadSheetCap`,
+    `resultZip`, `resultDxfGate`, `billing`, `trackAllowlist`
+    (`server/tests/`) ; harnais navigateur `scripts/qa-e2e-free-lock.mjs` (à
+    livrer par WP-QA : absent de l'arbre à la fusion du 02/11 — retirer cette
+    mention si le lot QA ne le crée pas).
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :
