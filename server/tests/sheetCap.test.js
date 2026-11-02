@@ -25,7 +25,8 @@ vi.mock('~~/server/features/payment/stripe', () => ({
 }))
 
 import nestHandler from '~~/server/api/project/[slug]/nest.post.js'
-import { assertSheetCountWithinTier, sheetCapForTier, FREE_SHEET_CAP } from '~~/server/utils/entitlement'
+import { assertSheetCountWithinMax } from '~~/server/utils/entitlement'
+import { MAX_SHEETS_PER_JOB } from '~~/shared/constants/payment.constants'
 import { fakeDb } from './helpers/fakeMongo'
 
 const currentPeriod = () => new Date().toISOString().slice(0, 7)
@@ -71,81 +72,154 @@ beforeEach(() => {
     state.enqueued = []
 })
 
-describe('sheetCapForTier (resolver, AGENTS #34)', () => {
-    it('free is capped, paid tiers uncapped, unknown tiers uncapped', () => {
-        expect(sheetCapForTier('free')).toBe(FREE_SHEET_CAP)
-        expect(sheetCapForTier('standard')).toBe(Infinity)
-        expect(sheetCapForTier('privacy')).toBe(Infinity)
-        expect(sheetCapForTier('whatever')).toBe(Infinity)
+// Démo : projet partagé, quota démo dédié (J-056).
+const demoDb = (userDoc) =>
+    fakeDb({
+        users: [userDoc],
+        projects: [{ slug: 'demo', isDemo: true }],
+        user_dxf_files: [{ slug: 'f1', name: 'marine.dxf', projectSlug: 'demo', isDemo: true }],
     })
 
-    it('assertSheetCountWithinTier throws the stable 403 sheet_cap_exceeded', async () => {
-        expect(() => assertSheetCountWithinTier(2, 'free')).not.toThrow()
-        expect(() => assertSheetCountWithinTier(3, 'free')).toThrowError(
-            expect.objectContaining({ statusCode: 403, statusMessage: 'sheet_cap_exceeded' })
-        )
-        expect(() => assertSheetCountWithinTier(50, 'standard')).not.toThrow()
+const paidUser = () =>
+    freeUser({
+        subscription: {
+            status: 'active',
+            priceId: 'price_std',
+            currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000),
+        },
+    })
+
+describe('assertSheetCountWithinMax (borne technique d6, resolver AGENTS #34)', () => {
+    it('la borne vaut 1000 tôles par job', () => {
+        expect(MAX_SHEETS_PER_JOB).toBe(1000)
+    })
+
+    it('MAX passe, MAX + 1 lève le 400 stable too_many_sheets', () => {
+        expect(() => assertSheetCountWithinMax(MAX_SHEETS_PER_JOB)).not.toThrow()
+        let caught = null
+        try {
+            assertSheetCountWithinMax(MAX_SHEETS_PER_JOB + 1)
+        } catch (err) {
+            caught = err
+        }
+        expect(caught).toMatchObject({ statusCode: 400, statusMessage: 'too_many_sheets' })
+        expect(caught.data).toEqual({ reason: 'too_many_sheets', max: 1000 })
     })
 })
 
-describe('POST /api/project/[slug]/nest — free sheet cap (D-PAY-9)', () => {
-    it('free user at 3 sheets total (mixed formats) -> 403 sheet_cap_exceeded, quota NOT consumed', async () => {
+describe('POST /api/project/[slug]/nest — plus de plafond Free (O1), borne technique (d6)', () => {
+    it('Free, 3 tôles en formats mixtes -> job créé, une unité Free consommée', async () => {
         const userDoc = freeUser()
         state.db = baseDb([userDoc])
-        const body = nestBody([[3000, 1500, 1], [1000, 2000, 1], [1000, 1000, 1]])
-        await expect(nestHandler(ev('u1', 'p1', body))).rejects.toMatchObject({
-            statusCode: 403,
-            statusMessage: 'sheet_cap_exceeded',
-        })
-        expect(state.enqueued).toHaveLength(0)
-        expect(userDoc.freeNestingUsed).toBe(0) // cap enforced BEFORE any charge
+        const body = nestBody([
+            [3000, 1500, 1],
+            [1000, 2000, 1],
+            [1000, 1000, 1],
+        ])
+        await nestHandler(ev('u1', 'p1', body))
+        expect(state.enqueued).toHaveLength(1)
+        expect(state.enqueued[0].params.sheets).toHaveLength(3)
+        expect(userDoc.freeNestingUsed).toBe(1)
     })
 
-    it('free user at 2 sheets total -> enqueued, free unit consumed', async () => {
+    it('Free, 29 tôles (cas prod) -> job créé', async () => {
         const userDoc = freeUser()
         state.db = baseDb([userDoc])
-        const body = nestBody([[3000, 1500, 2]])
-        await nestHandler(ev('u1', 'p1', body))
+        await nestHandler(ev('u1', 'p1', nestBody([[3000, 1500, 29]])))
         expect(state.enqueued).toHaveLength(1)
         expect(userDoc.freeNestingUsed).toBe(1)
     })
 
-    it('legacy single-sheet params with sheetCount 3 -> 403 (same cap)', async () => {
+    it('Free, ancien format sheetCount 3 -> job créé', async () => {
         const userDoc = freeUser()
         state.db = baseDb([userDoc])
         const body = {
             files: [{ slug: 'f1', count: 10 }],
             params: { width: 3000, height: 1500, sheetCount: 3, space: 2 },
         }
-        await expect(nestHandler(ev('u1', 'p1', body))).rejects.toMatchObject({
-            statusCode: 403,
-            statusMessage: 'sheet_cap_exceeded',
+        await nestHandler(ev('u1', 'p1', body))
+        expect(state.enqueued).toHaveLength(1)
+        expect(userDoc.freeNestingUsed).toBe(1)
+    })
+
+    it('Free, 1001 tôles -> 400 too_many_sheets, rien en file, quota intact', async () => {
+        const userDoc = freeUser()
+        state.db = baseDb([userDoc])
+        await expect(nestHandler(ev('u1', 'p1', nestBody([[3000, 1500, 1001]])))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
+            data: { reason: 'too_many_sheets', max: 1000 },
         })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.freeNestingUsed).toBe(0) // borne contrôlée AVANT toute charge
+    })
+
+    it('Free, 1001 tôles réparties sur deux formats -> 400 (somme des count)', async () => {
+        const userDoc = freeUser()
+        state.db = baseDb([userDoc])
+        const body = nestBody([
+            [3000, 1500, 500],
+            [1000, 2000, 501],
+        ])
+        await expect(nestHandler(ev('u1', 'p1', body))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
+        })
+        expect(state.enqueued).toHaveLength(0)
         expect(userDoc.freeNestingUsed).toBe(0)
     })
 
-    it('standard subscriber at 5 sheets -> enqueued (uncapped)', async () => {
-        const userDoc = freeUser({
-            subscription: { status: 'active', priceId: 'price_std', currentPeriodEnd: new Date(Date.now() + 30 * 24 * 3600 * 1000) },
-        })
+    it('Free, ancien format sheetCount 5000 -> 400, rien consommé', async () => {
+        const userDoc = freeUser()
         state.db = baseDb([userDoc])
-        const body = nestBody([[3000, 1500, 5]])
-        await nestHandler(ev('u1', 'p1', body))
+        const body = {
+            files: [{ slug: 'f1', count: 10 }],
+            params: { width: 3000, height: 1500, sheetCount: 5000, space: 2 },
+        }
+        await expect(nestHandler(ev('u1', 'p1', body))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
+        })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.freeNestingUsed).toBe(0)
+    })
+
+    it('standard, 5 tôles -> job créé, palier standard (inchangé)', async () => {
+        const userDoc = paidUser()
+        state.db = baseDb([userDoc])
+        await nestHandler(ev('u1', 'p1', nestBody([[3000, 1500, 5]])))
         expect(state.enqueued).toHaveLength(1)
         expect(state.enqueued[0].params.computeLevel).toBe('standard')
     })
 
-    it('demo project at 3 sheets -> enqueued (EXEMPT from the cap, dedicated quota — J-056)', async () => {
-        const userDoc = freeUser({ demoNestingUsed: 0, demoNestingPeriod: currentPeriod() })
-        state.db = fakeDb({
-            users: [userDoc],
-            projects: [{ slug: 'demo', isDemo: true }],
-            user_dxf_files: [{ slug: 'f1', name: 'marine.dxf', projectSlug: 'demo', isDemo: true }],
+    it('standard, 1001 tôles -> 400 (la borne vaut pour tous les paliers)', async () => {
+        const userDoc = paidUser()
+        state.db = baseDb([userDoc])
+        await expect(nestHandler(ev('u1', 'p1', nestBody([[3000, 1500, 1001]])))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
         })
-        const body = nestBody([[3000, 1500, 3]])
-        await nestHandler(ev('u1', 'demo', body))
+        expect(state.enqueued).toHaveLength(0)
+    })
+
+    it('démo, 3 tôles -> job créé sur le quota démo (inchangé, J-056)', async () => {
+        const userDoc = freeUser({ demoNestingUsed: 0, demoNestingPeriod: currentPeriod() })
+        state.db = demoDb(userDoc)
+        await nestHandler(ev('u1', 'demo', nestBody([[3000, 1500, 3]])))
         expect(state.enqueued).toHaveLength(1)
         expect(userDoc.demoNestingUsed).toBe(1)
+        expect(userDoc.freeNestingUsed).toBe(0)
+    })
+
+    it('démo, 1001 tôles -> 400 (démo comprise), quota démo intact', async () => {
+        const userDoc = freeUser({ demoNestingUsed: 0, demoNestingPeriod: currentPeriod() })
+        state.db = demoDb(userDoc)
+        await expect(nestHandler(ev('u1', 'demo', nestBody([[3000, 1500, 1001]])))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
+        })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.demoNestingUsed).toBe(0)
         expect(userDoc.freeNestingUsed).toBe(0)
     })
 })

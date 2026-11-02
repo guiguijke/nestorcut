@@ -6,6 +6,8 @@ import { trackEvent } from "~~/server/tracking/add"
 import { createDecryptStream } from "~~/server/utils/crypto";
 import { requireFileAccess } from "~~/server/utils/vault";
 import logger from "~~/server/utils/logger";
+import { downloadSheetCapForUser } from "~~/server/utils/entitlement";
+import { filterDownloadableNames, isDemoJob, paidPlansDisabledFlag } from "~~/server/utils/sheetDownloadGate";
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId;
@@ -25,17 +27,30 @@ export default defineEventHandler(async (event) => {
         });
     }
 
+    // O2 (02/11) : un Free reçoit les seules tôles 1..cap (numéro lu dans le
+    // nom, d4) ; démo (d3), flag K (d2) et payant (reprise Stripe comprise)
+    // reçoivent tout. Un nom illisible est toujours gardé (D2).
+    const allNames = Array.isArray(nestResult.dxf_files) ? nestResult.dxf_files : [];
+    const cap = isDemoJob(nestResult)
+        ? Infinity
+        : await downloadSheetCapForUser(userId, { paidPlansDisabled: paidPlansDisabledFlag(event) });
+    const names = filterDownloadableNames(allNames, cap);
+    const partial = names.length < allNames.length;
+
     await trackEvent(event, "download_nested_result_zip_file", {
         nestSlug: nestSlug,
     })
 
     const nestDxfBucket = await getDxfResultBucket();
 
-    const dxfFiles = await nestDxfBucket.find({ filename: { $in: nestResult.dxf_files } }).toArray();
+    // D6 : les entrées suivent l'ordre de dxf_files (ordre des tôles), pas
+    // celui de find.
+    const dxfFiles = (await nestDxfBucket.find({ filename: { $in: names } }).toArray())
+        .sort((a, b) => names.indexOf(a.filename) - names.indexOf(b.filename));
 
     // Sources validées AVANT les en-têtes : un fichier manquant donne une
     // erreur HTTP propre, jamais un ZIP « valide » auquel il manque une tôle.
-    const expectedNames = new Set(nestResult.dxf_files || []);
+    const expectedNames = new Set(names);
     if (dxfFiles.length < expectedNames.size) {
         throw createError({
             statusCode: 404,
@@ -52,7 +67,10 @@ export default defineEventHandler(async (event) => {
 
     setResponseHeaders(event, {
         "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename=nesting-${nestSlug}.zip`,
+        // D5 : un ZIP partiel le dit dans son nom.
+        "Content-Disposition": partial
+            ? `attachment; filename=nesting-${nestSlug}-sheets-1-${cap}.zip`
+            : `attachment; filename=nesting-${nestSlug}.zip`,
         "Cache-Control": "private, no-store",
     });
 

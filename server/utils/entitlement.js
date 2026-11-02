@@ -3,6 +3,7 @@ import { connectDB } from '../db/mongo'
 import { FREE_NESTING_LIMIT } from '../features/payment/const'
 import { isPromoActive } from './promo'
 import { DEMO_NESTING_LIMIT } from '../../shared/constants/demo.constants'
+import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB } from '../../shared/constants/payment.constants'
 import { ACTIVE_SUBSCRIPTION_STATUSES, getSubscription, mapSubscription } from '../features/payment/stripe'
 import logger from './logger'
 import { logRef } from './logRef'
@@ -191,41 +192,18 @@ export function maxParallelNestsForTier(tier) {
 export const NEST_DIRECTIONS = ['left', 'bottom', 'balanced']
 
 /**
- * Sheet cap per nesting job, by tier (D-PAY-9). The FREE plan is capped at
- * FREE_SHEET_CAP sheets TOTAL — the sum of `count` over every sheet format
- * defined for the job, identical or different. Paid tiers are uncapped.
- *
- * Demo nestings are EXEMPT (J-056): they live under their own dedicated
- * monthly quota (D-DEM-3) and never reach this guard (demo path in
- * nest.post.js).
- *
- * RULE: enforced SERVER-SIDE at enqueue (P3 — a client-side hint alone is
- * never a guard), BEFORE any quota is consumed, via this resolver — never
- * inline a literal cap elsewhere (AGENTS.md, Server / quotas).
+ * d6 (02/11) : borne TECHNIQUE de la somme des `count` des formats d'un job,
+ * tous paliers, démo comprise (O1 : le plafond Free de 2 tôles est supprimé,
+ * D-PAY-9 partie cap remplacée — specs/90-decisions.md 2026-11-02).
+ * Contrôlée à l'enqueue AVANT toute charge (P3) ; miroir UX côté client.
+ * @param {number} totalSheets somme des count de tous les formats
  */
-export const FREE_SHEET_CAP = 2
-
-/**
- * @param {string} tier compute tier ('free'|'standard'|'privacy')
- * @returns {number} max sheets per job (Infinity = uncapped)
- */
-export function sheetCapForTier(tier) {
-    return tier === 'free' ? FREE_SHEET_CAP : Infinity
-}
-
-/**
- * Throws a stable 403 `sheet_cap_exceeded` when the job's total sheet count
- * exceeds the tier's cap.
- * @param {number} totalSheets sum of counts over every defined sheet format
- * @param {string} tier compute tier
- */
-export function assertSheetCountWithinTier(totalSheets, tier) {
-    const cap = sheetCapForTier(tier)
-    if (Number(totalSheets) > cap) {
+export function assertSheetCountWithinMax(totalSheets) {
+    if (Number(totalSheets) > MAX_SHEETS_PER_JOB) {
         throw createError({
-            statusCode: 403,
-            statusMessage: 'sheet_cap_exceeded',
-            data: { reason: 'sheet_cap_exceeded', cap },
+            statusCode: 400,
+            statusMessage: 'too_many_sheets',
+            data: { reason: 'too_many_sheets', max: MAX_SHEETS_PER_JOB },
         })
     }
 }
@@ -298,7 +276,7 @@ export function resolveComputeLocation(localComputeEnabled, isDemo, tier, projec
 /**
  * PR5 (Mode Local productisé, J-078) : où un job est calculé, côté UI.
  *   - DWG dans le job ⇒ serveur (Mode Local = DXF+SVG uniquement, acté) ;
- *   - Free ⇒ local forcé (pas de toggle ; cap 2 tôles déjà en prod) ;
+ *   - Free ⇒ local forcé (pas de toggle) ;
  *   - Unlimited/Pro ⇒ au choix, **défaut serveur** (comportement actuel
  *     inchangé — un payant qui veut ses habitudes ne voit rien changer).
  *
@@ -357,6 +335,66 @@ export async function getComputeTier(userId, charge) {
 export async function getComputeProfile(userId, charge) {
     const tier = await getComputeTier(userId, charge)
     return { ...COMPUTE_TIERS[tier], level: tier }
+}
+
+/**
+ * O2 (02/11) : tôle toujours téléchargeable, quel que soit le palier — le
+ * chemin rapide de la route DXF, SANS aucune requête (les tôles 1..cap d'un
+ * Free ne coûtent rien de plus). Entier sûr dans [1, FREE_DOWNLOAD_SHEET_CAP].
+ * @param {number} sheetNumber numéro de tôle lu dans le nom du fichier (1-based)
+ * @returns {boolean}
+ */
+export function isWithinFreeDownloadCap(sheetNumber) {
+    return Number.isSafeInteger(sheetNumber) && sheetNumber >= 1 && sheetNumber <= FREE_DOWNLOAD_SHEET_CAP
+}
+
+/**
+ * O2/d1 (02/11) : plafond de TÉLÉCHARGEMENT des tôles d'un résultat pour cet
+ * utilisateur, au moment de la requête.
+ *   - paidPlansDisabled vrai (d2, string-safe #29) ⇒ Infinity, AUCUNE requête ;
+ *   - getComputeTier(userId, null) ≠ 'free' (abonnement actif, grant) ⇒ Infinity ;
+ *   - palier 'free' MAIS abonnement stocké avec stripeSubscriptionId et statut
+ *     ∈ ACTIVE_SUBSCRIPTION_STATUSES (période qui semble échue : webhook ou
+ *     synchro de 6 h en retard) ⇒ refreshSubscription(db, user), comme
+ *     assertCanNest ; Infinity s'il est actif chez Stripe ;
+ *   - sinon FREE_DOWNLOAD_SHEET_CAP.
+ * Sans cette reprise, le client (hasPaidAccess, statut brut) dirait « payant »
+ * et proposerait « Tout télécharger » pendant que la route ZIP servirait un
+ * 200 tronqué sans message, et que l'ancre « Télécharger la tôle 3 »
+ * quitterait l'app vers la page JSON du 403.
+ * Appelé seulement pour une tôle > FREE_DOWNLOAD_SHEET_CAP (route DXF) ou pour
+ * le ZIP. Une panne Stripe rend `false` (refreshSubscription avale l'erreur) :
+ * plafond Free, comme assertCanNest ferait consommer le quota.
+ *
+ * RULE: seul lecteur serveur de FREE_DOWNLOAD_SHEET_CAP avec
+ * isWithinFreeDownloadCap (AGENTS #34).
+ *
+ * @param {string} userId
+ * @param {{ paidPlansDisabled?: any }} [opts]
+ * @returns {Promise<number>} FREE_DOWNLOAD_SHEET_CAP ou Infinity
+ */
+export async function downloadSheetCapForUser(userId, { paidPlansDisabled = false } = {}) {
+    // d2 — AGENTS #29 : l'override runtime NUXT_PUBLIC_* arrive en chaîne.
+    if (paidPlansDisabled === true || paidPlansDisabled === 'true') {
+        return Infinity
+    }
+    if ((await getComputeTier(userId, null)) !== 'free') {
+        return Infinity
+    }
+    // Reprise Stripe, copie d'assertCanNest : un payant dont le webhook est en
+    // retard n'est jamais servi tronqué. Restreinte aux statuts actifs stockés
+    // (un past_due / canceled reste Free sans appel réseau).
+    const db = await connectDB()
+    const user = await db.collection('users').findOne({ id: userId }, { projection: { id: 1, subscription: 1 } })
+    const subscription = user?.subscription
+    if (
+        subscription?.stripeSubscriptionId &&
+        ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) &&
+        (await refreshSubscription(db, user))
+    ) {
+        return Infinity
+    }
+    return FREE_DOWNLOAD_SHEET_CAP
 }
 
 /**

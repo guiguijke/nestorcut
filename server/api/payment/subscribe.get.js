@@ -6,6 +6,7 @@ import logger from '~~/server/utils/logger'
 import { logRef } from '~~/server/utils/logRef'
 import { TRIAL_DAYS } from '~~/server/features/payment/const'
 import { LIVE_SUBSCRIPTION_STATUSES, hasLiveSubscription, isTrialEligible } from '~~/server/features/payment/eligibility'
+import { checkoutUrls } from '~~/server/features/payment/returnTo'
 
 export default defineEventHandler(async (event) => {
     const userId = event.context?.auth?.userId
@@ -56,6 +57,13 @@ export default defineEventHandler(async (event) => {
         }
     }
 
+    // d9 : un compte local non vérifié ne peut pas acheter (il ne pourrait pas nester ensuite).
+    // Après les 409 : un abonné existant doit voir son abonnement, pas ce message.
+    // Aucun client Stripe ni checkout n'est créé.
+    if (user.provider === 'local' && user.emailVerified === false) {
+        throw createError({ statusCode: 403, statusMessage: 'email_not_verified' })
+    }
+
     // ?tier=privacy subscribes to the "Confidentialité+" plan (zero-knowledge
     // vault); anything else falls back to the standard unlimited plan.
     const tier = getQuery(event)?.tier === 'privacy' ? 'privacy' : 'standard'
@@ -83,7 +91,10 @@ export default defineEventHandler(async (event) => {
     const currency = plan.prices?.[detected] != null ? detected : null
 
     const internalId = generateRandomString(24)
-    const redirectUrl = `${baseUrl}/home`
+    // d10 / D14 : retour sur le projet du résultat quand le client le propose
+    // (revalidé par safeReturnPath), sinon /home. Annulation marquée
+    // `?checkout=cancelled` pour que le client la distingue d'un succès.
+    const { successUrl, cancelUrl } = checkoutUrls(baseUrl, getQuery(event)?.returnTo, internalId)
 
     const { id: sessionId, url } = await createSubscriptionCheckout({
         customerId,
@@ -93,8 +104,8 @@ export default defineEventHandler(async (event) => {
         trialDays: isTrialEligible(user) ? TRIAL_DAYS : 0,
         userId: user.id,
         internalId,
-        successUrl: `${redirectUrl}?subscriptionInternalId=${internalId}`,
-        cancelUrl: redirectUrl,
+        successUrl,
+        cancelUrl,
     })
 
     await db.collection('subscription_checkouts').insertOne({

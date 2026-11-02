@@ -45,6 +45,8 @@ import {
     hasLiveSubscription,
     isTrialEligible,
 } from '~~/server/features/payment/eligibility'
+import { safeReturnPath, checkoutUrls } from '~~/server/features/payment/returnTo'
+import { createCustomer } from '~~/server/features/payment/stripe'
 import { fakeDb } from './helpers/fakeMongo'
 
 const ev = (userId) => ({ context: { auth: { userId } } })
@@ -172,6 +174,130 @@ describe('subscribe.get — trial only once', () => {
         })
         await subscribeHandler(ev('u1'))
         expect(state.checkout[0].trialDays).toBe(0)
+    })
+})
+
+describe('subscribe.get — e-mail non vérifié (d9)', () => {
+    it('compte local non vérifié : 403 email_not_verified, aucun client Stripe ni checkout', async () => {
+        vi.mocked(createCustomer).mockClear()
+        state.db = dbWith({ id: 'u1', provider: 'local', emailVerified: false })
+        await expect(subscribeHandler(ev('u1'))).rejects.toMatchObject({
+            statusCode: 403,
+            statusMessage: 'email_not_verified',
+        })
+        expect(createCustomer).not.toHaveBeenCalled()
+        expect(state.checkout).toHaveLength(0)
+        expect(state.db.collection('subscription_checkouts').calls.insertOne).toHaveLength(0)
+    })
+
+    it('compte local non vérifié AVEC un abonnement vivant : 409 (les gardes 409 passent avant)', async () => {
+        state.db = dbWith({
+            id: 'u1',
+            provider: 'local',
+            emailVerified: false,
+            stripeCustomerId: 'cus_1',
+            subscription: { stripeSubscriptionId: 'sub_1', status: 'active' },
+        })
+        await expect(subscribeHandler(ev('u1'))).rejects.toMatchObject({
+            statusCode: 409,
+            statusMessage: 'subscription_exists',
+        })
+        expect(state.checkout).toHaveLength(0)
+    })
+
+    it('compte local non vérifié, abonnement vivant connu de Stripe seul : 409', async () => {
+        state.db = dbWith({ id: 'u1', provider: 'local', emailVerified: false, stripeCustomerId: 'cus_1' })
+        state.stripeSubs = [{ status: 'trialing' }]
+        await expect(subscribeHandler(ev('u1'))).rejects.toMatchObject({
+            statusCode: 409,
+            statusMessage: 'subscription_exists',
+        })
+    })
+
+    it('compte local vérifié : Checkout ouvert', async () => {
+        state.db = dbWith({ id: 'u1', provider: 'local', emailVerified: true })
+        const res = await subscribeHandler(ev('u1'))
+        expect(res.url).toBe('https://checkout.test/cs_1')
+        expect(state.checkout).toHaveLength(1)
+    })
+
+    it('compte local sans le champ emailVerified : Checkout ouvert (même règle que assertCanNest)', async () => {
+        state.db = dbWith({ id: 'u1', provider: 'local' })
+        const res = await subscribeHandler(ev('u1'))
+        expect(res.url).toBe('https://checkout.test/cs_1')
+    })
+
+    it('compte Google non vérifié (emailVerified false) : Checkout ouvert, la garde vise les comptes locaux', async () => {
+        state.db = dbWith({ id: 'u1', provider: 'google', emailVerified: false })
+        const res = await subscribeHandler(ev('u1'))
+        expect(res.url).toBe('https://checkout.test/cs_1')
+    })
+})
+
+describe('subscribe.get — URL de retour (d10 / D14)', () => {
+    const PROJECT = '/project/brave-otter-0123456789ab'
+
+    it('returnTo de projet valide : succès et annulation reviennent sur le projet', async () => {
+        state.db = dbWith({ id: 'u1' })
+        state.query = { returnTo: PROJECT }
+        await subscribeHandler(ev('u1'))
+        const opts = state.checkout[0]
+        const id = opts.internalId
+        expect(id).toMatch(/^[0-9a-f]{24}$/)
+        expect(opts.successUrl).toBe(`https://app.test${PROJECT}?subscriptionInternalId=${id}`)
+        expect(opts.cancelUrl).toBe(`https://app.test${PROJECT}?checkout=cancelled`)
+        // Le checkout persisté porte le même identifiant que l'URL de succès.
+        const inserted = state.db.collection('subscription_checkouts').calls.insertOne
+        expect(inserted).toHaveLength(1)
+        expect(inserted[0].internalId).toBe(id)
+    })
+
+    it('returnTo valide aussi pour le Checkout Pro (?tier=privacy)', async () => {
+        state.db = dbWith({ id: 'u1' })
+        state.query = { tier: 'privacy', returnTo: PROJECT }
+        await subscribeHandler(ev('u1'))
+        expect(state.checkout[0].priceId).toBe('price_pro')
+        expect(state.checkout[0].successUrl.startsWith(`https://app.test${PROJECT}?subscriptionInternalId=`)).toBe(true)
+        expect(state.checkout[0].cancelUrl).toBe(`https://app.test${PROJECT}?checkout=cancelled`)
+    })
+
+    const unsafe = [
+        'https://evil.test',
+        '//evil.test',
+        '/project/../admin',
+        '/project/x\n',
+        '/projectx',
+        '/project/',
+        '/home',
+        ['a'],
+    ]
+    for (const returnTo of [...unsafe, undefined]) {
+        it(`returnTo ${JSON.stringify(returnTo) ?? 'absent'} : les deux URL sur /home`, async () => {
+            state.db = dbWith({ id: 'u1' })
+            state.query = returnTo === undefined ? {} : { returnTo }
+            await subscribeHandler(ev('u1'))
+            const opts = state.checkout[0]
+            expect(opts.successUrl).toBe(`https://app.test/home?subscriptionInternalId=${opts.internalId}`)
+            expect(opts.cancelUrl).toBe('https://app.test/home?checkout=cancelled')
+        })
+    }
+
+    it('safeReturnPath : seul un chemin de projet relatif passe', () => {
+        expect(safeReturnPath(PROJECT)).toBe(PROJECT)
+        expect(safeReturnPath('/project/demo')).toBe('/project/demo')
+        const more = [undefined, null, 42, '/project/Demo', '/project/a b', '/project/a/b', '/project/x?y=1']
+        for (const raw of [...unsafe, ...more, '/project/x#h', ' /project/x']) {
+            expect(safeReturnPath(raw)).toBeNull()
+        }
+        expect(safeReturnPath(`/project/${'a'.repeat(200)}`)).toBe(`/project/${'a'.repeat(200)}`)
+        expect(safeReturnPath(`/project/${'a'.repeat(201)}`)).toBeNull()
+    })
+
+    it('checkoutUrls : repli /home', () => {
+        expect(checkoutUrls('https://app.test', 'https://evil.test', 'abc')).toEqual({
+            successUrl: 'https://app.test/home?subscriptionInternalId=abc',
+            cancelUrl: 'https://app.test/home?checkout=cancelled',
+        })
     })
 })
 

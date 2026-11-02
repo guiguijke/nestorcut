@@ -4,7 +4,7 @@ import { connectDB } from '~~/server/db/mongo'
 import { DOMAINS } from '~~/server/core/domains'
 import { enqueueNestingJob } from '~~/server/core/project/service'
 import { trackEvent } from '~~/server/tracking/add'
-import { assertCanNest, assertCanNestDemo, assertSheetCountWithinTier, BROWSER_COMPUTE, browserWalksForTier, COMPUTE_TIERS, QUALITY_WALKS, getComputeProfile, getComputeTier, maxParallelNestsForTier, refundNestCharge, resolveComputeLocation, validateDirections, NEST_DIRECTIONS } from '~~/server/utils/entitlement'
+import { assertCanNest, assertCanNestDemo, assertSheetCountWithinMax, BROWSER_COMPUTE, browserWalksForTier, COMPUTE_TIERS, QUALITY_WALKS, getComputeProfile, getComputeTier, maxParallelNestsForTier, refundNestCharge, resolveComputeLocation, validateDirections, NEST_DIRECTIONS } from '~~/server/utils/entitlement'
 import {
     DEMO_MAX_DIRECTIONS,
     DEMO_MAX_PARTS,
@@ -233,6 +233,8 @@ export default defineEventHandler(async (event) => {
         height: Number(params.height),
         count: Math.floor(Number(params.sheetCount) || 1),
     }]
+    // d6 : borne technique, tous paliers, démo comprise — avant le 422 et toute charge.
+    assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (Number(s.count) || 0), 0))
     if (!project.local) {
         const partsBySlug = new Map(
             userDxfFilesDatabase.map((f) => [f.slug, f.polygonParts || []]),
@@ -348,13 +350,9 @@ export default defineEventHandler(async (event) => {
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
-            // Mêmes plafonds que les projets cloud : cap tôles par tier, puis
-            // quota (consommé une fois la requête validée ; refundé si échec).
+            // Quota puis profil par palier (quota consommé une fois la requête
+            // validée ; refundé si échec).
             const tier = await getComputeTier(userId, null)
-            const totalSheets = sheets
-                ? sheets.reduce((sum, sheet) => sum + sheet.count, 0)
-                : Math.max(1, Math.floor(Number(params.sheetCount) || 1))
-            assertSheetCountWithinTier(totalSheets, tier)
             charge = await assertCanNest(userId)
             const tierProfile = COMPUTE_TIERS[tier] || COMPUTE_TIERS.free
             compute = {
@@ -378,20 +376,6 @@ export default defineEventHandler(async (event) => {
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
-
-            // Sheet cap by tier (D-PAY-9): free jobs are capped at 2 sheets
-            // TOTAL (sum of counts over every format, identical or different).
-            // Resolved from the stored account state and enforced BEFORE any
-            // quota is consumed (P3 — the client can never inflate its own
-            // allowance). Edge accepted: a stored-but-stale expired subscription
-            // resolves as free here; the next entitlement refresh fixes it.
-            // Demo nestings are exempt (dedicated quota, J-056) — they never
-            // reach this branch.
-            const tier = await getComputeTier(userId, null)
-            const totalSheets = sheets
-                ? sheets.reduce((sum, sheet) => sum + sheet.count, 0)
-                : Math.max(1, Math.floor(Number(params.sheetCount) || 1))
-            assertSheetCountWithinTier(totalSheets, tier)
 
             // Subscription / free-quota gate. Consumes a unit only once the request is
             // fully validated. The charge is stored on the job so the worker can refund
