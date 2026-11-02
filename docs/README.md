@@ -21,7 +21,7 @@ et sorties de QA restent dans `qa/<campagne>/`.
 
 | Fichier | Contenu |
 |---|---|
-| [`POINT-GLOBAL-2026-09-27.md`](POINT-GLOBAL-2026-09-27.md) | **Point global du 27/09** (vérificateur) : état de la production, contrôle avant déploiement de la V0.9.8, audit (constats confirmés, sécurité renvoyée au document privé `specs/AUDIT-SECURITE-2026-09-27.md`), promesses publiques contre le code, features restantes vérifiées dans le code, admin et suivi d'usage sans données personnelles, lots S0 / M4 / P / A1-A2 / U1-U7, décisions du propriétaire |
+| `specs/POINT-GLOBAL-2026-09-27.md` (privé) | **Point global du 27/09** (vérificateur) : état de la production, contrôle avant déploiement de la V0.9.8, audit (constats confirmés, sécurité renvoyée au document privé `specs/AUDIT-SECURITE-2026-09-27.md`), promesses publiques contre le code, features restantes vérifiées dans le code, admin et suivi d'usage sans données personnelles, lots S0 / M4 / P / A1-A2 / U1-U7, décisions du propriétaire |
 | [`MASTERPLAN-2026-09-05.md`](MASTERPLAN-2026-09-05.md) | **Boussole** : la référence du nesting dans le navigateur (§0), séquenciation T0-T5, registre des décisions, forme des instructions à l'implémenteur (§8) |
 | [`PLAN-PERF-UX-2026-09-05.md`](PLAN-PERF-UX-2026-09-05.md) | Plan perf/UX en 6 lots (lots 1-3 livrés, 4 en cours, 5-6 cadrés) |
 | [`FICHE-LOT4-T2-2026-09-06.md`](FICHE-LOT4-T2-2026-09-06.md) | Lot 4 (T2) : verrous par chantier, décision Rust/Python, contrôles intermédiaires, recentrage navigateur |
@@ -37,7 +37,7 @@ et sorties de QA restent dans `qa/<campagne>/`.
 | [`PLAN-IMPORT-2026-09-09.md`](PLAN-IMPORT-2026-09-09.md) | Phase C import (tête de T3) : corpus ≥ 30 DXF, coureurs wasm et ezdxf sur une grille JSON commune, classement des causes, spécification du rapport de réparation — lots A-E parallélisables, aucun code produit |
 | [`PLAN-COMPTE-INSCRIPTION-2026-09-07.md`](PLAN-COMPTE-INSCRIPTION-2026-09-07.md) | Lot C1 « inscription » : audit de la vérification d'e-mail (existante, à rendre visible), doublon d'e-mail administrateur (digest sans marqueur), newsletter proposée tous les 90 j — décisions D1-D8, périmètre fermé, verrous |
 | [`AUDIT-LICENCE-DEPOT-2026-09-07.md`](AUDIT-LICENCE-DEPOT-2026-09-07.md) | Dépôt public : part héritée de nest2d mesurée, tiers (jagua MPL sans LICENSE vendorisé), documents internes exposés, options de licence non commerciale, instruction du lot L1 — décision propriétaire |
-| [`JALON-UTILISATEURS-T1-2026-09-06.md`](JALON-UTILISATEURS-T1-2026-09-06.md) | Guide d'entretiens et grille de décision du jalon utilisateurs |
+| `specs/JALON-UTILISATEURS-T1-2026-09-06.md` (privé) | Guide d'entretiens et grille de décision du jalon utilisateurs |
 | [`PLAN-coupe-commune.md`](PLAN-coupe-commune.md) | Coupe commune en grappes : dette d'abord (kerf explicite livré), lignes communes ensuite |
 
 ## Archives (cycles clos)

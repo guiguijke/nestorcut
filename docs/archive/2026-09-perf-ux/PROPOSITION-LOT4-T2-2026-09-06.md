@@ -11,7 +11,7 @@ chantiers **sans regret** — ceux que le jalon utilisateurs (ex-« porte
 utilisateurs », user gate) ne peut pas invalider. Les chantiers produits
 (calques/identifiants, bibliothèque de chutes, amorce, contraintes de
 tôle, coupe commune) attendent le verdict de la grille
-(`JALON-UTILISATEURS-T1-2026-09-06.md`). Le jalon se déroule EN
+(`specs/JALON-UTILISATEURS-T1-2026-09-06.md` (privé)). Le jalon se déroule EN
 PARALLÈLE (livrable propriétaire : Stripe, campagne, cinq entretiens).
 
 ## 1. Phase A — dette planifiée (~1/3 du lot)
