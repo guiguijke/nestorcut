@@ -42,9 +42,11 @@ from worker_common.logger import setup_logger
 logger = setup_logger("placement")
 
 def parse_result_containers(output, input_items, bin_dims, shape_centroids=None):
-    """Parses engine output into ResultContainers. Each layout keeps the
-    container_id the engine assigned (= index of the bin type used; 0 for the
-    SPP strip), so heterogeneous sheets get the right frame.
+    """Parses engine output into ResultContainers. The layout's engine
+    container_id (= index of the bin type used; 0 for the SPP strip) only
+    resolves the sheet frame through bin_dims, so heterogeneous sheets get the
+    right dims. The ResultContainer's container_id is the sheet's 1-based rank
+    in layout order: it numbers the output files (`_part_{N}`), never a bin id.
     Returns (containers, placed_count, density, cost).
 
     The exported transformation is applied AS-IS to the original geometry:

@@ -1670,8 +1670,8 @@ def _nesting_process_impl(doc):
     # Mêmes gardes que le mono (§5 généricité) : uniquement si le motif
     # « rectangle dominant + petite classe » est détecté, silencieux
     # sinon ; tout-ou-rien — le constructeur rend None (erreurs tracées)
-    # s'il ne couvre pas la demande. container_id = ids MOTEUR (l'aval
-    # map-back s'applique comme aux alternatives moteur).
+    # s'il ne couvre pas la demande. container_id = ids MOTEUR (dimensions
+    # résolues via bin_dims_engine, comme les alternatives moteur).
     if not is_spp and engine_alternatives:
         try:
             from core.structure_multi import build_grid_layouts_multi
@@ -2125,18 +2125,14 @@ def _nesting_process_impl(doc):
         # Échappatoire debug (A4) : livrer quand même une alternative
         # mesurée invalide pour inspection.
         allow_invalid_alts = os.environ.get("NEST_ALLOW_INVALID_ALTS") == "1"
+        # container_id = rang 1..N de la tôle (noms `_part_{N}` lus par le
+        # verrou Free) — jamais un id de format : le map-back du V15 le
+        # passait dans container_map_back (clé = id MOTEUR 0-based) et, avec
+        # un format vide en tête, dupliquait/décalait les noms. Le format ne
+        # sert qu'aux dimensions, déjà résolues par le parse (ids moteur).
         result_containers, placed_count, density, cost = parse_result_containers(
             {"solution": engine_alt["solution"]}, input_items, bin_dims_engine
         )
-        # V15 (vérif 2026-09-04) : les container_id PERSISTÉS (noms DXF/SVG,
-        # métrologie) doivent être rétablis en ids de FORMATS — le map-back
-        # existait mais n'était jamais appliqué. Ici, APRÈS le parse (qui
-        # résout les dimensions avec les ids moteur).
-        if container_map_back:
-            for c in result_containers:
-                c.container_id = container_map_back.get(
-                    getattr(c, "container_id", None),
-                    getattr(c, "container_id", None))
 
         # J4-bis : l'expansion n'a pas rattaché tout ce qui avait été retiré
         # de l'instance — les pièces manquantes ne sont sur aucune tôle. On
