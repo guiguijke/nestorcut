@@ -558,8 +558,9 @@ def _nesting_process_impl(doc):
     # C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS — une tôle
     # `count: 0` au milieu de la liste cassait l'import (« consecutive
     # IDs », opaque). Les formats vides sont FILTRÉS ; container_map_back
-    # retraduit les container_id moteur vers les ids de formats d'origine
-    # (bin_dims reste indexé par l'id FORMAT, utilisé par le post-pass).
+    # mappe id moteur → id de format d'origine (coûts, dimensions, grille) —
+    # jamais appliqué aux container_id des tôles, qui sont des rangs 1..N
+    # (bin_dims reste indexé par l'id FORMAT).
     container_map_back = {}
     for bin_id, sheet in enumerate(sheets):
         sheet_width = float(sheet.get("width"))
@@ -584,8 +585,7 @@ def _nesting_process_impl(doc):
         for b, area in zip(bins, active_areas):
             b["cost"] = max(1, round(area / min_area * 100))
     # bin_dims_engine : clés = ids MOTEUR (0..len(bins)-1), valeurs = dims
-    # du format d'origine — le map-back des container_id (identité quand
-    # aucun format n'est filtré).
+    # du format d'origine (identité quand aucun format n'est filtré).
     bin_dims_engine = {
         eid: bin_dims[fid] for eid, fid in container_map_back.items()}
 

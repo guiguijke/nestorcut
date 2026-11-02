@@ -5,17 +5,20 @@ Le verrou Free (lot V1) lit le numéro de tôle dans ce nom
 (`shared/constants/sheetDownload.constants.js`) : une numérotation décalée
 ou dupliquée verrouille les mauvaises tôles.
 
-Cas : un format `count: 0` AVANT les formats actifs. Le C13 le filtre
-avant le moteur (ids moteur consécutifs) ; le V15 retraduisait ensuite
-`container_id` via `container_map_back` (clé = id MOTEUR 0-based) alors
-que `parse_result_containers` y met le rang 1-based de la tôle — formats
-[A×0, B×2, C×1] ⇒ _part_2, _part_2, _part_3 (tôle 1 écrasée par la 2).
+Cas : un format `count: 0` AVANT ou ENTRE les formats actifs. Le C13 le
+filtre avant le moteur (ids moteur consécutifs) ; le V15 retraduisait
+ensuite `container_id` via `container_map_back` (clé = id MOTEUR 0-based)
+alors que `parse_result_containers` y met le rang 1-based de la tôle —
+formats [A×0, B×2, C×1] ⇒ _part_2, _part_2, _part_3 (tôle 1 écrasée par
+la 2) ; [B×2, A×0, C×1] ⇒ idem.
 
 Run: PYTHONPATH=workers/common:workers/nesting python -m pytest workers/nesting/tests/test_sheet_file_names.py -q
 """
 import sys
 import types
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "common"))
@@ -67,16 +70,22 @@ def _pose(x, y):
     return {"item_id": 0, "transformation": {"rotation": 0.0, "translation": [x, y]}}
 
 
-def test_empty_leading_format_keeps_sheet_files_numbered_1_to_n(monkeypatch):
+_A_EMPTY = {"width": 800.0, "height": 800.0, "count": 0}
+_B = {"width": 1000.0, "height": 1000.0, "count": 2}
+_C = {"width": 1200.0, "height": 1200.0, "count": 1}
+
+
+# A (vide) filtré, ids moteur 0→B, 1→C dans les deux cas.
+@pytest.mark.parametrize("sheets", [[_A_EMPTY, _B, _C], [_B, _A_EMPTY, _C]],
+                         ids=["empty-first", "empty-middle"])
+def test_empty_format_keeps_sheet_files_numbered_1_to_n(monkeypatch, sheets):
+    monkeypatch.setenv("NEST_REVEAL_STEP_SEC", "0")
     doc = {
         "_id": "job-names", "slug": "names-1", "projectSlug": "p1",
         "ownerId": "u1", "status": "processing",
         "files": [{"slug": "sq", "count": 3, "rotations": [0.0]}],
         "params": {
-            # A (vide) AVANT les formats actifs : ids moteur 0→B, 1→C.
-            "sheets": [{"width": 800.0, "height": 800.0, "count": 0},
-                       {"width": 1000.0, "height": 1000.0, "count": 2},
-                       {"width": 1200.0, "height": 1200.0, "count": 1}],
+            "sheets": [dict(s) for s in sheets],
             "space": 2.0, "fillHoles": True, "timeBudgetSec": 3,
             "alternativesCount": 1, "directions": ["left"], "vcores": 1,
         },
