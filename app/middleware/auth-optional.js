@@ -6,7 +6,11 @@ export default defineNuxtRouteMiddleware(async () => {
     const { getters, actions } = authStore
     const { setUser } = actions
     const { userIsSet } = toRefs(getters)
-    if (!unref(userIsSet)) {
+    // Serveur : TOUJOURS relire la session de CETTE requête, comme 'auth'.
+    // Le raccourci « déjà connu » n'a de sens que dans l'onglet ; en SSR il
+    // a servi l'utilisateur du rendu précédent à un anonyme (fuite d'état
+    // du process Nitro, corrigée dans composables/auth.js).
+    if (import.meta.server || !unref(userIsSet)) {
         try {
             await setUser()
         } catch {
