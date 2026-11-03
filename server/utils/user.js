@@ -8,6 +8,24 @@ import logger from './logger'
 import { clientIp } from './ratelimit'
 import { logRef } from './logRef'
 
+// Une adresse = une méthode de connexion (décision du propriétaire,
+// 2026-11-03) : pas de liaison automatique avec un compte e-mail + mot de
+// passe. Son titulaire réel le reprend par « mot de passe oublié » — le lien
+// part dans sa boîte et la réinitialisation coupe toutes les sessions.
+function emailTakenByOtherAccount(provider) {
+    const code = provider === 'local' ? 'email_taken_local' : 'email_taken'
+    return createError({ statusCode: 409, statusMessage: 'An account with this email already exists', data: { code } })
+}
+
+// L'index unique porte sur `email` tel que stocké : l'inscription locale le
+// met en minuscules, Google le rend tel quel.
+function findOtherAccountWithEmail(db, userId, email) {
+    return db.collection('users').findOne(
+        { id: { $ne: userId }, email: { $in: [...new Set([email, email.toLowerCase()])] } },
+        { projection: { provider: 1 } },
+    )
+}
+
 export async function createOrUpdateUser({ event, sessionId, providerId, email, name, avatarUrl }) {
     if (!providerId || !email || !name) {
         logger.error('Missing required user data', {
@@ -21,6 +39,20 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
 
     const session = generateSession()
     const db = await connectDB()
+
+    const userId = `google:${providerId}`
+    const isUserExists = await db.collection('users').findOne({ id: userId })
+
+    // Banned accounts cannot authenticate via Google either.
+    if (isUserExists?.banned) {
+        throw new Error('This account has been suspended')
+    }
+
+    // Avant l'avatar : un refus ne laisse aucun fichier orphelin.
+    const otherAccount = await findOtherAccountWithEmail(db, userId, email)
+    if (otherAccount) {
+        throw emailTakenByOtherAccount(otherAccount.provider)
+    }
 
     const avatarKey = await downloadAndStoreAvatar(providerId, avatarUrl)
 
@@ -53,17 +85,16 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
         },
     }
 
-    const userId = `google:${providerId}`
-    const isUserExists = await db.collection('users').findOne({ id: userId })
-
-    // Banned accounts cannot authenticate via Google either.
-    if (isUserExists?.banned) {
-        throw new Error('This account has been suspended')
-    }
-
     // S-4 : purge des sessions expirées avant d'ajouter la nouvelle.
     await purgeExpiredSessions(db, { id: userId })
-    await db.collection('users').updateOne({ id: userId }, updateData, { upsert: true })
+    try {
+        await db.collection('users').updateOne({ id: userId }, updateData, { upsert: true })
+    } catch (err) {
+        // Compte e-mail créé entre la vérification et l'écriture.
+        if (err?.code !== 11000) throw err
+        const taken = await findOtherAccountWithEmail(db, userId, email)
+        throw emailTakenByOtherAccount(taken?.provider)
+    }
 
     if (!isUserExists) {
         try {

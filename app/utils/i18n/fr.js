@@ -847,6 +847,7 @@ export default {
     'auth.googleError.exchange_failed': 'La connexion Google a échoué — réessayez.',
     'auth.googleError.access_denied': 'La connexion Google a été annulée.',
     'auth.googleError.no_email': "Votre compte Google n'expose pas d'adresse e-mail.",
+    'auth.googleError.email_taken_local': 'Cette adresse e-mail a déjà un compte avec mot de passe — connectez-vous avec votre e-mail et votre mot de passe.',
     'auth.googleError.generic': 'La connexion Google a échoué — essayez une autre méthode.',
     // U1 : pied compact (layout auth).
     'footer.whatsNew': "Nouveautés",

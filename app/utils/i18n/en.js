@@ -870,6 +870,7 @@ export default {
     'auth.googleError.exchange_failed': 'Google sign-in failed — please try again.',
     'auth.googleError.access_denied': 'Google sign-in was canceled.',
     'auth.googleError.no_email': 'Your Google account exposes no email address.',
+    'auth.googleError.email_taken_local': 'This email already has an account with a password — sign in with your email and password.',
     'auth.googleError.generic': 'Google sign-in failed — please try another method.',
     // U1 : pied compact (layout auth).
     'footer.whatsNew': "What's new",

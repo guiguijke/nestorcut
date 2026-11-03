@@ -37,12 +37,15 @@ export default defineEventHandler(async (event) => {
     const passwordHash = await bcrypt.hash(password, 10)
 
     // Update the password and drop all sessions to force a fresh login
-    // everywhere the account was connected.
+    // everywhere the account was connected. The link reached this inbox, so
+    // the address is proven: an account opened with someone else's email
+    // and reclaimed this way needs no second verification step.
     await db.collection('users').updateOne(
         { id: reset.userId },
-        { $set: { passwordHash, sessions: [] } }
+        { $set: { passwordHash, sessions: [], emailVerified: true }, $min: { emailVerifiedAt: new Date() } }
     )
     await db.collection('passwordResets').deleteMany({ userId: reset.userId })
+    await db.collection('emailVerifications').deleteMany({ userId: reset.userId })
 
     return { ok: true }
 })

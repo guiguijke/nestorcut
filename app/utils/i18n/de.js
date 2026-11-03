@@ -752,6 +752,7 @@ export default {
     "auth.googleError.exchange_failed": "Google-Anmeldung fehlgeschlagen — bitte erneut versuchen.",
     "auth.googleError.access_denied": "Die Google-Anmeldung wurde abgebrochen.",
     "auth.googleError.no_email": "Ihr Google-Konto legt keine E-Mail-Adresse offen.",
+    "auth.googleError.email_taken_local": "Für diese E-Mail gibt es bereits ein Konto mit Passwort — melden Sie sich mit E-Mail und Passwort an.",
     "auth.googleError.generic": "Google-Anmeldung fehlgeschlagen — bitte andere Methode versuchen.",
     "footer.whatsNew": "Neuigkeiten",
     "footer.legal": "Impressum",

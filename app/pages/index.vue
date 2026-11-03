@@ -4,6 +4,14 @@
              (?auth_error=…) — un message explicite, pas un retour muet. -->
         <div v-if="googleError" class="welcome__auth-error" role="alert">
             {{ googleError }}
+            <NuxtLink
+                v-if="authErrorCode === 'email_taken_local'"
+                to="/auth/forgot-password"
+                class="welcome__auth-error-link"
+                data-testid="google-error-forgot"
+            >
+                {{ t('auth.forgotPassword') }}
+            </NuxtLink>
         </div>
         <div class="welcome__card card">
             <img src="/brand/n-mark.png" alt="NestorCut" class="card__logo" />
@@ -58,10 +66,12 @@ const GOOGLE_ERROR_KEYS = {
     exchange_failed: 'auth.googleError.exchange_failed',
     access_denied: 'auth.googleError.access_denied',
     no_email: 'auth.googleError.no_email',
+    email_taken_local: 'auth.googleError.email_taken_local',
 }
 const route = useRoute()
+const authErrorCode = computed(() => String(route.query.auth_error || ''))
 const googleError = computed(() => {
-    const code = String(route.query.auth_error || '')
+    const code = authErrorCode.value
     if (!code) return ''
     const key = GOOGLE_ERROR_KEYS[code]
     return key ? t(key) : t('auth.googleError.generic')
@@ -98,6 +108,12 @@ onMounted(() => {
         color: var(--error-text, var(--danger));
         font-size: var(--fs-13);
         line-height: 1.45;
+    }
+    &__auth-error-link {
+        display: block;
+        margin-top: 6px;
+        color: inherit;
+        text-decoration: underline;
     }
 
     display: flex;

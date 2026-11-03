@@ -749,6 +749,7 @@ export default {
     "auth.googleError.exchange_failed": "Accesso con Google non riuscito — riprova.",
     "auth.googleError.access_denied": "L'accesso con Google è stato annullato.",
     "auth.googleError.no_email": "Il tuo account Google non espone alcun indirizzo email.",
+    "auth.googleError.email_taken_local": "Questa email ha già un account con password — accedi con email e password.",
     "auth.googleError.generic": "Accesso con Google non riuscito — prova un altro metodo.",
     "footer.whatsNew": "Novità",
     "footer.legal": "Note legali",

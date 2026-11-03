@@ -3,6 +3,8 @@
 </template>
 
 <script setup>
+import { serverErrorData } from '~/utils/serverErrorData'
+
 definePageMeta({
     layout: "doc",
 });
@@ -29,7 +31,10 @@ onMounted(async () => {
         });
         router.push({ path: '/home' });
     } catch (err) {
-        router.push({ path: "/", query: { auth_error: "exchange_failed" } });
+        // Adresse d'un compte e-mail + mot de passe : réessayer ne changerait
+        // rien, la page d'accueil le dit et propose « mot de passe oublié ».
+        const taken = serverErrorData(err).code === "email_taken_local";
+        router.push({ path: "/", query: { auth_error: taken ? "email_taken_local" : "exchange_failed" } });
     }
 });
 </script>
