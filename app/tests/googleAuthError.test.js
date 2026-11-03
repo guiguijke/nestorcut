@@ -22,6 +22,11 @@ describe('connexion Google refusée — adresse d’un compte e-mail', () => {
         expect(src).toMatch(/authErrorCode === 'email_taken_local'"\s+to="\/auth\/forgot-password"/)
     })
 
+    it('sans connexion par e-mail : message générique, pas d’impasse vers le mot de passe', () => {
+        const src = read('../pages/index.vue')
+        expect(src).toContain("code === 'email_taken_local' && !localAuthEnabled.value ? 'generic' : code")
+    })
+
     it('message présent dans les six langues', () => {
         for (const [lang, dict] of Object.entries(DICTS)) {
             expect(dict['auth.googleError.email_taken_local'], lang).toBeTruthy()

@@ -68,17 +68,22 @@ const GOOGLE_ERROR_KEYS = {
     no_email: 'auth.googleError.no_email',
     email_taken_local: 'auth.googleError.email_taken_local',
 }
+const config = useRuntimeConfig()
+const localAuthEnabled = computed(() => config.public.localAuthEnabled !== false && config.public.localAuthEnabled !== 'false')
+
 const route = useRoute()
-const authErrorCode = computed(() => String(route.query.auth_error || ''))
+// Sans connexion par e-mail, « connectez-vous avec votre mot de passe »
+// serait une impasse : message générique, pas de lien.
+const authErrorCode = computed(() => {
+    const code = String(route.query.auth_error || '')
+    return code === 'email_taken_local' && !localAuthEnabled.value ? 'generic' : code
+})
 const googleError = computed(() => {
     const code = authErrorCode.value
     if (!code) return ''
     const key = GOOGLE_ERROR_KEYS[code]
     return key ? t(key) : t('auth.googleError.generic')
 })
-
-const config = useRuntimeConfig()
-const localAuthEnabled = computed(() => config.public.localAuthEnabled !== false && config.public.localAuthEnabled !== 'false')
 const googleEnabled = computed(() => Boolean(config.public.googleClientId))
 
 const doAuth = async (provider) => {

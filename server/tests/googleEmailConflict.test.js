@@ -55,6 +55,12 @@ describe('connexion Google — adresse d’un autre compte', () => {
         expect(state.sendWelcomeMessage).not.toHaveBeenCalled()
     })
 
+    it('un compte Google existant n’est pas évincé par une variante de casse ouverte après lui', async () => {
+        users.push({ id: 'google:123', provider: 'google', email: 'Ana@B.co', sessions: [] })
+        users.push({ id: 'local:ana@b.co', provider: 'local', email: 'ana@b.co', passwordHash: 'h' })
+        await expect(login('Ana@B.co')).resolves.toMatchObject({ sessionId: expect.any(String) })
+    })
+
     it('compte e-mail créé entre la vérification et l’écriture (E11000) → 409, pas 500', async () => {
         const col = state.db.collection('users')
         const updateOne = col.updateOne

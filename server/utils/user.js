@@ -48,10 +48,15 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
         throw new Error('This account has been suspended')
     }
 
-    // Avant l'avatar : un refus ne laisse aucun fichier orphelin.
-    const otherAccount = await findOtherAccountWithEmail(db, userId, email)
-    if (otherAccount) {
-        throw emailTakenByOtherAccount(otherAccount.provider)
+    // Création seulement : un compte Google existant n'est jamais évincé par
+    // un compte ouvert après lui (variante de casse, que l'index unique
+    // laisse passer). Avant l'avatar : un refus ne laisse aucun fichier
+    // orphelin.
+    if (!isUserExists) {
+        const otherAccount = await findOtherAccountWithEmail(db, userId, email)
+        if (otherAccount) {
+            throw emailTakenByOtherAccount(otherAccount.provider)
+        }
     }
 
     const avatarKey = await downloadAndStoreAvatar(providerId, avatarUrl)

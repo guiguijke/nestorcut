@@ -746,7 +746,7 @@ export default {
     "auth.googleError.exchange_failed": "Falha no login com Google — tente novamente.",
     "auth.googleError.access_denied": "O login com Google foi cancelado.",
     "auth.googleError.no_email": "Sua conta Google não expõe endereço de e-mail.",
-    "auth.googleError.email_taken_local": "Este e-mail já tem uma conta com senha — entre com o seu e-mail e a sua senha.",
+    "auth.googleError.email_taken_local": "O e-mail da sua conta Google já tem uma conta com senha — entre com esse e-mail e a sua senha.",
     "auth.googleError.generic": "Falha no login com Google — tente outro método.",
     "footer.whatsNew": "Novidades",
     "footer.legal": "Aviso legal",

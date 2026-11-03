@@ -754,7 +754,7 @@ export default {
     "auth.googleError.exchange_failed": "Fallo al entrar con Google — inténtalo de nuevo.",
     "auth.googleError.access_denied": "El acceso con Google ha sido cancelado.",
     "auth.googleError.no_email": "Tu cuenta de Google no expone ninguna dirección de correo electrónico.",
-    "auth.googleError.email_taken_local": "Este correo ya tiene una cuenta con contraseña — entra con tu correo y tu contraseña.",
+    "auth.googleError.email_taken_local": "El correo de tu cuenta de Google ya tiene una cuenta con contraseña — entra con ese correo y tu contraseña.",
     "auth.googleError.generic": "Fallo al entrar con Google — prueba otro método.",
     "footer.whatsNew": "Novedades",
     "footer.legal": "Aviso legal",
