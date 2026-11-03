@@ -827,6 +827,7 @@ export default {
     'auth.error.password_too_short': 'Le mot de passe doit contenir au moins 8 caractères.',
     'auth.error.password_required': 'Saisissez votre mot de passe.',
     'auth.error.email_taken': 'Un compte existe déjà avec cette adresse e-mail — connectez-vous.',
+    'auth.error.email_taken_google': 'Cette adresse e-mail est déjà liée à un compte Google — connectez-vous avec Google.',
     'auth.error.invalid_credentials': 'E-mail ou mot de passe incorrect.',
     'auth.error.account_suspended': 'Ce compte a été suspendu. Contactez le support.',
     'auth.error.fields_required': 'Saisissez votre e-mail et votre mot de passe.',

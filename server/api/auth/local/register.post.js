@@ -12,6 +12,13 @@ import { assertRateLimit, clientIp } from '~~/server/utils/ratelimit'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// Adresse prise par un compte Google : « connectez-vous » ne suffit pas, le
+// mot de passe n'existe pas — le client propose la connexion Google.
+function emailTaken(provider) {
+    const code = provider === 'google' ? 'email_taken_google' : 'email_taken'
+    return createError({ statusCode: 409, statusMessage: 'An account with this email already exists', data: { code, field: 'email' } })
+}
+
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig(event)
     if (config.public.localAuthEnabled === false || config.public.localAuthEnabled === 'false') {
@@ -42,38 +49,51 @@ export default defineEventHandler(async (event) => {
     const db = await connectDB()
     const userId = `local:${email}`
 
-    const existing = await db.collection('users').findOne({ id: userId })
+    // L'index unique porte sur `email`, tous fournisseurs confondus : une
+    // adresse déjà prise par un compte Google passait le contrôle par `id`
+    // et finissait en E11000 → 500 (constat 2026-11-03).
+    const existing = await db.collection('users').findOne(
+        { $or: [{ id: userId }, { email }] },
+        { projection: { provider: 1 } },
+    )
     if (existing) {
-        throw createError({ statusCode: 409, statusMessage: 'An account with this email already exists', data: { code: 'email_taken', field: 'email' } })
+        throw emailTaken(existing.provider)
     }
 
     const passwordHash = await bcrypt.hash(password, 10)
     const session = generateSession()
 
-    await db.collection('users').insertOne({
-        id: userId,
-        provider: 'local',
-        email,
-        name,
-        // No avatar file; /api/user/avatar returns a generated placeholder.
-        avatarFileName: null,
-        avatarUrl: null,
-        passwordHash,
-        sessions: [storedSession(session)],
-        createdAt: new Date(),
-        freeNestingUsed: 0,
-        // Measurement unit preference ('mm' | 'inch') — default metric;
-        // switchable via PATCH /api/user/preferences.
-        preferredUnit: 'mm',
-        // Local signups must verify their email before nesting (anti-fake).
-        emailVerified: false,
-        newsletterOptIn,
-        newsletterOptInAt: newsletterOptIn ? new Date() : null,
-        // Geo + provenance, captured at signup for the admin panel. Country
-        // comes from Cloudflare's cf-ipcountry header (null without it).
-        signupCountry: event.node.req.headers[COUNTRY_HEADER_NAME] || null,
-        signupIp: clientIp(event),
-    })
+    try {
+        await db.collection('users').insertOne({
+            id: userId,
+            provider: 'local',
+            email,
+            name,
+            // No avatar file; /api/user/avatar returns a generated placeholder.
+            avatarFileName: null,
+            avatarUrl: null,
+            passwordHash,
+            sessions: [storedSession(session)],
+            createdAt: new Date(),
+            freeNestingUsed: 0,
+            // Measurement unit preference ('mm' | 'inch') — default metric;
+            // switchable via PATCH /api/user/preferences.
+            preferredUnit: 'mm',
+            // Local signups must verify their email before nesting (anti-fake).
+            emailVerified: false,
+            newsletterOptIn,
+            newsletterOptInAt: newsletterOptIn ? new Date() : null,
+            // Geo + provenance, captured at signup for the admin panel. Country
+            // comes from Cloudflare's cf-ipcountry header (null without it).
+            signupCountry: event.node.req.headers[COUNTRY_HEADER_NAME] || null,
+            signupIp: clientIp(event),
+        })
+    } catch (err) {
+        // Deux inscriptions simultanées (ou une connexion Google) entre le
+        // contrôle et l'insertion : même réponse que le contrôle.
+        if (err?.code === 11000) throw emailTaken()
+        throw err
+    }
 
     // The verification email is the core of the anti-fake flow, but a mailer
     // outage must not break the signup — the user can request a new link

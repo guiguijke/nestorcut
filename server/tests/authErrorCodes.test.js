@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import './helpers/h3Shims'
 
 // 3.1.3 (lot 3) : codes d'erreur STABLES de l'auth locale — le client mappe
-// err.data.code → clé i18n ; un renommage silencieux casserait le mapping.
+// data.code → clé i18n (app/utils/authServerError.js, lu en err.data.data
+// côté $fetch) ; un renommage silencieux casserait le mapping.
 const state = vi.hoisted(() => ({
     db: null,
     config: { public: { localAuthEnabled: true } },
@@ -73,6 +74,30 @@ describe('register.post — codes d’erreur stables', () => {
             users: [{ id: 'local:a@b.co', passwordHash: '$2a$10$CwTycUXWue0Thq9StjUM0uJ8.0vW3q3aQ3vP3p3p3p3p3p3p3p3p3' }],
         })
         await expect(registerHandler(ev({ email: 'a@b.co', name: 'A', password: 'longenough1' }))).rejects.toMatchObject({
+            statusCode: 409,
+            data: { code: 'email_taken', field: 'email' },
+        })
+    })
+
+    // Constat 2026-11-03 : l'index unique porte sur `email` — une adresse
+    // d'un compte Google passait le contrôle par `id` puis E11000 → 500.
+    it('e-mail d’un compte Google → 409 email_taken_google, aucune insertion', async () => {
+        state.db = fakeDb({
+            users: [{ id: 'google:123', provider: 'google', email: 'g@b.co' }],
+        })
+        await expect(registerHandler(ev({ email: 'G@b.co', name: 'A', password: 'longenough1' }))).rejects.toMatchObject({
+            statusCode: 409,
+            data: { code: 'email_taken_google', field: 'email' },
+        })
+        expect(state.db.collection('users').calls.insertOne).toHaveLength(0)
+    })
+
+    it('course à l’insertion (E11000) → 409 email_taken, pas 500', async () => {
+        state.db = fakeDb({ users: [] })
+        state.db.collection('users').insertOne = async () => {
+            throw Object.assign(new Error('E11000 duplicate key error'), { code: 11000 })
+        }
+        await expect(registerHandler(ev({ email: 'race@b.co', name: 'A', password: 'longenough1' }))).rejects.toMatchObject({
             statusCode: 409,
             data: { code: 'email_taken', field: 'email' },
         })

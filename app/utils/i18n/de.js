@@ -734,6 +734,7 @@ export default {
     "auth.error.password_too_short": "Das Passwort muss mindestens 8 Zeichen lang sein.",
     "auth.error.password_required": "Bitte geben Sie Ihr Passwort ein.",
     "auth.error.email_taken": "Mit dieser E-Mail existiert bereits ein Konto — melden Sie sich an, statt sich zu registrieren.",
+    "auth.error.email_taken_google": "Diese E-Mail ist bereits mit einem Google-Konto verknüpft — melden Sie sich mit Google an.",
     "auth.error.invalid_credentials": "E-Mail oder Passwort falsch.",
     "auth.error.account_suspended": "Dieses Konto wurde gesperrt. Kontaktieren Sie den Support.",
     "auth.error.fields_required": "Bitte füllen Sie E-Mail und Passwort aus.",

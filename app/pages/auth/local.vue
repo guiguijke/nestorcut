@@ -47,6 +47,16 @@
             <p v-if="emailError" id="local-auth-email-error" class="local-auth__fielderror">
                 {{ emailError }}
             </p>
+            <button
+                v-if="emailError && emailTakenByGoogle && googleEnabled"
+                type="button"
+                class="local-auth__google"
+                data-testid="local-auth-google"
+                :disabled="googleBusy"
+                @click="loginWithGoogle"
+            >
+                {{ t('auth.loginGoogle') }}
+            </button>
             <div class="local-auth__password">
                 <InputField
                     v-model="password"
@@ -110,6 +120,7 @@
 <script setup>
 import { themeType } from '~~/constants/theme.constants'
 import { trackEvent } from '~/utils/track'
+import { mapAuthServerError } from '~/utils/authServerError'
 
 const { t } = useLocale()
 
@@ -131,6 +142,8 @@ const emailError = ref('')
 const passwordError = ref('')
 const showPassword = ref(false)
 const loading = ref(false)
+// Erreur e-mail venue d'un compte Google : le bouton Google s'affiche dessous.
+const emailTakenByGoogle = ref(false)
 
 const toggleMode = () => {
     isRegister.value = !isRegister.value
@@ -138,6 +151,7 @@ const toggleMode = () => {
     nameError.value = ''
     emailError.value = ''
     passwordError.value = ''
+    emailTakenByGoogle.value = false
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -148,6 +162,7 @@ const validateForm = () => {
     nameError.value = ''
     emailError.value = ''
     passwordError.value = ''
+    emailTakenByGoogle.value = false
     if (isRegister.value && !name.value.trim()) {
         nameError.value = t('auth.error.name_required')
     }
@@ -162,27 +177,20 @@ const validateForm = () => {
     return !nameError.value && !emailError.value && !passwordError.value
 }
 
-// 3.1.3 : codes d'erreur STABLES du serveur → clés i18n.
-const SERVER_ERROR_KEYS = {
-    invalid_email: { key: 'auth.error.invalid_email', field: 'email' },
-    name_required: { key: 'auth.error.name_required', field: 'name' },
-    password_too_short: { key: 'auth.error.password_too_short', field: 'password' },
-    email_taken: { key: 'auth.error.email_taken', field: 'email' },
-    invalid_credentials: { key: 'auth.error.invalid_credentials' },
-    account_suspended: { key: 'auth.error.account_suspended' },
-    fields_required: { key: 'auth.error.fields_required' },
-    auth_disabled: { key: 'auth.error.auth_disabled' },
-}
-const mapServerError = (err) => {
-    // A2 (audit compte 2026-09-05) : le 429 rate-limit porte un code
-    // stable + le délai réel — message traduit avec les minutes.
-    if (err?.data?.code === 'rate_limited') {
-        const min = Math.max(1, Math.ceil((err?.data?.retryAfterSec || 900) / 60))
-        return { text: t('auth.rateLimited', { n: min }) }
+// Adresse d'un compte Google : le message renvoie vers Google, et cette page
+// n'a pas d'autre bouton Google (index.vue et LoginView seulement).
+const googleEnabled = computed(() => Boolean(config.public.googleClientId))
+const googleBusy = ref(false)
+const loginWithGoogle = async () => {
+    if (googleBusy.value) return
+    googleBusy.value = true
+    try {
+        const response = await $fetch(API_ROUTES.AUTH('google'), { method: 'GET' })
+        await navigateTo(response.url, { external: true })
+    } catch {
+        fieldError.value = t('auth.errorGeneric')
+        googleBusy.value = false
     }
-    const mapped = err?.data?.code ? SERVER_ERROR_KEYS[err.data.code] : null
-    if (mapped) return { text: t(mapped.key), field: mapped.field }
-    return { text: t('auth.errorGeneric') }
 }
 
 const onSubmit = async () => {
@@ -209,7 +217,8 @@ const onSubmit = async () => {
         }
         router.push({ path: '/home' })
     } catch (err) {
-        const mapped = mapServerError(err)
+        const mapped = mapAuthServerError(err, t, { googleEnabled: googleEnabled.value })
+        emailTakenByGoogle.value = mapped.code === 'email_taken_google'
         if (mapped.field === 'email') emailError.value = mapped.text
         else if (mapped.field === 'password') passwordError.value = mapped.text
         else if (mapped.field === 'name') nameError.value = mapped.text
@@ -319,6 +328,23 @@ onMounted(async () => {
     }
     &__toggle {
         margin-top: 24px;
+        background: none;
+        border: none;
+        color: var(--accent-primary);
+        cursor: pointer;
+        font-size: var(--fs-14);
+        text-decoration: underline;
+
+        @media (hover:hover) {
+            &:hover {
+                opacity: 0.8;
+            }
+        }
+    }
+    &__google {
+        align-self: flex-start;
+        margin: -4px 0 8px;
+        padding: 0;
         background: none;
         border: none;
         color: var(--accent-primary);

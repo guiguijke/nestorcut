@@ -736,6 +736,7 @@ export default {
     "auth.error.password_too_short": "La contraseña debe tener al menos 8 caracteres.",
     "auth.error.password_required": "Escribe tu contraseña.",
     "auth.error.email_taken": "Ya existe una cuenta con este correo — entra en lugar de registrarte.",
+    "auth.error.email_taken_google": "Este correo ya está vinculado a una cuenta de Google — entra con Google.",
     "auth.error.invalid_credentials": "Correo o contraseña incorrectos.",
     "auth.error.account_suspended": "Esta cuenta ha sido suspendida. Contacta con soporte.",
     "auth.error.fields_required": "Rellena tu correo y tu contraseña.",

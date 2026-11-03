@@ -850,6 +850,7 @@ export default {
     'auth.error.password_too_short': 'The password must be at least 8 characters.',
     'auth.error.password_required': 'Please enter your password.',
     'auth.error.email_taken': 'An account already exists with this email — log in instead.',
+    'auth.error.email_taken_google': 'This email is already linked to a Google account — log in with Google.',
     'auth.error.invalid_credentials': 'Wrong email or password.',
     'auth.error.account_suspended': 'This account has been suspended. Contact support.',
     'auth.error.fields_required': 'Please fill in your email and password.',

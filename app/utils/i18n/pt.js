@@ -728,6 +728,7 @@ export default {
     "auth.error.password_too_short": "A senha deve ter pelo menos 8 caracteres.",
     "auth.error.password_required": "Digite sua senha.",
     "auth.error.email_taken": "Já existe uma conta com este e-mail — entre em vez de cadastrar.",
+    "auth.error.email_taken_google": "Este e-mail já está vinculado a uma conta Google — entre com o Google.",
     "auth.error.invalid_credentials": "E-mail ou senha incorretos.",
     "auth.error.account_suspended": "Esta conta foi suspensa. Contate o suporte.",
     "auth.error.fields_required": "Preencha seu e-mail e senha.",
