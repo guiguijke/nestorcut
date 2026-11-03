@@ -25,6 +25,10 @@
                 :mode="privacyMode"
                 class="project__badge"
             />
+            <span
+                v-if="nestingInProgress"
+                class="project__nesting"
+            >{{ t('project.nestingInProgress') }}</span>
         </label>
         <NuxtLink
             v-else
@@ -350,9 +354,9 @@ onBeforeUnmount(() => {
     &--selecting {
         pointer-events: auto;
     }
+    // Teinte d'accent : ne pas confondre « coché » et « projet consulté ».
     &--selected {
-        background-color: var(--fill-tertiary);
-        box-shadow: inset 2px 0 0 var(--accent-primary);
+        background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent);
     }
 
     &__label--select {

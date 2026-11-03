@@ -1,7 +1,7 @@
 <template>
     <MainAside
         :label="t('project.projects')"
-        @closeAside="$emit('closeAside')"
+        @closeAside="closeAside"
         :btnLabel="btnLabelValue"
         @btnClick="createNewProject"
     >
@@ -22,6 +22,7 @@
         >
             <button
                 v-if="!selecting"
+                ref="selectBtn"
                 type="button"
                 class="projects__tool"
                 data-testid="projects-select"
@@ -31,6 +32,7 @@
             </button>
             <template v-else>
                 <button
+                    ref="selectAllBtn"
                     type="button"
                     class="projects__tool"
                     data-testid="projects-select-all"
@@ -42,7 +44,7 @@
                     type="button"
                     class="projects__tool"
                     data-testid="projects-select-cancel"
-                    @click="stopSelecting"
+                    @click="cancelSelecting"
                 >
                     {{ t('project.deleteCancel') }}
                 </button>
@@ -80,7 +82,7 @@
             {{ t('project.empty') }}
         </p>
         <DialogWrapper
-            v-model:isModalOpen="confirmOpen"
+            v-model:isModalOpen="dialogOpen"
             trackingTag="project_delete_many"
         >
             <div class="delete-many">
@@ -89,14 +91,15 @@
                     class="delete-many__title"
                 />
                 <p class="delete-many__text">
-                    {{ t(selectedProjects.some((p) => p.local) ? 'project.deleteManyLocal' : 'project.deleteManyCloud') }}
+                    {{ t(hasLocalSelected ? 'project.deleteManyLocal' : 'project.deleteManyCloud') }}
                 </p>
+                <!-- Région présente avant son texte : sinon les lecteurs
+                     d'écran n'annoncent pas le premier message. -->
                 <p
-                    v-if="deleting"
                     class="delete-many__progress"
                     role="status"
                 >
-                    {{ t('project.deleteManyProgress', progress) }}
+                    {{ deleting ? t('project.deleteManyProgress', progress) : '' }}
                 </p>
                 <p
                     v-if="failedCount"
@@ -165,29 +168,55 @@ const filteredList = computed(() => {
 const deletable = computed(() => projectsList.value.filter(canDeleteProject))
 const selecting = ref(false)
 const selected = ref(new Set())
-const selectedSlugs = computed(() =>
-    deletable.value.map((p) => p.slug).filter((slug) => selected.value.has(slug))
-)
-const selectedProjects = computed(() =>
-    deletable.value.filter((p) => selected.value.has(p.slug))
-)
-// « Tout » = ce que la recherche affiche, pas les projets masqués.
+// Compteur, confirmation et suppression = ce que la recherche AFFICHE : un
+// projet coché puis masqué par le filtre ne part jamais sans être vu.
 const visibleDeletable = computed(() => filteredList.value.filter(canDeleteProject))
+const selectedProjects = computed(() =>
+    visibleDeletable.value.filter((p) => selected.value.has(p.slug))
+)
+const selectedSlugs = computed(() => selectedProjects.value.map((p) => p.slug))
 const allSelected = computed(() =>
     visibleDeletable.value.length > 0 && visibleDeletable.value.every((p) => selected.value.has(p.slug))
 )
 const confirmOpen = ref(false)
 const deleting = ref(false)
+// Croix, fond et Échap restent sans effet pendant la suppression : la fenêtre
+// doit pouvoir dire ensuite ce qui a échoué.
+const dialogOpen = computed({
+    get: () => confirmOpen.value,
+    set: (open) => {
+        if (open || !deleting.value) confirmOpen.value = open
+    },
+})
+// Figé à l'ouverture : la liste fond pendant la suppression, pas le texte.
+const hasLocalSelected = ref(false)
 const progress = ref({ done: 0, total: 0 })
 const failedCount = ref(0)
+const selectBtn = ref(null)
+const selectAllBtn = ref(null)
 
-function startSelecting() {
+async function startSelecting() {
     selected.value = new Set()
     selecting.value = true
+    await nextTick()
+    selectAllBtn.value?.focus()
 }
 function stopSelecting() {
     selecting.value = false
     selected.value = new Set()
+}
+// Le bouton qui avait le focus disparaît : le rendre au bouton « Sélectionner ».
+async function focusSelectBtn() {
+    await nextTick()
+    selectBtn.value?.focus()
+}
+function cancelSelecting() {
+    stopSelecting()
+    focusSelectBtn()
+}
+function closeAside() {
+    if (!deleting.value) stopSelecting()
+    emit('closeAside')
 }
 function toggle(slug) {
     const next = new Set(selected.value)
@@ -206,6 +235,7 @@ function toggleAll() {
 }
 function openConfirm() {
     failedCount.value = 0
+    hasLocalSelected.value = selectedProjects.value.some((p) => p.local)
     confirmOpen.value = true
 }
 async function confirmDeleteMany() {
@@ -213,17 +243,21 @@ async function confirmDeleteMany() {
     deleting.value = true
     failedCount.value = 0
     progress.value = { done: 0, total: selectedProjects.value.length }
-    const { failed } = await deleteProjects(selectedProjects.value, {
-        currentSlug: route.params.slug,
-        onProgress: (p) => { progress.value = p },
-    })
-    deleting.value = false
-    // Les échecs restent cochés, la fenêtre reste ouverte pour les dire.
-    selected.value = new Set(failed.map((f) => f.project.slug))
-    failedCount.value = failed.length
-    if (!failed.length) {
-        confirmOpen.value = false
-        stopSelecting()
+    try {
+        const { failed } = await deleteProjects(selectedProjects.value, {
+            currentSlug: () => route.params.slug,
+            onProgress: (p) => { progress.value = p },
+        })
+        // Les échecs restent cochés, la fenêtre reste ouverte pour les dire.
+        selected.value = new Set(failed.map((f) => f.project.slug))
+        failedCount.value = failed.length
+        if (!failed.length) {
+            confirmOpen.value = false
+            stopSelecting()
+            focusSelectBtn()
+        }
+    } finally {
+        deleting.value = false
     }
 }
 
@@ -241,7 +275,7 @@ const btnLabelValue = computed(() => {
 const emit = defineEmits(["closeAside"]);
 
 const createNewProject = () => {
-    emit('closeAside');
+    closeAside();
     router.push({ name: 'home' })
 }
 </script>
@@ -297,6 +331,10 @@ const createNewProject = () => {
         color: var(--label-secondary);
         font-size: var(--fs-14);
         line-height: 1.5;
+    }
+    // Vide hors suppression : pas de trou dans la fenêtre.
+    &__progress:empty {
+        margin-top: -12px;
     }
     &__error {
         color: var(--error-text, var(--danger));

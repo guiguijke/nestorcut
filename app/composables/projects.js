@@ -90,21 +90,31 @@ export async function deleteProject(project, { currentSlug } = {}) {
     try {
         await $fetch(API_ROUTES.PROJECT(project.slug), { method: 'DELETE' })
     } catch (err) {
-        const code = err?.data?.statusMessage
-        return {
-            ok: false,
-            errorKey: code === 'jobs_in_progress'
-                ? 'project.deleteErrorActive'
-                : 'project.deleteError',
+        // 404 : déjà supprimé (autre onglet, réponse perdue) — le but est
+        // atteint, et le garder dans la liste le ferait échouer à chaque essai.
+        if (err?.statusCode !== 404 && err?.status !== 404) {
+            const code = err?.data?.statusMessage
+            return {
+                ok: false,
+                errorKey: code === 'jobs_in_progress'
+                    ? 'project.deleteErrorActive'
+                    : 'project.deleteError',
+            }
         }
     }
 
-    // J-090 — purge IndexedDB après le 200 uniquement.
+    // J-090 — purge IndexedDB après le 200 uniquement. Au mieux : le serveur a
+    // déjà supprimé, une base navigateur indisponible ne doit pas laisser un
+    // projet fantôme dans la liste.
     if (project.local) {
-        const { purgeProjectFiles } = await import('./localFilesStore')
-        const { purgeProject } = await import('./localResultsStore')
-        await purgeProjectFiles(project.slug)
-        await purgeProject(project.slug)
+        try {
+            const { purgeProjectFiles } = await import('./localFilesStore')
+            const { purgeProject } = await import('./localResultsStore')
+            await purgeProjectFiles(project.slug)
+            await purgeProject(project.slug)
+        } catch {
+            // Orphelins possibles sur ce poste, rien de récupérable ici.
+        }
     }
 
     removeProjectFromStore(project.slug)
@@ -124,17 +134,24 @@ export async function deleteProject(project, { currentSlug } = {}) {
  * consulté passe en dernier : son navigateTo('/home') n'interrompt rien.
  *
  * @param {object[]} projects
- * @param {{ currentSlug?: string, onProgress?: (p: { done: number, total: number }) => void }} options
+ * @param {{ currentSlug?: () => string | undefined, onProgress?: (p: { done: number, total: number }) => void }} options
+ *   currentSlug : relu à chaque projet — l'utilisateur a pu changer de page
+ *   pendant la suppression, on ne le renvoie pas à /home depuis ailleurs.
  * @returns {Promise<{ deleted: number, failed: { project: object, errorKey: string }[] }>}
  */
 export async function deleteProjects(projects, { currentSlug, onProgress } = {}) {
     const queue = (projects || []).filter(canDeleteProject)
-    queue.sort((a, b) => (a.slug === currentSlug) - (b.slug === currentSlug))
+    const viewed = currentSlug?.()
+    queue.sort((a, b) => (a.slug === viewed) - (b.slug === viewed))
     const failed = []
     let done = 0
     for (const project of queue) {
-        const result = await deleteProject(project, { currentSlug })
-        if (!result.ok) failed.push({ project, errorKey: result.errorKey })
+        try {
+            const result = await deleteProject(project, { currentSlug: currentSlug?.() })
+            if (!result.ok) failed.push({ project, errorKey: result.errorKey })
+        } catch {
+            failed.push({ project, errorKey: 'project.deleteError' })
+        }
         done++
         onProgress?.({ done, total: queue.length })
     }

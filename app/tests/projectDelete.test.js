@@ -29,6 +29,7 @@ vi.mock('../composables/localResultsStore', () => ({
     }),
 }))
 
+import { purgeProjectFiles } from '../composables/localFilesStore'
 import { globalStore } from '../composables/index'
 import {
     canDeleteProject,
@@ -194,10 +195,59 @@ describe('deleteProjects', () => {
             return { ok: true }
         })
 
-        await deleteProjects([cloudProject, localProject], { currentSlug: 'alpha' })
+        await deleteProjects([cloudProject, localProject], { currentSlug: () => 'alpha' })
 
         expect(order).toEqual(['/api/project/beta', '/api/project/alpha'])
         expect(globalThis.navigateTo).toHaveBeenCalledTimes(1)
         expect(globalThis.navigateTo).toHaveBeenCalledWith('/home')
+    })
+
+    it('does not send the user to /home if they left that page during the run', async () => {
+        let viewed = 'alpha'
+        globalThis.$fetch = vi.fn(async () => {
+            viewed = 'other-page'
+            return { ok: true }
+        })
+
+        await deleteProjects([cloudProject, localProject], { currentSlug: () => viewed })
+
+        expect(projectSlugs()).toEqual(['demo'])
+        expect(globalThis.navigateTo).not.toHaveBeenCalled()
+    })
+
+    it('an exception on one project is reported and the next ones still run', async () => {
+        globalThis.navigateTo = vi.fn(async () => {
+            throw new Error('navigation failed')
+        })
+        const progress = []
+
+        const result = await deleteProjects([cloudProject, localProject], {
+            currentSlug: () => 'beta',
+            onProgress: (p) => progress.push(p),
+        })
+
+        expect(result.failed).toEqual([{ project: localProject, errorKey: 'project.deleteError' }])
+        expect(progress).toEqual([{ done: 1, total: 2 }, { done: 2, total: 2 }])
+    })
+
+    it('a browser storage failure after the 200 leaves no ghost project', async () => {
+        purgeProjectFiles.mockRejectedValueOnce(new Error('indexeddb_unavailable'))
+
+        const result = await deleteProjects([localProject, cloudProject])
+
+        expect(result).toEqual({ deleted: 2, failed: [] })
+        expect(projectSlugs()).toEqual(['demo'])
+    })
+
+    it('a 404 means already gone: it leaves the list instead of failing forever', async () => {
+        globalThis.$fetch = vi.fn(async () => {
+            // eslint-disable-next-line no-throw-literal
+            throw { statusCode: 404, data: { statusMessage: 'Not found' } }
+        })
+
+        const result = await deleteProjects([cloudProject])
+
+        expect(result).toEqual({ deleted: 1, failed: [] })
+        expect(projectSlugs()).toEqual(['beta', 'demo'])
     })
 })

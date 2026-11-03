@@ -13,7 +13,18 @@ describe('liste des projets — sélection multiple', () => {
 
     it('la liste supprime par deleteProjects, avec le slug consulté et la progression', () => {
         expect(list).toContain("import { canDeleteProject, deleteProjects } from '~/composables/projects'")
-        expect(list).toMatch(/deleteProjects\(selectedProjects\.value, \{\s*currentSlug: route\.params\.slug,\s*onProgress:/)
+        expect(list).toMatch(/deleteProjects\(selectedProjects\.value, \{\s*currentSlug: \(\) => route\.params\.slug,\s*onProgress:/)
+    })
+
+    it('compteur et suppression ne portent que sur les projets affichés par la recherche', () => {
+        expect(list).toMatch(/selectedProjects = computed\(\(\) =>\s*visibleDeletable\.value\.filter/)
+        expect(list).toMatch(/selectedSlugs = computed\(\(\) => selectedProjects\.value\.map/)
+    })
+
+    it('la fenêtre ne se ferme pas pendant la suppression, et une erreur ne la bloque pas', () => {
+        expect(list).toContain('v-model:isModalOpen="dialogOpen"')
+        expect(list).toContain('if (open || !deleting.value) confirmOpen.value = open')
+        expect(list).toMatch(/\} finally \{\s*deleting\.value = false/)
     })
 
     it('en sélection, un clic sur une carte ne ferme pas le panneau et ne navigue pas', () => {
