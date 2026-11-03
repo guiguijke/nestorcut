@@ -1329,8 +1329,14 @@ export const filesStore = readonly({
         params: getter((state) => state.params),
         nestRequestError: getter((state) => {
             if (filesStore.getters.filesCount < 1) {
+                // Projet demandé, réponse pas encore là (rendu serveur,
+                // premier rendu client, navigation entre projets) : zéro
+                // fichier n'est pas un constat — sans ce garde, le HTML servi
+                // affichait « Select at least one file » en rouge jusqu'au
+                // fetch client. Les paramètres invalides, eux, restent signalés.
+                const loading = state.lastProjectRequest != null && state.lastProjectRequest !== state.projectSlug
                 // Local empty IndexedDB is a state, not a form error (ux1).
-                return state.projectLocal ? '' : 'project.needFiles'
+                return loading || state.projectLocal ? '' : 'project.needFiles'
             }
             if (state.isInvalidParams) {
                 return 'project.invalidParams'

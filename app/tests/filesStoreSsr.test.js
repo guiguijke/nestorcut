@@ -173,6 +173,42 @@ describe('filesStore — état par requête côté serveur', () => {
         expect(unref(filesStore.getters.params).space).not.toBe('9')
     })
 
+    // Le rendu n'attend pas getProject : sans garde, le HTML servi d'un
+    // projet PLEIN affichait « Select at least one file » en rouge.
+    it("aucune erreur « needFiles » tant que le projet demandé n'a pas répondu", async () => {
+        const nestError = (req) => {
+            current = req
+            const value = unref(filesStore.getters.nestRequestError)
+            current = null
+            return value
+        }
+        const alice = fakeRequest('alice')
+        const full = startLoad(alice, 'a')
+        expect(nestError(alice)).toBe('')
+        gate('a').resolve(projectPayload('a', 2))
+        await full
+        expect(nestError(alice)).toBe('')
+
+        // Projet réellement vide : l'erreur revient une fois la réponse là.
+        const bob = fakeRequest('bob')
+        const empty = startLoad(bob, 'b')
+        expect(nestError(bob)).toBe('')
+        gate('b').resolve(projectPayload('b', 0))
+        await empty
+        expect(nestError(bob)).toBe('project.needFiles')
+
+        // Le garde ne vise que « aucun fichier » : des paramètres invalides
+        // restent signalés pendant le chargement du projet suivant.
+        current = alice
+        filesStore.actions.updateParams({ space: 'abc' })
+        current = null
+        expect(nestError(alice)).toBe('project.invalidParams')
+        const next = startLoad(alice, 'c')
+        expect(nestError(alice)).toBe('project.invalidParams')
+        gate('c').resolve(projectPayload('c', 1))
+        await next
+    })
+
     it('aucun polling serveur pour des fichiers encore en traitement', async () => {
         vi.useFakeTimers()
         const alice = fakeRequest('alice')
