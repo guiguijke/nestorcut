@@ -1,5 +1,5 @@
 
-import { computed, reactive, readonly } from 'vue'
+import { computed, customRef, reactive, readonly } from 'vue'
 import { processingType } from '~~/constants/files.constants'
 import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
 import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
@@ -81,16 +81,19 @@ loadSnapshotsFromStorage()
 // Une fois le projet chargé, le drapeau est consommé ; au RETOUR sur le
 // projet, c'est le snapshot qui gagne (les curated defaults ne repassent
 // pas par-dessus les réglages de l'utilisateur).
-let pendingCuratedDefaults = false
 function markCuratedDefaults() {
-    pendingCuratedDefaults = true
+    filesState().pendingCuratedDefaults = true
 }
 
 function snapshotCurrentProject() {
+    // Snapshots belong to the tab (sessionStorage): on the server this Map
+    // would be shared by every request of the process.
+    if (!import.meta.client) return
+    const state = filesState()
     if (state.projectSlug == null) return
     projectSnapshots.set(state.projectSlug, {
         params: JSON.parse(JSON.stringify(state.params)),
-        paramsUnit,
+        paramsUnit: state.paramsUnit,
         countBySlug: Object.fromEntries(
             (state.projectFiles || []).map((file) => [file.slug, file.count])
         ),
@@ -111,6 +114,7 @@ function snapshotCurrentProject() {
 // pagehide en filet de sécurité (charge d'onglet, F5).
 let snapshotPersistTimer = null
 function scheduleSnapshotPersist() {
+    if (!import.meta.client) return
     if (snapshotPersistTimer) clearTimeout(snapshotPersistTimer)
     snapshotPersistTimer = setTimeout(() => {
         snapshotPersistTimer = null
@@ -121,117 +125,156 @@ if (typeof window !== 'undefined') {
     window.addEventListener('pagehide', snapshotCurrentProject)
 }
 
-const state = reactive({
-    projectFiles: null,
-    projectSlug: null,
-    projectName: '',
-    projectDemo: false,
-    // J-090 : projet « 100 % privé » — fichiers en IndexedDB, jamais uploadés.
-    projectLocal: false,
-    // Clé i18n de la dernière erreur d'import navigateur (affichée en page).
-    localImportError: '',
-    localImportErrorParams: {},
-    // Lot J10-a : INFORMATION de dépôt (zone d'exclusion déclarée) —
-    // distincte de l'erreur : le travail se fait, l'atelier est PRÉVENU.
-    localImportNotice: '',
-    localImportNoticeParams: {},
-    lastParams: '',
-    // Set when a demo nesting hits the monthly demo quota — shown on the
-    // project page instead of the paywall (demo 402s are reason=demo_quota).
-    demoQuotaReached: false,
-    // R-2 (audit 2026-08-31 §R-1) : clé i18n de la dernière erreur de
-    // soumission non gérée ailleurs (409 concurrent_limit, 5xx…) — avant,
-    // l'erreur était avalée ET lastParams marqué → bouton grisé muet.
-    nestError: '',
-    // Z1 (vérif 2026-09-05) : payload structuré du refus 422 capacité
-    // (aire gonflée > seuil) — {reason, ratio, sheetsNeeded,
-    // maxPartsAtSpacing, maxSpacingForFitMm} pour le bandeau à leviers.
-    nestUnfit: null,
-    // Soumission en vol : bloque le double-clic pendant la latence du POST
-    // (2 requêtes = 2 charges possibles chez un Free, cf. R-1 serveur).
-    nestBusy: false,
-    params: factoryParams(),
-    isSvgLoaded: computed(
-        () =>
-            state.projectFiles?.every(
-                (file) => file.processingStatus !== processingType.inProgress
-            ) || false
-    ),
-    filesStatusDone: computed(
-        () =>
-            state.projectFiles?.filter(
-                (file) => file.processingStatus === processingType.done
-            ) || []
-    ),
-    filesToNest: computed(() =>
-        state.filesStatusDone.map((file) => ({
-            slug: file.slug,
-            count: file.count,
-            // Per-file rotation override wins; otherwise use the global setting.
-            rotation: file.rotation || JSON.stringify(buildRotationAngles(Number(state.params.rotationCount))),
-            // Projet 100 % privé : pas de `name` — le serveur n'en a pas
-            // besoin (quota + slugs opaques suffisent). Le libellé reste
-            // dans IndexedDB, affiché ici seulement.
-        }))
-    ),
-    currentFilesSlug: computed(
-        () => new Set(state.projectFiles?.map((file) => file.slug) || [])
-    ),
-    // Nom honnête (m-7 audit 2026-08-31 §R-m.7) : ce computed vaut « les
-    // paramètres sont INVALIDES » — l'ancien nom isValidParams (sémantique
-    // inversée) était un piège de maintenance.
-    isInvalidParams: computed(() => {
-        const sheets = normalizedSheets(state.params)
-        if (sheets.length === 0) return false
-        const invalid = sheets.some(
-            (sheet) =>
-                !isValidNumber(sheet.width) ||
-                !isValidNumber(sheet.height) ||
-                !/^\d+$/.test(String(sheet.count)) ||
-                Number(sheet.count) < 1
-        )
-        return invalid || !isValidNumber(state.params.space)
-    }),
-    requestBody: computed(() => {
-        const sheets = normalizedSheets(state.params)
-        const first = sheets[0] || { width: 0, height: 0, count: 0 }
-        // Params hold DISPLAY-unit strings (the user's preferred unit) — the
-        // API and the whole pipeline speak canonical mm, so convert here,
-        // at the boundary.
-        const unit = getUnitState()
-        const toMm = (v) => displayToMm(Number(v), unit)
-        return JSON.stringify({
-            files: state.filesToNest,
-            params: {
-                sheets: sheets.map((sheet) => ({
-                    width: toMm(sheet.width),
-                    height: toMm(sheet.height),
-                    count: Number(sheet.count),
-                })),
-                // Legacy mirror of the first sheet — older workers/APIs only
-                // understand width/height/sheetCount.
-                width: toMm(first.width),
-                height: toMm(first.height),
-                sheetCount: Number(first.count),
-                tolerance: Number(state.params.tolerance),
-                space: toMm(state.params.space),
-                addOutShape: state.params.addOutShape,
-                fillHoles: state.params.fillHoles !== false,
-                rotationCount: Number(state.params.rotationCount),
-                // Layout directions to optimize towards (server re-validates
-                // against the tier allowance); undefined = server default.
-                directions: Array.isArray(state.params.directions) && state.params.directions.length
-                    ? state.params.directions
-                    : undefined,
-                // Demo-only: 1 / 4 / 8 walks (Free / Unlimited / Pro preview).
-                // Server allow-lists; ignored on non-demo jobs.
-                demoWalks: state.params.demoWalks != null
-                    ? Number(state.params.demoWalks)
-                    : undefined,
-            }
+function createFilesState() {
+    const state = reactive({
+        projectFiles: null,
+        projectSlug: null,
+        projectName: '',
+        projectDemo: false,
+        // J-090 : projet « 100 % privé » — fichiers en IndexedDB, jamais uploadés.
+        projectLocal: false,
+        // Clé i18n de la dernière erreur d'import navigateur (affichée en page).
+        localImportError: '',
+        localImportErrorParams: {},
+        // Lot J10-a : INFORMATION de dépôt (zone d'exclusion déclarée) —
+        // distincte de l'erreur : le travail se fait, l'atelier est PRÉVENU.
+        localImportNotice: '',
+        localImportNoticeParams: {},
+        lastParams: '',
+        // Set when a demo nesting hits the monthly demo quota — shown on the
+        // project page instead of the paywall (demo 402s are reason=demo_quota).
+        demoQuotaReached: false,
+        // R-2 (audit 2026-08-31 §R-1) : clé i18n de la dernière erreur de
+        // soumission non gérée ailleurs (409 concurrent_limit, 5xx…) — avant,
+        // l'erreur était avalée ET lastParams marqué → bouton grisé muet.
+        nestError: '',
+        // Z1 (vérif 2026-09-05) : payload structuré du refus 422 capacité
+        // (aire gonflée > seuil) — {reason, ratio, sheetsNeeded,
+        // maxPartsAtSpacing, maxSpacingForFitMm} pour le bandeau à leviers.
+        nestUnfit: null,
+        // Soumission en vol : bloque le double-clic pendant la latence du POST
+        // (2 requêtes = 2 charges possibles chez un Free, cf. R-1 serveur).
+        nestBusy: false,
+        params: factoryParams(),
+        // The unit state.params is CURRENTLY expressed in. Starts at mm (factory
+        // defaults); tracked so a unit sync is idempotent — re-applying the same
+        // unit (SPA remount, DB re-sync) never double-converts user values.
+        paramsUnit: 'mm',
+        // Set by markCuratedDefaults() above.
+        pendingCuratedDefaults: false,
+        // m-6 (audit 2026-08-31 §R-m.6) : sur navigation rapide, la réponse la
+        // plus LENTE gagnait et collait les fichiers/params d'un AUTRE projet sur
+        // l'URL courante. On ne retient que la réponse de la dernière demande.
+        lastProjectRequest: null,
+        isSvgLoaded: computed(
+            () =>
+                state.projectFiles?.every(
+                    (file) => file.processingStatus !== processingType.inProgress
+                ) || false
+        ),
+        filesStatusDone: computed(
+            () =>
+                state.projectFiles?.filter(
+                    (file) => file.processingStatus === processingType.done
+                ) || []
+        ),
+        filesToNest: computed(() =>
+            state.filesStatusDone.map((file) => ({
+                slug: file.slug,
+                count: file.count,
+                // Per-file rotation override wins; otherwise use the global setting.
+                rotation: file.rotation || JSON.stringify(buildRotationAngles(Number(state.params.rotationCount))),
+                // Projet 100 % privé : pas de `name` — le serveur n'en a pas
+                // besoin (quota + slugs opaques suffisent). Le libellé reste
+                // dans IndexedDB, affiché ici seulement.
+            }))
+        ),
+        currentFilesSlug: computed(
+            () => new Set(state.projectFiles?.map((file) => file.slug) || [])
+        ),
+        // Nom honnête (m-7 audit 2026-08-31 §R-m.7) : ce computed vaut « les
+        // paramètres sont INVALIDES » — l'ancien nom isValidParams (sémantique
+        // inversée) était un piège de maintenance.
+        isInvalidParams: computed(() => {
+            const sheets = normalizedSheets(state.params)
+            if (sheets.length === 0) return false
+            const invalid = sheets.some(
+                (sheet) =>
+                    !isValidNumber(sheet.width) ||
+                    !isValidNumber(sheet.height) ||
+                    !/^\d+$/.test(String(sheet.count)) ||
+                    Number(sheet.count) < 1
+            )
+            return invalid || !isValidNumber(state.params.space)
+        }),
+        requestBody: computed(() => {
+            const sheets = normalizedSheets(state.params)
+            const first = sheets[0] || { width: 0, height: 0, count: 0 }
+            // Params hold DISPLAY-unit strings (the user's preferred unit) — the
+            // API and the whole pipeline speak canonical mm, so convert here,
+            // at the boundary.
+            const unit = getUnitState()
+            const toMm = (v) => displayToMm(Number(v), unit)
+            return JSON.stringify({
+                files: state.filesToNest,
+                params: {
+                    sheets: sheets.map((sheet) => ({
+                        width: toMm(sheet.width),
+                        height: toMm(sheet.height),
+                        count: Number(sheet.count),
+                    })),
+                    // Legacy mirror of the first sheet — older workers/APIs only
+                    // understand width/height/sheetCount.
+                    width: toMm(first.width),
+                    height: toMm(first.height),
+                    sheetCount: Number(first.count),
+                    tolerance: Number(state.params.tolerance),
+                    space: toMm(state.params.space),
+                    addOutShape: state.params.addOutShape,
+                    fillHoles: state.params.fillHoles !== false,
+                    rotationCount: Number(state.params.rotationCount),
+                    // Layout directions to optimize towards (server re-validates
+                    // against the tier allowance); undefined = server default.
+                    directions: Array.isArray(state.params.directions) && state.params.directions.length
+                        ? state.params.directions
+                        : undefined,
+                    // Demo-only: 1 / 4 / 8 walks (Free / Unlimited / Pro preview).
+                    // Server allow-lists; ignored on non-demo jobs.
+                    demoWalks: state.params.demoWalks != null
+                        ? Number(state.params.demoWalks)
+                        : undefined,
+                }
+            })
         })
     })
-})
+    return state
+}
+
+// Client: one tab = one user, the module singleton is the store.
+const clientState = import.meta.client ? createFilesState() : null
+
+// Server: ONE Nitro process renders every request. [slug].vue loads the
+// project in an immediate watch that the render does not await, so the HTML
+// showed the state left by the PREVIOUS getProject() — another user's
+// project title, file names and « Nest N parts » included. The state now
+// lives on the request's own nuxtApp.
+const serverStates = new WeakMap()
+
+function filesState() {
+    if (import.meta.client) return clientState
+    // Server reads belong in setup, middleware or render. After an await
+    // unctx may hold ANOTHER request's nuxtApp (asyncContext is off): code
+    // that awaits captures the state first (see getProject).
+    const nuxtApp = tryUseNuxtApp()
+    // No Nuxt context at all: an empty state that nothing else shares.
+    if (!nuxtApp) return createFilesState()
+    let state = serverStates.get(nuxtApp)
+    if (!state) {
+        state = createFilesState()
+        serverStates.set(nuxtApp, state)
+    }
+    return state
+}
 
 let updateTimer
 
@@ -252,6 +295,10 @@ function consumePendingLocalFiles() {
 // by the file processing worker, so the UI flips from a loader to the
 // selectable file as soon as processing completes.
 function scheduleFilesRefresh(path) {
+    // Server: the render is already sent, and a poll would run outside the
+    // request (no cookie → 401 → navigateTo() without a Nuxt context).
+    if (!import.meta.client) return
+    const state = filesState()
     if (updateTimer) {
         clearTimeout(updateTimer)
         updateTimer = null
@@ -266,19 +313,18 @@ function scheduleFilesRefresh(path) {
     }
 }
 
-// m-6 (audit 2026-08-31 §R-m.6) : sur navigation rapide, la réponse la plus
-// LENTE gagnait et collait les fichiers/params d'un AUTRE projet sur l'URL
-// courante. On ne retient que la réponse de la dernière demande émise.
-let lastProjectRequest = null
-
 async function getProject(path, fetchOpts = {}) {
-    lastProjectRequest = path
+    // Resolve the request's state (and, on the server, its nuxtApp) BEFORE
+    // the first await: the Nuxt context is only guaranteed synchronously.
+    const state = filesState()
+    const nuxtApp = import.meta.client ? null : tryUseNuxtApp()
+    state.lastProjectRequest = path
     try {
         // SSR: the caller (page setup) passes useRequestHeaders(['cookie'])
         // — useApiFetch() inside this store action has no Nuxt context
         // (watch/async) and 401'd → navigateTo('/home') on F5.
         const data = await $fetch(path, fetchOpts)
-        if (path !== lastProjectRequest) return
+        if (path !== state.lastProjectRequest) return
         state.projectLocal = Boolean(data.local)
         state.projectDemo = Boolean(data.isDemo)
         if (data.local) {
@@ -287,41 +333,49 @@ async function getProject(path, fetchOpts = {}) {
             // SSR : pas d'IndexedDB — poser le slug/nom et laisser le
             // client hydrater. Sans ça F5 bounce vers /home (constat P4).
             if (import.meta.server) {
-                setProjectFiles([], path)
-                setProjectName(data.name || '')
+                setProjectFiles([], path, state)
+                setProjectName(data.name || '', state)
                 return
             }
             const { listLocalFiles } = await import('./localFilesStore')
             const { localRecordToUiFile } = await import('./localImport')
             const { titleFromFileName } = await import('../utils/projectTitle')
             const records = await listLocalFiles(data.slug)
-            setProjectFiles(records.map(localRecordToUiFile), path)
+            setProjectFiles(records.map(localRecordToUiFile), path, state)
             // Display name, IndexedDB only — never PATCH. Lot J11-a (A1) :
             // un projet issu d'un `.job` porte le NOM DU FICHIER `.job`
             // (c'est ce que l'atelier reconnaît), pas celui d'une fiche
             // « dessin (2/4) ». Repli : premier fichier, comme avant.
             const jobName = records.map((r) => r.sheetcam?.jobName).find(Boolean) || null
             const fromFile = titleFromFileName(jobName || records[0]?.name)
-            setProjectName(fromFile || data.name || '')
+            setProjectName(fromFile || data.name || '', state)
         } else {
-            if (data.name) setProjectName(data.name)
-            setProjectFiles(data.files, path)
+            if (data.name) setProjectName(data.name, state)
+            setProjectFiles(data.files, path, state)
         }
     } catch (error) {
-        if (path !== lastProjectRequest) return
-        if (error?.data?.statusMessage === 'vault_locked') {
-            const vaultUnlockDialog = useVaultUnlockDialog();
-            vaultUnlockDialog.value = true;
-            return
+        if (path !== state.lastProjectRequest) return
+        const onError = () => {
+            if (error?.data?.statusMessage === 'vault_locked') {
+                const vaultUnlockDialog = useVaultUnlockDialog();
+                vaultUnlockDialog.value = true;
+                return
+            }
+            console.error('Error fetching project:', error)
+            navigateTo("/home");
         }
-        console.error('Error fetching project:', error)
-        navigateTo("/home");
+        // Server: run in THIS request's app. Without it the 404 of a foreign
+        // slug redirected a concurrent render to /home, or threw NUXT_E1001
+        // (no context) and turned the page into a 500.
+        if (nuxtApp) nuxtApp.runWithContext(onError)
+        else onError()
     }
 }
-function setProjectName(name) {
+// `state` is passed by getProject() after its await (see filesState()).
+function setProjectName(name, state = filesState()) {
     state.projectName = name
 }
-function setProjectFiles(files, path) {
+function setProjectFiles(files, path, state = filesState()) {
     // Cloisonnement (QA 2026-08-30) : en QUITTANT un projet on snapshotte
     // ses réglages ; en ARRIVANT sur un autre, on restaure SON snapshot —
     // ou les défauts d'usine (plus de fuite des params d'un projet à
@@ -372,12 +426,12 @@ function setProjectFiles(files, path) {
             // withKerfDefaults : snapshot posé avant le chantier kerf
             // (B.4) — même espacement effectif après migration.
             state.params = withKerfDefaults(JSON.parse(JSON.stringify(snap.params)))
-            paramsUnit = snap.paramsUnit
-        } else if (!pendingCuratedDefaults) {
+            state.paramsUnit = snap.paramsUnit
+        } else if (!state.pendingCuratedDefaults) {
             state.params = factoryParams()
-            paramsUnit = 'mm'
+            state.paramsUnit = 'mm'
         }
-        pendingCuratedDefaults = false
+        state.pendingCuratedDefaults = false
     }
     scheduleFilesRefresh(path)
 }
@@ -389,6 +443,7 @@ function setProjectFiles(files, path) {
  * wasm, aucun changement avant « Appliquer ».
  */
 async function openFicheScale(file) {
+    const state = filesState()
     const { useAdvancedImport } = await import('./advancedImport')
     const adv = useAdvancedImport()
     try {
@@ -451,6 +506,7 @@ async function awaitFilesDone(projectPath, timeoutMs = 300000) {
 
 /** Applique l'échelle réglée dans l'aperçu à la fiche ouverte (E4-b). */
 async function applyFicheScale(options) {
+    const state = filesState()
     const { useAdvancedImport } = await import('./advancedImport')
     const adv = useAdvancedImport()
     const slug = adv.preview.pending[0]?.ficheSlug
@@ -481,6 +537,7 @@ async function applyFicheScale(options) {
 
 /** « Réinitialiser l'échelle » d'une fiche (E4-b) — retour bit-identique. */
 async function resetFicheScale(file) {
+    const state = filesState()
     state.localImportError = ''
     state.localImportErrorParams = {}
     try {
@@ -509,6 +566,7 @@ async function resetFicheScale(file) {
  * quantité de la fiche est HÉRITÉE par chacune.
  */
 async function explodeFiche(file) {
+    const state = filesState()
     state.localImportError = ''
     state.localImportErrorParams = {}
     const parentCount = Number(file.count) || 1
@@ -558,6 +616,7 @@ async function explodeFiche(file) {
  * actionnable, et le plafond de taille tombait avec.
  */
 async function importDxfReplacingJobFiche(file, slug, options = {}) {
+    const state = filesState()
     const { importLocalFiles } = await import('./localImport')
     const nameEq = (a, b) => String(a || '').trim().toLowerCase()
         === String(b || '').trim().toLowerCase()
@@ -577,6 +636,7 @@ async function importDxfReplacingJobFiche(file, slug, options = {}) {
 }
 
 async function addFiles(files, slug) {
+    const state = filesState()
     if (state.projectLocal) {
         // J-090 : import 100 % navigateur (parse wasm + IndexedDB) — aucun
         // byte ne transite par le serveur.
@@ -666,6 +726,7 @@ async function addFiles(files, slug) {
  * qu'un échec total muet.
  */
 async function uploadToServer(files, slug) {
+    const state = filesState()
     const list = [...files]
     const failedNames = []
     const reasons = new Set()
@@ -724,6 +785,7 @@ async function uploadToServer(files, slug) {
  * (consigne §5 point 2).
  */
 async function addSheetCamJobDrop(drop, slug) {
+    const state = filesState()
     const { readSheetCamJob, importLocalFiles, importLocalBytes, assignJobStarts } = await import('./localImport')
     const {
         prefillFromJob, cutSettingsFor, resolveJobDrawingSources,
@@ -970,6 +1032,7 @@ function normalizedSheets(params) {
     return []
 }
 function updateParams(param) {
+    const state = filesState()
     state.params = { ...state.params, ...param }
     scheduleSnapshotPersist()
 }
@@ -982,6 +1045,7 @@ function updateParams(param) {
  * passer par ici partout.
  */
 function updateKerfSafety(patch) {
+    const state = filesState()
     const kerf = patch.kerf != null ? String(patch.kerf) : state.params.kerf
     const safety = patch.safety != null ? String(patch.safety) : state.params.safety
     state.params = {
@@ -993,6 +1057,7 @@ function updateKerfSafety(patch) {
     scheduleSnapshotPersist()
 }
 function updateSheet(index, patch) {
+    const state = filesState()
     const sheets = normalizedSheets(state.params).map((sheet, i) =>
         i === index ? { ...sheet, ...patch } : sheet
     )
@@ -1000,16 +1065,12 @@ function updateSheet(index, patch) {
     scheduleSnapshotPersist()
 }
 function addSheet() {
+    const state = filesState()
     const sheets = normalizedSheets(state.params)
     const last = sheets[sheets.length - 1] || { ...DEFAULT_SHEET.mm, count: '1' }
     state.params = { ...state.params, sheets: [...sheets, { ...last, count: '1' }] }
     scheduleSnapshotPersist()
 }
-
-// The unit state.params is CURRENTLY expressed in. Starts at mm (factory
-// defaults); tracked so a unit sync is idempotent — re-applying the same
-// unit (SPA remount, DB re-sync) never double-converts user values.
-let paramsUnit = 'mm'
 
 /**
  * Brings the in-progress form values to `toUnit` (called on unit switch AND
@@ -1020,8 +1081,9 @@ let paramsUnit = 'mm'
  * (0.1 mm <-> 0.004" round-trips exactly through the display trimming).
  */
 function syncParamsToUnit(toUnit) {
-    if (!toUnit || paramsUnit === toUnit) return
-    const fromUnit = paramsUnit
+    const state = filesState()
+    if (!toUnit || state.paramsUnit === toUnit) return
+    const fromUnit = state.paramsUnit
     // B.3/B.4 : kerf et sécurité sont des longueurs comme space — la
     // conversion les prend, puis space est RECALCULÉ depuis eux pour que
     // la règle space = kerf + 2 × sécurité reste exacte après un switch
@@ -1055,10 +1117,11 @@ function syncParamsToUnit(toUnit) {
         safety,
         space: spacingFromKerfSafety(kerf, safety),
     }
-    paramsUnit = toUnit
+    state.paramsUnit = toUnit
     scheduleSnapshotPersist()
 }
 function removeSheet(index) {
+    const state = filesState()
     const sheets = normalizedSheets(state.params)
     if (sheets.length <= 1) return
     state.params = { ...state.params, sheets: sheets.filter((_, i) => i !== index) }
@@ -1081,6 +1144,7 @@ function buildRotationAngles(count) {
     return Array.from({ length: n }, (_, i) => Math.round(i * step))
 }
 function increment(index, event) {
+    const state = filesState()
     const step = event && event.shiftKey ? 10 : 1
     if (state.projectFiles[index].count + step <= 999) {
         state.projectFiles[index].count += step
@@ -1090,6 +1154,7 @@ function increment(index, event) {
     scheduleSnapshotPersist()
 }
 function decrement(index, event) {
+    const state = filesState()
     const step = event && event.shiftKey ? 10 : 1
     if (state.projectFiles[index].count - step >= 0) {
         state.projectFiles[index].count -= step
@@ -1099,6 +1164,7 @@ function decrement(index, event) {
     scheduleSnapshotPersist()
 }
 function updateCount(value, index) {
+    const state = filesState()
     if (!isValidNumber(value)) {
         state.projectFiles[index].count = 0
     } else if (Number(value) > 999) {
@@ -1109,12 +1175,14 @@ function updateCount(value, index) {
     scheduleSnapshotPersist()
 }
 function updateRotation(value, index) {
+    const state = filesState()
     if (state.projectFiles[index]) {
         state.projectFiles[index].rotation = value
     }
     scheduleSnapshotPersist()
 }
 async function nest(slug) {
+    const state = filesState()
     // R-2 (audit 2026-08-31 §R-1) : garde de double soumission — un 2e clic
     // pendant la latence du POST passait le compteur de concurrence serveur
     // et pouvait doubler la charge de quota.
@@ -1220,39 +1288,46 @@ async function nest(slug) {
 
 /** Z1 (vérif 2026-09-05) : ferme le bandeau capacité (après action). */
 function dismissNestUnfit() {
-    state.nestUnfit = null
+    filesState().nestUnfit = null
 }
 
 /** AA2 (vérif L1 2026-09-05) : appelé sur toute annulation — le bouton
  * Nest redevient actif avec les MÊMES paramètres (isNewParams repasse à
  * vrai ; sans ce reset, il fallait modifier un réglage ou recharger). */
 function resetLastParams() {
-    state.lastParams = ''
+    filesState().lastParams = ''
 }
+
+// Client: plain computeds over the tab's singleton, as before. Server: a ref
+// resolved on every read — a module-level computed would cache the first
+// request's state for every later one.
+const getter = (read) => import.meta.client
+    ? computed(() => read(clientState))
+    : customRef(() => ({ get: () => read(filesState()), set: () => {} }))
 
 export const filesStore = readonly({
     getters: {
-        projectFiles: computed(() => state.projectFiles),
-        projectSlug: computed(() => state.projectSlug),
-        projectName: computed(() => state.projectName),
-        projectDemo: computed(() => state.projectDemo),
-        projectLocal: computed(() => state.projectLocal),
-        localImportError: computed(() => state.localImportError),
-        localImportNotice: computed(() => state.localImportNotice),
-        localImportNoticeParams: computed(() => state.localImportNoticeParams),
-        localImportErrorParams: computed(() => state.localImportErrorParams),
-        filesCount: computed(() =>
+        projectFiles: getter((state) => state.projectFiles),
+        projectSlug: getter((state) => state.projectSlug),
+        projectName: getter((state) => state.projectName),
+        projectDemo: getter((state) => state.projectDemo),
+        projectLocal: getter((state) => state.projectLocal),
+        localImportError: getter((state) => state.localImportError),
+        localImportNotice: getter((state) => state.localImportNotice),
+        localImportNoticeParams: getter((state) => state.localImportNoticeParams),
+        localImportErrorParams: getter((state) => state.localImportErrorParams),
+        filesCount: getter((state) =>
             state.filesStatusDone.reduce((acc, curr) => acc + curr.count, 0)
         ),
-        isNewParams: computed(() => state.requestBody !== state.lastParams),
-        demoQuotaReached: computed(() => state.demoQuotaReached),
+        isNewParams: getter((state) => state.requestBody !== state.lastParams),
+        demoQuotaReached: getter((state) => state.demoQuotaReached),
         // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
-        sheetCountTooHigh: computed(() => exceedsMaxSheets(normalizedSheets(state.params))),
-        nestError: computed(() => state.nestError),
-        nestUnfit: computed(() => state.nestUnfit),
-        nestBusy: computed(() => state.nestBusy),
-        params: computed(() => state.params),
-        nestRequestError: computed(() => {
+        sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),
+        nestError: getter((state) => state.nestError),
+        nestUnfit: getter((state) => state.nestUnfit),
+        nestBusy: getter((state) => state.nestBusy),
+        params: getter((state) => state.params),
+        nestRequestError: getter((state) => {
             if (filesStore.getters.filesCount < 1) {
                 // Local empty IndexedDB is a state, not a form error (ux1).
                 return state.projectLocal ? '' : 'project.needFiles'

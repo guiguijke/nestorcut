@@ -62,6 +62,12 @@ async function loadStore(onNest) {
         actions: { getProjects: vi.fn(async () => {}), setModalNestData },
     })
     vi.stubGlobal('authStore', { actions: { setUser: vi.fn(async () => {}) } })
+    // vitest = chemin serveur de `files.js` (import.meta.client indéfini) :
+    // l'état vit sur le nuxtApp de la requête. Un seul nuxtApp ici = un seul
+    // utilisateur, comme l'onglet du client (filesStoreSsr.test.js couvre
+    // le cloisonnement entre requêtes).
+    const nuxtApp = { runWithContext: (fn) => fn() }
+    vi.stubGlobal('tryUseNuxtApp', () => nuxtApp)
     vi.stubGlobal('navigateTo', vi.fn())
     vi.stubGlobal(
         '$fetch',

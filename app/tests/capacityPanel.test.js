@@ -235,7 +235,7 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
     it('files.js : 400 too_many_sheets, miroir de la borne, 402 string-safe avec contexte', () => {
         expect(filesJs).toMatch(/statusMessage === 'too_many_sheets'/)
         expect(filesJs).toContain("state.nestError = 'nest.error.maxSheets'")
-        expect(filesJs).toContain('sheetCountTooHigh: computed(() => exceedsMaxSheets(normalizedSheets(state.params)))')
+        expect(filesJs).toContain('sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params)))')
         // AGENTS #29 : jamais `=== true` sur le flag runtime (il arrive en chaîne).
         expect(filesJs).toContain('flagOn(useRuntimeConfig().public.paidPlansDisabled)')
         expect(filesJs).not.toMatch(/paidPlansDisabled\s*===\s*true/)
