@@ -99,6 +99,7 @@ onMounted(() => {
 <style lang="scss" scoped>
 .welcome {
     &__auth-error {
+        width: 100%;
         max-width: 380px;
         margin: 0 auto 12px;
         padding: 10px 14px;
@@ -116,7 +117,9 @@ onMounted(() => {
         text-decoration: underline;
     }
 
+    // En colonne : l'erreur Google au-dessus de la carte, pas à côté.
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 60vh;
