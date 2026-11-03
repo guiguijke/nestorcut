@@ -1,9 +1,33 @@
 <template>
-    <div 
+    <div
         :class="projectClasses"
         class="project"
     >
+        <!-- Sélection multiple : la carte entière coche/décoche (le label
+             porte le voile ::after), aucune navigation. La démo n'est pas
+             cochable (403 serveur). -->
+        <label
+            v-if="selecting"
+            class="project__label project__label--select"
+            :class="{ 'project__label--disabled': !canDelete }"
+        >
+            <input
+                v-if="canDelete"
+                type="checkbox"
+                class="project__check"
+                :checked="selected"
+                :aria-label="t('project.selectItem', { name: projectName })"
+                data-testid="project-select-check"
+                @change="emit('toggle', project.slug)"
+            />
+            <span class="project__name">{{ projectName }}</span>
+            <PrivacyChip
+                :mode="privacyMode"
+                class="project__badge"
+            />
+        </label>
         <NuxtLink
+            v-else
             :to="`/project/${project.slug}`"
             @click="getProject(API_ROUTES.PROJECT(project.slug))"
             class="project__label"
@@ -32,7 +56,7 @@
         <!-- Poubelle : jamais sur le projet démo partagé (403 serveur).
              Révélée au survol desktop, toujours visible en tactile (CSS). -->
         <MainButton
-            v-if="canDelete"
+            v-if="canDelete && !selecting"
             class="project__btn"
             :icon="iconType.trash"
             :size="sizeType.m"
@@ -92,12 +116,22 @@ import { themeType } from '~~/constants/theme.constants';
 import { projectPrivacyMode } from '~/utils/privacyMode';
 import { hasActiveJob } from '~/composables/localSolverRegistry';
 
-const { project } = defineProps({
+const { project, selecting, selected } = defineProps({
     project: {
         type: Object,
         required: true,
     },
-}) 
+    // Mode sélection multiple de la liste (UserProjects.vue).
+    selecting: {
+        type: Boolean,
+        default: false,
+    },
+    selected: {
+        type: Boolean,
+        default: false,
+    },
+})
+const emit = defineEmits(['toggle'])
 const route = useRoute()
 const now = ref(new Date())
 const { t } = useLocale()
@@ -106,7 +140,9 @@ const { actions } = filesStore;
 const { getProject } = actions;
 
 const projectClasses = computed(() => ({
-    'project--active': unref(project).slug === route.params.slug
+    'project--active': unref(project).slug === route.params.slug,
+    'project--selecting': selecting,
+    'project--selected': selecting && selected,
 }))
 // The shared demo project carries a generic DB name — localize it.
 const projectName = computed(() =>
@@ -308,6 +344,35 @@ onBeforeUnmount(() => {
             pointer-events: auto;
             opacity: 1;
         }
+    }
+
+    // Après --active : le projet consulté reste cochable en sélection.
+    &--selecting {
+        pointer-events: auto;
+    }
+    &--selected {
+        background-color: var(--fill-tertiary);
+        box-shadow: inset 2px 0 0 var(--accent-primary);
+    }
+
+    &__label--select {
+        cursor: pointer;
+        // Pas de poubelle en sélection : le nom reprend la place.
+        padding-right: 0;
+    }
+    &__label--disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+    &__check {
+        position: relative;
+        z-index: 1;
+        flex-shrink: 0;
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: var(--accent-primary);
+        cursor: pointer;
     }
 }
 

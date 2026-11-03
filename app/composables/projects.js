@@ -116,3 +116,27 @@ export async function deleteProject(project, { currentSlug } = {}) {
 
     return { ok: true }
 }
+
+/**
+ * Suppression de plusieurs projets (demande du propriétaire, 03/11) : UN
+ * PAR UN, chacun quitte la liste dès son 200 — la liste fond sous les yeux.
+ * Un échec (409 calcul en cours…) n'arrête pas les suivants. Le projet
+ * consulté passe en dernier : son navigateTo('/home') n'interrompt rien.
+ *
+ * @param {object[]} projects
+ * @param {{ currentSlug?: string, onProgress?: (p: { done: number, total: number }) => void }} options
+ * @returns {Promise<{ deleted: number, failed: { project: object, errorKey: string }[] }>}
+ */
+export async function deleteProjects(projects, { currentSlug, onProgress } = {}) {
+    const queue = (projects || []).filter(canDeleteProject)
+    queue.sort((a, b) => (a.slug === currentSlug) - (b.slug === currentSlug))
+    const failed = []
+    let done = 0
+    for (const project of queue) {
+        const result = await deleteProject(project, { currentSlug })
+        if (!result.ok) failed.push({ project, errorKey: result.errorKey })
+        done++
+        onProgress?.({ done, total: queue.length })
+    }
+    return { deleted: queue.length - failed.length, failed }
+}

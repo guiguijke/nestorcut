@@ -34,6 +34,7 @@ import {
     canDeleteProject,
     deleteConfirmMessageKey,
     deleteProject,
+    deleteProjects,
 } from '../composables/projects'
 
 const cloudProject = { slug: 'alpha', name: 'Alpha' }
@@ -138,5 +139,65 @@ describe('deleteConfirmMessageKey', () => {
     it('warns about browser storage only for 100% private projects', () => {
         expect(deleteConfirmMessageKey(cloudProject)).toBe('project.deleteConfirmCloud')
         expect(deleteConfirmMessageKey(localProject)).toBe('project.deleteConfirmLocal')
+    })
+})
+
+// Suppression multiple (demande du propriétaire, 03/11) : un par un, la
+// liste fond au fil de l'eau, un échec n'arrête pas les suivants.
+describe('deleteProjects', () => {
+    it('deletes one by one, in order, and the list shrinks after each 200', async () => {
+        const seen = []
+        globalThis.$fetch = vi.fn(async (url) => {
+            seen.push({ url, list: projectSlugs() })
+            return { ok: true }
+        })
+        const progress = []
+
+        const result = await deleteProjects([cloudProject, localProject], { onProgress: (p) => progress.push(p) })
+
+        expect(result).toEqual({ deleted: 2, failed: [] })
+        expect(seen).toEqual([
+            { url: '/api/project/alpha', list: ['alpha', 'beta', 'demo'] },
+            { url: '/api/project/beta', list: ['beta', 'demo'] },
+        ])
+        expect(progress).toEqual([{ done: 1, total: 2 }, { done: 2, total: 2 }])
+        expect(state.purgedFiles).toEqual(['beta'])
+        expect(projectSlugs()).toEqual(['demo'])
+    })
+
+    it('a 409 on one project does not stop the next ones', async () => {
+        globalThis.$fetch = vi.fn(async (url) => {
+            // eslint-disable-next-line no-throw-literal
+            if (url === '/api/project/alpha') throw { data: { statusMessage: 'jobs_in_progress' } }
+            return { ok: true }
+        })
+
+        const result = await deleteProjects([cloudProject, localProject])
+
+        expect(result.deleted).toBe(1)
+        expect(result.failed).toEqual([{ project: cloudProject, errorKey: 'project.deleteErrorActive' }])
+        expect(projectSlugs()).toEqual(['alpha', 'demo'])
+    })
+
+    it('never sends the shared demo project', async () => {
+        const result = await deleteProjects([demoProject, cloudProject])
+
+        expect(globalThis.$fetch).toHaveBeenCalledTimes(1)
+        expect(globalThis.$fetch).toHaveBeenCalledWith('/api/project/alpha', { method: 'DELETE' })
+        expect(result).toEqual({ deleted: 1, failed: [] })
+    })
+
+    it('the project being viewed goes last, so leaving its page interrupts nothing', async () => {
+        const order = []
+        globalThis.$fetch = vi.fn(async (url) => {
+            order.push(url)
+            return { ok: true }
+        })
+
+        await deleteProjects([cloudProject, localProject], { currentSlug: 'alpha' })
+
+        expect(order).toEqual(['/api/project/beta', '/api/project/alpha'])
+        expect(globalThis.navigateTo).toHaveBeenCalledTimes(1)
+        expect(globalThis.navigateTo).toHaveBeenCalledWith('/home')
     })
 })
