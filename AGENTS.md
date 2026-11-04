@@ -922,7 +922,10 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     ligne `app/utils/bootChunkRetry.js`, qui recharge une fois au plus toutes les
     10 s tant que l'hydratation n'est pas finie. Tant qu'une panne échoue plus
     lentement que cette garde, la page réessaie sans plafond, ce qui est voulu : elle
-    revient seule à la fin de la panne. Pas de plugin Nuxt : si la perte
+    revient seule à la fin de la panne. Sur un chunk de la page, `reloadNuxtApp` de
+    Nuxt peut ajouter un rechargement sous sa propre garde de 10 s (`nuxt:reload`) :
+    une panne à échec rapide fait donc 3 chargements, puis s'arrête sur la page 500
+    (tracé en prod). Pas de plugin Nuxt : si la perte
     touche le graphe de l'entrée, aucun plugin ne tourne jamais. Filtrer sur
     `/_nuxt/` est obligatoire : la balise Cloudflare, refusée par la CSP à chaque
     chargement, est aussi un `<script type="module">` en erreur, et sans le filtre

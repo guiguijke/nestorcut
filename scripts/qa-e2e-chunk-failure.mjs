@@ -136,8 +136,11 @@ try {
         // 10 s (c'est lui qui verrouille la garde : on abandonne après un essai),
         // l'autre au-dessus, où la garde ne bloque rien : on vérifie seulement
         // que la page réessaie tant que la panne dure.
+        // Au plus 3 et non 2 : sur un chunk de la page, l'échec suivant passe par
+        // reloadNuxtApp de Nuxt, qui a sa propre garde de 10 s (`nuxt:reload`).
+        // Tracé en prod le 04/11 : 3 chargements, puis plus rien sur 45 s.
         const quick = await persistent(1000, 7000)()
-        check('panne durable, échec rapide : au plus 2 chargements du document', quick.documents <= 2, `${quick.documents} chargements`)
+        check('panne durable, échec rapide : au plus 3 chargements du document', quick.documents <= 3, `${quick.documents} chargements`)
         const slow = await persistent(11000, 36000)()
         check('panne durable, échec lent : la page continue de réessayer',
             slow.documents >= 3 && slow.documents <= 4 && slow.gaps.every((g) => g >= 10000),
