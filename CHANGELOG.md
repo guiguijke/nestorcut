@@ -4,6 +4,50 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.11
+
+*FR*
+
+- Projets : vous pouvez en supprimer plusieurs d'un coup. Dans la liste des projets, « Sélectionner » fait apparaître une case devant chaque projet, sauf le projet de démonstration qui ne se supprime jamais, et « Tout sélectionner » coche tous les projets affichés ; après une seule confirmation, ils sont supprimés un par un et quittent la liste au fur et à mesure. Un projet qui ne peut pas être supprimé (un calcul en cours, par exemple) reste coché avec un message, et la suppression des suivants continue. Pendant une recherche, seuls les projets affichés sont supprimés.
+- Connexion : créer un compte avec l'adresse d'un compte Google est refusé avec un message clair et un bouton de connexion Google, au lieu d'une erreur générique. Se connecter avec Google sur l'adresse d'un compte à mot de passe reste refusé, mais un message dit maintenant quoi faire, avec un lien « Mot de passe oublié ? ». Réinitialiser son mot de passe confirme aussi l'adresse e-mail.
+- Page de connexion par e-mail : un mauvais mot de passe, un compte déjà existant, un compte suspendu ou trop d'essais affichent maintenant le bon message, au lieu d'une erreur générique.
+- Projet : à l'ouverture d'un projet qui contient déjà des fichiers, le message rouge « Sélectionnez au moins un fichier à imbriquer » ne s'affiche plus pendant le chargement.
+
+*EN*
+
+- Projects: you can now delete several at once. In the project list, “Select” shows a checkbox next to each project, except the demo project, which can never be deleted, and “Select all” checks every project shown; after a single confirmation, they are deleted one by one and leave the list as they go. A project that cannot be deleted (a nesting is running, for example) stays selected with a message, and the next ones are still deleted. During a search, only the projects shown are deleted.
+- Login: creating an account with the address of a Google account is refused with a clear message and a Google login button, instead of a generic error. Logging in with Google using the address of an account with a password is still refused, but a message now says what to do, with a “Forgot password?” link. Resetting your password also confirms your email address.
+- Email login page: a wrong password, an account that already exists, a suspended account or too many attempts now show the right message instead of a generic error.
+- Project: when you open a project that already contains files, the red message “Select at least one file to nest” no longer shows while it loads.
+
+*PT*
+
+- Projetos: agora você pode excluir vários de uma vez. Na lista de projetos, “Selecionar” mostra uma caixa de seleção ao lado de cada projeto, exceto o projeto de demonstração, que nunca pode ser excluído, e “Selecionar tudo” marca todos os projetos exibidos; após uma única confirmação, eles são excluídos um a um e saem da lista aos poucos. Um projeto que não pode ser excluído (com um cálculo em andamento, por exemplo) continua marcado com uma mensagem, e a exclusão dos seguintes prossegue. Durante uma busca, só os projetos exibidos são excluídos.
+- Login: criar uma conta com o endereço de uma conta Google é recusado com uma mensagem clara e um botão de login com o Google, em vez de um erro genérico. Entrar com o Google usando o endereço de uma conta com senha continua recusado, mas agora uma mensagem diz o que fazer, com um link “Esqueceu a senha?”. Redefinir a senha também confirma o endereço de e-mail.
+- Página de login por e-mail: senha incorreta, conta já existente, conta suspensa ou tentativas demais agora mostram a mensagem certa em vez de um erro genérico.
+- Projeto: ao abrir um projeto que já contém arquivos, a mensagem vermelha “Selecione pelo menos um arquivo para aninhar” não aparece mais durante o carregamento.
+
+*IT*
+
+- Progetti: ora puoi eliminarne diversi in una volta. Nell'elenco dei progetti, «Seleziona» mostra una casella accanto a ogni progetto, tranne il progetto demo, che non si può mai eliminare, e «Seleziona tutto» spunta tutti i progetti visualizzati; dopo un'unica conferma vengono eliminati uno alla volta e lasciano l'elenco man mano. Un progetto che non si può eliminare (per esempio con un calcolo in corso) resta spuntato con un messaggio, e l'eliminazione dei successivi prosegue. Durante una ricerca vengono eliminati solo i progetti visualizzati.
+- Accesso: la creazione di un account con l'indirizzo di un account Google viene rifiutata con un messaggio chiaro e un pulsante di accesso con Google, invece di un errore generico. L'accesso con Google usando l'indirizzo di un account con password continua a essere rifiutato, ma ora un messaggio dice cosa fare, con un link «Password dimenticata?». Reimpostare la password conferma anche l'indirizzo email.
+- Pagina di accesso via email: una password errata, un account già esistente, un account sospeso o troppi tentativi mostrano ora il messaggio giusto invece di un errore generico.
+- Progetto: all'apertura di un progetto che contiene già dei file, il messaggio rosso «Seleziona almeno un file da annidare» non compare più durante il caricamento.
+
+*DE*
+
+- Projekte: Sie können jetzt mehrere auf einmal löschen. In der Projektliste blendet „Auswählen“ neben jedem Projekt ein Kontrollkästchen ein, außer beim Demo-Projekt, das sich nie löschen lässt, und „Alle auswählen“ wählt alle angezeigten Projekte aus; nach einer einzigen Bestätigung werden sie nacheinander gelöscht und verschwinden nach und nach aus der Liste. Ein Projekt, das nicht gelöscht werden kann (zum Beispiel wegen einer laufenden Berechnung), bleibt mit einer Meldung ausgewählt, und das Löschen der folgenden Projekte geht weiter. Während einer Suche werden nur die angezeigten Projekte gelöscht.
+- Anmeldung: Ein Konto mit der Adresse eines Google-Kontos zu erstellen wird mit einer klaren Meldung und einer Schaltfläche für die Google-Anmeldung abgelehnt, statt mit einem allgemeinen Fehler. Die Google-Anmeldung mit der Adresse eines Kontos mit Passwort wird weiterhin abgelehnt, aber eine Meldung sagt jetzt, was zu tun ist, mit dem Link „Passwort vergessen?“. Das Zurücksetzen des Passworts bestätigt auch die E-Mail-Adresse.
+- Seite für die E-Mail-Anmeldung: Bei einem falschen Passwort, einem bereits vorhandenen Konto, einem gesperrten Konto oder zu vielen Versuchen erscheint jetzt die richtige Meldung statt eines allgemeinen Fehlers.
+- Projekt: Beim Öffnen eines Projekts, das bereits Dateien enthält, erscheint die rote Meldung „Wählen Sie mindestens eine Datei zum Verschachteln aus“ während des Ladens nicht mehr.
+
+*ES*
+
+- Proyectos: ahora puedes eliminar varios de una vez. En la lista de proyectos, «Seleccionar» muestra una casilla junto a cada proyecto, salvo el proyecto de demostración, que nunca se puede eliminar, y «Seleccionar todo» marca todos los proyectos mostrados; tras una sola confirmación, se eliminan uno a uno y van saliendo de la lista. Un proyecto que no se puede eliminar (con un cálculo en curso, por ejemplo) sigue marcado con un mensaje, y la eliminación de los siguientes continúa. Durante una búsqueda, solo se eliminan los proyectos mostrados.
+- Acceso: crear una cuenta con la dirección de una cuenta de Google se rechaza con un mensaje claro y un botón para entrar con Google, en lugar de un error genérico. Entrar con Google con la dirección de una cuenta con contraseña sigue rechazándose, pero ahora un mensaje indica qué hacer, con un enlace «¿Has olvidado la contraseña?». Restablecer la contraseña también confirma la dirección de correo electrónico.
+- Página de acceso por correo electrónico: una contraseña incorrecta, una cuenta ya existente, una cuenta suspendida o demasiados intentos muestran ahora el mensaje correcto en lugar de un error genérico.
+- Proyecto: al abrir un proyecto que ya contiene archivos, el mensaje rojo «Selecciona al menos un archivo para anidar» ya no aparece durante la carga.
+
 ## V0.9.10
 
 *FR*
