@@ -1,4 +1,5 @@
 import { schemaWebSite } from './app/utils/schema'
+import { bootChunkRetryScript } from './app/utils/bootChunkRetry'
 import { fileURLToPath } from 'node:url'
 
 // Sass requires forward-slash paths in @import, even on Windows.
@@ -200,6 +201,7 @@ export default defineNuxtConfig({
                 }
             ],
             script: [
+                { innerHTML: bootChunkRetryScript, tagPriority: 'critical' },
                 {
                     async: true,
                     type: 'application/ld+json',

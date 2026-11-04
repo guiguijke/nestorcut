@@ -910,6 +910,27 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     scénarios ; la base locale doit contenir un document `subscription_plan`,
     recette en tête du script).
 
+64. **Un chunk JS perdu au démarrage laisse une page affichée mais morte
+    (constat prod 04/11, `/auth/local`).** Le HTML vient du serveur, donc la page
+    a l'air prête ; sans hydratation, aucun bouton ne répond. Une 522 Cloudflare
+    arrive après ~15 s : l'import partage alors le préchargement encore en vol et
+    échoue avec lui, sans nouvelle requête (une 522 IMMÉDIATE, elle, se rattrape
+    seule : l'import refait la requête, et c'est ce qu'un test naïf mesure). Mesuré
+    sur `/auth/local` : 27 chunks sur 56 tuaient la page, et rien ne la rattrapait :
+    `chunk-reload` de Nuxt n'agit qu'aux navigations et aux changements de
+    manifeste, `chunk-reload-crawler` que pour les robots. Correctif : script en
+    ligne `app/utils/bootChunkRetry.js`, qui recharge une fois au plus toutes les
+    10 s tant que l'hydratation n'est pas finie. Tant qu'une panne échoue plus
+    lentement que cette garde, la page réessaie sans plafond, ce qui est voulu : elle
+    revient seule à la fin de la panne. Pas de plugin Nuxt : si la perte
+    touche le graphe de l'entrée, aucun plugin ne tourne jamais. Filtrer sur
+    `/_nuxt/` est obligatoire : la balise Cloudflare, refusée par la CSP à chaque
+    chargement, est aussi un `<script type="module">` en erreur, et sans le filtre
+    chaque page de prod se rechargerait. S'arrêter à la fin de l'hydratation aussi :
+    `automatic-immediate` de Nuxt rechargerait en plein calcul navigateur sur un
+    chunk paresseux. Verrous : `app/tests/bootChunkRetry.test.js`, harnais
+    `scripts/qa-e2e-chunk-failure.mjs` (`QA_FAIL_DELAY_MS=15000` pour la forme réelle).
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :
