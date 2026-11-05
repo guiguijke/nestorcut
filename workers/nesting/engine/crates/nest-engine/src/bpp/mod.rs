@@ -293,6 +293,7 @@ pub fn run_bpp_mem(
     // pour le chemin natif ; le chemin navigateur a le sien dans
     // `merge_alternatives_json`, même fonction.
     let mouth = crate::mouth_guard::guard_bp_runs(&ext_instance, config, &mut exported);
+    refuse_if_nothing_placed(&ext_instance, config, &exported, sink)?;
     match merge_bp_runs(&ext_instance, &exported, &biases, config.n_alternatives) {
         Ok(merged) => {
             sink(&format!(
@@ -318,6 +319,52 @@ pub fn run_bpp_mem(
     }
 }
 
+
+/// Refus LISIBLE quand aucun walk n'a posé la moindre pièce (lot A).
+///
+/// Une pièce exactement à la cote de la tôle passe la garde amont (elle tient
+/// sur le papier) mais le moteur ne lui trouve aucune pose valide : zéro pièce
+/// posée, densité nulle, et le navigateur échouait à relire cet export
+/// (« invalid type: null, expected f32 »). On cherche la pièce fautive dans
+/// une tôle vide et on la NOMME (`item_unplaceable:<id>:`). Si toutes les
+/// pièces se placent individuellement (échec d'un autre ordre), on ne refuse
+/// rien : le comportement historique est conservé.
+///
+/// N'est appelé que si tous les runs sont vides : zéro effet sur un job qui
+/// pose au moins une pièce.
+pub fn refuse_if_nothing_placed(
+    ext_instance: &ExtBPInstance,
+    config: &EngineConfig,
+    runs: &[BpRun],
+    sink: &EventSink,
+) -> Result<()> {
+    let demand: u64 = ext_instance.items.iter().map(|it| it.demand).sum();
+    let nothing = !runs.is_empty()
+        && runs
+            .iter()
+            .all(|r| r.solution.layouts.iter().all(|l| l.placed_items.is_empty()));
+    if demand == 0 || !nothing {
+        return Ok(());
+    }
+    let sparrow_config = config.sparrow_config();
+    let importer = Importer::new(
+        sparrow_config.cde_config,
+        sparrow_config.poly_simpl_tolerance,
+        sparrow_config.min_item_separation,
+        sparrow_config.narrow_concavity_cutoff_ratio,
+    );
+    let Ok(instance) = jagua_rs::probs::bpp::io::import_instance(&importer, ext_instance) else {
+        return Ok(());
+    };
+    match constructive::first_item_fitting_no_empty_bin(&instance, DirBias::LeftFirst) {
+        Some(id) => Err(crate::import_error::item_unplaceable_error(
+            sink,
+            id,
+            &format!("item {id} does not fit in any empty sheet"),
+        )),
+        None => Ok(()),
+    }
+}
 
 // ===========================================================================
 // Finition de la tôle partielle — plan docs/PLAN-DERNIERE-TOLE-2026-09-09.md

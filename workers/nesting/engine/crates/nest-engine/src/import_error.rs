@@ -75,6 +75,26 @@ pub fn item_import_error(
     }
 }
 
+/// Une pièce ne se place nulle part (lot A) : le constructif SPP n'a trouvé de
+/// place dans AUCUNE largeur de bande (`sparrow::optimizer::lbf::ItemDoesNotFit`,
+/// avant le lot une assertion tuait le moteur : `panic = "abort"`,
+/// « unreachable » en navigateur), ou le BPP n'a posé aucune pièce parce
+/// qu'une pièce ne tient dans aucune tôle vide.
+///
+/// Même modèle que [`item_import_error`] : un évènement
+/// `{"type":"error","kind":"item_unplaceable","item":…,"reason":…}` pour le
+/// worker Python, et un message préfixé `item_unplaceable:<id>:` pour le
+/// navigateur, dont le seul canal est le message de l'exception wasm.
+pub fn item_unplaceable_error(sink: &EventSink, item_id: usize, reason: &str) -> anyhow::Error {
+    let short: String = reason.chars().take(REASON_MAX_CHARS).collect();
+    sink(&format!(
+        "{{\"type\":\"error\",\"kind\":\"item_unplaceable\",\"item\":{},\"reason\":\"{}\"}}",
+        item_id,
+        json_escape(&short)
+    ));
+    anyhow!("item_unplaceable:{item_id}: {short}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

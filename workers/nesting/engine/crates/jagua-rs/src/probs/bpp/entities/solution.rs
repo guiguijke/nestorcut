@@ -27,6 +27,14 @@ impl BPSolution {
             .map(|ls| ls.placed_item_area(instance))
             .sum::<f32>();
 
+        // Patch lot A (VENDORED.patch.md point 7) : une solution SANS tôle
+        // (aucune pièce posée) donnait 0/0 = NaN, sérialisé en `null`, et
+        // `merge_alternatives` échouait à relire son propre export
+        // (« invalid type: null, expected f32 »). Densité nulle, comme un
+        // layout vide.
+        if total_bin_area == 0.0 {
+            return 0.0;
+        }
         total_item_area / total_bin_area
     }
 

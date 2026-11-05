@@ -2,7 +2,7 @@ use crate::config::*;
 use crate::consts::LBF_SAMPLE_CONFIG;
 use crate::optimizer::compress::compression_phase;
 use crate::optimizer::explore::exploration_phase;
-use crate::optimizer::lbf::LBFBuilder;
+use crate::optimizer::lbf::{ItemDoesNotFit, LBFBuilder};
 use crate::optimizer::separator::Separator;
 use crate::util::listener::{ReportType, SolutionListener};
 use crate::util::terminator::Terminator;
@@ -27,13 +27,13 @@ pub fn optimize(
     expl_config: &ExplorationConfig,
     cmpr_config: &CompressionConfig,
     initial_solution: Option<&SPSolution>
-) -> (SPSolution, usize) {
+) -> Result<(SPSolution, usize), ItemDoesNotFit> {
     let mut next_rng = || Xoshiro256PlusPlus::seed_from_u64(rng.next_u64());
     
     // First build an initial solution if none is provided
     let start_prob = match initial_solution {
         None => {
-            let builder = LBFBuilder::new(instance.clone(), next_rng(), LBF_SAMPLE_CONFIG).construct();
+            let builder = LBFBuilder::new(instance.clone(), next_rng(), LBF_SAMPLE_CONFIG).construct()?;
             builder.prob
         }
         Some(init_sol) => {
@@ -73,5 +73,5 @@ pub fn optimize(
 
     // Return the final compressed solution with the total number of
     // placement evaluations performed across both phases.
-    (cmpr_sol, expl_stats.total_evals + cmpr_stats.total_evals)
+    Ok((cmpr_sol, expl_stats.total_evals + cmpr_stats.total_evals))
 }

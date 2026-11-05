@@ -78,4 +78,31 @@
      `nest-engine/tests/small_job_default_path.rs`).
    Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
 
+6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
+   voisins) — pièce À LA COTE EXACTE, lot A :
+   - `src/sample/uniform_sampler.rs` : `UniformBBoxSampler::new` écartait toute
+     rotation dont une plage d'échantillonnage était vide, donc aussi celles
+     de largeur NULLE (`start == end`, pièce qui tient pile). Un job dont
+     aucune rotation n'avait de plage de largeur > 0 recevait `None` et mourait
+     plus loin. Désormais, **seulement si `rot_entries` est vide**, les rotations
+     à plage de largeur nulle (jamais négative) sont retenues, et `sample()`
+     rend leur borne sans tirage (`random_range` panique sur une plage vide).
+     Tout cas qui donnait un échantillonneur avant le patch est inchangé,
+     tirages RNG compris (verrou `bench/determinism_lock.py`). Constaté : sur
+     le wasm, la volute du constat de la relecture critique (graines 100/101 du
+     pool) tombait sur ce cas ; natif, les flottants diffèrent et elle passait.
+   - `src/optimizer/lbf.rs` + `src/optimizer/mod.rs` : l'assertion « strip-width
+     is running away … item N does not seem to fit » (`panic = "abort"` :
+     `unreachable` en navigateur) devient l'erreur TYPÉE `ItemDoesNotFit
+     { item_id, strip_width }`. `LBFBuilder::construct` et `optimize` rendent
+     un `Result`. `nest-engine` la traduit en `item_unplaceable:<id>:` (même
+     modèle que `item_geometry`, `import_error.rs`), et une phase 2 qui échoue
+     retombe sur la phase 1 au lieu de tuer la classe.
+
+7. `src/probs/bpp/entities/solution.rs` : `BPSolution::density` rend 0 pour une
+   solution sans tôle (aucune pièce posée) au lieu de 0/0 = NaN. Le NaN était
+   sérialisé en `null`, et `merge_alternatives` échouait à relire son propre
+   export (« invalid type: null, expected f32 »). Sans autre effet : seul le
+   cas vide change de valeur.
+
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).

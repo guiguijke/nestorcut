@@ -12,6 +12,29 @@ use std::cmp::Reverse;
 use std::iter;
 use rand::rngs::Xoshiro256PlusPlus;
 
+/// Erreur TYPÉE du constructif : une pièce ne se place dans aucune largeur de
+/// bande raisonnable. Remplace l'assertion `strip_width_is_in_check` qui
+/// faisait mourir le moteur (`panic = "abort"` : « unreachable » en
+/// navigateur, job perdu). `item_id` est l'id de l'item de l'instance, le même
+/// que celui déclaré à l'import (ids consécutifs).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ItemDoesNotFit {
+    pub item_id: usize,
+    pub strip_width: f32,
+}
+
+impl std::fmt::Display for ItemDoesNotFit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "item {} does not seem to fit into the strip (strip-width running away, >{:.3})",
+            self.item_id, self.strip_width
+        )
+    }
+}
+
+impl std::error::Error for ItemDoesNotFit {}
+
 pub struct LBFBuilder {
     pub instance: SPInstance,
     pub prob: SPProblem,
@@ -35,7 +58,7 @@ impl LBFBuilder {
         }
     }
 
-    pub fn construct(mut self) -> Self {
+    pub fn construct(mut self) -> Result<Self, ItemDoesNotFit> {
         let start = Instant::now();
         let n_items = self.instance.items.len();
         let sorted_item_indices = (0..n_items)
@@ -54,25 +77,28 @@ impl LBFBuilder {
         debug!("[CONSTR] placing items in order: {:?}",sorted_item_indices);
 
         for item_id in sorted_item_indices {
-            self.place_item(item_id);
+            self.place_item(item_id)?;
         }
 
         self.prob.fit_strip();
         debug!("[CONSTR] placed all items in width: {:.3} (in {:?})",self.prob.strip_width(), start.elapsed());
-        self
+        Ok(self)
     }
 
-    fn place_item(&mut self, item_id: usize) {
+    fn place_item(&mut self, item_id: usize) -> Result<(), ItemDoesNotFit> {
         match self.find_placement(item_id) {
             Some(p_opt) => {
                 self.prob.place_item(p_opt);
                 debug!("[CONSTR] placing item {}/{} with id {} at [{}]",self.prob.layout.placed_items.len(),self.instance.total_item_qty(),p_opt.item_id,p_opt.d_transf);
+                Ok(())
             }
             None => {
                 debug!("[CONSTR] failed to place item with id {}, expanding strip width",item_id);
                 self.prob.change_strip_width(self.prob.strip_width() * 1.2);
-                assert!(assertions::strip_width_is_in_check(&self.prob), "strip-width is running away (>{:.3}), item {item_id} does not seem to fit into the strip", self.prob.strip_width());          
-                self.place_item(item_id);
+                if !assertions::strip_width_is_in_check(&self.prob) {
+                    return Err(ItemDoesNotFit { item_id, strip_width: self.prob.strip_width() });
+                }
+                self.place_item(item_id)
             }
         }
     }
