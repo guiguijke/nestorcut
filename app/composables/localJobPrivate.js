@@ -879,6 +879,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             // Lot E2 : pièces plus fines que l'espacement (le gonflement
             // d'import a pris le repli). Même champ que le chemin serveur.
             ...(thinParts.length ? { thinParts } : {}),
+            // Livraison dégradée (fusion en échec : meilleur walk sans
+            // finition) : le code seul, pour que la base et l'admin la voient.
+            ...(result?.degraded?.reason ? { degraded: String(result.degraded.reason) } : {}),
             layoutCount: best.layoutCount ?? 0,
             density: best.density ?? null,
             ...(partialUnfit ? { unfit: partialUnfit } : {}),

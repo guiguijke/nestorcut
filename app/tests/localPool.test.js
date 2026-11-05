@@ -634,6 +634,19 @@ describe('runPool — la fusion échoue après des walks réussis (lot A)', () =
         expect(MockWorker.instances.every((w) => w.terminated)).toBe(true)
     })
 
+    it('trace la raison de l’échec de fusion dans la console (diagnostic)', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        script(
+            [completeOut(0, 900), completeOut(1, 850), completeOut(2, 870)],
+            (worker, msg) => worker.emit({ id: msg.id, jobSlug: msg.jobSlug, ok: false, error: 'unreachable' }),
+        )
+        const out = await runPool(SLUG, makePayload({ walks: 3 }))
+        expect(out.ok).toBe(true)
+        const lines = warn.mock.calls.map((c) => c.join(' '))
+        expect(lines.some((l) => l.includes('merge_failed') && l.includes('unreachable'))).toBe(true)
+        warn.mockRestore()
+    })
+
     it('égalité de largeur : le walk de plus petit index', async () => {
         script(
             [completeOut(0, 900), completeOut(1, 850), completeOut(2, 850)],

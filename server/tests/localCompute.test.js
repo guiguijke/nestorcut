@@ -485,6 +485,20 @@ describe('POST local-quota — comptabilité seule, zéro géométrie (PR5, J-07
         expect(jobDoc.alternatives).toBeUndefined() // corps ignoré
     })
 
+    it('garde la trace d’une livraison dégradée (fusion en échec), code connu seulement', async () => {
+        const jobDoc = localJob()
+        state.config = { public: { localComputeEnabled: true } }
+        state.db = fakeDb({ nesting_jobs: [jobDoc], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, degraded: 'merge_failed' }))
+        expect(jobDoc.status).toBe('done')
+        expect(jobDoc.degraded).toBe('merge_failed')
+
+        const other = localJob()
+        state.db = fakeDb({ nesting_jobs: [other], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, degraded: 'C:\mes fichiers\plan.dxf' }))
+        expect(other.degraded).toBeUndefined() // texte libre jamais stocké
+    })
+
     it('409 si pas awaiting_local, 404 pour un autre utilisateur, 404 flag OFF', async () => {
         state.config = { public: { localComputeEnabled: true } }
         state.db = fakeDb({ nesting_jobs: [localJob({ status: 'done' })], users: [freeUser()] })

@@ -586,9 +586,11 @@ function compareKeys(a, b) {
  * Résultat du meilleur walk complet, ou null. Les seeds 63 bits sont
  * réécrites en STRING depuis la dérivation BigInt exacte (piège 16b :
  * `JSON.parse` du worker les a manglées au-delà de 2^53), comme le fait la
- * fusion. `degraded` trace la raison pour le diagnostic.
+ * fusion. `degraded` porte la raison jusqu'à la comptabilité (local-quota) ;
+ * `message` (texte brut de la fusion) ne va QUE dans la console du
+ * navigateur : il peut citer une pièce, il ne quitte pas l'appareil.
  */
-function bestWalkDelivery(pool, payload, masterSeed, reason) {
+function bestWalkDelivery(pool, payload, masterSeed, reason, message) {
     let best = null
     for (const slot of pool.slots) {
         if (!slot.outcome?.ok) continue
@@ -605,6 +607,7 @@ function bestWalkDelivery(pool, payload, masterSeed, reason) {
         : deriveSeed(masterSeed, best.slot.w)
     const runSeed = deriveSeed(walkSeed, 0).toString()
     const alternatives = best.complete.map((alt, rank) => ({ ...alt, rank, seed: runSeed }))
+    console.warn(`[local] fusion dégradée (${reason}) : meilleur walk ${best.slot.w} livré sans fusion ni finition${message ? ` — ${message}` : ''}`)
     return {
         ...best.slot.outcome.result,
         problem: best.slot.outcome.result?.problem ?? payload?.problem,
@@ -648,7 +651,7 @@ function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
             // perdu : on livre le meilleur walk complet, sans fusion ni
             // finition (comme le mode mono-walk). Aucun walk complet →
             // l'échec reste un échec, avec le message de la fusion.
-            const kept = bestWalkDelivery(pool, payload, masterSeed, 'merge_failed')
+            const kept = bestWalkDelivery(pool, payload, masterSeed, 'merge_failed', data.error)
             if (kept) {
                 pool.settle({ ok: true, result: kept, memory: poolMemory(pool) })
                 return
