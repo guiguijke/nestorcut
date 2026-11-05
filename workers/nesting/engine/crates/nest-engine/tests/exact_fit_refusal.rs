@@ -162,9 +162,11 @@ fn bpp_temoin_une_piece_qui_tient_se_place() {
 /// PHASE 2 (cadre transposé) ne trouvait pas de place et paniquait à
 /// lbf.rs:74. Une phase 2 impossible retombe maintenant sur la phase 1.
 /// Fixture produite par le vrai `buildLocalPayload`.
-/// NB : natif, les flottants diffèrent du wasm et ce cas passait déjà avant
-/// le patch ; la preuve DISCRIMINANTE de la volute est côté wasm
-/// (`bench/lot_a_wasm_check.mjs`). Ici : le moteur natif ne régresse pas.
+/// NB : cette volute ne PROUVE rien natif — le test sur le moteur natif
+/// d'avant le lot n'a pas été rejoué, et la panique mesurée est celle du wasm.
+/// La preuve DISCRIMINANTE (échoue sur l'ancien wasm, passe sur le nouveau)
+/// est `app/tests/localEngineLotA.test.js`. Ici : le moteur natif ne régresse
+/// pas et ne panique pas sur ces deux graines.
 #[test]
 fn volute_du_constat_ne_panique_plus() {
     let instance = std::fs::read_to_string(concat!(
