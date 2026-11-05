@@ -226,3 +226,28 @@ fn bpp_deux_toles_dont_une_trop_juste_garde_la_trajectoire_de_la_baseline() {
     let it = a.get("evaluations").or_else(|| a.get("iterations")).and_then(|v| v.as_u64());
     assert_eq!(it, Some(400), "trajectoire changée : {a:.300}");
 }
+
+/// Une pièce à la cote exacte AVEC d'autres pièces qui se placent : avant, le
+/// job livrait 3 pièces sur 4 sans nommer la fautive (quota consommé, et
+/// ajouter des tôles identiques ne la placera jamais). Maintenant : refus nommé.
+#[test]
+fn bpp_cote_exacte_avec_d_autres_pieces_est_refusee_en_nommant_la_piece() {
+    let inst = serde_json::json!({
+        "name": "mixte",
+        "items": [
+            {"id": 0, "demand": 1, "allowed_orientations": [0.0, 90.0, 180.0, 270.0],
+             "shape": {"type": "simple_polygon", "data": rect(996.0, 1996.0)}},
+            {"id": 1, "demand": 3, "allowed_orientations": [0.0, 90.0],
+             "shape": {"type": "simple_polygon", "data": rect(200.0, 200.0)}}
+        ],
+        "bins": [{"id": 0, "stock": 3, "cost": 1, "zones": [],
+                  "shape": {"type": "simple_polygon", "data": rect(1000.0, 2000.0)}}]
+    })
+    .to_string();
+    let (sink, lines) = silent();
+    let msg = error_text(run_json_with_sink("bpp", &inst, &config(2.0, false), sink));
+    assert!(msg.starts_with("item_unplaceable:0:"), "message : {msg}");
+    let evt = lines.lock().unwrap().join("
+");
+    assert!(evt.contains("\"kind\":\"item_unplaceable\",\"item\":0"), "évènement : {evt}");
+}

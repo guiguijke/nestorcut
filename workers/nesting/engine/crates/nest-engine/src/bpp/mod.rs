@@ -320,18 +320,23 @@ pub fn run_bpp_mem(
 }
 
 
-/// Refus LISIBLE quand aucun walk n'a posé la moindre pièce (lot A).
+/// Refus LISIBLE d'une pièce qu'aucune tôle vide n'accueille (lot A).
 ///
 /// Une pièce exactement à la cote de la tôle passe la garde amont (elle tient
-/// sur le papier) mais le moteur ne lui trouve aucune pose valide : zéro pièce
-/// posée, densité nulle, et le navigateur échouait à relire cet export
-/// (« invalid type: null, expected f32 »). On cherche la pièce fautive dans
-/// une tôle vide et on la NOMME (`item_unplaceable:<id>:`). Si toutes les
-/// pièces se placent individuellement (échec d'un autre ordre), on ne refuse
-/// rien : le comportement historique est conservé.
+/// sur le papier) mais le moteur ne lui trouve aucune pose valide. Sans autre
+/// pièce, rien n'était posé (densité nulle, et le navigateur échouait à relire
+/// cet export : « invalid type: null, expected f32 ») ; avec d'autres pièces,
+/// le job livrait une tôle partielle sans nommer la fautive, quota consommé,
+/// alors qu'ajouter des tôles identiques ne la placera jamais.
 ///
-/// N'est appelé que si tous les runs sont vides : zéro effet sur un job qui
-/// pose au moins une pièce.
+/// Quand AUCUN run n'a tout posé, on cherche, parmi les pièces qu'aucun run
+/// n'a posées une seule fois, celle qui ne tient dans aucune tôle vide, et on
+/// la NOMME (`item_unplaceable:<id>:`). Si toutes tiennent individuellement
+/// (stock épuisé, mauvais ordre), on ne refuse rien : comportement historique.
+///
+/// Un run qui pose tout (ou un job dont chaque pièce est posée au moins une
+/// fois) n'est jamais refusé ; le sondage n'a lieu que sur un job déjà
+/// incomplet, donc zéro effet sur la trajectoire d'un job complet.
 pub fn refuse_if_nothing_placed(
     ext_instance: &ExtBPInstance,
     config: &EngineConfig,
@@ -339,13 +344,21 @@ pub fn refuse_if_nothing_placed(
     sink: &EventSink,
 ) -> Result<()> {
     let demand: u64 = ext_instance.items.iter().map(|it| it.demand).sum();
-    let nothing = !runs.is_empty()
-        && runs
-            .iter()
-            .all(|r| r.solution.layouts.iter().all(|l| l.placed_items.is_empty()));
-    if demand == 0 || !nothing {
+    if demand == 0 || runs.is_empty() {
         return Ok(());
     }
+    let placed_in = |r: &BpRun| -> u64 {
+        r.solution.layouts.iter().map(|l| l.placed_items.len() as u64).sum()
+    };
+    // Un run complet : rien à refuser.
+    if runs.iter().any(|r| placed_in(r) >= demand) {
+        return Ok(());
+    }
+    let ever_placed: std::collections::HashSet<u64> = runs
+        .iter()
+        .flat_map(|r| r.solution.layouts.iter())
+        .flat_map(|l| l.placed_items.iter().map(|p| p.item_id))
+        .collect();
     let sparrow_config = config.sparrow_config();
     let importer = Importer::new(
         sparrow_config.cde_config,
@@ -356,7 +369,9 @@ pub fn refuse_if_nothing_placed(
     let Ok(instance) = jagua_rs::probs::bpp::io::import_instance(&importer, ext_instance) else {
         return Ok(());
     };
-    match constructive::first_item_fitting_no_empty_bin(&instance, DirBias::LeftFirst) {
+    match constructive::first_item_fitting_no_empty_bin(&instance, DirBias::LeftFirst, |id| {
+        !ever_placed.contains(&(id as u64))
+    }) {
         Some(id) => Err(crate::import_error::item_unplaceable_error(
             sink,
             id,

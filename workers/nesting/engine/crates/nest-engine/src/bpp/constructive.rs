@@ -265,16 +265,23 @@ fn search_layout(
 /// sans rapport avec les graines des walks.
 const PROBE_SEED: u64 = 0x1AB0_7A01;
 
-/// Première pièce (id) qui ne se place dans AUCUNE tôle VIDE en stock, `None`
-/// si toutes se placent quelque part (lot A, pièce à la cote exacte).
+/// Première pièce (id) parmi celles que `candidate` retient et qui ne se place
+/// dans AUCUNE tôle VIDE en stock, `None` si toutes se placent quelque part
+/// (lot A, pièce à la cote exacte).
 ///
-/// N'est appelé qu'APRÈS COUP, quand aucun walk n'a posé la moindre pièce :
-/// aucun coût ni effet sur le chemin normal, et son RNG est le sien.
-pub fn first_item_fitting_no_empty_bin(instance: &BPInstance, bias: DirBias) -> Option<usize> {
+/// N'est appelé qu'APRÈS COUP, quand des pièces restent sans place : aucun
+/// coût ni effet sur le chemin normal, et son RNG est le sien. `candidate`
+/// écarte les pièces qu'un walk a déjà posées au moins une fois : elles
+/// tiennent, le sondage aléatoire ne doit pas pouvoir les accuser.
+pub fn first_item_fitting_no_empty_bin(
+    instance: &BPInstance,
+    bias: DirBias,
+    candidate: impl Fn(usize) -> bool,
+) -> Option<usize> {
     use rand::SeedableRng;
     let mut rng = rand::rngs::Xoshiro256PlusPlus::seed_from_u64(PROBE_SEED);
     for (item_id, (item, qty)) in instance.items.iter().enumerate() {
-        if *qty == 0 {
+        if *qty == 0 || !candidate(item_id) {
             continue;
         }
         let fits = instance.bins.iter().filter(|b| b.stock > 0).any(|b| {
