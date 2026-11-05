@@ -786,11 +786,14 @@ function postMerge(jobSlug, pool, payload) {
         // quota n'est pas brûlé pour rien).
         const masterForDegrade = String(payload?.engineConfig?.prng_seed ?? '0')
         const kept = bestWalkDelivery(pool, payload, masterForDegrade, 'merge_unavailable')
-        pool.settle({
-            ok: true,
-            result: kept || survivors[0].outcome.result,
-            memory: poolMemory(pool),
-        })
+        if (kept) {
+            pool.settle({ ok: true, result: kept, memory: poolMemory(pool) })
+            return
+        }
+        // Aucun walk complet : jamais livré en succès (même règle que la
+        // fusion en échec). Échec propre, quota remboursé par l'appelant.
+        console.warn('[local] fusion indisponible (merge_unavailable) et aucun walk complet : échec du job')
+        pool.settle({ ok: false, error: 'merge_failed', memory: poolMemory(pool) })
         return
     }
     const masterSeed = String(payload?.engineConfig?.prng_seed ?? '0')

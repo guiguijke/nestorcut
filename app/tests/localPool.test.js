@@ -521,10 +521,10 @@ describe('runPool — merge vers un worker mort : jamais d\'impasse (verrou R-4)
         MockWorker.instances[0].crash('boom')
         MockWorker.instances[1].crash('boom') // même la cible du repost meurt
         const out = await promise
-        expect(out.ok).toBe(true)
-        // Dégradé : le run du worker 0 livré tel quel (une alternative, pas
-        // de fusion) — le job TERMINE au lieu de tourner à vide.
-        expect(out.result.alternatives[0].seed).toBe(1000)
+        // Walks incomplets (aucune pièce posée) : jamais livrés en succès,
+        // mais le job TERMINE (échec remboursable) au lieu de tourner à vide.
+        expect(out.ok).toBe(false)
+        expect(out.error).toBe('merge_failed')
     })
 
     it('merge sans réponse : timeout 30 s → retry sur l\'autre survivant', async () => {
@@ -705,6 +705,35 @@ describe('runPool — la fusion échoue après des walks réussis (lot A)', () =
         expect(out.result.alternatives[0].strip_width).toBe(800)
         expect(out.result.alternatives[0].seed).toBe(runSeed(1))
         expect(out.result.degraded).toEqual({ reason: 'merge_unavailable', walk: 1 })
+    })
+
+    it('les workers meurent pendant la fusion, aucun walk complet : échec tracé, jamais un walk partiel en succès', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+        MockWorker.respond = null
+        const promise = runPool(SLUG, makePayload({ walks: 2 }))
+        MockWorker.instances[0].emit({ ok: true, jobSlug: SLUG, result: engineOut(0) })
+        MockWorker.instances[1].emit({ ok: true, jobSlug: SLUG, result: engineOut(1) })
+        MockWorker.instances[0].crash('wasm abort')
+        MockWorker.instances[1].crash('wasm abort')
+        const out = await promise
+        expect(out.ok).toBe(false)
+        expect(out.error).toBe('merge_failed')
+        expect(warn.mock.calls.some((c) => c.join(' ').includes('merge_unavailable'))).toBe(true)
+        warn.mockRestore()
+    })
+
+    it('la fusion expire deux fois, aucun walk complet : échec, pas de succès partiel', async () => {
+        vi.useFakeTimers()
+        vi.spyOn(console, 'warn').mockImplementation(() => {})
+        MockWorker.respond = null
+        const promise = runPool(SLUG, makePayload({ walks: 2 }))
+        MockWorker.instances[0].emit({ ok: true, jobSlug: SLUG, result: engineOut(0) })
+        MockWorker.instances[1].emit({ ok: true, jobSlug: SLUG, result: engineOut(1) })
+        await vi.advanceTimersByTimeAsync(mergeTimeoutMs(3))
+        await vi.advanceTimersByTimeAsync(mergeTimeoutMs(3))
+        const out = await promise
+        expect(out.ok).toBe(false)
+        expect(out.error).toBe('merge_failed')
     })
 
     it('mono-walk : inchangé, jamais de merge ni de marqueur dégradé', async () => {
