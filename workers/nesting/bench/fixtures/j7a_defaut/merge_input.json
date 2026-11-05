@@ -1,0 +1,199 @@
+{
+ "problem": "bpp",
+ "instance": {
+  "name": "nest2d",
+  "items": [
+   {
+    "id": 0,
+    "demand": 2,
+    "allowed_orientations": [
+     0,
+     90,
+     180,
+     270
+    ],
+    "shape": {
+     "type": "simple_polygon",
+     "data": [
+      [
+       0,
+       0
+      ],
+      [
+       40,
+       0
+      ],
+      [
+       40,
+       40
+      ],
+      [
+       0,
+       40
+      ],
+      [
+       0,
+       0
+      ]
+     ]
+    }
+   }
+  ],
+  "bins": [
+   {
+    "id": 0,
+    "cost": 100,
+    "stock": 1,
+    "shape": {
+     "type": "polygon",
+     "data": {
+      "outer": [
+       [
+        0,
+        0
+       ],
+       [
+        1000,
+        0
+       ],
+       [
+        1000,
+        2000
+       ],
+       [
+        0,
+        2000
+       ],
+       [
+        0,
+        0
+       ]
+      ]
+     }
+    }
+   }
+  ]
+ },
+ "engineConfig": {
+  "time_budget_sec": 3600,
+  "prng_seed": 0,
+  "n_alternatives": 1,
+  "poly_simpl_tolerance": 0.001,
+  "min_item_separation": 2,
+  "narrow_concavity_cutoff": [
+   0.01,
+   0.01
+  ],
+  "live_events": false,
+  "n_workers": 1,
+  "separator_workers": 1,
+  "biases": [
+   "left"
+  ],
+  "sa_max_iterations": 400
+ },
+ "runs": [
+  {
+   "bias": "left",
+   "cost": 100,
+   "cost_detail": {
+    "bin_cost": 100,
+    "falkenauer": 0.000002559999757067999,
+    "remnant": 0.9981667776943806,
+    "unplaced": 0
+   },
+   "density": 0.0015999999595806003,
+   "finish": null,
+   "iterations": 33,
+   "layout_count": 1,
+   "rank": 0,
+   "seed": "4780109286133741349",
+   "solution": {
+    "cost": 100,
+    "density": 0.0015999999595806003,
+    "layouts": [
+     {
+      "container_id": 0,
+      "density": 0.0015999999595806003,
+      "placed_items": [
+       {
+        "item_id": 0,
+        "transformation": {
+         "rotation": -180,
+         "translation": [
+          42.00362014770508,
+          42.000404357910156
+         ]
+        }
+       },
+       {
+        "item_id": 0,
+        "transformation": {
+         "rotation": 90,
+         "translation": [
+          42.00373840332031,
+          44.003135681152344
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "run_time_sec": 0
+   }
+  },
+  {
+   "bias": "left",
+   "cost": 100,
+   "cost_detail": {
+    "bin_cost": 100,
+    "falkenauer": 0.000002559999757067999,
+    "remnant": 0.9981669007158697,
+    "unplaced": 0
+   },
+   "density": 0.0015999999595806003,
+   "finish": null,
+   "iterations": 308,
+   "layout_count": 1,
+   "rank": 0,
+   "seed": "1086796595124383892",
+   "solution": {
+    "cost": 100,
+    "density": 0.0015999999595806003,
+    "layouts": [
+     {
+      "container_id": 0,
+      "density": 0.0015999999595806003,
+      "placed_items": [
+       {
+        "item_id": 0,
+        "transformation": {
+         "rotation": -90,
+         "translation": [
+          2.000244140625,
+          42.00012969970703
+         ]
+        }
+       },
+       {
+        "item_id": 0,
+        "transformation": {
+         "rotation": 90,
+         "translation": [
+          42.00101852416992,
+          44.0028076171875
+         ]
+        }
+       }
+      ]
+     }
+    ],
+    "run_time_sec": 0
+   }
+  }
+ ],
+ "biases": [
+  "left"
+ ],
+ "n_alternatives": 1
+}

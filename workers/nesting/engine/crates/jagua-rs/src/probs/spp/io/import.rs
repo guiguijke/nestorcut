@@ -20,6 +20,34 @@ fn maybe_par_iter<T>(slice: &[T]) -> std::slice::Iter<'_, T> {
     slice.iter()
 }
 
+/// Erreur typée : la hauteur de la bande ne dépasse pas l'espacement exigé, le
+/// conteneur déflaté serait vide. Remontée par `import_instance` au lieu
+/// d'une panique (`strip.rs`, `Rect::try_new(..).unwrap()`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StripHeightBelowSeparation {
+    pub strip_height: f32,
+    pub separation: f32,
+}
+
+impl std::fmt::Display for StripHeightBelowSeparation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "strip_height_below_separation: strip height {} <= item separation {}",
+            self.strip_height, self.separation
+        )
+    }
+}
+
+impl std::error::Error for StripHeightBelowSeparation {}
+
+fn ensure_strip_height_above_separation(strip_height: f32, separation: f32) -> Result<()> {
+    if strip_height <= separation {
+        return Err(StripHeightBelowSeparation { strip_height, separation }.into());
+    }
+    Ok(())
+}
+
 /// Imports an instance into the library
 pub fn import_instance(importer: &Importer, ext_instance: &ExtSPInstance) -> Result<SPInstance> {
     let items: Vec<(Item, usize)> = {
@@ -54,8 +82,22 @@ pub fn import_instance(importer: &Importer, ext_instance: &ExtSPInstance) -> Res
 
     let fixed_height = ext_instance.strip_height;
 
-    // Initialize the base width for 100% density
-    let width = total_item_area / fixed_height;
+    // Initialize the base width for 100% density.
+    //
+    // Le conteneur de la bande est DÉFLATÉ de `separation / 2` sur chaque
+    // bord : une largeur ≤ séparation (ou une hauteur ≤ séparation) donne un
+    // polygone vide, donc une panique dans `Strip -> Container`
+    // (« Offset resulted in an empty polygon »). Voir VENDORED.patch.md,
+    // point 5. Sur tout job qui ne paniquait pas, `total / H > séparation` et
+    // la largeur reste EXACTEMENT `total / H`.
+    let separation = importer.shape_modify_config.offset.unwrap_or(0.0).max(0.0) * 2.0;
+    if separation > 0.0 {
+        ensure_strip_height_above_separation(fixed_height, separation)?;
+    }
+    let mut width = total_item_area / fixed_height;
+    if separation > 0.0 && width <= separation {
+        width = separation + total_item_area / (fixed_height - separation);
+    }
 
     let base_strip = Strip::new(
         fixed_height,

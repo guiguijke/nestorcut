@@ -57,4 +57,25 @@
    verrou de déterminisme reste bit-identique.
    Lot E2 de `docs/archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md`.
 
+5. `src/probs/spp/io/import.rs` (+ réexport dans `src/probs/spp/io/mod.rs`) :
+   **largeur initiale de la bande** (piège AGENTS #2b). Le conteneur d'une
+   bande est DÉFLATÉ de `séparation / 2` par côté ; la largeur initiale
+   `aire totale / hauteur` pouvait être ≤ séparation, le polygone déflaté
+   était vide et `Strip -> Container` paniquait (`strip.rs`,
+   « Offset resulted in an empty polygon »). Avec `panic = "abort"`, c'était
+   `unreachable` en navigateur et le calcul perdu. Le cas se présente dès deux
+   pièces dont l'aire totale ne dépasse pas hauteur × espacement (2×40×40 sur
+   1000×2000 à espacement 2, réglages d'usine) : la bascule J7-a envoie le job
+   en BPP, puis la finition de tôle partielle recrée la même bande.
+   - si `total / H ≤ séparation`, la largeur devient
+     `séparation + total / (H − séparation)` ;
+   - si `H ≤ séparation`, `import_instance` rend l'erreur TYPÉE
+     `StripHeightBelowSeparation` (message préfixé
+     `strip_height_below_separation:`) au lieu de laisser le dénominateur
+     nul ou négatif ;
+   - sinon la largeur reste EXACTEMENT `total / H` : bit-identique sur tout
+     job qui ne paniquait pas (verrou `bench/determinism_lock.py`, test
+     `nest-engine/tests/small_job_default_path.rs`).
+   Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
+
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).
