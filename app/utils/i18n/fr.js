@@ -429,7 +429,7 @@ export default {
     'localMode.allInvalid': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez en mode serveur.",
     // AF6 (L3-bis) : projet « cet appareil » — le mode serveur n'existe
     // pas pour ces fichiers.
-    'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez avec une tâche plus petite.",
+    'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez ; si cela se reproduit, modifiez l'espacement ou les rotations autorisées, ou contactez le support.",
     'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
@@ -458,6 +458,8 @@ export default {
     'importPreview.cancel': 'Annuler',
     'localMode.itemGeometry': "Le moteur n'a pas pu utiliser la pièce {part} de « {file} » : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — corrigez cette pièce dans votre CAO, ou mettez sa quantité à 0.",
     'localMode.itemGeometryUnknown': "Le moteur n'a pas pu utiliser une pièce de cette tâche : son contour n'est pas un tracé fermé exploitable. L'imbrication a été remboursée — vérifiez les pièces des fichiers de ce projet.",
+    'localMode.itemUnplaceable': "Le moteur n'a trouvé aucune position valide pour la pièce {part} de « {file} » sur les tôles déclarées à cet espacement. Elle est peut-être aussi grande que la tôle une fois l'espacement ajouté. L'imbrication a été remboursée — utilisez une tôle plus grande, réduisez l'espacement ou autorisez plus de rotations pour cette pièce.",
+    'localMode.itemUnplaceableUnknown': "Le moteur n'a trouvé aucune position valide pour une pièce de cette tâche sur les tôles déclarées à cet espacement. L'imbrication a été remboursée — utilisez une tôle plus grande, réduisez l'espacement ou autorisez plus de rotations.",
     'localCompute.memoryError': "Cette tâche demande plus de mémoire que votre navigateur ne peut en fournir. L'imbrication a été remboursée — essayez une tâche plus petite ou un navigateur de bureau.",
     'localMode.title': 'Lieu de calcul',
     'localMode.toggle.local': 'Sur ma machine',
@@ -465,10 +467,10 @@ export default {
     'localMode.freeForced': 'La formule Gratuit calcule dans votre navigateur.',
     'localMode.dwgServer': 'Les fichiers DWG sont traités sur nos serveurs — le mode local prend en charge DXF et SVG uniquement.',
     'localMode.entityLimit': 'Ce fichier contient trop d\u2019entités pour un calcul dans le navigateur. Passez en mode serveur (il peut réessayer) ou simplifiez le fichier.',
-    'localMode.crashError': 'Le calcul dans le navigateur s\u2019est arrêté de façon inattendue. L\u2019imbrication a été remboursée — vous pouvez réessayer en mode serveur.',
+    'localMode.crashError': "Le calcul dans le navigateur s'est arrêté de façon inattendue, sans que nous sachions pourquoi. L'imbrication a été remboursée — vous pouvez réessayer, ou réessayer en mode serveur. Si cela se reproduit, contactez le support avec les fichiers de ce projet.",
     'localMode.memorySuggest': 'Mémoire navigateur insuffisante pour cette tâche. L\u2019imbrication a été remboursée — le mode serveur peut la traiter.',
     // Versions sans mention du mode serveur (Gratuit = local forcé, pas de bascule).
-    'localMode.crashLocal': 'Le calcul sur l\u2019appareil s\u2019est arrêté de façon inattendue. L\u2019imbrication a été remboursée — réessayez avec une tâche plus petite.',
+    'localMode.crashLocal': "Le calcul sur l'appareil s'est arrêté de façon inattendue, sans que nous sachions pourquoi. L'imbrication a été remboursée — vous pouvez réessayer, ou modifier légèrement l'espacement ou la taille de la tôle. Si cela se reproduit, contactez le support avec les fichiers de ce projet.",
     'localMode.memoryLocal': 'Cette tâche demande plus de mémoire que votre navigateur ne peut en fournir. L\u2019imbrication a été remboursée — essayez une tâche plus petite.',
     'localMode.entityLimitLocal': 'Ce fichier contient trop d\u2019entités pour un calcul dans le navigateur — simplifiez le fichier.',
     'localMode.done': 'Calculé localement — les résultats sont enregistrés dans ce navigateur.',

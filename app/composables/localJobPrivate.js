@@ -549,20 +549,25 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         // Lot E0 : le moteur refuse la géométrie d'UN item — on nomme le
         // fichier et la pièce au lieu de « arrêté de façon inattendue ».
         const { itemGeometryTarget } = await import('./localGeomError')
-        const geom = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap)
+        const geomHit = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap)
+        // Lot A : le moteur n'a trouvé de place pour UNE pièce nulle part
+        // (pièce à la cote exacte) — même nommage fichier + rang, autre code.
+        const { itemUnplaceableTarget } = await import('./localGeomError')
+        const unplaceable = geomHit ? null : itemUnplaceableTarget(outcome.error, itemMap || payload?.itemMap)
+        const geom = geomHit || unplaceable
+        const code = geomHit ? 'item_geometry' : unplaceable ? 'item_unplaceable' : null
         await $fetch(`/api/results/${jobSlug}/local-fail`, {
             method: 'POST',
             body: {
                 error: outcome.error === 'memory_cap' ? 'memory_cap'
-                    : geom ? 'item_geometry'
-                    : String(outcome.error),
+                    : code || String(outcome.error),
                 ...(unfit ? { unfit } : {}),
                 ...(geom ? { geom } : {}),
             },
         })
         return {
             ok: false,
-            error: geom ? 'item_geometry' : outcome.error,
+            error: code || outcome.error,
             memory: outcome.memory,
             unfit,
             geom,

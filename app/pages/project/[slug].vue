@@ -355,7 +355,8 @@ const localTooLarge = ref(null);
 const localSpacingTooLarge = ref(null);
 const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
     localOnly: unref(isLocalProject),
-    params: localComputeError.value === 'item_geometry' ? localGeomParams.value
+    params: localComputeError.value === 'item_geometry' || localComputeError.value === 'item_unplaceable'
+        ? localGeomParams.value
         : localComputeError.value === 'part_too_large' && localTooLarge.value
             ? {
                 file: localTooLarge.value.name,
@@ -419,6 +420,7 @@ watch(
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
               : p.error === 'item_geometry' ? 'item_geometry'
+              : p.error === 'item_unplaceable' ? 'item_unplaceable'
               : p.error === 'part_too_large' ? 'part_too_large'
               : p.error === 'spacing_too_large' ? 'spacing_too_large'
               : p.error === 'cancelled' ? null

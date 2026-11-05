@@ -14,7 +14,8 @@ from core.nesting_input_builder import (
     deterministic_seed,
 )
 from core.engine import (EngineCancelled, EngineError,
-                         item_geometry_message, parse_item_geometry,
+                         item_geometry_message, item_unplaceable_message,
+                         parse_item_geometry, parse_item_unplaceable,
                          run_engine, thin_parts)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
@@ -1388,15 +1389,21 @@ def _nesting_process_impl(doc):
         # fichier et le rang de la piece — « Nesting failed: item_geometry:7:
         # Simple polygon contains intersecting edges » n'aide personne.
         _item_id = parse_item_geometry(detail)
-        if _item_id is not None:
-            _target = part_index_by_id.get(_item_id) or {}
+        # Lot A : meme nommage quand le moteur ne trouve de place pour une
+        # piece nulle part (piece a la cote exacte de la tole).
+        _unplaceable_id = (parse_item_unplaceable(detail)
+                           if _item_id is None else None)
+        if _item_id is not None or _unplaceable_id is not None:
+            _named_id = _item_id if _item_id is not None else _unplaceable_id
+            _target = part_index_by_id.get(_named_id) or {}
             _fname = None
             if _target.get("slug"):
                 _fdoc = db["user_dxf_files"].find_one(
                     {"slug": _target["slug"]}, {"name": 1}) or {}
                 _fname = _fdoc.get("name")
-            information, item_geometry = item_geometry_message(
-                _item_id, _target, _fname)
+            _message = (item_geometry_message if _item_id is not None
+                        else item_unplaceable_message)
+            information, item_geometry = _message(_named_id, _target, _fname)
         elif "no feasible solution" in detail:
             # Plan 2026-09-05 §1.2b : infaisabilité moteur → information
             # ACTIONNABLE + champ structuré `unfit` (les trois leviers).

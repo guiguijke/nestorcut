@@ -9,7 +9,7 @@ import pt from '../utils/i18n/pt'
 
 const CODES = [
     'memory_cap', 'entity_limit', 'geometry_missing', 'all_alternatives_invalid',
-    'capacity_exceeded', 'item_geometry', 'part_too_large', 'spacing_too_large',
+    'capacity_exceeded', 'item_geometry', 'item_unplaceable', 'part_too_large', 'spacing_too_large',
     'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'local_unknown',
 ]
 

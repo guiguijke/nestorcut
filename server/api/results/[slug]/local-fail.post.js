@@ -6,6 +6,7 @@ import { connectDB } from '~~/server/db/mongo'
 const LOCAL_FAIL_CODES = new Set([
     'memory_cap', 'entity_limit', 'geometry_missing', 'local_geometry_missing',
     'all_alternatives_invalid', 'capacity_exceeded', 'item_geometry',
+    'item_unplaceable',
     'part_too_large', 'spacing_too_large', 'crash', 'payload_build',
     'pool_failed', 'merge_failed', 'merge_parse', 'local_interrupted',
     'local_unknown', 'engine_error',

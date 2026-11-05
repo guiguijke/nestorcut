@@ -200,6 +200,12 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
                 item = error_event.get("item")
                 raise EngineError(
                     f"item_geometry:{item}: {reason}", kind=kind, item=item)
+            if kind == "item_unplaceable":
+                # Lot A : le moteur ne trouve de place pour UNE piece nulle
+                # part (piece a la cote exacte de la tole) — meme nommage.
+                item = error_event.get("item")
+                raise EngineError(
+                    f"item_unplaceable:{item}: {reason}", kind=kind, item=item)
             raise EngineError(f"engine failed (rc={returncode}, reason={reason}): {stderr_tail}")
 
         alternatives_path = os.path.join(out_dir, "alternatives.json")
@@ -269,6 +275,12 @@ def parse_item_geometry(detail):
     return int(m.group(1)) if m else None
 
 
+def parse_item_unplaceable(detail):
+    """Lot A : id de l'item sans aucune place possible, sinon None."""
+    m = re.search(r"item_unplaceable:(\d+)", str(detail or ""))
+    return int(m.group(1)) if m else None
+
+
 def thin_parts(items, part_index_by_id, names_by_slug=None):
     """Lot E2 : items « plus fins que l'espacement » -> fichier + rang.
 
@@ -314,6 +326,29 @@ def item_geometry_message(item_id, target, file_name=None):
         f"Nesting failed: part {part + 1} of {label} has an outline the "
         "engine cannot use (not a usable closed contour) — fix that part in "
         "your CAD, or set its quantity to 0."
+    )
+    return information, {
+        "item": item_id,
+        "slug": target.get("slug"),
+        "part": part,
+    }
+
+
+def item_unplaceable_message(item_id, target, file_name=None):
+    """Lot A : message utilisateur + champ structure pour une piece que le
+    moteur n'arrive a poser nulle part (cote exacte de la tole, espacement
+    compris). Meme forme que `item_geometry_message` ; ne pretend pas
+    connaitre la cause exacte : il dit ce qui s'est passe et ce qui peut
+    changer.
+    """
+    target = target or {}
+    part = target.get("part") or 0
+    label = f'"{file_name}"' if file_name else "one of the files"
+    information = (
+        f"Nesting failed: the engine found no valid position for part "
+        f"{part + 1} of {label} on the declared sheets at this spacing (it "
+        "may be as large as the sheet once the spacing is added) — use a "
+        "larger sheet, reduce the spacing, or allow more rotations."
     )
     return information, {
         "item": item_id,

@@ -11,6 +11,8 @@ import {
     parseItemGeometryError,
     itemGeometryTarget,
     itemGeometryParams,
+    parseItemUnplaceableError,
+    itemUnplaceableTarget,
 } from '../composables/localGeomError'
 import { translate } from '../utils/i18n'
 
@@ -96,5 +98,46 @@ describe('E0 — erreur de géométrie d’item', () => {
             expect(msg).not.toBe('localMode.itemGeometryUnknown')
             expect(msg.length).toBeGreaterThan(30)
         }
+    })
+})
+
+// Lot A : le moteur ne trouve de place pour UNE pièce nulle part (pièce à la
+// cote exacte de la tôle). Message mesuré sur 996×1996 dans 1000×2000,
+// espacement 2 (nest-engine/tests/exact_fit_refusal.rs).
+const UNPLACEABLE_MSG = 'item_unplaceable:7: item 7 does not fit in any empty sheet'
+
+describe('Lot A — pièce sans place possible', () => {
+    it('lit l’id d’item, sans le confondre avec un refus de géométrie', () => {
+        expect(parseItemUnplaceableError(UNPLACEABLE_MSG)).toBe(7)
+        expect(parseItemUnplaceableError('item_unplaceable:0: x')).toBe(0)
+        expect(parseItemGeometryError(UNPLACEABLE_MSG)).toBeNull()
+        expect(parseItemUnplaceableError(ENGINE_MSG)).toBeNull()
+        expect(parseItemUnplaceableError('unreachable')).toBeNull()
+        expect(parseItemUnplaceableError('')).toBeNull()
+        expect(parseItemUnplaceableError(undefined)).toBeNull()
+    })
+
+    it('résout le fichier et la pièce par l’itemMap, ou reste silencieux', () => {
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, ITEM_MAP)).toEqual({ slug: 'ecrin-volute', part: 11 })
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, null)).toBeNull()
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, [{ id: 3, slug: 'x', part: 0 }])).toBeNull()
+        // Un refus de géométrie n'est pas un refus de place.
+        expect(itemUnplaceableTarget(ENGINE_MSG, ITEM_MAP)).toBeNull()
+    })
+
+    it('la phrase nomme le fichier et la pièce dans les 6 langues, sans promettre de cause', () => {
+        const params = itemGeometryParams(itemUnplaceableTarget(UNPLACEABLE_MSG, ITEM_MAP), FILES)
+        for (const locale of ['fr', 'en', 'de', 'es', 'it', 'pt']) {
+            const msg = translate('localMode.itemUnplaceable', locale, params)
+            expect(msg, locale).toContain('ecrin.dxf')
+            expect(msg, locale).toContain('12')
+            expect(msg, locale).not.toContain('{file}')
+            expect(msg, locale).not.toContain('{part}')
+            const unknown = translate('localMode.itemUnplaceableUnknown', locale)
+            expect(unknown, locale).not.toBe('localMode.itemUnplaceableUnknown')
+            expect(unknown.length, locale).toBeGreaterThan(30)
+        }
+        expect(translate('localMode.itemUnplaceable', 'fr', params)).toMatch(/rembours/i)
+        expect(translate('localMode.itemUnplaceable', 'en', params)).toMatch(/refund/i)
     })
 })

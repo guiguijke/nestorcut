@@ -15,6 +15,7 @@ const REASON_KEYS = {
     all_alternatives_invalid: 'localMode.allInvalid',
     capacity_exceeded: 'localMode.capacityExceeded',
     item_geometry: 'localMode.itemGeometryUnknown',
+    item_unplaceable: 'localMode.itemUnplaceableUnknown',
     part_too_large: 'localMode.partTooLargePlain',
     spacing_too_large: 'localMode.spacingTooLarge',
     crash: 'localMode.crashError',

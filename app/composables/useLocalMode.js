@@ -50,6 +50,14 @@ export function useLocalMode(projectSlug) {
                 ? t('localMode.itemGeometry', params)
                 : t('localMode.itemGeometryUnknown')
         }
+        // Lot A : aucune position valide pour UNE pièce (cote exacte de la
+        // tôle) — nomme aussi le fichier et le rang, et dit ce qu'on peut
+        // changer, au lieu d'un « arrêté de façon inattendue ».
+        if (err === 'item_unplaceable') {
+            return params
+                ? t('localMode.itemUnplaceable', params)
+                : t('localMode.itemUnplaceableUnknown')
+        }
         if (err === 'memory_cap') {
             return localOnly ? t('localMode.memoryLocal') : t('localMode.memorySuggest')
         }

@@ -8,7 +8,9 @@ ORDINAIRE n'est PAS transforme en message de geometrie.
 """
 import pytest
 
-from core.engine import EngineError, item_geometry_message, parse_item_geometry
+from core.engine import (EngineError, item_geometry_message,
+                         item_unplaceable_message, parse_item_geometry,
+                         parse_item_unplaceable)
 
 # Message reellement rendu par le moteur (nest-engine/src/import_error.rs),
 # mesure sur une instance a trois items dont le second est degenere.
@@ -97,3 +99,46 @@ def test_thin_parts_ignore_les_entrees_absurdes_et_borne_la_liste():
     from core.engine import MAX_THIN_PARTS, thin_parts
     assert thin_parts(["x", None], {}) == []
     assert len(thin_parts(list(range(200)), {})) == MAX_THIN_PARTS
+
+
+# --- Lot A : piece sans aucune place possible (cote exacte de la tole) -----
+# Message reellement rendu par le moteur (nest-engine/import_error.rs,
+# `item_unplaceable_error`), mesure sur 996x1996 dans 1000x2000, espacement 2.
+UNPLACEABLE_DETAIL = "item_unplaceable:0: item 0 does not fit in any empty sheet"
+
+
+def test_lit_l_identifiant_d_une_piece_sans_place():
+    assert parse_item_unplaceable(UNPLACEABLE_DETAIL) == 0
+    assert parse_item_unplaceable("item_unplaceable:12: item 12 does not seem to fit") == 12
+
+
+@pytest.mark.parametrize("detail", [
+    "",
+    None,
+    ENGINE_DETAIL,  # un refus de GEOMETRIE n'est pas un refus de PLACE
+    "engine failed (rc=101, reason=unknown): thread panicked",
+    "no feasible solution: narrowest strip 3200.0 exceeds limit 3000.0",
+])
+def test_les_autres_echecs_ne_sont_pas_un_refus_de_place(detail):
+    assert parse_item_unplaceable(detail) is None
+
+
+def test_un_refus_de_place_n_est_pas_lu_comme_geometrie():
+    assert parse_item_geometry(UNPLACEABLE_DETAIL) is None
+
+
+def test_refus_de_place_nomme_le_fichier_et_le_rang_sans_inventer_la_cause():
+    info, field = item_unplaceable_message(
+        0, {"slug": "grande-piece", "part": 4}, "grande.dxf")
+    assert '"grande.dxf"' in info
+    assert "part 5" in info  # index 4 => cinquieme piece
+    assert "larger sheet" in info and "reduce the spacing" in info
+    # ni « crash », ni « smaller job » : on ne pretend pas connaitre une cause.
+    assert "smaller" not in info and "unexpected" not in info
+    assert field == {"item": 0, "slug": "grande-piece", "part": 4}
+
+
+def test_refus_de_place_sans_nom_de_fichier():
+    info, field = item_unplaceable_message(2, {"slug": "opaque", "part": 0})
+    assert "one of the files" in info and "part 1" in info
+    assert field["slug"] == "opaque"

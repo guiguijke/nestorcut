@@ -441,7 +441,7 @@ export default {
     'localMode.allInvalid': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please retry in server mode.',
     // AF6 (L3-bis) : projet « cet appareil » — le mode serveur n'existe
     // pas pour ces fichiers.
-    'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please retry with a smaller job.',
+    'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please try again; if it keeps happening, change the spacing or the allowed rotations, or contact support.',
     'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
@@ -473,6 +473,8 @@ export default {
     'importPreview.cancel': 'Cancel',
     'localMode.itemGeometry': 'The engine could not use part {part} of “{file}”: its outline is not a usable closed contour. The nesting was refunded — fix that part in your CAD, or set its quantity to 0.',
     'localMode.itemGeometryUnknown': 'The engine could not use one part of this job: its outline is not a usable closed contour. The nesting was refunded — check the parts of the files in this project.',
+    'localMode.itemUnplaceable': 'The engine found no valid position for part {part} of “{file}” on the declared sheets at this spacing. It may be as large as the sheet once the spacing is added. The nesting was refunded — use a larger sheet, reduce the spacing, or allow more rotations for this part.',
+    'localMode.itemUnplaceableUnknown': 'The engine found no valid position for one part of this job on the declared sheets at this spacing. The nesting was refunded — use a larger sheet, reduce the spacing, or allow more rotations.',
     'localCompute.memoryError': 'This job needs more memory than your browser can provide. The nesting was refunded — try a smaller job or a desktop browser.',
     'localMode.title': 'Compute location',
     'localMode.toggle.local': 'On my machine',
@@ -480,10 +482,10 @@ export default {
     'localMode.freeForced': 'The Free plan computes in your browser.',
     'localMode.dwgServer': 'DWG files are processed on our servers — local mode supports DXF and SVG only.',
     'localMode.entityLimit': 'This file has too many entities for in-browser computing. Switch to server mode (it can retry) or simplify the file.',
-    'localMode.crashError': 'The in-browser compute stopped unexpectedly. The nesting was refunded — you can retry in server mode.',
+    'localMode.crashError': 'The in-browser compute stopped unexpectedly and we could not tell why. The nesting was refunded — you can try again or retry in server mode. If it keeps happening, contact support with the files of this project.',
     'localMode.memorySuggest': 'Not enough browser memory for this job. The nesting was refunded — server mode can handle it.',
     // Versions sans mention du mode serveur (Free = local forcé, pas de bascule).
-    'localMode.crashLocal': 'The on-device compute stopped unexpectedly. The nesting was refunded — please try again with a smaller job.',
+    'localMode.crashLocal': 'The on-device compute stopped unexpectedly and we could not tell why. The nesting was refunded — you can try again, or change the spacing or the sheet size slightly. If it keeps happening, contact support with the files of this project.',
     'localMode.memoryLocal': 'This job needs more memory than your browser can provide. The nesting was refunded — try a smaller job.',
     'localMode.entityLimitLocal': 'This file has too many entities for in-browser computing — simplify the file.',
     'localMode.done': 'Computed locally — results are saved in this browser.',
