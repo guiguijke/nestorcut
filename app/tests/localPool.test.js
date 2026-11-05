@@ -577,6 +577,140 @@ describe('runPool — merge vers un worker mort : jamais d\'impasse (verrou R-4)
 // Annulation
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Lot A — la fusion échoue (ou son worker meurt) alors que des walks ont
+// ABOUTI : on garde le meilleur walk au lieu de régler en échec. Cas réel : 2
+// pièces de 40×40 sur 1000×2000 à espacement 2 faisaient paniquer la finition
+// de `merge_alternatives` (trap `unreachable`) après deux walks réussis.
+// ---------------------------------------------------------------------------
+
+describe('runPool — la fusion échoue après des walks réussis (lot A)', () => {
+    const SLUG = 'job-lot-a'
+
+    /** Sortie d'un walk qui POSE toute la demande (1 pièce), de largeur donnée. */
+    const completeOut = (w, width, { spp = true, cost = null } = {}) => ({
+        problem: spp ? 'spp' : 'bpp',
+        sol_instance: {},
+        alternatives: [spp
+            ? {
+                rank: 0, seed: 1000 + w, bias: 'left', evaluations: 10 + w, strip_width: width,
+                solution: { strip_width: width, layout: { placed_items: [{ item_id: 0 }] } },
+            }
+            : {
+                rank: 0, seed: 1000 + w, bias: 'left', iterations: 10 + w, cost: cost.bin_cost,
+                cost_detail: cost,
+                solution: { layouts: [{ placed_items: [{ item_id: 0 }] }] },
+            }],
+    })
+
+    /** Répond aux solves par `outs[w]`, au merge par `mergeReply(worker, msg)`. */
+    function script(outs, mergeReply) {
+        MockWorker.respond = (worker, msg) => {
+            const w = MockWorker.instances.indexOf(worker)
+            if (msg.op === 'merge') {
+                mergeReply(worker, msg)
+                return
+            }
+            worker.emit({ ok: true, jobSlug: msg.jobSlug, result: outs[w], memory: { pagesBefore: 1, pagesAfter: 2 } })
+        }
+    }
+
+    it('merge en erreur (trap unreachable) : le walk le plus étroit est livré, seed en string exacte', async () => {
+        script(
+            [completeOut(0, 900), completeOut(1, 850), completeOut(2, 870)],
+            (worker, msg) => worker.emit({ id: msg.id, jobSlug: msg.jobSlug, ok: false, error: 'unreachable' }),
+        )
+        const out = await runPool(SLUG, makePayload({ walks: 3 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.alternatives).toHaveLength(1)
+        expect(out.result.alternatives[0].strip_width).toBe(850)
+        // Piège 16b : la seed du moteur (> 2^53) a été manglée par le
+        // JSON.parse du worker — elle est réécrite en STRING exacte.
+        expect(typeof out.result.alternatives[0].seed).toBe('string')
+        expect(out.result.alternatives[0].seed).toBe(runSeed(1))
+        expect(out.result.alternatives[0].rank).toBe(0)
+        expect(out.result.degraded).toEqual({ reason: 'merge_failed', walk: 1 })
+        expect(out.result.problem).toBe('spp')
+        expect(MockWorker.instances.every((w) => w.terminated)).toBe(true)
+    })
+
+    it('égalité de largeur : le walk de plus petit index', async () => {
+        script(
+            [completeOut(0, 900), completeOut(1, 850), completeOut(2, 850)],
+            (worker, msg) => worker.emit({ id: msg.id, ok: false, error: 'unreachable' }),
+        )
+        const out = await runPool(SLUG, makePayload({ walks: 3 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.degraded.walk).toBe(1)
+    })
+
+    it('BPP : le coût de tôles le plus bas gagne, puis la chute', async () => {
+        const cd = (bin_cost, remnant) => ({ unplaced: 0, bin_cost, remnant, falkenauer: 0.1 })
+        script(
+            [
+                completeOut(0, 0, { spp: false, cost: cd(3, 0.9) }),
+                completeOut(1, 0, { spp: false, cost: cd(2, 0.4) }),
+                completeOut(2, 0, { spp: false, cost: cd(2, 0.7) }),
+            ],
+            (worker, msg) => worker.emit({ id: msg.id, ok: false, error: 'unreachable' }),
+        )
+        const out = await runPool(SLUG, makePayload({ walks: 3, spp: false }))
+        expect(out.ok).toBe(true)
+        expect(out.result.degraded.walk).toBe(2)
+        expect(out.result.alternatives[0].seed).toBe(runSeed(2))
+        expect(out.result.problem).toBe('bpp')
+    })
+
+    it('un walk qui ne pose pas toute la demande n’est jamais livré à la place de la fusion', async () => {
+        // 0 pièce posée (cas de la pièce à la cote exacte) : la fusion a
+        // refusé en nommant la pièce, ce message reste l'échec du job.
+        script(
+            [engineOut(0), engineOut(1)],
+            (worker, msg) => worker.emit({ id: msg.id, ok: false, error: 'item_unplaceable:0: item 0 does not fit in any empty sheet' }),
+        )
+        const out = await runPool(SLUG, makePayload({ walks: 2 }))
+        expect(out.ok).toBe(false)
+        expect(out.error).toBe('item_unplaceable:0: item 0 does not fit in any empty sheet')
+    })
+
+    it('aucun walk n’a réussi : l’échec reste un échec', async () => {
+        MockWorker.respond = (worker, msg) => worker.emit({ ok: false, jobSlug: msg.jobSlug, error: 'engine boom' })
+        const out = await runPool(SLUG, makePayload({ walks: 2 }))
+        expect(out.ok).toBe(false)
+        expect(out.error).toBe('engine boom')
+    })
+
+    it('les workers meurent pendant la fusion : le meilleur walk complet est livré (seed exacte)', async () => {
+        MockWorker.respond = null
+        const promise = runPool(SLUG, makePayload({ walks: 2 }))
+        MockWorker.instances[0].emit({ ok: true, jobSlug: SLUG, result: completeOut(0, 900) })
+        MockWorker.instances[1].emit({ ok: true, jobSlug: SLUG, result: completeOut(1, 800) })
+        MockWorker.instances[0].crash('wasm abort')
+        MockWorker.instances[1].crash('wasm abort')
+        const out = await promise
+        expect(out.ok).toBe(true)
+        expect(out.result.alternatives[0].strip_width).toBe(800)
+        expect(out.result.alternatives[0].seed).toBe(runSeed(1))
+        expect(out.result.degraded).toEqual({ reason: 'merge_unavailable', walk: 1 })
+    })
+
+    it('mono-walk : inchangé, jamais de merge ni de marqueur dégradé', async () => {
+        MockWorker.respond = (worker, msg) => worker.emit({ ok: true, jobSlug: msg.jobSlug, result: completeOut(0, 900) })
+        const out = await runPool(SLUG, makePayload({ walks: 1 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.degraded).toBeUndefined()
+    })
+
+    it('fusion réussie : aucun marqueur dégradé, le résultat de la fusion est livré tel quel', async () => {
+        const mergeCalls = []
+        MockWorker.respond = respondAllOk({ mergeCalls })
+        const out = await runPool(SLUG, makePayload({ walks: 2 }))
+        expect(out.ok).toBe(true)
+        expect(mergeCalls).toHaveLength(1)
+        expect(out.result.degraded).toBeUndefined()
+    })
+})
+
 describe('championIdleMs (fenêtre d’arrêt ~ f(n))', () => {
     it('plancher 2 s sur un petit job ; +20 ms/pièce ; plafond = patience', () => {
         expect(championIdleMs(0)).toBe(2000)

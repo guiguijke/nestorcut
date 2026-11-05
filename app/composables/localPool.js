@@ -530,6 +530,89 @@ export function cancelPool(jobSlug) {
 // Internes.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Lot A — livraison du MEILLEUR WALK quand la fusion échoue.
+//
+// La fusion (`merge_alternatives`) finit la tôle partielle et peut paniquer
+// (panic = "abort" : trap `unreachable`, le worker répond ok:false, ou meurt).
+// Les walks, eux, ont réussi : jeter ce calcul pour un échec est le pire
+// choix. On garde donc le meilleur walk COMPLET (qui pose toute la demande),
+// comme le fait déjà le mode mono-walk — la même sortie moteur, finalisée par
+// `finalizeLocal` et son filet physique comme n'importe quel résultat.
+//
+// Ce n'est PAS un second classement : seul le walk gagnant est repris, tel
+// qu'exporté par le moteur. Aucun walk complet (ex. refus « pièce à la cote
+// exacte », zéro pièce posée) → null : l'échec de la fusion reste l'échec.
+// ---------------------------------------------------------------------------
+
+/** Nombre de pièces posées d'une alternative exportée (SPP ou BPP). */
+function placedInAlt(alt) {
+    const sol = alt?.solution
+    if (Array.isArray(sol?.layouts)) {
+        return sol.layouts.reduce((n, l) => n + (l?.placed_items?.length || 0), 0)
+    }
+    return sol?.layout?.placed_items?.length || 0
+}
+
+/** Clé de comparaison d'une alternative (plus petit = meilleur). */
+function altKey(alt) {
+    const d = alt?.cost_detail
+    if (d && typeof d === 'object') {
+        return [
+            Number(d.unplaced) || 0,
+            Number(d.bin_cost) || 0,
+            -(Number(d.remnant) || 0),
+            -(Number(d.falkenauer) || 0),
+        ]
+    }
+    const width = Number(alt?.strip_width ?? alt?.solution?.strip_width)
+    const height = Number(alt?.used_height ?? alt?.solution?.used_height)
+    return [
+        Number.isFinite(width) ? width : Infinity,
+        Number.isFinite(height) ? height : Infinity,
+        Number(alt?.cost) || 0,
+    ]
+}
+
+function compareKeys(a, b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+        const d = (a[i] ?? 0) - (b[i] ?? 0)
+        if (d !== 0) return d
+    }
+    return 0
+}
+
+/**
+ * Résultat du meilleur walk complet, ou null. Les seeds 63 bits sont
+ * réécrites en STRING depuis la dérivation BigInt exacte (piège 16b :
+ * `JSON.parse` du worker les a manglées au-delà de 2^53), comme le fait la
+ * fusion. `degraded` trace la raison pour le diagnostic.
+ */
+function bestWalkDelivery(pool, payload, masterSeed, reason) {
+    let best = null
+    for (const slot of pool.slots) {
+        if (!slot.outcome?.ok) continue
+        const alts = slot.outcome.result?.alternatives
+        if (!Array.isArray(alts)) continue
+        const complete = alts.filter((a) => pool.demand > 0 && placedInAlt(a) === pool.demand)
+        if (!complete.length) continue
+        const key = altKey(complete[0])
+        if (!best || compareKeys(key, best.key) < 0) best = { slot, complete, key }
+    }
+    if (!best) return null
+    const walkSeed = pool.slots.length === 1
+        ? BigInt(masterSeed)
+        : deriveSeed(masterSeed, best.slot.w)
+    const runSeed = deriveSeed(walkSeed, 0).toString()
+    const alternatives = best.complete.map((alt, rank) => ({ ...alt, rank, seed: runSeed }))
+    return {
+        ...best.slot.outcome.result,
+        problem: best.slot.outcome.result?.problem ?? payload?.problem,
+        alternatives,
+        degraded: { reason, walk: best.slot.w },
+    }
+}
+
 function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
     if (pool.settled) return
     const data = event.data || {}
@@ -560,6 +643,16 @@ function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
     // Réponse à l'op 'merge' (opération adressée par id, protocole worker).
     if (data.id && data.id === slot.mergeId) {
         if (!data.ok) {
+            // Lot A : la fusion a échoué (panique de la finition, bundle
+            // périmé…) alors que des walks ont ABOUTI. Le travail n'est pas
+            // perdu : on livre le meilleur walk complet, sans fusion ni
+            // finition (comme le mode mono-walk). Aucun walk complet →
+            // l'échec reste un échec, avec le message de la fusion.
+            const kept = bestWalkDelivery(pool, payload, masterSeed, 'merge_failed')
+            if (kept) {
+                pool.settle({ ok: true, result: kept, memory: poolMemory(pool) })
+                return
+            }
             // Échec propre côté appelant — notamment
             // 'merge_alternatives_unavailable' si le bundle wasm publié est
             // antérieur à J-093. Le quota est refundé par l'appelant.
@@ -685,12 +778,14 @@ function postMerge(jobSlug, pool, payload) {
     const alive = survivors.filter((s) => !s.dead && s.worker)
     if (!alive.length || pool.mergeAttempts >= MERGE_MAX_ATTEMPTS) {
         // Plus personne (ou plus de tentatives) pour merger : on livre le
-        // premier run survivant — une alternative au lieu de la fusion,
-        // dégradé mais le job TERMINE (le quota n'est pas brûlé pour rien).
-        const best = survivors[0]
+        // MEILLEUR walk complet (lot A ; sinon le premier survivant) — une
+        // alternative au lieu de la fusion, dégradé mais le job TERMINE (le
+        // quota n'est pas brûlé pour rien).
+        const masterForDegrade = String(payload?.engineConfig?.prng_seed ?? '0')
+        const kept = bestWalkDelivery(pool, payload, masterForDegrade, 'merge_unavailable')
         pool.settle({
             ok: true,
-            result: best.outcome.result,
+            result: kept || survivors[0].outcome.result,
             memory: poolMemory(pool),
         })
         return
