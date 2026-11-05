@@ -67,29 +67,6 @@ impl UniformBBoxSampler {
                 }
             }).collect_vec();
 
-        // Pièce À LA COTE EXACTE (patch lot A, VENDORED.patch.md point 6) :
-        // quand AUCUNE rotation n'a de plage de largeur > 0, on accepte les
-        // rotations dont les plages sont de largeur NULLE (start == end, pas
-        // négative) : la pièce tient exactement et sa pose est imposée. Avant,
-        // l'échantillonneur renvoyait None et le constructif paniquait
-        // (lbf.rs) ou le BPP posait zéro pièce. Ce repli n'est évalué que si
-        // `rot_entries` est vide : tout cas qui donnait un échantillonneur
-        // avant le patch est inchangé, tirages RNG compris.
-        let rot_entries = if rot_entries.is_empty() {
-            rotations.iter()
-                .filter_map(|&r| {
-                    let r_shape_bbox = shape_buffer.transform_from(item.shape_cd.as_ref(), &Transformation::from_rotation(r)).bbox;
-                    let cont_x_range = (container_bbox.x_min - r_shape_bbox.x_min)..(container_bbox.x_max - r_shape_bbox.x_max);
-                    let cont_y_range = (container_bbox.y_min - r_shape_bbox.y_min)..(container_bbox.y_max - r_shape_bbox.y_max);
-                    let x_range = intersect_range(&cont_x_range, &sample_x_range);
-                    let y_range = intersect_range(&cont_y_range, &sample_y_range);
-                    (x_range.start <= x_range.end && y_range.start <= y_range.end)
-                        .then_some(RotEntry { r, x_range, y_range })
-                }).collect_vec()
-        } else {
-            rot_entries
-        };
-
         match rot_entries.is_empty() {
             true => None,
             false => Some(Self { rot_entries }),
@@ -102,10 +79,8 @@ impl UniformBBoxSampler {
 
         // sample a random x and y value within the valid range
         let r = r_entry.r;
-        // Plage de largeur nulle (pièce à la cote exacte) : valeur imposée,
-        // sans tirage — `random_range` panique sur une plage vide.
-        let x_sample = if r_entry.x_range.is_empty() { r_entry.x_range.start } else { rng.random_range(r_entry.x_range.clone()) };
-        let y_sample = if r_entry.y_range.is_empty() { r_entry.y_range.start } else { rng.random_range(r_entry.y_range.clone()) };
+        let x_sample = rng.random_range(r_entry.x_range.clone());
+        let y_sample = rng.random_range(r_entry.y_range.clone());
 
         DTransformation::new(r, (x_sample, y_sample))
     }

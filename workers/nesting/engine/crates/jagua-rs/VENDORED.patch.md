@@ -80,20 +80,15 @@
 
 6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
    voisins) — pièce À LA COTE EXACTE, lot A :
-   - `src/sample/uniform_sampler.rs` : `UniformBBoxSampler::new` écartait toute
-     rotation dont une plage d'échantillonnage était vide, donc aussi celles
-     de largeur NULLE (`start == end`, pièce qui tient pile). Un job dont
-     aucune rotation n'avait de plage de largeur > 0 recevait `None` et mourait
-     plus loin. Désormais, **seulement si `rot_entries` est vide**, les rotations
-     à plage de largeur nulle (jamais négative) sont retenues, et `sample()`
-     rend leur borne sans tirage (`random_range` panique sur une plage vide).
-     Tout cas qui donnait un échantillonneur avant le patch est inchangé,
-     tirages RNG compris (verrou `bench/determinism_lock.py`). Mesuré : sur
-     une pièce à la cote exacte (h=996,0 sur 1000, espacement 2) l'échantillonneur
-     rend désormais une pose, que l'évaluateur juge encore `Invalid` à cause de
-     l'arrondi f32 de la boîte englobante : l'effet visible est le refus typé
-     ci-dessous, pas une pose. Aucun cas n'a été trouvé où ce repli seul fait
-     poser la pièce.
+   - `src/sample/uniform_sampler.rs` : **inchangé**. Un premier essai du lot
+     retenait les rotations à plage de largeur nulle quand toutes les autres
+     étaient vides ; il a été retiré : il faisait tirer et évaluer là où
+     l'échantillonneur rendait `None`, donc changeait la trajectoire (layout,
+     évaluations) de jobs qui aboutissaient déjà (bande 1000 + pièce 100x996
+     en rotations 0/90, BPP 996x1996 sur deux tôles), sans faire poser une
+     seule pièce de plus. Verrou : `tests/exact_fit_refusal.rs`,
+     `bpp_deux_toles_dont_une_trop_juste_garde_la_trajectoire_de_la_baseline`.
+     Le refus typé ci-dessous n'en dépend pas.
    - `src/optimizer/lbf.rs` + `src/optimizer/mod.rs` : l'assertion « strip-width
      is running away … item N does not seem to fit » (`panic = "abort"` :
      `unreachable` en navigateur) devient l'erreur TYPÉE `ItemDoesNotFit

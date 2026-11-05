@@ -190,3 +190,39 @@ fn volute_du_constat_ne_panique_plus() {
         assert!(!out.alternatives.is_empty(), "graine {seed}");
     }
 }
+
+/// Verrou de TRAJECTOIRE : un job qui aboutissait avant le lot garde ses
+/// tirages. Deux tôles (1000x2000 trop juste, 1200x2200 qui accueille), une
+/// pièce 996x1996 en une orientation. Baseline e1e6deb5 : 400 itérations. Un
+/// échantillonneur qui accepte les plages de largeur nulle fait tirer et
+/// évaluer là où il rendait `None` (320 itérations, layout différent).
+#[test]
+fn bpp_deux_toles_dont_une_trop_juste_garde_la_trajectoire_de_la_baseline() {
+    let inst = serde_json::json!({
+        "name": "trajectoire",
+        "items": [{
+            "id": 0, "demand": 1, "allowed_orientations": [0.0],
+            "shape": {"type": "simple_polygon", "data": rect(996.0, 1996.0)}
+        }],
+        "bins": [
+            {"id": 0, "stock": 3, "cost": 1, "zones": [],
+             "shape": {"type": "simple_polygon", "data": rect(1000.0, 2000.0)}},
+            {"id": 1, "stock": 3, "cost": 1, "zones": [],
+             "shape": {"type": "simple_polygon", "data": rect(1200.0, 2200.0)}}
+        ]
+    })
+    .to_string();
+    let cfg = serde_json::json!({
+        "time_budget_sec": 3600, "prng_seed": 7, "n_alternatives": 1,
+        "poly_simpl_tolerance": 0.001, "min_item_separation": 2,
+        "narrow_concavity_cutoff": null, "live_events": false,
+        "n_workers": 1, "separator_workers": 1, "sa_max_iterations": 400,
+        "biases": ["left"], "finish_partial_sheet": false
+    })
+    .to_string();
+    let (sink, _) = silent();
+    let out = run_json_with_sink("bpp", &inst, &cfg, sink).expect("la 2e tôle accueille la pièce");
+    let a = &out.alternatives[0];
+    let it = a.get("evaluations").or_else(|| a.get("iterations")).and_then(|v| v.as_u64());
+    assert_eq!(it, Some(400), "trajectoire changée : {a:.300}");
+}
