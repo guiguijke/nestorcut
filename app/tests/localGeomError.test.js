@@ -141,3 +141,34 @@ describe('Lot A — pièce sans place possible', () => {
         expect(translate('localMode.itemUnplaceable', 'en', params)).toMatch(/refund/i)
     })
 })
+
+describe('Lot A — ids réduits par la réduction J-085 (meta.idMap)', () => {
+    // Trois fichiers : plaque (id 0), rondelle absorbée dans le trou de la
+    // plaque (id 1, retirée de l'instance), latte (id 2). Le moteur voit
+    // [plaque, latte] avec les ids 0 et 1 ; idMap : id réduit -> id d'origine.
+    const MAP = [
+        { id: 0, slug: 'plaque', part: 0 },
+        { id: 1, slug: 'rondelle', part: 0 },
+        { id: 2, slug: 'latte', part: 0 },
+    ]
+    const ID_MAP = [0, 2]
+
+    it('un refus de place sur l’id réduit nomme la pièce d’origine', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:1: item 1 does not seem to fit', MAP, ID_MAP))
+            .toEqual({ slug: 'latte', part: 0 })
+    })
+
+    it('un refus de géométrie sur l’id réduit nomme la pièce d’origine', () => {
+        expect(itemGeometryTarget('item_geometry:1: Simple polygon contains intersecting edges', MAP, ID_MAP))
+            .toEqual({ slug: 'latte', part: 0 })
+    })
+
+    it('sans idMap (instance non réduite) l’id est pris tel quel', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:1: x', MAP)).toEqual({ slug: 'rondelle', part: 0 })
+        expect(itemUnplaceableTarget('item_unplaceable:1: x', MAP, null)).toEqual({ slug: 'rondelle', part: 0 })
+    })
+
+    it('un id hors de l’idMap reste silencieux plutôt que de nommer une autre pièce', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:5: x', MAP, ID_MAP)).toBeNull()
+    })
+})

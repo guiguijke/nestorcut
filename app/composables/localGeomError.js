@@ -34,10 +34,22 @@ export function parseItemUnplaceableError(message) {
     return Number(m[1])
 }
 
-/** id moteur → { slug, part } via l'itemMap ; null si l'id est inconnu. */
-function targetOfId(id, itemMap) {
+/**
+ * id moteur → { slug, part } via l'itemMap ; null si l'id est inconnu.
+ *
+ * Quand la réduction J-085 a réindexé l'instance (`payload.meta.idMap` :
+ * id réduit → id d'origine), l'id du message est un id RÉDUIT, alors que
+ * l'itemMap porte les ids d'origine : sans `idMap` on nommerait une autre
+ * pièce. Un id hors de l'idMap reste inconnu (null), jamais deviné.
+ */
+function targetOfId(id, itemMap, idMap) {
     if (id === null || !Array.isArray(itemMap)) return null
-    const hit = itemMap.find((e) => Number(e?.id) === id)
+    let original = id
+    if (Array.isArray(idMap)) {
+        if (!Number.isInteger(id) || id < 0 || id >= idMap.length) return null
+        original = Number(idMap[id])
+    }
+    const hit = itemMap.find((e) => Number(e?.id) === original)
     if (!hit || !hit.slug) return null
     const part = Number(hit.part)
     return { slug: String(hit.slug), part: Number.isFinite(part) ? part : 0 }
@@ -46,16 +58,17 @@ function targetOfId(id, itemMap) {
 /**
  * id moteur → { slug, part } via l'itemMap du job ([{ id, slug, part }]).
  * `part` est l'index de la pièce DANS son fichier (0-based, comme l'itemMap).
+ * `idMap` (optionnel) : `meta.idMap` de l'instance réduite.
  * Rend `null` si l'id est inconnu : on préfère un message générique à un
  * numéro inventé.
  */
-export function itemGeometryTarget(message, itemMap) {
-    return targetOfId(parseItemGeometryError(message), itemMap)
+export function itemGeometryTarget(message, itemMap, idMap) {
+    return targetOfId(parseItemGeometryError(message), itemMap, idMap)
 }
 
 /** Idem pour le refus `item_unplaceable` (lot A). */
-export function itemUnplaceableTarget(message, itemMap) {
-    return targetOfId(parseItemUnplaceableError(message), itemMap)
+export function itemUnplaceableTarget(message, itemMap, idMap) {
+    return targetOfId(parseItemUnplaceableError(message), itemMap, idMap)
 }
 
 /**

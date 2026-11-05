@@ -280,6 +280,22 @@ def parse_item_unplaceable(detail):
     m = re.search(r"item_unplaceable:(\d+)", str(detail or ""))
     return int(m.group(1)) if m else None
 
+def original_item_id(item_id, meta):
+    """Lot A : id d'ORIGINE d'un id cite par le moteur.
+
+    Quand la reduction J-085 a reindexe l'instance (`meta["idMap"]` : id
+    reduit -> id d'origine), le moteur nomme un id REDUIT alors que
+    `part_index_by_id` porte les ids d'origine : sans cette conversion on
+    nommerait une autre piece. Sans reduction, l'id est inchange. Un id hors
+    de l'idMap rend None (jamais devine).
+    """
+    id_map = (meta or {}).get("idMap") if isinstance(meta, dict) else None
+    if not isinstance(id_map, list):
+        return item_id
+    if not isinstance(item_id, int) or item_id < 0 or item_id >= len(id_map):
+        return None
+    return id_map[item_id]
+
 
 def thin_parts(items, part_index_by_id, names_by_slug=None):
     """Lot E2 : items « plus fins que l'espacement » -> fichier + rang.

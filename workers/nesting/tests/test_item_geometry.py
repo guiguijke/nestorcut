@@ -9,7 +9,7 @@ ORDINAIRE n'est PAS transforme en message de geometrie.
 import pytest
 
 from core.engine import (EngineError, item_geometry_message,
-                         item_unplaceable_message, parse_item_geometry,
+                         item_unplaceable_message, original_item_id, parse_item_geometry,
                          parse_item_unplaceable)
 
 # Message reellement rendu par le moteur (nest-engine/src/import_error.rs),
@@ -142,3 +142,24 @@ def test_refus_de_place_sans_nom_de_fichier():
     info, field = item_unplaceable_message(2, {"slug": "opaque", "part": 0})
     assert "one of the files" in info and "part 1" in info
     assert field["slug"] == "opaque"
+
+
+# --- Lot A : ids REDUITS par la reduction J-085 (meta.idMap) ---------------
+# Le moteur nomme l'id de l'instance resolue ; part_index_by_id porte les ids
+# d'origine. Trois fichiers : plaque (0), rondelle absorbee dans son trou (1,
+# retiree de l'instance), latte (2) -> le moteur voit [plaque, latte].
+def test_id_reduit_redevient_l_id_d_origine():
+    meta = {"idMap": [0, 2]}
+    assert original_item_id(1, meta) == 2
+    assert original_item_id(0, meta) == 0
+
+
+def test_sans_reduction_l_id_est_inchange():
+    assert original_item_id(1, None) == 1
+    assert original_item_id(1, {}) == 1
+    assert original_item_id(1, {"idMap": None}) == 1
+
+
+def test_id_hors_de_l_idmap_n_est_pas_devine():
+    assert original_item_id(5, {"idMap": [0, 2]}) is None
+    assert original_item_id(-1, {"idMap": [0, 2]}) is None

@@ -549,11 +549,11 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         // Lot E0 : le moteur refuse la géométrie d'UN item — on nomme le
         // fichier et la pièce au lieu de « arrêté de façon inattendue ».
         const { itemGeometryTarget } = await import('./localGeomError')
-        const geomHit = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap)
+        const geomHit = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap, payload?.meta?.idMap)
         // Lot A : le moteur n'a trouvé de place pour UNE pièce nulle part
         // (pièce à la cote exacte) — même nommage fichier + rang, autre code.
         const { itemUnplaceableTarget } = await import('./localGeomError')
-        const unplaceable = geomHit ? null : itemUnplaceableTarget(outcome.error, itemMap || payload?.itemMap)
+        const unplaceable = geomHit ? null : itemUnplaceableTarget(outcome.error, itemMap || payload?.itemMap, payload?.meta?.idMap)
         const geom = geomHit || unplaceable
         const code = geomHit ? 'item_geometry' : unplaceable ? 'item_unplaceable' : null
         await $fetch(`/api/results/${jobSlug}/local-fail`, {

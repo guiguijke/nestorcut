@@ -15,7 +15,8 @@ from core.nesting_input_builder import (
 )
 from core.engine import (EngineCancelled, EngineError,
                          item_geometry_message, item_unplaceable_message,
-                         parse_item_geometry, parse_item_unplaceable,
+                         original_item_id, parse_item_geometry,
+                         parse_item_unplaceable,
                          run_engine, thin_parts)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
@@ -1395,6 +1396,9 @@ def _nesting_process_impl(doc):
                            if _item_id is None else None)
         if _item_id is not None or _unplaceable_id is not None:
             _named_id = _item_id if _item_id is not None else _unplaceable_id
+            # Le moteur nomme l'id de l'instance RESOLUE : id reduit si la
+            # reduction J-085 a reindexe (meta.idMap), a remettre en id d'origine.
+            _named_id = original_item_id(_named_id, meta)
             _target = part_index_by_id.get(_named_id) or {}
             _fname = None
             if _target.get("slug"):
