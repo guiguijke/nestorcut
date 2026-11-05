@@ -189,6 +189,7 @@ import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
+import { createLiveScrollGate, liveScrollSlug } from "~/utils/liveScroll";
 import {
     DEMO_NESTING_LIMIT,
     DEMO_PROJECT_SLUG,
@@ -281,21 +282,6 @@ const runningCores = computed(() => {
     return Math.min(8, Math.max(1, Number(n) || 1));
 });
 
-// The live section sits at the TOP of the page (above the files grid, which
-// is 8 screens tall on the demo): when a new job starts streaming, bring it
-// into view once so the animation is never missed below the fold.
-const liveSection = ref(null);
-const lastLiveSlug = ref(null);
-watch(
-    () => unref(liveResult)?.slug,
-    async (slug) => {
-        if (!slug || slug === lastLiveSlug.value) return;
-        lastLiveSlug.value = slug;
-        await nextTick();
-        liveSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-);
-
 // Mode Local productisé (J-077/J-082) : quand le worker Python a PRÉPARÉ un
 // job local (status awaiting_local), on le résout dans le navigateur et les
 // RÉSULTATS restent 100 % navigateur (IndexedDB) — le serveur ne reçoit que
@@ -339,6 +325,30 @@ const localLive = computed(() => {
         },
     };
 });
+// The live section sits at the TOP of the page (above the files grid, which
+// is 8 screens tall on the demo): when a new job starts streaming, bring it
+// into view once so the animation is never missed below the fold.
+// Les deux sources comptent : le flux serveur (liveResult) et le calcul
+// navigateur (localLiveFrame, alimenté par le registre local) — ce dernier
+// n'arrivait jamais ici. Une fois PAR JOB (la garde mémorise les slugs), donc
+// ni à chaque frame ni au retour sur un projet.
+const liveSection = ref(null);
+const liveScrollGate = createLiveScrollGate();
+watch(
+    () => liveScrollSlug({
+        serverSlug: unref(liveResult)?.slug,
+        localRunning: unref(localComputeRunning),
+        localFrameSlug: unref(localLiveFrame)?.slug,
+    }),
+    async (slug) => {
+        if (!liveScrollGate.claim(slug)) return;
+        await nextTick();
+        const calm = typeof window !== 'undefined'
+            && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+        liveSection.value?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
+);
+
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
 // les messages d'erreur locaux prennent leurs variantes dédiées.
 // Lot E0 : géométrie d'une pièce refusée par le moteur — { slug, part } du
@@ -780,7 +790,6 @@ watch(pageSlug, async (s, prev) => {
         localZonePhase.value = null
         localLiveFrame.value = null
         localReveal.value = null
-        lastLiveSlug.value = null
     }
     await getProject(
         API_ROUTES.PROJECT(s),
