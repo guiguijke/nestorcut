@@ -32,7 +32,7 @@
             {{ t('auth.forgot.success') }}
         </p>
 
-        <NuxtLink to="/auth/local" class="forgot-password__back">
+        <NuxtLink to="/auth/local?mode=login" class="forgot-password__back">
             {{ t('auth.forgot.backToLogin') }}
         </NuxtLink>
     </div>

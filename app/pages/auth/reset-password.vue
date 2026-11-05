@@ -43,7 +43,7 @@
             {{ t('auth.reset.success') }}
         </p>
 
-        <NuxtLink to="/auth/local" class="reset-password__back">
+        <NuxtLink to="/auth/local?mode=login" class="reset-password__back">
             {{ t('auth.reset.backToLogin') }}
         </NuxtLink>
     </div>
