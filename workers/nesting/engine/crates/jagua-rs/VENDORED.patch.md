@@ -88,16 +88,23 @@
      à plage de largeur nulle (jamais négative) sont retenues, et `sample()`
      rend leur borne sans tirage (`random_range` panique sur une plage vide).
      Tout cas qui donnait un échantillonneur avant le patch est inchangé,
-     tirages RNG compris (verrou `bench/determinism_lock.py`). Constaté : sur
-     le wasm, la volute du constat de la relecture critique (graines 100/101 du
-     pool) tombait sur ce cas ; natif, les flottants diffèrent et elle passait.
+     tirages RNG compris (verrou `bench/determinism_lock.py`). Mesuré : sur
+     une pièce à la cote exacte (h=996,0 sur 1000, espacement 2) l'échantillonneur
+     rend désormais une pose, que l'évaluateur juge encore `Invalid` à cause de
+     l'arrondi f32 de la boîte englobante : l'effet visible est le refus typé
+     ci-dessous, pas une pose. Aucun cas n'a été trouvé où ce repli seul fait
+     poser la pièce.
    - `src/optimizer/lbf.rs` + `src/optimizer/mod.rs` : l'assertion « strip-width
      is running away … item N does not seem to fit » (`panic = "abort"` :
      `unreachable` en navigateur) devient l'erreur TYPÉE `ItemDoesNotFit
      { item_id, strip_width }`. `LBFBuilder::construct` et `optimize` rendent
      un `Result`. `nest-engine` la traduit en `item_unplaceable:<id>:` (même
-     modèle que `item_geometry`, `import_error.rs`), et une phase 2 qui échoue
-     retombe sur la phase 1 au lieu de tuer la classe.
+     modèle que `item_geometry`, `import_error.rs`). Une PHASE 2 qui échoue
+     (cadre transposé, bande = largeur de phase 1 + 1 mm) retombe sur le
+     résultat de la phase 1 au lieu de tuer la classe : c'était la panique de
+     la volute du constat (une orientation, bande de 66,5 mm) sur le wasm, qui
+     disparaît avec `two_phase: false` — mesuré sur le wasm d'origine, graines
+     100 et 101 du pool.
 
 7. `src/probs/bpp/entities/solution.rs` : `BPSolution::density` rend 0 pour une
    solution sans tôle (aucune pièce posée) au lieu de 0/0 = NaN. Le NaN était

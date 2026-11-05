@@ -158,10 +158,10 @@ fn bpp_temoin_une_piece_qui_tient_se_place() {
 
 /// La volute du constat de la relecture critique (g 1,9, h 3,0, 2,5 tours,
 /// ≈ 60 mm, deux exemplaires, une orientation, bande de 66,5 mm, espacement
-/// 2) : le constructif ne trouvait pas de place et paniquait à lbf.rs:74 —
-/// SUR LE WASM, avec les graines 100 et 101 du pool. Fixture produite par le
-/// vrai `buildLocalPayload`. Cause : les plages d'échantillonnage de largeur
-/// nulle étaient écartées (`uniform_sampler.rs`) ; elles sont acceptées.
+/// 2) : sur le WASM, avec les graines 100 et 101 du pool, le constructif de la
+/// PHASE 2 (cadre transposé) ne trouvait pas de place et paniquait à
+/// lbf.rs:74. Une phase 2 impossible retombe maintenant sur la phase 1.
+/// Fixture produite par le vrai `buildLocalPayload`.
 /// NB : natif, les flottants diffèrent du wasm et ce cas passait déjà avant
 /// le patch ; la preuve DISCRIMINANTE de la volute est côté wasm
 /// (`bench/lot_a_wasm_check.mjs`). Ici : le moteur natif ne régresse pas.
