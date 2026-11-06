@@ -57,26 +57,46 @@
    verrou de déterminisme reste bit-identique.
    Lot E2 de `docs/archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md`.
 
-5. `src/probs/spp/io/import.rs` (+ réexport dans `src/probs/spp/io/mod.rs`) :
-   **largeur initiale de la bande** (piège AGENTS #2b). Le conteneur d'une
-   bande est DÉFLATÉ de `séparation / 2` par côté ; la largeur initiale
-   `aire totale / hauteur` pouvait être ≤ séparation, le polygone déflaté
-   était vide et `Strip -> Container` paniquait (`strip.rs`,
-   « Offset resulted in an empty polygon »). Avec `panic = "abort"`, c'était
-   `unreachable` en navigateur et le calcul perdu. Le cas se présente dès deux
-   pièces dont l'aire totale ne dépasse pas hauteur × espacement (2×40×40 sur
-   1000×2000 à espacement 2, réglages d'usine) : la bascule J7-a envoie le job
-   en BPP, puis la finition de tôle partielle recrée la même bande.
-   - si `total / H ≤ séparation`, la largeur devient
-     `séparation + total / (H − séparation)` ;
-   - si `H ≤ séparation`, `import_instance` rend l'erreur TYPÉE
-     `StripHeightBelowSeparation` (message préfixé
-     `strip_height_below_separation:`) au lieu de laisser le dénominateur
-     nul ou négatif ;
-   - sinon la largeur reste EXACTEMENT `total / H` : bit-identique sur tout
-     job qui ne paniquait pas (verrou `bench/determinism_lock.py`, test
-     `nest-engine/tests/small_job_default_path.rs`).
-   Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
+5. **Largeur de la bande : seule la construction du conteneur dit si elle
+   existe** (piège AGENTS #2b). Le conteneur d'une bande est DÉFLATÉ de
+   `séparation / 2` par côté. Juste au-dessus de la séparation il reste un
+   rectangle de quelques ulp : `geo_buffer` le rend vide, ou `SPolygon::new`
+   le refuse (« Offset resulted in an empty polygon », « Simple polygon must
+   have at least 3 points », « no pole found »), et `Strip -> Container`
+   paniquait. Avec `panic = "abort"`, c'était `unreachable` en navigateur et
+   l'abort rc 3221226505 sur le worker. La fenêtre grandit avec la hauteur
+   (mesuré à espacement 2 : piège jusqu'à +1e-5 mm pour H = 1000, +3e-5 pour
+   H = 2000, +1e-4 pour H = 6000) : aucun seuil en mm ne la décrit.
+   - `src/probs/spp/entities/strip.rs` : `Strip::try_container` construit par le
+     chemin faillible. Pur : ni tirage, ni écriture dans `FALLBACK_ITEMS` (le
+     repli du point 3 ne sert qu'au gonflement). `From<Strip>` reste, réservé
+     aux largeurs déjà construites.
+   - `src/probs/spp/io/import.rs` (+ réexport dans `src/probs/spp/io/mod.rs`) :
+     la largeur reste EXACTEMENT `total / H` si elle dépasse la séparation et que
+     son conteneur se construit. Sinon `séparation + terme`, le terme partant de
+     `total / (H - séparation)` et doublant, plancher `EPSILON × max(H,
+     séparation)`, 32 essais au plus, arrêt dès qu'une bande plus large que haute
+     échoue (elle ne ferait que s'amincir). Rien ne se construit, ou `H ≤
+     séparation` : erreur TYPÉE `StripHeightBelowSeparation` (message préfixé
+     `strip_height_below_separation:`).
+   - `src/probs/spp/entities/problem.rs` : `try_change_strip_width` et
+     `apply_strip` ; `fit_strip` garde la bande actuelle si la largeur ajustée n'a
+     pas de conteneur. Côté sparrow et nest-engine, qui réduit ou élargit la bande
+     en cours de recherche traite le refus : `lbf.rs` rend `ItemDoesNotFit`,
+     `explore.rs` et `compress.rs` s'arrêtent à la dernière largeur construite,
+     `separator.rs` sonde AVANT de déplacer une pièce, `column_fill.rs` passe.
+   - `src/geometry/primitives/simple_polygon.rs` : `SPolygon::try_from_rect`,
+     car `From<Rect>` panique sur un rectangle sans pôle AVANT l'offset (largeur
+     minuscule sans espacement). `src/geometry/fail_fast/pole.rs` +
+     `primitives/rect.rs` : `try_quadrants`, une cellule trop petite pour être
+     coupée arrête la descente. `src/entities/container.rs` + `rect.rs` :
+     `can_split`, un conteneur que le quadtree ne pourrait pas couper
+     `quadtree_depth` fois est refusé au lieu de paniquer dans `Rect::quadrants`.
+   Bit-identique sur tout job dont le conteneur existait : mêmes flottants, seuls
+   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`,
+   tests `nest-engine/tests/small_job_default_path.rs`
+   et `strip_container_window.rs`). Les gardes amont (`main.py`,
+   `localPayloadBuilder.js`) restent en défense.
 
 6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
    voisins) — pièce À LA COTE EXACTE, lot A :

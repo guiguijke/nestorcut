@@ -64,13 +64,18 @@ pub fn compression_phase(
 
 fn attempt_to_compress(sep: &mut Separator, init_sol: &SPSolution, r_shrink: f32, term: &impl Terminator, sol_listener: &mut impl SolutionListener) -> (Option<SPSolution>, crate::optimizer::worker::SepStats) {
     // Restore to the initial solution and width
-    sep.change_strip_width(init_sol.strip_width(), None);
+    let no_attempt = crate::optimizer::worker::SepStats { total_moves: 0, total_evals: 0 };
+    if sep.change_strip_width(init_sol.strip_width(), None).is_err() {
+        return (None, no_attempt);
+    }
     sep.rollback(init_sol, None);
 
     // Shrink the container by the provided amount at a random position
     let new_width = init_sol.strip_width() * (1.0 - r_shrink);
     let split_pos = sep.rng.random_range(0.0..sep.prob.strip_width());
-    sep.change_strip_width(new_width, Some(split_pos));
+    if sep.change_strip_width(new_width, Some(split_pos)).is_err() {
+        return (None, no_attempt);
+    }
 
     // Try to separate layout, if all collisions are eliminated, return the solution
     let (compacted_sol, ot, stats) = sep.separate(term, sol_listener);

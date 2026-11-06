@@ -33,6 +33,14 @@ impl Container {
         cde_config: CDEConfig,
     ) -> Result<Self> {
         let outer = Arc::new(original_outer.convert_to_internal()?);
+        // Le quadtree de la CDE coupe cette boîte `quadtree_depth` fois, par
+        // `Rect::quadrants` qui panique sur un côté trop court : refusé ici.
+        ensure!(
+            outer.bbox.inflate_to_square().can_split(cde_config.quadtree_depth),
+            "container too small for a quadtree of depth {}: {:?}",
+            cde_config.quadtree_depth,
+            outer.bbox
+        );
         let outer_orig = Arc::new(original_outer);
         ensure!(
             quality_zones.len() == quality_zones.iter().map(|qz| qz.quality).unique().count(),

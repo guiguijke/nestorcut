@@ -98,11 +98,11 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    polygon ») — ce n'est PAS une dégradation sûre automatique. Toujours
    passer par `channels_usable(space)` : si scellé, laisser les trous
    fermés (outer plein) — trous inutilisés mais job vivant.
-2b. **Strip initial jagua = aire totale / hauteur, DEFLATÉ de space/2** :
-   si `total_part_area / strip_height ≤ space`, l'offset du strip sort vide
-   et le moteur panique dans un thread rayon (« Offset resulted in an empty
-   polygon », opaque). Garde côté Python avant `run_engine` (exception
-   explicite : réduire l'espacement ou ajouter pièces/stock).
+2b. **Une largeur de bande n'existe que si son conteneur se construit** : le
+   conteneur est DEFLATÉ de space/2, et juste au-dessus de `space` il n'a plus
+   de pôle sur une fenêtre qui grandit avec la hauteur, donc jamais de seuil :
+   `Strip::try_container` décide, et `From<Strip>` ne sert qu'aux largeurs déjà
+   construites (`panic = "abort"`, VENDORED.patch.md point 5).
 2c. **`geo_buffer` s'effondre sur un canal plus étroit que le gonflement.**
    L'inflation d'import (`space/2`) décale les deux bords d'un canal étroit
    l'un à travers l'autre : le contour rendu se recoupe, `SPolygon::new` le

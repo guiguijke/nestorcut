@@ -241,7 +241,13 @@ impl Separator {
         new_pk
     }
 
-    pub fn change_strip_width(&mut self, new_width: f32, split_position: Option<f32>) {
+    /// Une largeur dont le conteneur n'existe pas laisse tout en place et rend
+    /// l'erreur (bande réduite à quelques ulp, sur des pièces infimes).
+    pub fn change_strip_width(&mut self, new_width: f32, split_position: Option<f32>) -> anyhow::Result<()> {
+        let mut strip = self.prob.strip;
+        strip.set_width(new_width);
+        let container = strip.try_container()?;
+
         //if no split position is provided, use the center of the strip
         let split_position = split_position.unwrap_or(self.prob.strip_width() / 2.0);
         let delta = new_width - self.prob.strip_width();
@@ -258,7 +264,7 @@ impl Separator {
             self.move_item(pik, new_transf.decompose());
         }
 
-        self.prob.change_strip_width(new_width);
+        self.prob.apply_strip(strip, container);
 
         //rebuild the collision tracker (le biais d'aire est recalculé sur la
         //population courante — P4)
@@ -275,5 +281,6 @@ impl Separator {
             }
         });
         debug!("[SEP] changed strip width to {:.3}", new_width);
+        Ok(())
     }
 }

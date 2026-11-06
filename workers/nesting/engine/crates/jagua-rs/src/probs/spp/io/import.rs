@@ -20,9 +20,9 @@ fn maybe_par_iter<T>(slice: &[T]) -> std::slice::Iter<'_, T> {
     slice.iter()
 }
 
-/// Erreur typée : la hauteur de la bande ne dépasse pas l'espacement exigé, le
-/// conteneur déflaté serait vide. Remontée par `import_instance` au lieu
-/// d'une panique (`strip.rs`, `Rect::try_new(..).unwrap()`).
+/// Erreur typée : la hauteur de la bande ne laisse pas de quoi construire un
+/// conteneur une fois l'espacement retiré, quelle que soit la largeur. Remontée
+/// par `import_instance` au lieu d'une panique.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StripHeightBelowSeparation {
     pub strip_height: f32,
@@ -33,7 +33,7 @@ impl std::fmt::Display for StripHeightBelowSeparation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "strip_height_below_separation: strip height {} <= item separation {}",
+            "strip_height_below_separation: strip height {} leaves no room for item separation {}",
             self.strip_height, self.separation
         )
     }
@@ -46,6 +46,33 @@ fn ensure_strip_height_above_separation(strip_height: f32, separation: f32) -> R
         return Err(StripHeightBelowSeparation { strip_height, separation }.into());
     }
     Ok(())
+}
+
+/// Nombre d'essais de [`first_buildable_strip`]. Du plancher à la hauteur il y a
+/// au plus 24 doublements (la mantisse d'un f32) ; la marge ne coûte que sur un
+/// job dont la bande n'existe pas.
+const STRIP_PROBE_MAX: usize = 32;
+
+/// Plus petite largeur `séparation + terme` dont le conteneur se construit, le
+/// terme partant de `total / (H - séparation)` et doublant, avec un plancher à
+/// quelques ulp de la plus grande cote : la fenêtre sans conteneur grandit avec
+/// la hauteur, seule la construction dit où elle s'arrête. `None` si la hauteur
+/// est en cause : une bande déjà plus large que haute ne fait que s'amincir.
+fn first_buildable_strip(template: Strip, total_item_area: f32, separation: f32) -> Option<Strip> {
+    let height = template.fixed_height;
+    let floor = f32::EPSILON * height.max(separation);
+    let mut term = total_item_area / (height - separation);
+    for _ in 0..STRIP_PROBE_MAX {
+        let strip = Strip { width: separation + term, ..template };
+        if strip.try_container().is_ok() {
+            return Some(strip);
+        }
+        if strip.width >= height {
+            return None;
+        }
+        term = (term * 2.0).max(floor);
+    }
+    None
 }
 
 /// Imports an instance into the library
@@ -85,20 +112,13 @@ pub fn import_instance(importer: &Importer, ext_instance: &ExtSPInstance) -> Res
     // Initialize the base width for 100% density.
     //
     // Le conteneur de la bande est DÉFLATÉ de `separation / 2` sur chaque
-    // bord : une largeur ≤ séparation (ou une hauteur ≤ séparation) donne un
-    // polygone vide, donc une panique dans `Strip -> Container`
-    // (« Offset resulted in an empty polygon »). Voir VENDORED.patch.md,
-    // point 5. Sur tout job qui ne paniquait pas, `total / H > séparation` et
-    // la largeur reste EXACTEMENT `total / H`.
+    // bord : une largeur à peine au-dessus de la séparation (ou dessous) n'a
+    // pas de conteneur, et `Strip -> Container` panique. Voir VENDORED.patch.md,
+    // point 5. Tout job dont le conteneur existe garde EXACTEMENT `total / H`.
     let separation = importer.shape_modify_config.offset.unwrap_or(0.0).max(0.0) * 2.0;
     if separation > 0.0 {
         ensure_strip_height_above_separation(fixed_height, separation)?;
     }
-    let mut width = total_item_area / fixed_height;
-    if separation > 0.0 && width <= separation {
-        width = separation + total_item_area / (fixed_height - separation);
-    }
-
     let base_strip = Strip::new(
         fixed_height,
         importer.cde_config,
@@ -107,8 +127,15 @@ pub fn import_instance(importer: &Importer, ext_instance: &ExtSPInstance) -> Res
             simplify_tolerance: None,
             narrow_concavity_cutoff: None,
         },
-        width,
+        total_item_area / fixed_height,
     )?;
+    let base_strip = if base_strip.width > separation && base_strip.try_container().is_ok() {
+        base_strip
+    } else {
+        first_buildable_strip(base_strip, total_item_area, separation).ok_or(
+            StripHeightBelowSeparation { strip_height: fixed_height, separation },
+        )?
+    };
 
     Ok(SPInstance::new(items, base_strip))
 }

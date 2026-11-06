@@ -121,11 +121,13 @@ impl POINode {
     fn split(&self, poly: &SPolygon, poles: &[Circle]) -> Option<[POINode; 4]> {
         match self.level {
             0 => None,
-            _ => Some(
-                self.bbox
-                    .quadrants()
-                    .map(|qd| POINode::new(qd, self.level - 1, poly, poles)),
-            ),
+            // Une cellule trop petite pour être coupée (quelques ulp, rectangle
+            // minuscule) s'arrête là : `compute_pole` rend alors son erreur au
+            // lieu de paniquer dans `Rect::quadrants`.
+            _ => self
+                .bbox
+                .try_quadrants()
+                .map(|qds| qds.map(|qd| POINode::new(qd, self.level - 1, poly, poles))),
         }
     }
 

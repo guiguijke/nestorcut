@@ -94,7 +94,12 @@ impl LBFBuilder {
             }
             None => {
                 debug!("[CONSTR] failed to place item with id {}, expanding strip width",item_id);
-                self.prob.change_strip_width(self.prob.strip_width() * 1.2);
+                // Sur une bande à peine plus haute que l'espacement, le conteneur
+                // finit par ne plus exister en s'élargissant : la pièce n'y tient pas.
+                let wider = self.prob.strip_width() * 1.2;
+                if self.prob.try_change_strip_width(wider).is_err() {
+                    return Err(ItemDoesNotFit { item_id, strip_width: wider });
+                }
                 if !assertions::strip_width_is_in_check(&self.prob) {
                     return Err(ItemDoesNotFit { item_id, strip_width: self.prob.strip_width() });
                 }

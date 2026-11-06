@@ -150,6 +150,34 @@ impl Rect {
         [q1, q2, q3, q4]
     }
 
+    /// Comme [Rect::quadrants], mais rend `None` au lieu de paniquer quand un
+    /// côté n'a plus assez d'ulp pour être coupé en deux. Mêmes flottants sinon.
+    pub fn try_quadrants(&self) -> Option<[Self; 4]> {
+        let mid = self.centroid();
+        let corners = self.corners();
+
+        Some([
+            Rect::from_diagonal_corners(corners[0], mid).ok()?,
+            Rect::from_diagonal_corners(corners[1], mid).ok()?,
+            Rect::from_diagonal_corners(corners[2], mid).ok()?,
+            Rect::from_diagonal_corners(corners[3], mid).ok()?,
+        ])
+    }
+
+    /// `self` se coupe-t-il `depth` fois de suite en quadrants ? Les quadrants
+    /// sont le produit des coupes en x et en y, il suffit de suivre chaque axe :
+    /// même milieu que [Rect::centroid], pas un seul rectangle à allouer.
+    pub fn can_split(&self, depth: u8) -> bool {
+        fn axis(lo: f32, hi: f32, depth: u8) -> bool {
+            if depth == 0 {
+                return true;
+            }
+            let mid = (lo + hi) / 2.0;
+            lo < mid && mid < hi && axis(lo, mid, depth - 1) && axis(mid, hi, depth - 1)
+        }
+        axis(self.x_min, self.x_max, depth) && axis(self.y_min, self.y_max, depth)
+    }
+
     /// Returns the four corners of `self`, in the same order as [Rect::quadrants].
     pub fn corners(&self) -> [Point; 4] {
         [
@@ -393,5 +421,40 @@ impl SeparationDistance<Point> for Rect {
                 (GeoPosition::Interior, min_distance.powi(2))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Rect;
+
+    fn splits_by_quadrants(r: Rect, depth: u8) -> bool {
+        depth == 0
+            || r.try_quadrants()
+                .is_some_and(|qs| qs.iter().all(|q| splits_by_quadrants(*q, depth - 1)))
+    }
+
+    /// `can_split` dit exactement ce que ferait la descente par `quadrants`.
+    #[test]
+    fn can_split_suit_la_descente_par_quadrants() {
+        let (mut oui, mut non) = (0, 0);
+        for origin in [0.0_f32, 1.0, 1000.0] {
+            for k in 0..28 {
+                let side = 1e-6_f32 * 1.5_f32.powi(k);
+                let r = Rect { x_min: origin, y_min: origin, x_max: origin + side, y_max: origin + side };
+                if r.x_min < r.x_max {
+                    for depth in 0..=5 {
+                        let attendu = splits_by_quadrants(r, depth);
+                        assert_eq!(r.can_split(depth), attendu, "{r:?} profondeur {depth}");
+                        if attendu {
+                            oui += 1;
+                        } else {
+                            non += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(oui > 0 && non > 0);
     }
 }

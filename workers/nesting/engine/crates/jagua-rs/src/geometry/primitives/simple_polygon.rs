@@ -73,6 +73,17 @@ impl SPolygon {
         })
     }
 
+    /// Le rectangle `r` en polygone, sans paniquer sur un rectangle si mince
+    /// qu'il n'a plus de pôle (l'implémentation de `From<Rect>` y panique).
+    pub fn try_from_rect(r: &Rect) -> Result<Self> {
+        SPolygon::new(vec![
+            (r.x_min, r.y_min).into(),
+            (r.x_max, r.y_min).into(),
+            (r.x_max, r.y_max).into(),
+            (r.x_min, r.y_max).into(),
+        ])
+    }
+
     pub fn generate_surrogate(&mut self, config: SPSurrogateConfig) -> Result<()> {
         //regenerate the surrogate if it is not present or if the config has changed
         match &self.surrogate {
@@ -348,13 +359,6 @@ where
     T: Borrow<Rect>,
 {
     fn from(r: T) -> Self {
-        let r = r.borrow();
-        SPolygon::new(vec![
-            (r.x_min, r.y_min).into(),
-            (r.x_max, r.y_min).into(),
-            (r.x_max, r.y_max).into(),
-            (r.x_min, r.y_max).into(),
-        ])
-        .unwrap()
+        SPolygon::try_from_rect(r.borrow()).unwrap()
     }
 }
