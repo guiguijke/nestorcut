@@ -239,7 +239,7 @@ describe('useJobScroll, sur le vrai registre local', () => {
             const { serverJob } = mount(page, { onFailed })
             await play(serverJob, 'running', 'local', 'error')
             expect(page.calls).toEqual([])
-            expect(onFailed).not.toHaveBeenCalled()
+            expect(onFailed.mock.calls).toEqual([['srv']])
         })
 
         // Mesuré dans le navigateur sur le vrai worker : la pièce à la cote exacte
@@ -276,6 +276,20 @@ describe('useJobScroll, sur le vrai registre local', () => {
                 scroll.expectJob()
                 await play(serverJob, 'error')
                 expect(page.calls).toEqual([])
+            })
+
+            it('l’ancien job échoue après le clic : ce n’est pas lui qu’on attend, le nouveau reste suivi', async () => {
+                const page = fakePage({ y: 300 })
+                const onFailed = vi.fn()
+                const { serverJob, scroll } = mount(page, { onFailed })
+                await play(serverJob, 'local')
+                scroll.expectJob()
+                await play(serverJob, 'error')
+                expect(page.calls).toEqual([])
+                serverJob.value = srv('error', 'suivant')
+                await flush()
+                expect(names(page)).toEqual(['banner'])
+                expect(onFailed.mock.calls).toEqual([['srv'], ['suivant']])
             })
 
             it('Nest cliqué puis autre projet : son échec connu ne défile pas', async () => {
@@ -341,7 +355,7 @@ describe('useJobScroll, sur le vrai registre local', () => {
             expect(onFailed.mock.calls).toEqual([['a']])
         })
 
-        it('fin normale, annulation, échec déjà connu : aucun appel', async () => {
+        it('fin normale, annulation : aucun appel', async () => {
             const onFailed = vi.fn()
             const projectSlug = ref('p-fini')
             mount(fakePage(), { onFailed, projectSlug })
@@ -352,15 +366,36 @@ describe('useJobScroll, sur le vrai registre local', () => {
             start('coupe', 'p-coupe', 5)
             await flush()
             await finish('coupe', { ok: false, error: 'cancelled' })
-            projectSlug.value = 'p-connu'
+            await flush()
+            expect(onFailed).not.toHaveBeenCalled()
+        })
+
+        // Page remontée sur le même projet : `lastParams` a survécu, Nest resterait
+        // grisé sous un bandeau qui propose de réessayer.
+        it('retour sur un job serveur déjà échoué : appelé, sans défilement', async () => {
+            const onFailed = vi.fn()
+            const page = fakePage({ y: 300 })
+            mount(page, { onFailed, serverJob: ref({ slug: 'srv', phase: 'error' }) })
+            await flush()
+            expect(onFailed.mock.calls).toEqual([['srv']])
+            expect(page.calls).toEqual([])
+        })
+
+        it('retour sur un job local déjà échoué : appelé, sans défilement', async () => {
+            const onFailed = vi.fn()
+            const projectSlug = ref('p-connu')
+            const page = fakePage({ y: 300 })
+            mount(page, { onFailed, projectSlug })
             start('connu', 'p-connu', 5)
             await flush()
             projectSlug.value = 'p-ailleurs'
             await flush()
             await fail('connu')
+            expect(onFailed).not.toHaveBeenCalled()
             projectSlug.value = 'p-connu'
             await flush()
-            expect(onFailed).not.toHaveBeenCalled()
+            expect(onFailed.mock.calls).toEqual([['connu']])
+            expect(page.calls).toEqual([])
         })
     })
 

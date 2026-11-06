@@ -20,6 +20,9 @@
 //                        l'échec du job 2 amène le bandeau.
 //   retour_echoue        A échoue pendant qu'on regarde B, retour sur A : bandeau
 //                        affiché, aucun défilement (composant réutilisé, piège 47).
+//   retour_maison        A échoue pendant qu'on est sur /home, retour sur A (page
+//                        remontée, même projet) : bandeau affiché, aucun défilement,
+//                        Nest actif.
 //   retour_en_cours      A tourne, /home, retour sur A : pas de second défilement
 //                        live ; le worker meurt : le bandeau est amené.
 //   grand_ecran          1440x1500 : le bandeau est visible à l'arrivée de la vue
@@ -325,6 +328,23 @@ const SCENARIOS = {
         await waitBanner(page)
         const r = await finish(page, 'retour_echoue')
         check('retour_echoue : bandeau affiché, aucun défilement au retour', Boolean(r.banner) && r.scrolls.length === n0, show(r))
+        await ctx.close()
+    },
+    async retour_maison() {
+        const { ctx, page } = await openContext()
+        const pA = await newProject(page, [EXACT])
+        await delayPayload(ctx, 3000)
+        await clickNest(page)
+        await sleep(500)
+        await route(page, '/home')
+        await page.waitForURL('**/home')
+        await sleep(5500)
+        await route(page, pA)
+        await page.waitForURL('**' + pA)
+        await waitBanner(page)
+        const r = await finish(page, 'retour_maison')
+        check('retour_maison : bandeau affiché, aucun défilement vers lui', Boolean(r.banner) && bannerCalls(r) === 0, show(r))
+        check('retour_maison : Nest actif pour réessayer', (await nestDisabled(page)) === false)
         await ctx.close()
     },
     async retour_en_cours() {

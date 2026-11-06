@@ -41,7 +41,8 @@ import {
  * @param liveEl     ref de la section live
  * @param failureEl  ref du bandeau d'échec (null tant qu'il n'est pas rendu)
  * @param target     window côté navigateur, null au rendu serveur (ne fait rien)
- * @param onFailed   (slug) => appelé à la même transition, défilement ou non
+ * @param onFailed   (slug) => job en échec vu par cette page, transition ou retour
+ *                   dessus, défilement ou non
  * @param seen       slugs déjà amenés à l'écran (survit au démontage de la page)
  * @returns {{ expectJob: () => void }}
  */
@@ -107,9 +108,8 @@ export function useJobScroll({ projectSlug = () => null, progress, serverSlug, s
                 }
                 const justFailed = phase === 'error' && (runningSlug === slug || expectedNow)
                 runningSlug = null
-                if (!justFailed) return
-                onFailed?.(slug)
-                bringFailureIntoView(slug)
+                if (phase === 'error') onFailed?.(slug)
+                if (justFailed) bringFailureIntoView(slug)
             },
             { immediate: true },
         )
