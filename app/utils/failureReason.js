@@ -49,3 +49,14 @@ export function failureBannerText(job, t, mapLocalError) {
     if (key) return t(key)
     return information || t('result.failed')
 }
+
+/**
+ * Note de la carte pour une livraison dégradée (`degraded` du job, posé par
+ * local-quota) : les pièces sont posées, mais sans la fusion ni la finition de
+ * la dernière tôle. Le job reste un succès, l'utilisateur doit le savoir.
+ */
+const DEGRADED_NOTES = new Set(['merge_failed', 'merge_unavailable'])
+
+export function degradedNoteKey(code) {
+    return DEGRADED_NOTES.has(code) ? 'results.degraded' : null
+}

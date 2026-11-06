@@ -650,6 +650,7 @@ export default {
     // A3 (lot 4) : awaiting_local orphelin expiré côté serveur.
     'results.orphanExpired': 'Not picked up by this device — the nesting was canceled and refunded after 10 minutes. Launch it again and keep this tab open.',
     'results.orphanExpired.short': 'Not picked up',
+    'results.degraded': 'All parts are placed, but the final optimisation step stopped: this layout may use more material than usual.',
     'results.localInterrupted': 'The calculation was interrupted before finishing (browser tab closed, crash or lost connection). The nesting was refunded — launch it again and keep this tab open.',
     'results.all': 'All results',
     'results.empty': 'Your nested results will be here',

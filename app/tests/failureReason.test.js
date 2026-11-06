@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { failureBannerText, failureReasonKey } from '../utils/failureReason'
+import { degradedNoteKey, failureBannerText, failureReasonKey } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
 import de from '../utils/i18n/de'
@@ -80,5 +80,34 @@ describe('failureBannerText', () => {
         for (const information of [null, undefined, '', '   ']) {
             expect(failureBannerText({ information }, t)).toBe('t:result.failed')
         }
+    })
+})
+
+describe('degradedNoteKey', () => {
+    it('une livraison dégradée a une note traduite dans les 6 langues', () => {
+        for (const [name, dict] of Object.entries({ en, fr, de, es, it: it_, pt })) {
+            for (const code of ['merge_failed', 'merge_unavailable']) {
+                const key = degradedNoteKey(code)
+                expect(key, code).toBeTruthy()
+                expect(dict[key], `${name}:${key}`).toBeTruthy()
+            }
+        }
+    })
+
+    it('job normal ou code inconnu : aucune note', () => {
+        for (const code of [null, undefined, '', 'toString', 'autre']) {
+            expect(degradedNoteKey(code)).toBeNull()
+        }
+    })
+
+    // Verrou de couverture : tout code que local-quota pose sur le job doit se
+    // voir sur la carte.
+    it('chaque code accepté par local-quota a une note', () => {
+        const src = readFileSync(new URL('../../server/api/results/[slug]/local-quota.post.js', import.meta.url), 'utf8')
+        const block = src.match(/DEGRADED_CODES = new Set\(\[([\s\S]*?)\]\)/)
+        expect(block, 'liste DEGRADED_CODES introuvable').toBeTruthy()
+        const accepted = [...block[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+        expect(accepted.length).toBeGreaterThan(0)
+        expect(accepted.filter((c) => !degradedNoteKey(c))).toEqual([])
     })
 })

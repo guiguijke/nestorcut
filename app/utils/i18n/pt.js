@@ -562,6 +562,7 @@ export default {
     "results.otherDeviceHint": "Este nesting rodou no navegador de outro dispositivo. Seus arquivos nunca saíram daquele dispositivo — execute o nesting novamente aqui para obter o resultado.",
     "results.orphanExpired": "Não recebido por este dispositivo — o nesting foi cancelado e reembolsado após 10 minutos. Execute novamente e mantenha esta aba aberta.",
     "results.orphanExpired.short": "Não recebido",
+    "results.degraded": "Todas as peças estão colocadas, mas a última etapa de otimização parou: esta disposição pode consumir mais material do que o habitual.",
     "results.localInterrupted": "O cálculo foi interrompido antes de terminar (aba fechada, falha ou conexão perdida). O nesting foi reembolsado — execute novamente e mantenha esta aba aberta.",
     "results.all": "Todos os resultados",
     "results.empty": "Seus resultados de nesting aparecerão aqui",

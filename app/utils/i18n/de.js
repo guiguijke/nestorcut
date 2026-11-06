@@ -568,6 +568,7 @@ export default {
     "results.otherDeviceHint": "Dieses Nesting lief im Browser eines anderen Geräts. Seine Dateien haben dieses Gerät nie verlassen — führen Sie das Nesting hier erneut aus, um die Layouts zu erhalten.",
     "results.orphanExpired": "Von diesem Gerät nicht abgeholt — das Nesting wurde nach 10 Minuten abgebrochen und erstattet. Starten Sie es erneut und lassen Sie diesen Tab offen.",
     "results.orphanExpired.short": "Nicht abgeholt",
+    "results.degraded": "Alle Teile sind platziert, aber der letzte Optimierungsschritt wurde abgebrochen: Diese Anordnung kann mehr Material verbrauchen als üblich.",
     "results.localInterrupted": "Die Berechnung wurde vor dem Ende unterbrochen (Tab geschlossen, Absturz oder Verbindungsverlust). Das Nesting wurde erstattet — starten Sie es erneut und lassen Sie diesen Tab offen.",
     "results.all": "Alle Ergebnisse",
     "results.empty": "Ihre Nesting-Ergebnisse erscheinen hier",

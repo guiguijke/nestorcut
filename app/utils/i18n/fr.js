@@ -629,6 +629,7 @@ export default {
     // A3 (lot 4) : awaiting_local orphelin expiré côté serveur.
     'results.orphanExpired': "Non pris en charge par cet appareil — l'imbrication a été annulée et remboursée après 10 minutes. Relancez-la en gardant cet onglet ouvert.",
     'results.orphanExpired.short': 'Non pris en charge',
+    'results.degraded': "Toutes les pièces sont posées, mais la dernière étape d'optimisation s'est arrêtée : cette disposition peut consommer plus de matière que d'habitude.",
     'results.localInterrupted': "Le calcul a été interrompu avant la fin (onglet fermé, plantage ou connexion perdue). L'imbrication a été remboursée — relancez-la en gardant cet onglet ouvert.",
     'results.all': 'Tous les résultats',
     'results.empty': "Vos résultats d'imbrication apparaîtront ici",
