@@ -4,6 +4,62 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.12
+
+*FR*
+
+- Petits travaux : quelques petites pièces sur une grande tôle (un rectangle de 40 × 100 mm avec les réglages d'usine, par exemple) pouvaient arrêter le calcul. Ils aboutissent maintenant.
+- Pièces qui ne tiennent pas : une pièce qui ne tient sur aucune tôle, même juste à la cote de la tôle, est refusée en la nommant, au lieu d'un arrêt inexpliqué, même quand les autres pièces se placent.
+- Calcul en échec : quand un calcul échoue, ou que le serveur refuse de le lancer (un autre calcul en cours, par exemple), le message apparaît maintenant à l'écran au lieu de rester plus bas dans la page, et vous pouvez relancer tout de suite.
+- Calcul sur l'appareil : la vue en direct est amenée à l'écran dès le début du calcul, comme c'était déjà le cas sur le serveur.
+- Dernière étape d'optimisation : si elle s'arrête, vos pièces sont quand même livrées, et une note sur la carte prévient que la disposition peut consommer plus de matière que d'habitude.
+- Page de connexion par e-mail : elle s'ouvre maintenant sur la connexion, et non plus sur la création de compte.
+
+*EN*
+
+- Small jobs: a few small parts on a large sheet (a 40 × 100 mm rectangle with the factory settings, for example) could stop the nesting. They now complete.
+- Parts that do not fit: a part that fits on no sheet, even one right at the sheet's exact size, is refused by name instead of an unexplained stop, even when the other parts can be placed.
+- Failed nesting: when a nesting fails, or the server refuses to start it (another nesting already running, for example), the message now appears on screen instead of staying further down the page, and you can start again right away.
+- On-device nesting: the live view is brought on screen as soon as the nesting starts, as it already was on the server.
+- Final optimisation step: if it stops, your parts are still delivered, and a note on the card warns that the layout may use more material than usual.
+- Email login page: it now opens on login rather than on account creation.
+
+*PT*
+
+- Trabalhos pequenos: algumas peças pequenas em uma chapa grande (um retângulo de 40 × 100 mm com as configurações de fábrica, por exemplo) podiam interromper o cálculo. Agora eles são concluídos.
+- Peças que não cabem: uma peça que não cabe em nenhuma chapa, mesmo na medida exata da chapa, é recusada pelo nome, em vez de uma parada sem explicação, mesmo quando as outras peças podem ser colocadas.
+- Cálculo com falha: quando um cálculo falha, ou o servidor se recusa a iniciá-lo (outro cálculo em andamento, por exemplo), a mensagem agora aparece na tela em vez de ficar mais abaixo na página, e você pode reiniciar em seguida.
+- Cálculo no dispositivo: a visualização ao vivo é trazida para a tela assim que o cálculo começa, como já acontecia no servidor.
+- Última etapa de otimização: se ela parar, suas peças continuam sendo entregues, e uma nota no cartão avisa que o layout pode usar mais material do que o normal.
+- Página de login por e-mail: agora ela abre no login, e não mais na criação de conta.
+
+*IT*
+
+- Lavori piccoli: pochi pezzi piccoli su una lamiera grande (per esempio un rettangolo di 40 × 100 mm con le impostazioni di fabbrica) potevano fermare il calcolo. Ora vanno a buon fine.
+- Pezzi che non stanno: un pezzo che non sta su nessuna lamiera, anche se è proprio alla misura esatta della lamiera, viene rifiutato indicandone il nome, invece di un arresto senza spiegazione, anche quando gli altri pezzi si possono posizionare.
+- Calcolo non riuscito: quando un calcolo non riesce, o il server rifiuta di avviarlo (per esempio perché un altro calcolo è in corso), il messaggio ora compare sullo schermo invece di restare più in basso nella pagina, e puoi rilanciarlo subito.
+- Calcolo sul dispositivo: la vista in diretta viene portata sullo schermo appena il calcolo parte, come già avveniva sul server.
+- Ultima fase di ottimizzazione: se si ferma, i tuoi pezzi vengono comunque consegnati, e una nota sulla scheda avvisa che la disposizione può usare più materiale del solito.
+- Pagina di accesso via email: ora si apre sull'accesso e non più sulla creazione dell'account.
+
+*DE*
+
+- Kleine Aufträge: Einige kleine Teile auf einem großen Blech (zum Beispiel ein Rechteck von 40 × 100 mm mit den Werkseinstellungen) konnten die Berechnung stoppen. Sie werden jetzt abgeschlossen.
+- Teile, die nicht passen: Ein Teil, das auf kein Blech passt, auch genau im Blechmaß, wird mit seinem Namen abgelehnt statt mit einem unerklärten Abbruch, auch wenn sich die anderen Teile platzieren lassen.
+- Fehlgeschlagene Berechnung: Wenn eine Berechnung fehlschlägt oder der Server sie nicht startet (zum Beispiel weil bereits eine andere läuft), erscheint die Meldung jetzt auf dem Bildschirm, statt weiter unten auf der Seite zu bleiben, und Sie können sofort neu starten.
+- Berechnung auf dem Gerät: Die Live-Ansicht wird gleich beim Start der Berechnung auf den Bildschirm geholt, wie schon auf dem Server.
+- Letzter Optimierungsschritt: Wenn er abbricht, werden Ihre Teile trotzdem geliefert, und ein Hinweis auf der Karte warnt, dass die Anordnung mehr Material als üblich verbrauchen kann.
+- Seite für die E-Mail-Anmeldung: Sie öffnet sich jetzt bei der Anmeldung statt bei der Kontoerstellung.
+
+*ES*
+
+- Trabajos pequeños: unas pocas piezas pequeñas en una chapa grande (un rectángulo de 40 × 100 mm con los ajustes de fábrica, por ejemplo) podían detener el cálculo. Ahora se completan.
+- Piezas que no caben: una pieza que no cabe en ninguna chapa, incluso justo a la medida de la chapa, se rechaza nombrándola, en lugar de una parada sin explicación, aunque las demás piezas se puedan colocar.
+- Cálculo fallido: cuando un cálculo falla, o el servidor se niega a iniciarlo (por ejemplo, porque hay otro en curso), el mensaje aparece ahora en pantalla en lugar de quedarse más abajo en la página, y puedes relanzarlo enseguida.
+- Cálculo en el dispositivo: la vista en directo se trae a la pantalla en cuanto empieza el cálculo, como ya ocurría en el servidor.
+- Última etapa de optimización: si se detiene, tus piezas se entregan igualmente, y una nota en la tarjeta avisa de que la disposición puede usar más material de lo habitual.
+- Página de acceso por correo electrónico: ahora se abre en el acceso y ya no en la creación de cuenta.
+
 ## V0.9.11
 
 *FR*
