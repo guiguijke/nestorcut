@@ -1,3 +1,10 @@
+/** Phases d'un job du registre local qui n'est pas encore terminé. */
+const ACTIVE_LOCAL_PHASES = new Set(['queued', 'running', 'finalizing'])
+
+export function isActiveLocalPhase(phase) {
+    return ACTIVE_LOCAL_PHASES.has(phase)
+}
+
 /**
  * Bind a results-list item to the project page currently on screen.
  * SSE reconnects on navigation (UserResults lives in the layout) so the

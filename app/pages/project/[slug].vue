@@ -189,7 +189,7 @@ import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
-import { createLiveScrollGate, isWhollyInView, liveScrollSlug, scrolledJobSlugs, watchUserScroll } from "~/utils/liveScroll";
+import { useJobScroll } from "~/composables/useJobScroll";
 import {
     DEMO_NESTING_LIMIT,
     DEMO_PROJECT_SLUG,
@@ -304,9 +304,6 @@ const localReveal = ref(null);
 // vue affiche AUSSI les stats en mode local (progress/compute étaient
 // null → compteur et ×N cœurs jamais visibles).
 const localLiveFrame = ref(null);
-// Job du registre local dont la page suit l'avancement (la frame ci-dessus peut
-// encore être celle du job précédent).
-const localJobSlug = ref(null);
 const localEvals = ref(null);
 // J-093 : taille effective du pool de walks (injectée dans les frames live).
 const localWalks = ref(1);
@@ -329,47 +326,17 @@ const localLive = computed(() => {
     };
 });
 // The live section sits at the TOP of the page (above the files grid, which
-// is 8 screens tall on the demo): when a new job starts streaming, bring it
-// into view once so the animation is never missed below the fold.
-// Les deux sources comptent : le flux serveur (liveResult) et le calcul
-// navigateur (localLiveFrame, alimenté par le registre local) — ce dernier
-// n'arrivait jamais ici. Une fois PAR JOB (la garde mémorise les slugs), donc
-// ni à chaque frame ni au retour sur un projet.
+// is 8 screens tall on the demo) and the failure banner sits right under it:
+// useJobScroll brings each of them into view, once per job.
 const liveSection = ref(null);
-const liveScrollGate = createLiveScrollGate(import.meta.client ? scrolledJobSlugs : undefined);
-watch(
-    () => liveScrollSlug({
-        serverSlug: unref(liveResult)?.slug,
-        localRunning: unref(localComputeRunning),
-        localFrameSlug: unref(localLiveFrame)?.slug,
-        localJobSlug: unref(localJobSlug),
-    }),
-    async (slug) => {
-        if (!liveScrollGate.claim(slug)) return;
-        await nextTick();
-        const calm = typeof window !== 'undefined'
-            && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-        liveSection.value?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
-    }
-);
-
-// Échec d'un job de cette page : le bandeau d'erreur (celui qui nomme la
-// pièce) est SOUS l'atelier, donc hors écran quand la page est restée défilée
-// (clic sur « Nest » en bas d'écran, ou défilement vers la vue live). On
-// l'amène à l'écran UNE fois par job — l'échec n'est vu qu'une fois passant de
-// « en cours » à « erreur » dans cette instance de page, donc jamais au retour
-// sur un job déjà échoué — sauf si l'utilisateur a défilé lui-même depuis le
-// lancement (il lit autre chose pendant un long calcul).
 const localErrorEl = ref(null);
-const userScroll = import.meta.client ? watchUserScroll(window) : null;
-onBeforeUnmount(() => userScroll?.stop());
-const scrollToFailure = async () => {
-    await nextTick();
-    const el = localErrorEl.value;
-    if (!el || isWhollyInView(el.getBoundingClientRect(), window.innerHeight)) return;
-    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' });
-};
+useJobScroll({
+    progress: () => progressFor(unref(pageSlug)),
+    serverSlug: () => unref(liveResult)?.slug,
+    liveEl: liveSection,
+    failureEl: localErrorEl,
+    target: import.meta.client ? window : null,
+});
 
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
 // les messages d'erreur locaux prennent leurs variantes dédiées.
@@ -466,18 +433,14 @@ watch(
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
                 localModeCtl.startTimer();
-                userScroll?.reset();
             }
         } else {
-            const justFailed = localComputeRunning.value && Boolean(localComputeError.value);
             localModeCtl.stopTimer();
             localComputeRunning.value = false;
-            if (justFailed && userScroll && !userScroll.moved()) scrollToFailure();
         }
         localWalks.value = p.walks || 1;
         localEvals.value = p.evals ?? null;
         localZonePhase.value = p.zone ?? null;
-        localJobSlug.value = p.slug ?? null;
         localLiveFrame.value = p.frame
             ? {
                 slug: p.slug,
@@ -815,7 +778,6 @@ watch(pageSlug, async (s, prev) => {
         localEvals.value = null
         localZonePhase.value = null
         localLiveFrame.value = null
-        localJobSlug.value = null
         localReveal.value = null
     }
     await getProject(

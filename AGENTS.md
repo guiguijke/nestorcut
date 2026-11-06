@@ -1004,6 +1004,14 @@ sortie : 0 OK, 1 seuil dépassé ou three dans un chunk préchargé, 2 fichier
 préchargé absent du disque. Il n'appelle pas `process.exit` (assertion libuv
 sous Windows quand `fetch` garde une connexion ouverte).
 
+**`scripts/qa-e2e-failure-scroll.mjs` (défilement de la page projet quand un job
+local échoue)** : harnais MANUEL, sans CI. Le comportement est verrouillé en vitest
+(`app/tests/useJobScroll.test.js`, vrai composable sur le vrai registre) ; ce harnais
+est le seul à exécuter le fil entre la page et `useJobScroll`, donc à relancer quand
+ce fil ou le gabarit de l'atelier change. Build servi plus base Mongo JETABLE
+(`QA_BASE_URL`, `QA_MONGO_URI` obligatoires, serveur local exigé, `nest2d` refusé).
+Codes de sortie : 0 OK, 1 scénario rouge.
+
 Benchmarks ESICUP (lents) : `pytest benchmarks/test_benchmarks.py -m slow`.
 Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --nocapture`.
 

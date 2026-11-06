@@ -5,22 +5,22 @@
  * sous la ligne de flottaison (PC comme téléphone).
  *
  * Deux sources de frames : le flux serveur (`liveResult`) et le calcul
- * navigateur (`localLive`, alimenté par le registre local). Les deux portent
- * le slug du job ; la page ne reçoit que les jobs de SON projet (pickers et
- * `progressFor` filtrent par projet, piège 47), donc un job d'un autre projet
- * ne peut pas déclencher le défilement.
+ * navigateur (le job du registre local). Les deux portent le slug du job ; la
+ * page ne reçoit que les jobs de SON projet (pickers et `progressFor` filtrent
+ * par projet, piège 47), donc un job d'un autre projet ne peut pas déclencher
+ * le défilement. Le câblage est dans `composables/useJobScroll.js`.
  */
+import { isActiveLocalPhase } from './liveJob'
 
 /**
  * Slug du job dont la vue live est à l'écran, ou null.
  * Le serveur passe en premier ; le calcul navigateur compte tant qu'il tourne
- * ET qu'il a produit une frame DE CE JOB : la page garde la dernière frame du
- * job précédent jusqu'à la première frame du suivant, donc une frame d'un
- * autre job (`localJobSlug`) ne compte pas.
+ * ET que CE job a produit une frame : `job.frame` est la sienne, jamais celle
+ * du job précédent.
  */
-export function liveScrollSlug({ serverSlug, localRunning, localFrameSlug, localJobSlug }) {
+export function liveScrollSlug({ serverSlug, job }) {
     if (serverSlug) return serverSlug
-    if (localRunning && localFrameSlug && localFrameSlug === localJobSlug) return localFrameSlug
+    if (job?.frame && isActiveLocalPhase(job.phase)) return job.slug
     return null
 }
 
