@@ -2,16 +2,19 @@
 //! (revue du lot A : mutation de chaque correctif, cinq survivants).
 //!
 //! Chaque test lance le moteur COMPLET sur l'entrée qui atteint le code retiré,
-//! et exige le résultat de HEAD, pas seulement l'absence de panique :
+//! et exige le résultat de HEAD, pas seulement l'absence de panique : le nombre
+//! de pièces posées pour une livraison, la largeur de bande en SPP, la cause pour
+//! un refus.
 //!
 //! - `column_fill.rs` `try_change_strip_width` (rebalance « balanced ») : une
 //!   bande de 1e-5 mm n'a pas de conteneur à la largeur de tôle, le passage est
-//!   sauté ; retiré, `change_strip_width` panique (`problem.rs:35`).
+//!   sauté, les 4 pièces sont livrées ; retiré, `change_strip_width` panique
+//!   (`problem.rs:35`).
 //! - `container.rs` `can_split` : une tôle BPP de 5e-4 mm posée à (1000, 1000)
 //!   n'a plus de quadtree constructible, le moteur la REFUSE ; retiré, il panique
 //!   (`rect.rs:145`).
 //! - `pole.rs` `try_quadrants` : tôle BPP de 0,002 mm au même endroit, le moteur
-//!   LIVRE ; retiré, il panique (`rect.rs:146`).
+//!   LIVRE sa pièce ; retiré, il panique (`rect.rs:146`).
 //! - `import.rs` `first_buildable_strip` : sans espacement, la largeur de bande
 //!   de départ est cherchée par doublement à partir d'un plancher ; un seul essai
 //!   (2000 / 1e-3 mm) ou pas de plancher (6000 / 1e-5 mm) REFUSE le job que HEAD
@@ -25,12 +28,33 @@ use nest_engine::run_json_with_sink;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
-/// Issue d'un job : livré (largeur de bande du premier choix, si SPP), refusé
-/// proprement (message), ou panique.
+/// Issue d'un job : livré (pièces posées et largeur de bande du premier choix, si
+/// SPP), refusé proprement (message), ou panique.
 #[derive(Debug)]
 enum Issue {
-    Livre { largeur: Option<f64> },
+    Livre { posees: usize, largeur: Option<f64> },
     Refuse(String),
+}
+
+/// Pièces posées par une alternative : `layout` en SPP, `layouts` en BPP.
+fn pieces_posees(alt: &serde_json::Value) -> usize {
+    let dans = |layout: &serde_json::Value| layout["placed_items"].as_array().map_or(0, Vec::len);
+    let solution = &alt["solution"];
+    match solution["layouts"].as_array() {
+        Some(layouts) => layouts.iter().map(dans).sum(),
+        None => dans(&solution["layout"]),
+    }
+}
+
+/// Exige une livraison de `attendu` pièces et rend la largeur de bande.
+fn exige_livre(issue: Issue, attendu: usize) -> Option<f64> {
+    match issue {
+        Issue::Livre { posees, largeur } => {
+            assert_eq!(posees, attendu, "pièces posées");
+            largeur
+        }
+        autre => panic!("attendu : livré, obtenu {autre:?}"),
+    }
 }
 
 fn rect(w: f64, h: f64, x: f64, y: f64) -> serde_json::Value {
@@ -90,7 +114,11 @@ fn run(problem: &str, inst: &str, cfg: &str) -> Issue {
         Ok(Err(e)) => Issue::Refuse(format!("{e:#}")),
         Ok(Ok(out)) => {
             assert!(!out.alternatives.is_empty(), "livré sans aucune alternative");
-            Issue::Livre { largeur: out.alternatives[0].get("strip_width").and_then(|w| w.as_f64()) }
+            let alt = &out.alternatives[0];
+            Issue::Livre {
+                posees: pieces_posees(alt),
+                largeur: alt.get("strip_width").and_then(|w| w.as_f64()),
+            }
         }
     }
 }
@@ -102,14 +130,18 @@ fn bande_de_1e_5_balanced_une_phase_aboutit() {
         &spp(1e-5, 2e-6, 4),
         &config(0.0, "balanced", false, Some(1000.0)),
     );
-    assert!(matches!(issue, Issue::Livre { .. }), "attendu : livré, obtenu {issue:?}");
+    let w = exige_livre(issue, 4).expect("largeur de bande");
+    assert!((w - 2.00003e-6).abs() < 1e-8, "largeur {w}");
 }
 
 #[test]
 fn tole_bpp_de_5e_4_loin_de_l_origine_est_refusee_proprement() {
     let issue = run("bpp", &bpp(5e-4, 1000.0), &config(0.0, "left", false, None));
     match issue {
-        Issue::Refuse(msg) => assert!(!msg.is_empty(), "refus sans message"),
+        Issue::Refuse(msg) => assert!(
+            msg.contains("container too small for a quadtree"),
+            "refus pour une autre cause : {msg}"
+        ),
         autre => panic!("attendu : refus propre, obtenu {autre:?}"),
     }
 }
@@ -117,7 +149,7 @@ fn tole_bpp_de_5e_4_loin_de_l_origine_est_refusee_proprement() {
 #[test]
 fn tole_bpp_de_0_002_loin_de_l_origine_aboutit() {
     let issue = run("bpp", &bpp(0.002, 1000.0), &config(0.0, "left", false, None));
-    assert!(matches!(issue, Issue::Livre { .. }), "attendu : livré, obtenu {issue:?}");
+    exige_livre(issue, 1);
 }
 
 /// H = 2000, deux pièces de 1e-3 mm : la largeur de départ n'existe qu'à partir
@@ -125,12 +157,8 @@ fn tole_bpp_de_0_002_loin_de_l_origine_aboutit() {
 #[test]
 fn sans_espacement_h_2000_pieces_de_1e_3_est_livre() {
     let issue = run("spp", &spp(2000.0, 1e-3, 2), &config(0.0, "left", false, Some(1000.0)));
-    match issue {
-        Issue::Livre { largeur: Some(w) } => {
-            assert!((w - 0.00100001).abs() < 1e-7, "largeur {w}");
-        }
-        autre => panic!("attendu : livré à 0.00100001, obtenu {autre:?}"),
-    }
+    let w = exige_livre(issue, 2).expect("largeur de bande");
+    assert!((w - 0.00100001).abs() < 1e-7, "largeur {w}");
 }
 
 /// H = 6000, deux pièces de 1e-5 mm : sous le plancher de doublement, la
@@ -138,10 +166,6 @@ fn sans_espacement_h_2000_pieces_de_1e_3_est_livre() {
 #[test]
 fn sans_espacement_h_6000_pieces_de_1e_5_est_livre() {
     let issue = run("spp", &spp(6000.0, 1e-5, 2), &config(0.0, "left", false, Some(1000.0)));
-    match issue {
-        Issue::Livre { largeur: Some(w) } => {
-            assert!((w - 0.000122).abs() < 1e-6, "largeur {w}");
-        }
-        autre => panic!("attendu : livré à 0.000122, obtenu {autre:?}"),
-    }
+    let w = exige_livre(issue, 2).expect("largeur de bande");
+    assert!((w - 0.000122).abs() < 1e-6, "largeur {w}");
 }
