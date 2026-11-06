@@ -20,6 +20,8 @@ import pt from '../utils/i18n/pt'
 const DICTS = { en, fr, de, es, it: it_, pt }
 // « job / tâche / trabalho… plus petit » dans les 6 langues.
 const SMALLER = /smaller|plus petit|kleiner|más pequeño|più piccolo|\bmenor\b/i
+const RETRY = { en: /try again/i, fr: /réessayer/i, de: /erneut/i, es: /reintentarlo/i, it: /riprovare/i, pt: /tentar novamente/i }
+const SUPPORT = { en: /contact support/i, fr: /contactez le support/i, de: /an den Support/i, es: /contacta con soporte/i, it: /contatta il supporto/i, pt: /fale com o suporte/i }
 const UNKNOWN_CAUSE_KEYS = ['localMode.crashLocal', 'localMode.crashError', 'localMode.allInvalidLocal']
 
 describe('messages d’arrêt à cause inconnue', () => {
@@ -37,8 +39,10 @@ describe('messages d’arrêt à cause inconnue', () => {
         for (const [name, dict] of Object.entries(DICTS)) {
             for (const key of ['localMode.crashLocal', 'localMode.crashError']) {
                 expect(dict[key], `${name}:${key}`).toMatch(refund[name])
-                // Une action concrète, pas seulement un constat.
-                expect(dict[key].length, `${name}:${key}`).toBeGreaterThan(120)
+                // Une action concrète, pas seulement un constat : réessayer ET
+                // joindre le support, dans la langue du dictionnaire.
+                expect(dict[key], `${name}:${key} (réessayer)`).toMatch(RETRY[name])
+                expect(dict[key], `${name}:${key} (support)`).toMatch(SUPPORT[name])
             }
         }
     })

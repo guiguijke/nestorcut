@@ -342,6 +342,21 @@ describe('local-payload / local-result / local-fail routes (flag-gated)', () => 
         expect(j2.errorCode).toBe('engine_error')
     })
 
+    it('local-fail: item_unplaceable et merge_failed sont des codes connus (conservés tels quels, pas engine_error)', async () => {
+        state.config = { public: { localComputeEnabled: true } }
+        for (const [i, code] of ['item_unplaceable', 'merge_failed', 'merge_parse'].entries()) {
+            const slug = `job-code-${i}`
+            const j = localJob({ slug })
+            state.db = fakeDb({ nesting_jobs: [j], users: [freeUser({ freeNestingUsed: 1 })] })
+            const res = await failHandler(ev('u1', slug, { error: code }))
+            expect(res.ok).toBe(true)
+            expect(j.status).toBe('error')
+            expect(j.information, code).toBe(code)
+            expect(j.errorCode, code).toBe(code)
+            expect(j.error, code).toBe(code)
+        }
+    })
+
     it('local-fail: job already done -> 409, no refund, status stays done', async () => {
         state.config = { public: { localComputeEnabled: true } }
         const userDoc = freeUser({ freeNestingUsed: 3 })
