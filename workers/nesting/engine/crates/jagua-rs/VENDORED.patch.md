@@ -69,8 +69,9 @@
    H = 2000, +1e-4 pour H = 6000) : aucun seuil en mm ne la décrit.
    - `src/probs/spp/entities/strip.rs` : `Strip::try_container` construit par le
      chemin faillible. Pur : ni tirage, ni écriture dans `FALLBACK_ITEMS` (le
-     repli du point 3 ne sert qu'au gonflement). `From<Strip>` reste, réservé
-     aux largeurs déjà construites.
+     repli du point 3 ne sert qu'au gonflement). `From<Strip>` reste, pour les
+     largeurs dont le conteneur a déjà été construit : ce n'est pas vrai de
+     `import_solution` (ci-dessous, « Panique restante »).
    - `src/probs/spp/io/import.rs` (+ réexport dans `src/probs/spp/io/mod.rs`) :
      la largeur reste EXACTEMENT `total / H` si elle dépasse la séparation et que
      son conteneur se construit. Sinon `séparation + terme`, le terme partant de
@@ -97,6 +98,18 @@
    fixture `j7a_limite` pour la fenêtre elle-même, natif = wasm ; tests
    `nest-engine/tests/small_job_default_path.rs` et `strip_container_window.rs`).
    Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
+   **Panique restante, connue, non corrigée** : `import_solution` (`import.rs`)
+   fait `change_strip_width(ext_solution.strip_width)`, c'est-à-dire
+   `try_change_strip_width(..).unwrap()`. `nest-engine/src/spp.rs::map_back_solution`
+   l'appelle pour les directions left et balanced avec un couloir jamais construit
+   à la hauteur d'origine (le moteur a travaillé transposé) : sur une tôle absurde
+   le conteneur n'existe pas, `problem.rs:35` panique. Mesuré sans espacement, une pièce
+   carrée qui tient dans la tôle : livre à W = 2 pour H = 6e7, panique pour H = 7e7 ; livre à W = 0,2 pour
+   H = 8e6, panique pour H = 1e7 ; livre à W = 20 pour H = 1e9, panique pour
+   H = 2e9 ; soit H / (W - espacement) de 3e7 livré à 1e8 en panique, sans seuil
+   net. Aucune panique mesurée en direction bottom ni, avec espacement 2, sur le
+   chemin BPP (refus propre). À corriger dans `import_solution` (version
+   faillible, comme `try_change_strip_width`), pas par une borne en mm.
 
 6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
    voisins) — pièce À LA COTE EXACTE, lot A :

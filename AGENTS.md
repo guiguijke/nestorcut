@@ -101,8 +101,28 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
 2b. **Une largeur de bande n'existe que si son conteneur se construit** : le
    conteneur est DEFLATÉ de space/2, et juste au-dessus de `space` il n'a plus
    de pôle sur une fenêtre qui grandit avec la hauteur, donc jamais de seuil :
-   `Strip::try_container` décide, et `From<Strip>` ne sert qu'aux largeurs déjà
-   construites (`panic = "abort"`, VENDORED.patch.md point 5).
+   `Strip::try_container` décide (`panic = "abort"`, VENDORED.patch.md point 5).
+   `From<Strip>` et `change_strip_width` (qui fait `try_change_strip_width(..)
+   .unwrap()`) ne valent que pour une largeur dont le conteneur a DÉJÀ été
+   construit. **Un chemin ne tient pas cette promesse, panique restante, connue et
+   non corrigée** : `nest-engine/src/spp.rs::map_back_solution` (retour de repère
+   des directions left et balanced, le moteur ayant travaillé transposé) appelle
+   `import_solution` (jagua-rs `import.rs`), qui fait `change_strip_width(corridor)`
+   avec un couloir jamais construit à la hauteur d'origine. Sans conteneur :
+   `problem.rs:35` (« no pole found »), abort. Elle ne touche que des tôles
+   absurdes. Mesures (natif, sans espacement, une pièce carrée qui tient dans la tôle, réglages du banc), avec
+   le rapport H / (W - espacement) : W = 2, H = 6e7 livre (3e7), H = 7e7 panique
+   (3,5e7) ; W = 0,2, H = 8e6 livre (4e7), H = 1e7 panique (5e7) ; W = 20,
+   H = 1e9 livre (5e7), H = 2e9 panique (1e8) ; W = 2, H = 1e8 panique (5e7). Le
+   rapport ne fait pas un seuil : il ne dépend pas que de lui, et aucune valeur n'est
+   à coder. La direction bottom ne transpose pas : aucune panique mesurée (W = 2,
+   H jusqu'à 1e9). Avec espacement 2 (W = 10) le job passe par le chemin BPP : refus
+   propre « no pole found » à H = 1e9, pas de panique. Le formulaire ne bloque pas
+   ces tôles (`isValidNumber`, `files.js` : chiffres seulement ; le serveur : > 0 et
+   fini) : 2 x 1e8 mm part au calcul navigateur, qui lance plusieurs walks de graines
+   différentes, et le job est livré tant qu'un walk survit (`checkAllSettled`,
+   `localPool.js`) ; si tous meurent, le message est `localMode.crashError`, avec
+   remboursement.
 2c. **`geo_buffer` s'effondre sur un canal plus étroit que le gonflement.**
    L'inflation d'import (`space/2`) décale les deux bords d'un canal étroit
    l'un à travers l'autre : le contour rendu se recoupe, `SPolygon::new` le
