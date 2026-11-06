@@ -1,0 +1,20 @@
+{
+ "time_budget_sec": 3600,
+ "prng_seed": 7,
+ "n_alternatives": 1,
+ "poly_simpl_tolerance": 0.001,
+ "min_item_separation": 2,
+ "narrow_concavity_cutoff": [
+  0.01,
+  0.01
+ ],
+ "live_events": false,
+ "n_workers": 1,
+ "separator_workers": 1,
+ "max_strip_width": 1000,
+ "biases": [
+  "left"
+ ],
+ "explore_max_conseq_failed_attempts": 2,
+ "compress_failure_decay": 0.5
+}

@@ -93,7 +93,8 @@
      `can_split`, un conteneur que le quadtree ne pourrait pas couper
      `quadtree_depth` fois est refusé au lieu de paniquer dans `Rect::quadrants`.
    Bit-identique sur tout job dont le conteneur existait : mêmes flottants, seuls
-   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`, tests
+   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`,
+   fixture `j7a_limite` pour la fenêtre elle-même, natif = wasm ; tests
    `nest-engine/tests/small_job_default_path.rs` et `strip_container_window.rs`).
    Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
 

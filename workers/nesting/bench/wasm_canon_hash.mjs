@@ -2,8 +2,9 @@
 // SHA-256 of the alternatives (cross-target determinism lock).
 //   node workers/nesting/bench/wasm_canon_hash.mjs [fixture]
 // Fixture par défaut : b_demo. Les autres : e0_volute (SPP, repli du
-// gonflement robuste du lot E0) et j7a_defaut (chemin par défaut d'un petit
-// job, par `merge_alternatives` — lot A).
+// gonflement robuste du lot E0), j7a_defaut (chemin par défaut d'un petit job,
+// par `merge_alternatives` — lot A) et j7a_limite (job à la limite de la bascule
+// J7-a, largeur initiale dans la fenêtre sans conteneur).
 import { existsSync, readFileSync } from 'node:fs';
 import init, { run_nesting, merge_alternatives } from '../../../public/engine/nest_wasm.js';
 
