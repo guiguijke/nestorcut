@@ -53,7 +53,7 @@ fn ensure_strip_height_above_separation(strip_height: f32, separation: f32) -> R
 /// job dont la bande n'existe pas.
 const STRIP_PROBE_MAX: usize = 32;
 
-/// Plus petite largeur `séparation + terme` dont le conteneur se construit, le
+/// Première largeur `séparation + terme` dont le conteneur se construit, le
 /// terme partant de `total / (H - séparation)` et doublant, avec un plancher à
 /// quelques ulp de la plus grande cote : la fenêtre sans conteneur grandit avec
 /// la hauteur, seule la construction dit où elle s'arrête. `None` si la hauteur
