@@ -33,6 +33,9 @@
 //                        le bandeau reste et rien ne défile.
 //   serveur_echec_direct le job apparaît directement en erreur, avant la fin de la
 //                        requête Nest (échec entre deux ticks du flux) : même résultat.
+//   fusion_morte         les walks aboutissent, les workers meurent à la fusion : le
+//                        job est livré sans bandeau d'échec, et la carte le dit, après
+//                        rechargement aussi.
 //
 // Jobs serveur : le fil de la page se vérifie sans worker, le harnais pose le document
 // du job dans la base et le vrai flux SSE fait le reste. Le vrai worker Python exige un
@@ -157,6 +160,14 @@ function instrument() {
         constructor(url, opts) {
             super(url, opts)
             if (String(url).includes('engine.worker')) engines.push(this)
+        }
+
+        postMessage(data, ...rest) {
+            if (window.__mergeDies && data?.op === 'merge') {
+                setTimeout(() => this.onerror?.({ message: 'qa_crash' }), 50)
+                return undefined
+            }
+            return super.postMessage(data, ...rest)
         }
     }
     // Le pool relance les walks en attente : on insiste jusqu'à ce que tous soient morts.
@@ -424,6 +435,25 @@ const SCENARIOS = {
         check('serveur_echec_direct : bandeau entier à l’écran', r.banner?.whole === true, show(r))
         check('serveur_echec_direct : un seul défilement vers le bandeau', bannerCalls(r) === 1, show(r.scrolls))
         check('serveur_echec_direct : Nest actif, y compris après la fin de la requête', (await nestDisabled(page)) === false)
+        await ctx.close()
+    },
+    async fusion_morte() {
+        const { ctx, page } = await openContext()
+        const project = await newProject(page, [SMALL])
+        await setCount(page, '2')
+        await page.evaluate(() => { window.__mergeDies = true })
+        await clickNest(page)
+        const NOTE = '[data-testid="result-degraded"]'
+        await page.waitForSelector(NOTE, { timeout: 90000 })
+        const job = await db.collection('nesting_jobs').findOne({ projectSlug: project.split('/').pop() })
+        check('fusion_morte : job livré, marqué dégradé', job?.status === 'done' && job?.degraded === 'merge_unavailable', show({ status: job?.status, degraded: job?.degraded }))
+        check('fusion_morte : toutes les pièces posées', job?.placed === 2 && job?.requested === 2, show({ placed: job?.placed, requested: job?.requested }))
+        check('fusion_morte : aucun bandeau d’échec', !(await probe(page)).banner)
+        await page.screenshot({ path: path.join(OUT, 'fusion_morte.png') })
+        await page.reload({ waitUntil: 'load' })
+        await page.waitForSelector(NOTE, { timeout: 30000 })
+        check('fusion_morte : au rechargement, la carte le dit toujours', true)
+        check('fusion_morte : au rechargement, aucun bandeau d’échec', !(await probe(page)).banner)
         await ctx.close()
     },
 }

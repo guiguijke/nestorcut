@@ -261,6 +261,18 @@ describe("files.js — le refus de capacité ne suit pas l'utilisateur sur un au
         expect(store.getters.nestBusy).toBe(false)
     })
 
+    it('un échec pendant la requête ne compte que pour elle : le Nest suivant qui réussit grise le bouton', async () => {
+        const store = await loadStore(async () => ({ jobId: 'job-a' }))
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        const first = store.actions.nest('a')
+        store.actions.resetLastParams()
+        await first
+        expect(store.getters.isNewParams).toBe(true)
+
+        await store.actions.nest('a')
+        expect(store.getters.isNewParams).toBe(false)
+    })
+
     it('course, témoin : le succès de A, resté sur A, grise Nest et ouvre la fenêtre de résultat', async () => {
         let finishNest
         const store = await loadStore(

@@ -1005,7 +1005,7 @@ préchargé absent du disque. Il n'appelle pas `process.exit` (assertion libuv
 sous Windows quand `fetch` garde une connexion ouverte).
 
 **`scripts/qa-e2e-failure-scroll.mjs` (bandeau et défilement de la page projet quand
-un job échoue, local ou serveur)** : harnais MANUEL, sans CI. Le comportement est verrouillé en vitest
+un job échoue, local ou serveur ; note de la carte quand la fusion meurt)** : harnais MANUEL, sans CI. Le comportement est verrouillé en vitest
 (`app/tests/useJobScroll.test.js`, vrai composable sur le vrai registre) ; ce harnais
 est le seul à exécuter le fil entre la page et `useJobScroll`, donc à relancer quand
 ce fil ou le gabarit de l'atelier change. Build servi plus base Mongo JETABLE

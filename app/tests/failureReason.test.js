@@ -100,6 +100,15 @@ describe('degradedNoteKey', () => {
         }
     })
 
+    // La carte n'a pas de test de montage : ce fil-là, seul le navigateur
+    // l'exécute (scénario fusion_morte de scripts/qa-e2e-failure-scroll.mjs).
+    it('la carte montre la note et son badge passe en ambre, sur un job terminé seulement', () => {
+        const card = readFileSync(new URL('../components/UserResultItem.vue', import.meta.url), 'utf8')
+        expect(card).toMatch(/isResultCompleted\.value \? degradedNoteKey\(props\.result\?\.degraded\) : null/)
+        expect(card).toMatch(/<p v-if="degradedKey"[^>]*>\s*\{\{ t\(degradedKey\) \}\}/)
+        expect(card).toMatch(/if \(isPartial\.value \|\| degradedKey\.value\) return 'warn'/)
+    })
+
     // Verrou de couverture : tout code que local-quota pose sur le job doit se
     // voir sur la carte.
     it('chaque code accepté par local-quota a une note', () => {
