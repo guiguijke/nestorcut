@@ -23,11 +23,17 @@
  * exact_fit_refusal}.rs ; le verrou natif ≡ wasm, dans
  * workers/nesting/bench/determinism_lock.py (fixture j7a_defaut).
  */
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { buildLocalPayload } from '../composables/localPayloadBuilder'
 import { deriveSeed } from '../composables/localPool'
+
+// Le vrai wasm : ces tests sont bornés en travail (itérations), pas en temps, et
+// leur durée suit la machine et sa charge. Le cas des 2 pièces de 0,15 mm mesure
+// 4,7 s seul au repos et 8 s dans la suite complète : le délai par défaut de 5 s
+// rendait `npx vitest run` rouge. Le délai ne sert ici qu'à détecter un blocage.
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 })
 
 const root = fileURLToPath(new URL('../../', import.meta.url))
 const engineDir = `${root}public/engine/`
