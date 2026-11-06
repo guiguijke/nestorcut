@@ -74,7 +74,7 @@ describe('useJobScroll, sur le vrai registre local', () => {
 
     // Monte comme la page : le bandeau n'existe qu'une fois rendu, donc après
     // les watchers de la transition (`v-if`, d'où le watch post-flush).
-    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), seen = new Set(), panel = false } = {}) {
+    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), seen = new Set(), panel = false, staleBanner = false } = {}) {
         const scope = effectScope()
         const failureEl = ref(null)
         scope.run(() => {
@@ -89,7 +89,7 @@ describe('useJobScroll, sur le vrai registre local', () => {
             watch(
                 () => {
                     const p = registry.progressFor(projectSlug.value)
-                    return p?.phase === 'error' && p?.error !== 'cancelled' && !panel
+                    return staleBanner || (p?.phase === 'error' && p?.error !== 'cancelled' && !panel)
                 },
                 (show) => { failureEl.value = show ? page.banner : null },
                 { flush: 'post', immediate: true },
@@ -161,6 +161,23 @@ describe('useJobScroll, sur le vrai registre local', () => {
         })
     })
 
+    describe('vue live, page remontée', () => {
+        it('le flux serveur revient après le remontage (SSE reconnecté) : pas de second défilement', async () => {
+            const seen = new Set()
+            const first = fakePage()
+            const a = mount(first, { seen })
+            a.serverSlug.value = 'srv'
+            await flush()
+            expect(names(first)).toEqual(['section'])
+            a.scope.stop()
+            const back = fakePage()
+            const b = mount(back, { seen })
+            b.serverSlug.value = 'srv'
+            await flush()
+            expect(back.calls).toEqual([])
+        })
+    })
+
     describe('échec du job', () => {
         it('sans geste : le bandeau finit entier à l’écran, centré, après la vue live', async () => {
             const page = fakePage()
@@ -201,6 +218,18 @@ describe('useJobScroll, sur le vrai registre local', () => {
                 const page = fakePage({ y: 0 })
                 const { scope } = mount(page, { panel, projectSlug: ref(`p-${slug}`) })
                 start(slug, `p-${slug}`, 5)
+                await finish(slug, res)
+                expect(page.calls, slug).toEqual([])
+                scope.stop()
+            }
+        })
+
+        it('un job qui finit bien ou qu’on annule ne défile pas, même si un bandeau est rendu', async () => {
+            for (const [slug, res] of [['fini', { ok: true }], ['coupe', { ok: false, error: 'cancelled' }]]) {
+                const page = fakePage({ y: 0 })
+                const { scope } = mount(page, { staleBanner: true, projectSlug: ref(`p-${slug}`) })
+                start(slug, `p-${slug}`, 5)
+                await flush()
                 await finish(slug, res)
                 expect(page.calls, slug).toEqual([])
                 scope.stop()
@@ -313,6 +342,18 @@ describe('useJobScroll, sur le vrai registre local', () => {
             expect(page.bannerWhole()).toBe(true)
         })
 
+        it('vue live arrivée avec le bandeau à l’écran, puis un cran qui l’en sort : il est ramené', async () => {
+            const page = fakePage({ vh: 1200, y: 200 })
+            mount(page)
+            start('a')
+            await frame('a')
+            expect(page.bannerWhole()).toBe(true)
+            page.wheel(-200)
+            expect(page.bannerWhole()).toBe(false)
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
         it('un cran de molette, bandeau déjà entier à l’écran : rien à faire', async () => {
             const page = fakePage({ y: 700 })
             mount(page)
@@ -359,6 +400,17 @@ describe('useJobScroll, sur le vrai registre local', () => {
             await frame('a')
             expect(names(page)).toEqual(['section'])
             expect(page.bannerWhole()).toBe(true)
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
+        it('loin de l’atelier, molette avant la première frame, échec pendant la remontée : il est amené', async () => {
+            const page = fakePage({ y: 3000, liveInFlight: true })
+            mount(page)
+            start('a')
+            await flush()
+            page.wheel(100)
+            await frame('a')
             await fail('a')
             expect(names(page)).toEqual(['section', 'banner'])
         })
