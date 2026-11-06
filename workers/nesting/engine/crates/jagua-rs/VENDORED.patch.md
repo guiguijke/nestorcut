@@ -93,10 +93,9 @@
      `can_split`, un conteneur que le quadtree ne pourrait pas couper
      `quadtree_depth` fois est refusé au lieu de paniquer dans `Rect::quadrants`.
    Bit-identique sur tout job dont le conteneur existait : mêmes flottants, seuls
-   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`,
-   tests `nest-engine/tests/small_job_default_path.rs`
-   et `strip_container_window.rs`). Les gardes amont (`main.py`,
-   `localPayloadBuilder.js`) restent en défense.
+   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`, tests
+   `nest-engine/tests/small_job_default_path.rs` et `strip_container_window.rs`).
+   Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
 
 6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
    voisins) — pièce À LA COTE EXACTE, lot A :
@@ -126,5 +125,16 @@
    sérialisé en `null`, et `merge_alternatives` échouait à relire son propre
    export (« invalid type: null, expected f32 »). Sans autre effet : seul le
    cas vide change de valeur.
+
+8. **Pièce sous la résolution des f32** (sans espacement, côté sous l'ulp de la
+   coordonnée où elle est posée : elle s'effondre sur une ligne). Seuls des
+   chemins qui paniquaient changent ; verrou
+   `nest-engine/tests/sub_resolution_items.rs`.
+   - `src/geometry/primitives/simple_polygon.rs` : `generate_bounding_box` garde
+     une boîte d'un ulp sur l'axe effondré.
+   - `src/collision_detection/hazards/collector.rs` : `remove_by_entity` ne panique
+     plus si la forme effondrée ne s'est pas vue elle-même.
+   - `src/geometry/shape_modification.rs` + `original_shape.rs` : `simplify_shape`
+     rend un `Result` ; une pièce sans pôle une fois centrée sort en `item_geometry`.
 
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).

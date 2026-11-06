@@ -52,7 +52,7 @@ pub fn simplify_shape(
     shape: &SPolygon,
     mode: ShapeModifyMode,
     max_area_change_ratio: f32,
-) -> SPolygon {
+) -> Result<SPolygon> {
     let original_area = shape.area;
 
     let mut ref_points = shape.vertices.clone();
@@ -129,8 +129,9 @@ pub fn simplify_shape(
         }
     }
 
-    //Convert it back to a simple polygon
-    let simpl_shape = SPolygon::new(ref_points).unwrap();
+    //Convert it back to a simple polygon. Une pièce si fine qu'elle n'a plus de
+    //pôle une fois centrée remonte l'erreur (`item_geometry`) au lieu de paniquer.
+    let simpl_shape = SPolygon::new(ref_points)?;
 
     if simpl_shape.n_vertices() < shape.n_vertices() {
         info!(
@@ -143,7 +144,7 @@ pub fn simplify_shape(
         info!("[PS] no simplification possible within area change constraints");
     }
 
-    simpl_shape
+    Ok(simpl_shape)
 }
 
 fn calculate_area_delta(shape: &[Point], candidate: &Candidate) -> Result<f32, InvalidCandidate> {

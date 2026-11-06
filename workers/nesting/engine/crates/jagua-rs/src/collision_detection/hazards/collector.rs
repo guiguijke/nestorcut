@@ -15,13 +15,13 @@ pub trait HazardCollector: HazardFilter {
 
     fn remove_by_key(&mut self, hkey: HazKey);
 
+    /// Une forme effondrée (pièce plus fine que la résolution des f32 à cet
+    /// endroit) peut ne pas se voir elle-même : rien à retirer, pas une panique.
     fn remove_by_entity(&mut self, entity: &HazardEntity) {
-        let hkey = self
-            .iter()
-            .find(|(_, v)| *v == entity)
-            .map(|(hkey, _)| hkey)
-            .expect("HazardEntity not found in collector");
-        self.remove_by_key(hkey);
+        let hkey = self.iter().find(|(_, v)| *v == entity).map(|(hkey, _)| hkey);
+        if let Some(hkey) = hkey {
+            self.remove_by_key(hkey);
+        }
     }
 
     fn is_empty(&self) -> bool {

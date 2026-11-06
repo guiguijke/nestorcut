@@ -143,6 +143,15 @@ impl SPolygon {
             x_max = x_max.max(point.0);
             y_max = y_max.max(point.1);
         }
+        // Une pièce plus fine que la résolution des f32 à l'endroit où elle est
+        // posée (sans espacement, côté sous l'ulp de la coordonnée) s'effondre
+        // sur une ligne : sa boîte garde un ulp, au lieu de paniquer.
+        if x_max == x_min {
+            x_max = x_min.next_up();
+        }
+        if y_max == y_min {
+            y_max = y_min.next_up();
+        }
         Rect::try_new(x_min, y_min, x_max, y_max).unwrap()
     }
 
