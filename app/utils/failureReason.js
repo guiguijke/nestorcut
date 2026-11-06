@@ -51,6 +51,17 @@ export function failureBannerText(job, t, mapLocalError) {
 }
 
 /**
+ * Bandeau d'échec de la page projet : le registre local d'abord (il nomme la
+ * pièce), sinon le dernier job vu par le flux serveur (`serverJobState`,
+ * `{ phase, job }`), seulement s'il est en erreur. Rien à dire : chaîne vide.
+ */
+export function jobErrorBannerText({ localErrorText, serverJob, t, mapLocalError }) {
+    if (localErrorText) return localErrorText
+    if (serverJob?.phase !== 'error') return ''
+    return failureBannerText(serverJob.job, t, mapLocalError)
+}
+
+/**
  * Note de la carte pour une livraison dégradée (`degraded` du job, posé par
  * local-quota) : les pièces sont posées, mais sans la fusion ni la finition de
  * la dernière tôle. Le job reste un succès, l'utilisateur doit le savoir.

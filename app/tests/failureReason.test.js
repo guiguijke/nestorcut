@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { degradedNoteKey, failureBannerText, failureReasonKey } from '../utils/failureReason'
+import { degradedNoteKey, failureBannerText, failureReasonKey, jobErrorBannerText } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
 import de from '../utils/i18n/de'
@@ -118,5 +118,35 @@ describe('degradedNoteKey', () => {
         const accepted = [...block[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
         expect(accepted.length).toBeGreaterThan(0)
         expect(accepted.filter((c) => !degradedNoteKey(c))).toEqual([])
+    })
+})
+
+describe('jobErrorBannerText', () => {
+    const t = (key) => `t:${key}`
+    const mapLocalError = (code) => `local:${code}`
+    const text = (over) => jobErrorBannerText({ localErrorText: '', serverJob: null, t, mapLocalError, ...over })
+
+    it('job serveur en erreur : la cause du worker, telle quelle', () => {
+        const information = 'Nesting failed: qa cause from the worker'
+        expect(text({ serverJob: { phase: 'error', job: { information } } })).toBe(information)
+    })
+
+    it('job serveur en erreur sans cause écrite : le libellé d’échec', () => {
+        expect(text({ serverJob: { phase: 'error', job: {} } })).toBe('t:result.failed')
+    })
+
+    it('job serveur d’un calcul navigateur rechargé : le message du direct', () => {
+        expect(text({ serverJob: { phase: 'error', job: { errorCode: 'merge_failed' } } })).toBe('local:merge_failed')
+    })
+
+    it('le registre local passe avant le flux serveur', () => {
+        const serverJob = { phase: 'error', job: { information: 'cause du serveur' } }
+        expect(text({ localErrorText: 'pièce 2 trop grande', serverJob })).toBe('pièce 2 trop grande')
+    })
+
+    it('rien en erreur : pas de bandeau', () => {
+        expect(text({})).toBe('')
+        expect(text({ serverJob: { phase: 'processing', job: { information: 'x' } } })).toBe('')
+        expect(text({ serverJob: { phase: 'done', job: { information: 'x' } } })).toBe('')
     })
 })

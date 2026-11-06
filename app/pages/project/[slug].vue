@@ -189,7 +189,7 @@ import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob, serverJobState } from "~/utils/liveJob";
-import { failureBannerText } from "~/utils/failureReason";
+import { jobErrorBannerText } from "~/utils/failureReason";
 import { useJobScroll } from "~/composables/useJobScroll";
 import {
     DEMO_NESTING_LIMIT,
@@ -379,10 +379,12 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
 // Bandeau d'échec : le registre local quand il connaît le job (il nomme la
 // pièce), sinon le flux serveur : job du worker, ou job local après rechargement.
 const jobErrorText = computed(() => {
-    if (localComputeError.value) return localErrorText.value;
-    const job = unref(serverJob);
-    if (job?.phase !== 'error') return '';
-    return failureBannerText(job.job, t, (code) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject) }));
+    return jobErrorBannerText({
+        localErrorText: localComputeError.value ? localErrorText.value : '',
+        serverJob: unref(serverJob),
+        t,
+        mapLocalError: (code) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject) }),
+    });
 });
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
 // leviers du pré-contrôle) — le registre le porte sur la phase error.
