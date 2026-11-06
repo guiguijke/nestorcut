@@ -53,8 +53,7 @@ const SCROLL_KEYS = new Set(['PageDown', 'PageUp', 'Home', 'End', 'ArrowDown', '
  * L'utilisateur a-t-il fait défiler la page lui-même depuis `reset()` ?
  * Molette, doigt ou touches de défilement : seuls les gestes de l'utilisateur
  * comptent, pas nos propres défilements (la position ne dit pas qui a bougé).
- * Sert à ne pas ramener au message d'échec un utilisateur qui lisait ailleurs
- * pendant un long calcul.
+ * Sert à distinguer une page que nous avons placée d'une page qu'il a reprise.
  */
 export function watchUserScroll(target) {
     let moved = false
@@ -77,4 +76,27 @@ export function watchUserScroll(target) {
 /** Le rectangle est-il entièrement à l'écran ? (`rect` de getBoundingClientRect) */
 export function isWhollyInView(rect, viewportHeight) {
     return Boolean(rect) && rect.top >= 0 && rect.bottom <= viewportHeight
+}
+
+/** Le rectangle touche-t-il l'écran ? */
+export function isPartlyInView(rect, viewportHeight) {
+    return Boolean(rect) && rect.bottom > 0 && rect.top < viewportHeight
+}
+
+/**
+ * Faut-il amener le bandeau d'échec à l'écran ? On raisonne sur l'endroit où la
+ * page va s'ARRÊTER, pas sur l'instant : le défilement vers la vue live est animé
+ * et l'échec peut arriver pendant le trajet, bandeau encore visible puis perdu.
+ *
+ * - `heading` : la page va vers la vue live, ou y est arrivée, sans que
+ *   l'utilisateur ait repris la main ; elle s'arrête la section en haut d'écran.
+ * - Sinon la position de l'instant est la bonne. Si l'utilisateur a repris la main
+ *   et que la section est sortie de l'écran, il lit autre chose : on le laisse.
+ *   Un cran de molette autour de l'atelier ne veut pas dire ça.
+ */
+export function failureScrollNeeded({ banner, section, viewportHeight, heading, userMoved }) {
+    const shift = heading && section ? section.top : 0
+    const landing = { top: banner.top - shift, bottom: banner.bottom - shift }
+    if (isWhollyInView(landing, viewportHeight)) return false
+    return !userMoved || isPartlyInView(section, viewportHeight)
 }

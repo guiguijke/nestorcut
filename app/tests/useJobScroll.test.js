@@ -276,6 +276,126 @@ describe('useJobScroll, sur le vrai registre local', () => {
             expect(page.y).toBe(2000)
         })
 
+        // Un cran de molette ne dit pas que l'utilisateur lit ailleurs : ce qui compte
+        // est l'endroit où la page va s'arrêter et si l'atelier y est encore.
+        it('un cran de molette avant la première frame : le bandeau est quand même amené', async () => {
+            const page = fakePage()
+            mount(page)
+            start('a')
+            await flush()
+            page.wheel(-200)
+            await frame('a')
+            expect(page.y).toBe(200)
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+            expect(page.bannerWhole()).toBe(true)
+        })
+
+        it('très loin avant la première frame : la vue live l’a ramené, le bandeau est amené', async () => {
+            const page = fakePage()
+            mount(page)
+            start('a')
+            await flush()
+            page.wheel(1800)
+            await frame('a')
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
+        it('un cran de molette après la vue live, atelier encore à l’écran : le bandeau est amené', async () => {
+            const page = fakePage()
+            mount(page)
+            start('a')
+            await frame('a')
+            page.wheel(100)
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+            expect(page.bannerWhole()).toBe(true)
+        })
+
+        it('un cran de molette, bandeau déjà entier à l’écran : rien à faire', async () => {
+            const page = fakePage({ y: 700 })
+            mount(page)
+            start('a')
+            await flush()
+            page.wheel(100)
+            await fail('a')
+            expect(page.bannerWhole()).toBe(true)
+            expect(page.calls).toEqual([])
+        })
+
+        it('molette sans frame, atelier sorti de l’écran : la page reste où elle est', async () => {
+            const page = fakePage()
+            mount(page)
+            start('a')
+            await flush()
+            page.wheel(1800)
+            await fail('a')
+            expect(page.calls).toEqual([])
+        })
+
+        it('juste au bord : un atelier qui ne touche plus l’écran compte comme sorti', async () => {
+            for (const [y, attendu] of [[1209, ['banner']], [1210, []]]) {
+                const page = fakePage({ y: 0 })
+                const { scope } = mount(page, { projectSlug: ref(`bord-${y}`) })
+                start(`bord-${y}`, `bord-${y}`, 5)
+                await flush()
+                page.y = y
+                page.wheel(0)
+                // Bandeau volontairement hors écran : seul l'atelier décide.
+                page.banner.getBoundingClientRect = () => ({ top: 5000, bottom: 5082 })
+                await fail(`bord-${y}`)
+                expect(names(page), `y=${y}`).toEqual(attendu)
+                scope.stop()
+            }
+        })
+
+        // Le défilement live est animé : pendant le trajet, la position de l'instant
+        // ne dit rien de celle où la page s'arrêtera (atelier en haut d'écran).
+        it('échec pendant que la vue live remonte, bandeau visible à cet instant : il est amené', async () => {
+            const page = fakePage({ y: 1063, liveInFlight: true })
+            mount(page)
+            start('a')
+            await frame('a')
+            expect(names(page)).toEqual(['section'])
+            expect(page.bannerWhole()).toBe(true)
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
+        it('échec pendant que la vue live remonte, bandeau visible à l’arrivée (grand écran) : rien de plus', async () => {
+            const page = fakePage({ vh: 1500, y: 700, liveInFlight: true })
+            mount(page)
+            start('a')
+            await frame('a')
+            await fail('a')
+            expect(names(page)).toEqual(['section'])
+        })
+
+        it('échec pendant le trajet, l’utilisateur a repris la main loin de l’atelier : rien de plus', async () => {
+            const page = fakePage({ y: 3000, liveInFlight: true })
+            mount(page)
+            start('a')
+            await frame('a')
+            page.wheel(100)
+            await fail('a')
+            expect(names(page)).toEqual(['section'])
+        })
+
+        it('même job relancé après son échec : le défilement live du premier passage ne compte plus', async () => {
+            const page = fakePage()
+            mount(page)
+            start('a')
+            await frame('a')
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+            expect(page.bannerWhole()).toBe(true)
+            start('a')
+            await flush()
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
         it('un geste du job précédent ne compte plus pour le suivant', async () => {
             const page = fakePage()
             mount(page)

@@ -10,7 +10,9 @@
  * hors écran quand la page est restée défilée. On l'amène à l'écran UNE fois,
  * sur la transition « en cours » -> « erreur » du même job vue par cette
  * instance de page : jamais au retour sur un job déjà échoué, jamais pour le
- * job d'un autre projet (piège 47, `progress` ne rend que ceux de la page).
+ * job d'un autre projet (piège 47, `progress` ne rend que ceux de la page). Les
+ * deux défilements suivent la même règle : un geste antérieur au départ de la vue
+ * live ne compte plus, puisque c'est nous qui avons déplacé la page ensuite.
  *
  * La page ne fournit que ses refs : tout le reste est ici pour que les tests
  * exécutent le vrai code (app/tests/useJobScroll.test.js).
@@ -19,7 +21,7 @@ import { nextTick, onScopeDispose, watch } from 'vue'
 import { isActiveLocalPhase } from '../utils/liveJob'
 import {
     createLiveScrollGate,
-    isWhollyInView,
+    failureScrollNeeded,
     liveScrollSlug,
     scrolledJobSlugs,
     watchUserScroll,
@@ -39,21 +41,32 @@ export function useJobScroll({ progress, serverSlug, liveEl, failureEl, target, 
     onScopeDispose(() => gesture.stop())
     const gate = createLiveScrollGate(seen)
     const behavior = () => (target.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
+    let liveDepartedSlug = null
 
     watch(
         () => liveScrollSlug({ serverSlug: serverSlug(), job: progress() }),
         async (slug) => {
             if (!gate.claim(slug)) return
             await nextTick()
+            gesture.reset()
+            liveDepartedSlug = slug
             liveEl.value?.scrollIntoView({ behavior: behavior(), block: 'start' })
         },
     )
 
-    const bringFailureIntoView = async () => {
+    const bringFailureIntoView = async (slug) => {
         await nextTick()
         const el = failureEl.value
-        if (!el || gesture.moved() || isWhollyInView(el.getBoundingClientRect(), target.innerHeight)) return
-        el.scrollIntoView({ behavior: behavior(), block: 'center' })
+        if (!el) return
+        const userMoved = gesture.moved()
+        const needed = failureScrollNeeded({
+            banner: el.getBoundingClientRect(),
+            section: liveEl.value?.getBoundingClientRect(),
+            viewportHeight: target.innerHeight,
+            heading: liveDepartedSlug === slug && !userMoved,
+            userMoved,
+        })
+        if (needed) el.scrollIntoView({ behavior: behavior(), block: 'center' })
     }
 
     let runningSlug = null
@@ -63,13 +76,14 @@ export function useJobScroll({ progress, serverSlug, liveEl, failureEl, target, 
             if (isActiveLocalPhase(phase)) {
                 if (runningSlug !== slug) {
                     runningSlug = slug
+                    liveDepartedSlug = null
                     gesture.reset()
                 }
                 return
             }
             const justFailed = phase === 'error' && runningSlug === slug
             runningSlug = null
-            if (justFailed) bringFailureIntoView()
+            if (justFailed) bringFailureIntoView(slug)
         },
         { immediate: true },
     )

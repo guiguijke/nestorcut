@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { createLiveScrollGate, isWhollyInView, liveScrollSlug, watchUserScroll } from '../utils/liveScroll'
+import { createLiveScrollGate, isPartlyInView, isWhollyInView, liveScrollSlug, watchUserScroll } from '../utils/liveScroll'
 
 describe('liveScrollSlug', () => {
     it('rend le slug du flux serveur en priorité', () => {
@@ -69,6 +69,16 @@ describe('isWhollyInView', () => {
         expect(isWhollyInView({ top: -1, bottom: 80 }, 900)).toBe(false)
         expect(isWhollyInView({ top: 850, bottom: 910 }, 900)).toBe(false)
         expect(isWhollyInView(null, 900)).toBe(false)
+    })
+})
+
+describe('isPartlyInView', () => {
+    it('vrai dès qu’un pixel touche l’écran, faux au ras des bords', () => {
+        expect(isPartlyInView({ top: -500, bottom: 1 }, 900)).toBe(true)
+        expect(isPartlyInView({ top: 899, bottom: 2000 }, 900)).toBe(true)
+        expect(isPartlyInView({ top: -500, bottom: 0 }, 900)).toBe(false)
+        expect(isPartlyInView({ top: 900, bottom: 2000 }, 900)).toBe(false)
+        expect(isPartlyInView(null, 900)).toBe(false)
     })
 })
 
