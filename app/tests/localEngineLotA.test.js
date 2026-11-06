@@ -9,7 +9,10 @@
  *      recrée une bande de 1,6 mm de large (strip.rs:54) ;
  *   2. une pièce à la cote exacte de la tôle (lbf.rs:74, ou zéro pièce posée
  *      et « invalid type: null, expected f32 » à la fusion) ;
- *   3. la volute du constat de la relecture critique, graines 100 et 101 du pool.
+ *   3. la volute du constat de la relecture critique, graines 100 et 101 du pool ;
+ *   4. la limite de la bascule J7-a : un seul rectangle de 40×100 mm, dont l'aire
+ *      dépasse 4000 mm² d'un epsilon. Le job reste en bande, sa largeur initiale
+ *      tombe dans la fenêtre sans conteneur, juste au-dessus de l'espacement.
  *
  * Ce test charge le wasm commité, l'initialise avec les octets du fichier, et
  * passe le payload du VRAI `buildLocalPayload`. Il échoue si public/engine n'est
@@ -140,6 +143,90 @@ describe('pièce à la cote exacte : refus lisible, jamais un trap', () => {
             problem: 'bpp', instance, engineConfig: JSON.parse(cfg({ prng_seed: 0 })),
             runs: [run], biases: ['left'], n_alternatives: 1,
         }))).toThrowError(/item_unplaceable:0:/)
+    })
+})
+
+describe('limite de la bascule J7-a : largeur initiale sans conteneur', () => {
+    // Bornée en travail, comme la fixture j7a_limite du verrou.
+    const detCfg = (payload) => {
+        const cfg = {
+            ...payload.engineConfig, n_workers: 1, separator_workers: 1, live_events: false,
+            finish_partial_sheet: false, time_budget_sec: 3600,
+            explore_max_conseq_failed_attempts: 2, compress_failure_decay: 0.5,
+        }
+        delete cfg.plateau_patience_sec
+        return cfg
+    }
+    const factory = { sheets: [{ width: 1000, height: 2000, count: 1 }], space: 2, directions: ['left'], alternativesCount: 1 }
+    const placed = (alt) => (alt.solution.layouts ?? [alt.solution.layout])
+        .reduce((n, l) => n + l.placed_items.length, 0)
+
+    // Le rectangle tel que le rend l'import d'un LWPOLYLINE de coin (77,77 ; 88,88).
+    const part = {
+        coords: [[77.77, 188.88], [117.77, 188.88], [117.77, 88.88], [77.77, 88.88], [77.77, 188.88]],
+        holes: [], width: 40, height: 100,
+    }
+
+    it('40×100 mm : le vrai builder garde la bande, les walks puis la fusion livrent la pièce', async () => {
+        const files = [{ slug: 'f', name: 'f', count: 1, parts: [part] }]
+        const { payload } = await buildLocalPayload({ files, params: factory, profile: { timeBudgetSec: 2 } }, deps)
+        expect(payload.problem).toBe('spp')
+        expect(payload.instance.strip_height).toBe(2000)
+
+        const master = String(payload.engineConfig.prng_seed)
+        const runs = []
+        for (let w = 0; w < 2; w++) {
+            const seed = deriveSeed(master, w).toString()
+            const out = JSON.parse(wasm.run_nesting(JSON.stringify(payload.instance), JSON.stringify(detCfg(payload)), BigInt(seed)))
+            expect(out.alternatives.length).toBe(1)
+            expect(placed(out.alternatives[0])).toBe(1)
+            // Toute la pièce gonflée dans le conteneur déflaté : 40 + 2 + 2.
+            expect(out.alternatives[0].strip_width).toBeGreaterThanOrEqual(44)
+            expect(out.alternatives[0].strip_width).toBeLessThan(45)
+            const runSeed = deriveSeed(BigInt(seed), 0).toString()
+            for (const alt of out.alternatives) runs.push({ ...alt, seed: runSeed })
+        }
+        const merged = JSON.parse(wasm.merge_alternatives(JSON.stringify({
+            problem: payload.problem, instance: payload.instance,
+            engineConfig: { ...detCfg(payload), prng_seed: 0 },
+            runs, biases: ['left'], n_alternatives: 1,
+        })))
+        expect(placed(merged.alternatives[0])).toBe(1)
+    })
+
+    it('la fixture du verrou passe aussi', () => {
+        const dir = `${benchDir}fixtures/j7a_limite/`
+        const out = JSON.parse(wasm.run_nesting(
+            readFileSync(`${dir}instance.json`, 'utf8'), readFileSync(`${dir}config_det.json`, 'utf8'), 7n))
+        expect(placed(out.alternatives[0])).toBe(1)
+    })
+
+    it('2 pièces de 0,15×0,15 mm : la finition de tôle partielle ne trappe plus', async () => {
+        const small = { coords: square(0.15, 0.15), holes: [], width: 0.15, height: 0.15 }
+        const files = [{ slug: 'f', name: 'f', count: 2, parts: [small] }]
+        const { payload } = await buildLocalPayload({ files, params: factory, profile: { timeBudgetSec: 2 } }, deps)
+        expect(payload.problem).toBe('bpp')
+        const runs = playWalks(payload, 1)
+        const merged = JSON.parse(wasm.merge_alternatives(JSON.stringify({
+            problem: payload.problem, instance: payload.instance,
+            engineConfig: { ...payload.engineConfig, prng_seed: 0, time_budget_sec: 3600, sa_max_iterations: 400, live_events: false },
+            runs, biases: ['left'], n_alternatives: 1,
+        })))
+        expect(placed(merged.alternatives[0])).toBe(2)
+    })
+
+    it('bande à peine plus haute que l’espacement : erreur typée, pas un trap', () => {
+        const instance = {
+            name: 'plat', strip_height: 2.00001,
+            items: [{ id: 0, demand: 1, allowed_orientations: [0], shape: { type: 'simple_polygon', data: square(0.5, 0.5) } }],
+        }
+        const cfg = JSON.stringify({
+            time_budget_sec: 2, prng_seed: 7, n_alternatives: 1, poly_simpl_tolerance: 0.001,
+            min_item_separation: 2, narrow_concavity_cutoff: null, live_events: false,
+            n_workers: 1, separator_workers: 1, max_strip_width: 1000, biases: ['left'],
+        })
+        expect(() => wasm.run_nesting(JSON.stringify(instance), cfg, 7n))
+            .toThrowError(/strip_height_below_separation:/)
     })
 })
 
