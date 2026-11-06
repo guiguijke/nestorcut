@@ -74,28 +74,33 @@ describe('useJobScroll, sur le vrai registre local', () => {
 
     // Monte comme la page : le bandeau n'existe qu'une fois rendu, donc après
     // les watchers de la transition (`v-if`, d'où le watch post-flush).
-    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), seen = new Set(), panel = false, staleBanner = false } = {}) {
+    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), serverJob = ref(null), onFailed, seen = new Set(), panel = false, staleBanner = false } = {}) {
         const scope = effectScope()
         const failureEl = ref(null)
+        let scroll
         scope.run(() => {
-            useJobScroll({
+            scroll = useJobScroll({
+                projectSlug: () => projectSlug.value,
                 progress: () => registry.progressFor(projectSlug.value),
                 serverSlug: () => serverSlug.value,
+                serverJob: () => serverJob.value,
                 liveEl: ref(page.section),
                 failureEl,
+                onFailed,
                 target: page.target,
                 seen,
             })
             watch(
                 () => {
                     const p = registry.progressFor(projectSlug.value)
+                    if (serverJob.value?.phase === 'error' && !panel) return true
                     return staleBanner || (p?.phase === 'error' && p?.error !== 'cancelled' && !panel)
                 },
                 (show) => { failureEl.value = show ? page.banner : null },
                 { flush: 'post', immediate: true },
             )
         })
-        return { scope, projectSlug, serverSlug, seen }
+        return { scope, projectSlug, serverSlug, serverJob, seen, scroll }
     }
 
     describe('vue live', () => {
@@ -158,6 +163,204 @@ describe('useJobScroll, sur le vrai registre local', () => {
             serverSlug.value = 'srv'
             await flush()
             expect(names(page)).toEqual(['section'])
+        })
+    })
+
+    // Le job serveur arrive par le flux SSE, sans registre : sa position dans le
+    // cycle est décrite par `serverJobState`. Géométrie de l'essai réel : Nest
+    // cliqué à y=300, le bandeau naît sous le pli.
+    describe('échec d’un job serveur', () => {
+        const srv = (phase, slug = 'srv') => ({ slug, phase })
+        const play = async (serverJob, ...phases) => {
+            for (const phase of phases) {
+                serverJob.value = srv(phase)
+                await flush()
+            }
+        }
+
+        it('en cours puis erreur : le bandeau est amené, une seule fois', async () => {
+            const page = fakePage({ y: 300 })
+            const { serverJob } = mount(page)
+            await play(serverJob, 'running', 'error')
+            expect(page.calls).toEqual([{ name: 'banner', behavior: 'smooth', block: 'center' }])
+            expect(page.bannerWhole()).toBe(true)
+            await play(serverJob, 'error')
+            expect(names(page)).toEqual(['banner'])
+        })
+
+        it('après la vue live : la position d’arrivée compte, le bandeau finit à l’écran', async () => {
+            const page = fakePage({ liveInFlight: true })
+            const { serverJob, serverSlug } = mount(page)
+            await play(serverJob, 'running')
+            serverSlug.value = 'srv'
+            await flush()
+            await play(serverJob, 'error')
+            expect(names(page)).toEqual(['section', 'banner'])
+        })
+
+        it('bandeau déjà entier à l’écran : aucun défilement', async () => {
+            const page = fakePage({ y: 800 })
+            const { serverJob } = mount(page)
+            await play(serverJob, 'running', 'error')
+            expect(page.calls).toEqual([])
+        })
+
+        it('job déjà échoué à l’arrivée sur la page : aucun défilement', async () => {
+            const page = fakePage({ y: 300 })
+            const { serverJob } = mount(page)
+            await play(serverJob, 'error')
+            expect(page.calls).toEqual([])
+            const reload = fakePage({ y: 300 })
+            mount(reload, { serverJob: ref(srv('error')) })
+            await flush()
+            expect(reload.calls).toEqual([])
+        })
+
+        it('fin normale ou annulation : aucun défilement', async () => {
+            const page = fakePage({ y: 300 })
+            const { serverJob } = mount(page, { staleBanner: true })
+            await play(serverJob, 'running', 'done')
+            expect(page.calls).toEqual([])
+        })
+
+        it('l’utilisateur est parti lire ailleurs : la page ne l’y arrache pas', async () => {
+            const page = fakePage({ y: 300 })
+            const { serverJob } = mount(page)
+            await play(serverJob, 'running')
+            page.wheel(1700)
+            await play(serverJob, 'error')
+            expect(page.calls).toEqual([])
+            expect(page.y).toBe(2000)
+        })
+
+        it('job calculé dans le navigateur : le flux serveur ne double pas le registre', async () => {
+            const page = fakePage({ y: 300 })
+            const onFailed = vi.fn()
+            const { serverJob } = mount(page, { onFailed })
+            await play(serverJob, 'running', 'local', 'error')
+            expect(page.calls).toEqual([])
+            expect(onFailed).not.toHaveBeenCalled()
+        })
+
+        // Mesuré dans le navigateur sur le vrai worker : la pièce à la cote exacte
+        // échoue entre deux ticks du flux, le job apparaît directement en erreur.
+        describe('job qui échoue avant d’être vu en cours', () => {
+            it('Nest cliqué, nouveau job déjà en erreur : le bandeau est amené une fois', async () => {
+                const page = fakePage({ y: 300 })
+                const onFailed = vi.fn()
+                const { serverJob, scroll } = mount(page, { onFailed })
+                scroll.expectJob()
+                await play(serverJob, 'error')
+                expect(names(page)).toEqual(['banner'])
+                expect(onFailed.mock.calls).toEqual([['srv']])
+                await play(serverJob, 'error')
+                expect(names(page)).toEqual(['banner'])
+            })
+
+            it('le job suivant remplace un échec plus ancien : même règle', async () => {
+                const page = fakePage({ y: 300 })
+                const { serverJob, scroll } = mount(page)
+                await play(serverJob, 'error')
+                expect(page.calls).toEqual([])
+                scroll.expectJob()
+                await flush()
+                serverJob.value = srv('error', 'suivant')
+                await flush()
+                expect(names(page)).toEqual(['banner'])
+            })
+
+            it('Nest cliqué mais toujours l’ancien job (requête refusée) : aucun défilement', async () => {
+                const page = fakePage({ y: 300 })
+                const { serverJob, scroll } = mount(page)
+                await play(serverJob, 'error')
+                scroll.expectJob()
+                await play(serverJob, 'error')
+                expect(page.calls).toEqual([])
+            })
+
+            it('Nest cliqué puis autre projet : son échec connu ne défile pas', async () => {
+                const page = fakePage({ y: 300 })
+                const { serverJob, scroll, projectSlug } = mount(page)
+                scroll.expectJob()
+                await flush()
+                projectSlug.value = 'p2'
+                serverJob.value = srv('error', 'job-de-p2')
+                await flush()
+                expect(page.calls).toEqual([])
+            })
+
+            it('un geste avant le clic sur Nest ne compte pas', async () => {
+                const page = fakePage({ y: 100 })
+                const { serverJob, scroll } = mount(page)
+                page.wheel(1700)
+                scroll.expectJob()
+                await play(serverJob, 'error')
+                expect(names(page)).toEqual(['banner'])
+            })
+
+            it('nouveau job vu en cours : la règle normale reprend, un seul défilement', async () => {
+                const page = fakePage({ y: 300 })
+                const { serverJob, scroll } = mount(page)
+                scroll.expectJob()
+                await play(serverJob, 'running', 'error')
+                expect(names(page)).toEqual(['banner'])
+            })
+        })
+
+        it('le job d’un autre slug n’hérite pas de la transition du précédent', async () => {
+            const page = fakePage({ y: 300 })
+            const { serverJob } = mount(page)
+            await play(serverJob, 'running')
+            serverJob.value = srv('error', 'autre')
+            await flush()
+            expect(page.calls).toEqual([])
+        })
+    })
+
+    // Le message propose de réessayer : Nest doit le permettre sans toucher aux
+    // réglages. La page n'y raccorde que `resetLastParams`.
+    describe('rappel onFailed', () => {
+        it('job serveur : une fois, à la transition vers l’erreur', async () => {
+            const onFailed = vi.fn()
+            const { serverJob } = mount(fakePage({ y: 300 }), { onFailed })
+            serverJob.value = { slug: 'srv', phase: 'running' }
+            await flush()
+            expect(onFailed).not.toHaveBeenCalled()
+            serverJob.value = { slug: 'srv', phase: 'error' }
+            await flush()
+            serverJob.value = { slug: 'srv', phase: 'error' }
+            await flush()
+            expect(onFailed.mock.calls).toEqual([['srv']])
+        })
+
+        it('job local : une fois à l’échec, même si le bandeau est déjà à l’écran', async () => {
+            const onFailed = vi.fn()
+            mount(fakePage({ y: 800 }), { onFailed })
+            start('a')
+            await fail('a')
+            expect(onFailed.mock.calls).toEqual([['a']])
+        })
+
+        it('fin normale, annulation, échec déjà connu : aucun appel', async () => {
+            const onFailed = vi.fn()
+            const projectSlug = ref('p-fini')
+            mount(fakePage(), { onFailed, projectSlug })
+            start('fini', 'p-fini', 5)
+            await flush()
+            await finish('fini', { ok: true })
+            projectSlug.value = 'p-coupe'
+            start('coupe', 'p-coupe', 5)
+            await flush()
+            await finish('coupe', { ok: false, error: 'cancelled' })
+            projectSlug.value = 'p-connu'
+            start('connu', 'p-connu', 5)
+            await flush()
+            projectSlug.value = 'p-ailleurs'
+            await flush()
+            await fail('connu')
+            projectSlug.value = 'p-connu'
+            await flush()
+            expect(onFailed).not.toHaveBeenCalled()
         })
     })
 

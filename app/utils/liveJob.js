@@ -35,6 +35,24 @@ export function pickRunningJob(list, projectSlug) {
     ) || null
 }
 
+/**
+ * Dernier job du projet vu par le flux serveur (la liste SSE arrive du plus
+ * récent au plus ancien) : c'est lui qui parle pour le projet, un échec plus
+ * ancien se tait dès qu'un nouveau job part.
+ * Phases : `running` sur le worker, `local` calculé dans ce navigateur (le
+ * registre local le suit, y compris son échec), `error`, `done` (une annulation
+ * n'est pas un échec).
+ */
+export function serverJobState(list, projectSlug) {
+    const job = (list || []).find((r) => belongsToProject(r, projectSlug))
+    if (!job) return null
+    let phase = 'done'
+    if (job.status === 'awaiting_local') phase = 'local'
+    else if (job.isInProgress) phase = 'running'
+    else if (job.status === 'failed' && !job.wasCancelled) phase = 'error'
+    return { slug: job.slug, phase, job }
+}
+
 // ---------------------------------------------------------------------------
 // Champion live — UNE définition partagée (registre + LiveNestingView).
 // R-6 (audit 2026-08-31 §R-6) : la couche registre filtrait les frames avec

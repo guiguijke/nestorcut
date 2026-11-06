@@ -1,4 +1,4 @@
-// QA E2E navigateur — le bandeau d'échec d'un job local arrive à l'écran, sans
+// QA E2E navigateur — le bandeau d'échec d'un job arrive à l'écran, sans
 // arracher à sa lecture un utilisateur parti ailleurs. Exécute la vraie page
 // projet : c'est le seul verrou de son câblage à `useJobScroll` (le comportement
 // lui-même est verrouillé par `app/tests/useJobScroll.test.js`, en vitest).
@@ -25,6 +25,15 @@
 //   grand_ecran          1440x1500 : le bandeau est visible à l'arrivée de la vue
 //                        live, aucun défilement en plus.
 //   telephone            390x844 : le bandeau finit entier à l'écran.
+//   serveur_en_cours     job serveur vu « processing » puis en erreur : la cause dans
+//                        le bandeau, entier à l'écran, Nest actif ; au rechargement,
+//                        le bandeau reste et rien ne défile.
+//   serveur_echec_direct le job apparaît directement en erreur, avant la fin de la
+//                        requête Nest (échec entre deux ticks du flux) : même résultat.
+//
+// Jobs serveur : le fil de la page se vérifie sans worker, le harnais pose le document
+// du job dans la base et le vrai flux SSE fait le reste. Le vrai worker Python exige un
+// build sans calcul local : ce n'est pas ce harnais.
 //
 // « Le worker meurt » : `onerror` des workers du moteur est appelé depuis la page,
 // le chemin réel d'un crash (localPool.failSlot), pour fixer l'instant de l'échec
@@ -205,6 +214,17 @@ const finish = async (page, name) => {
 const bannerCalls = (r) => r.scrolls.filter((s) => s.el === 'content__error').length
 const liveCalls = (r) => r.scrolls.filter((s) => s.el === 'atelier').length
 const show = (r) => JSON.stringify(r)
+const nestDisabled = (page) => page.evaluate(() => document.querySelector('.atelier__nest')?.classList.contains('button--disabled'))
+const bannerText = (page) => page.evaluate(() => document.querySelector('.content__error')?.textContent.trim() ?? '')
+const SERVER_CAUSE = 'Nesting failed: qa cause from the worker'
+const serverJob = async (projectPath, status, extra = {}) => {
+    const owner = await db.collection('users').findOne({ email: EMAIL })
+    const slug = `qa-srv-${Date.now()}`
+    await db.collection('nesting_jobs').insertOne({
+        slug, ownerId: owner.id, projectSlug: projectPath.split('/').pop(), status, createdAt: new Date(), requested: 1, placed: 0, ...extra,
+    })
+    return slug
+}
 
 const SCENARIOS = {
     async sans_geste() {
@@ -215,6 +235,7 @@ const SCENARIOS = {
         const r = await finish(page, 'sans_geste')
         check('sans_geste : bandeau entier à l’écran', r.banner?.whole === true, show(r))
         check('sans_geste : vue live puis bandeau, une fois chacun', liveCalls(r) === 1 && bannerCalls(r) === 1)
+        check('sans_geste : Nest actif pour réessayer', (await nestDisabled(page)) === false)
         await ctx.close()
     },
     async molette_avant_frame() {
@@ -344,6 +365,45 @@ const SCENARIOS = {
         await waitBanner(page)
         const r = await finish(page, 'telephone')
         check('telephone : bandeau entier à l’écran', r.banner?.whole === true, show(r))
+        await ctx.close()
+    },
+    async serveur_en_cours() {
+        const { ctx, page } = await openContext()
+        const project = await newProject(page, [SMALL])
+        await page.evaluate(() => window.scrollTo({ top: 300, behavior: 'instant' }))
+        const slug = await serverJob(project, 'processing')
+        await sleep(SETTLE_MS)
+        check('serveur_en_cours : aucun bandeau pendant le calcul', !(await probe(page)).banner)
+        await db.collection('nesting_jobs').updateOne({ slug }, { $set: { status: 'error', information: SERVER_CAUSE } })
+        await waitBanner(page)
+        const r = await finish(page, 'serveur_en_cours')
+        check('serveur_en_cours : bandeau entier à l’écran', r.banner?.whole === true, show(r))
+        check('serveur_en_cours : un seul défilement vers le bandeau', bannerCalls(r) === 1, show(r.scrolls))
+        check('serveur_en_cours : le bandeau dit la cause du worker', (await bannerText(page)) === SERVER_CAUSE)
+        check('serveur_en_cours : Nest actif pour réessayer', (await nestDisabled(page)) === false)
+        await page.reload({ waitUntil: 'load' })
+        await waitBanner(page)
+        const again = await finish(page, 'serveur_en_cours_recharge')
+        check('serveur_en_cours : au rechargement, la cause reste', (await bannerText(page)) === SERVER_CAUSE)
+        check('serveur_en_cours : au rechargement, aucun défilement', again.scrolls.length === 0, show(again.scrolls))
+        await ctx.close()
+    },
+    async serveur_echec_direct() {
+        const { ctx, page } = await openContext()
+        const project = await newProject(page, [SMALL])
+        await page.evaluate(() => window.scrollTo({ top: 300, behavior: 'instant' }))
+        await ctx.route('**/nest', async (r) => {
+            const slug = await serverJob(project, 'error', { information: SERVER_CAUSE })
+            await sleep(SETTLE_MS)
+            await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ slug }) })
+        })
+        await clickNest(page)
+        await waitBanner(page)
+        await sleep(SETTLE_MS)
+        const r = await finish(page, 'serveur_echec_direct')
+        check('serveur_echec_direct : bandeau entier à l’écran', r.banner?.whole === true, show(r))
+        check('serveur_echec_direct : un seul défilement vers le bandeau', bannerCalls(r) === 1, show(r.scrolls))
+        check('serveur_echec_direct : Nest actif, y compris après la fin de la requête', (await nestDisabled(page)) === false)
         await ctx.close()
     },
 }

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { failureReasonKey } from '../utils/failureReason'
+import { failureBannerText, failureReasonKey } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
 import de from '../utils/i18n/de'
@@ -47,5 +47,38 @@ describe('failureReasonKey', () => {
         const NEVER_SHOWN = ['local_geometry_missing', 'engine_error']
         const missing = accepted.filter((c) => !NEVER_SHOWN.includes(c) && !failureReasonKey(c))
         expect(missing).toEqual([])
+    })
+})
+
+describe('failureBannerText', () => {
+    const t = (key) => `t:${key}`
+
+    it('texte du worker : tel quel, c’est la seule cause connue', () => {
+        const information = 'Nesting failed: the engine found no valid position for part 1 of "a.dxf"'
+        expect(failureBannerText({ information }, t)).toBe(information)
+    })
+
+    // `errorCode` n'est posé que par local-fail : après rechargement, le même
+    // message qu'en direct. Un texte libre du moteur n'est pas montré tel quel,
+    // il ne dit rien à l'utilisateur et peut citer une pièce.
+    it('calcul navigateur : le message du registre, jamais le texte brut du moteur', () => {
+        const mapLocalError = (code) => `local:${code}`
+        expect(failureBannerText({ errorCode: 'engine_error', information: 'RuntimeError: unreachable' }, t, mapLocalError))
+            .toBe('local:crash')
+        expect(failureBannerText({ errorCode: 'merge_failed', information: 'merge_failed' }, t, mapLocalError))
+            .toBe('local:merge_failed')
+        expect(failureBannerText({ errorCode: 'local_interrupted', information: 'local_interrupted' }, t, mapLocalError))
+            .toBe('t:results.localInterrupted')
+    })
+
+    it('code stable : l’explication traduite, jamais le code brut', () => {
+        expect(failureBannerText({ information: 'item_unplaceable' }, t)).toBe('t:localMode.itemUnplaceableUnknown')
+        expect(failureBannerText({ information: 'local_interrupted' }, t)).toBe('t:results.localInterrupted')
+    })
+
+    it('aucune cause écrite : le libellé d’échec, jamais un bandeau vide', () => {
+        for (const information of [null, undefined, '', '   ']) {
+            expect(failureBannerText({ information }, t)).toBe('t:result.failed')
+        }
     })
 })

@@ -71,6 +71,7 @@ const fullJob = (i, extra = {}) => ({
     requested: 12,
     discardedAlternatives: [{ why: 'overlap' }],
     information: 'info',
+    errorCode: 'engine_error',
     unfit: { reason: 'partial' },
     progress: { stage: 's', done: 1, total: 2 },
     liveLayout: { sheets: [[1, 2]] },
@@ -107,6 +108,7 @@ describe('getResults — projection, borne et index', () => {
         const done = projected.items.find((i) => i.slug === 'job-1')
         expect(done.alternatives[0]).toMatchObject({ altId: 'a', strategy: 'compact', svgs: ['/api/files/result/svg/a.svg'] })
         expect(done.zipDownloadUrl).toBe('/api/files/result/zip/job-1')
+        expect(done.errorCode).toBe('engine_error')
     })
 
     it('ne rapatrie ni localPayload ni params/files/charge ni la géométrie des alternatives', async () => {

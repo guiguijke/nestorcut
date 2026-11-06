@@ -31,3 +31,21 @@ export function failureReasonKey(information) {
     const code = String(information || '').trim()
     return Object.prototype.hasOwnProperty.call(REASON_KEYS, code) ? REASON_KEYS[code] : null
 }
+
+/**
+ * Texte du bandeau de la page projet pour un job en échec que le registre local
+ * ne connaît pas (job serveur, ou job local après rechargement).
+ * `errorCode` n'est posé que pour un calcul navigateur (local-fail, sweeper) : le
+ * message est celui du direct, jamais le texte brut du moteur.
+ * Job du worker : son texte est la seule cause connue, rendu tel quel, comme dans
+ * la fenêtre de résultat. `error` n'est pas exposé au client, il peut citer un
+ * chemin ou une trace : sans `information`, le libellé d'échec.
+ */
+export function failureBannerText(job, t, mapLocalError) {
+    const code = job?.errorCode
+    if (code && code !== 'local_interrupted') return mapLocalError(code === 'engine_error' ? 'crash' : code)
+    const information = String(job?.information || '').trim()
+    const key = failureReasonKey(information)
+    if (key) return t(key)
+    return information || t('result.failed')
+}

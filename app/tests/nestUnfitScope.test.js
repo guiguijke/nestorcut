@@ -241,6 +241,26 @@ describe("files.js — le refus de capacité ne suit pas l'utilisateur sur un au
         expect(store.getters.nestBusy).toBe(false)
     })
 
+    it('course : le job échoue pendant que nest() attend ses réponses, Nest reste actif', async () => {
+        let finishNest
+        const store = await loadStore(
+            () =>
+                new Promise((resolve) => {
+                    finishNest = resolve
+                }),
+        )
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        const submission = store.actions.nest('a')
+
+        // Le flux a vu le job échouer : la page appelle resetLastParams.
+        store.actions.resetLastParams()
+        finishNest({ jobId: 'job-a' })
+        await submission
+
+        expect(store.getters.isNewParams).toBe(true)
+        expect(store.getters.nestBusy).toBe(false)
+    })
+
     it('course, témoin : le succès de A, resté sur A, grise Nest et ouvre la fenêtre de résultat', async () => {
         let finishNest
         const store = await loadStore(

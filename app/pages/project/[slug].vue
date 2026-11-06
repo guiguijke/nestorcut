@@ -138,8 +138,8 @@
         <div v-if="localImportNotice" class="content__notice content__notice--warn">
             {{ localImportNoticeText }}
         </div>
-        <div v-if="localComputeError && !capacityPanel" ref="localErrorEl" class="content__error">
-            {{ localErrorText }}
+        <div v-if="jobErrorText && !capacityPanel" ref="jobErrorEl" class="content__error" data-testid="job-error">
+            {{ jobErrorText }}
         </div>
         <div v-if="isDemo && demoQuotaReached && !demoUnlimited" class="content__error">
             {{ t('demo.quotaEmpty') }}
@@ -188,7 +188,8 @@ import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
-import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
+import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob, serverJobState } from "~/utils/liveJob";
+import { failureBannerText } from "~/utils/failureReason";
 import { useJobScroll } from "~/composables/useJobScroll";
 import {
     DEMO_NESTING_LIMIT,
@@ -329,13 +330,19 @@ const localLive = computed(() => {
 // is 8 screens tall on the demo) and the failure banner sits right under it:
 // useJobScroll brings each of them into view, once per job.
 const liveSection = ref(null);
-const localErrorEl = ref(null);
-useJobScroll({
+const jobErrorEl = ref(null);
+const serverJob = computed(() => serverJobState(unref(resultsList), unref(pageSlug)));
+const jobScroll = useJobScroll({
+    projectSlug: () => unref(pageSlug),
     progress: () => progressFor(unref(pageSlug)),
     serverSlug: () => unref(liveResult)?.slug,
+    serverJob: () => unref(serverJob),
     liveEl: liveSection,
-    failureEl: localErrorEl,
+    failureEl: jobErrorEl,
     target: import.meta.client ? window : null,
+    // Le job échoué n'a rien produit et le message propose de réessayer : Nest
+    // redevient actif avec les MÊMES réglages (comme après une annulation, AA2).
+    onFailed: () => resetLastParams(),
 });
 
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
@@ -364,6 +371,14 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
             }
         : null,
 }));
+// Bandeau d'échec : le registre local quand il connaît le job (il nomme la
+// pièce), sinon le flux serveur : job du worker, ou job local après rechargement.
+const jobErrorText = computed(() => {
+    if (localComputeError.value) return localErrorText.value;
+    const job = unref(serverJob);
+    if (job?.phase !== 'error') return '';
+    return failureBannerText(job.job, t, (code) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject) }));
+});
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
 // leviers du pré-contrôle) — le registre le porte sur la phase error.
 const localUnfit = ref(null);
@@ -556,6 +571,9 @@ const nestRequestError = computed(() => filesGetters.nestRequestError);
 // 5xx…) autrement muette + verrou de double soumission pendant le POST.
 const nestSubmitError = computed(() => filesGetters.nestError);
 const nestBusy = computed(() => filesGetters.nestBusy);
+watch(nestBusy, (busy) => {
+    if (busy) jobScroll.expectJob();
+});
 const localImportError = computed(() => filesGetters.localImportError);
 
 // Lot J10-a : information de dépôt (zone d'exclusion Work/keepout).

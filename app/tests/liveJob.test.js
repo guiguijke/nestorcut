@@ -7,6 +7,7 @@ import {
     frameFitsSheet,
     frameIsBetter,
     resolveLiveStage,
+    serverJobState,
 } from '../utils/liveJob'
 
 const aLive = { slug: 'jA', projectSlug: 'pA', status: 'awaiting_local', isInProgress: true, liveLayout: { stage: 'x' } }
@@ -29,6 +30,49 @@ describe('liveJob — isolation by projectSlug', () => {
         expect(pickAwaitingLocal(list, 'pA')).toBe(aLive)
         expect(pickLiveJob(list, 'pA')).toBe(aLive)
         expect(pickRunningJob(list, 'pA')).toBe(aLive)
+    })
+})
+
+// Le dernier job du projet vu par le flux serveur : la liste SSE arrive du plus
+// récent au plus ancien, un job plus ancien ne parle plus pour le projet.
+describe('serverJobState', () => {
+    const job = (slug, status, extra = {}) => ({
+        slug, projectSlug: 'pA', status,
+        isInProgress: ['processing', 'pending', 'awaiting_local'].includes(status), ...extra,
+    })
+    const phase = (j) => serverJobState([j], 'pA')?.phase
+
+    it('en attente ou en cours sur le worker : running', () => {
+        expect(phase(job('j', 'pending'))).toBe('running')
+        expect(phase(job('j', 'processing'))).toBe('running')
+    })
+
+    it('calculé dans le navigateur : local, le registre le suit déjà', () => {
+        expect(phase(job('j', 'awaiting_local'))).toBe('local')
+    })
+
+    it('échec : error, et le job est rendu pour dire sa cause', () => {
+        const failed = job('j', 'failed', { information: 'boom' })
+        expect(serverJobState([failed], 'pA')).toEqual({ slug: 'j', phase: 'error', job: failed })
+    })
+
+    it('annulation et fin normale ne sont pas des échecs', () => {
+        expect(phase(job('j', 'failed', { wasCancelled: true }))).toBe('done')
+        expect(phase(job('j', 'done'))).toBe('done')
+    })
+
+    it('seul le plus récent compte : un échec ancien se tait quand un nouveau job part', () => {
+        const old = job('old', 'failed', { information: 'boom' })
+        expect(serverJobState([job('new', 'processing'), old], 'pA').slug).toBe('new')
+        expect(serverJobState([job('new', 'done'), old], 'pA').phase).toBe('done')
+    })
+
+    it('piège 47 : jamais le job d’un autre projet, ni un job sans projet', () => {
+        const other = { ...job('j', 'failed'), projectSlug: 'pB' }
+        expect(serverJobState([other], 'pA')).toBe(null)
+        expect(serverJobState([{ ...job('j', 'failed'), projectSlug: undefined }], 'pA')).toBe(null)
+        expect(serverJobState([], 'pA')).toBe(null)
+        expect(serverJobState(null, 'pA')).toBe(null)
     })
 })
 

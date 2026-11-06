@@ -8,7 +8,7 @@ import { connectDB } from "~~/server/db/mongo";
 const RESULT_FIELDS = [
     'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly',
     'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
-    'information', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
+    'information', 'errorCode', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
     'dxf_files', 'svg_files',
     'alternatives.alt_id', 'alternatives.seed', 'alternatives.density',
     'alternatives.usedSheetShare', 'alternatives.strategy', 'alternatives.offcut',
@@ -92,6 +92,9 @@ export async function getResults(userId, projectSlug) {
             // Specific failure reason written by the worker (e.g. which part
             // does not fit the sheet); null for legacy jobs.
             information: queueItem.information ?? null,
+            // Catégorie d'échec d'un calcul navigateur (liste fermée, local-fail) :
+            // le bandeau rejoue le message du direct après un rechargement.
+            errorCode: queueItem.errorCode ?? null,
             // Plan 2026-09-05 §1.2b/§1.2c + Z3 (vérif 2026-09-05) : verdict
             // structuré {reason: 'capacity'|'strip'|'partial', leviers} —
             // alimente le bandeau du modal (unfit) et les leviers d'une
