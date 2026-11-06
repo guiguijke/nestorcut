@@ -996,6 +996,14 @@ une fois par poste : `npm i --no-save playwright && npx playwright install
 chromium`. Un `npm i` ultérieur l'élague : le refaire alors. Seul
 `@axe-core/playwright` (léger, aucun navigateur) est en devDependencies.
 
+**`scripts/qa-preload-auth-local.mjs` (poids du JS préchargé par `/auth/local`)** :
+harnais MANUEL, sans CI et sans test vitest. À lancer à la main après
+`npx nuxt build`, serveur du build démarré (`node scripts/qa-preload-auth-local.mjs
+--base http://127.0.0.1:3000`) ; rien ne le fait à votre place. Codes de
+sortie : 0 OK, 1 seuil dépassé ou three dans un chunk préchargé, 2 fichier
+préchargé absent du disque. Il n'appelle pas `process.exit` (assertion libuv
+sous Windows quand `fetch` garde une connexion ouverte).
+
 Benchmarks ESICUP (lents) : `pytest benchmarks/test_benchmarks.py -m slow`.
 Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --nocapture`.
 

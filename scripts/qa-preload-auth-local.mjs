@@ -8,11 +8,20 @@
 // dans ce chunk, chaque petit chunk qui l'importe en statique le fait
 // précharger. Ce garde-fou le détecte sur un build.
 //
+// HARNAIS MANUEL : à lancer à la main après `npx nuxt build`, avec le serveur
+// du build démarré. Aucune CI ni aucun test vitest ne le lance : rien ne
+// l'exécute tout seul, un oubli n'est pas détecté.
+//
 // Usage (sur un build, serveur lancé avec `node .output/server/index.mjs`) :
 //   node scripts/qa-preload-auth-local.mjs [--base http://127.0.0.1:3000]
 //        [--public .output/public] [--html page.html] [--max-ko 900]
 // Échec (exit 1) si le JS préchargé dépasse --max-ko (non compressé) ou si un
-// fichier préchargé contient le moteur WebGL de three. Aucune écriture.
+// fichier préchargé contient le moteur WebGL de three, 2 si un fichier
+// préchargé manque sur disque. Aucune écriture. Le script n'appelle jamais
+// process.exit : avec --base, la connexion keep-alive de fetch reste ouverte
+// et, sous Windows, la sortie forcée déclenchait l'assertion libuv
+// UV_HANDLE_CLOSING (code 127 après « OK »). Il fixe process.exitCode et laisse
+// Node finir quand les handles se ferment.
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -43,21 +52,26 @@ const read = (href) => {
 }
 const eager = new Set([...urls.modulepreload, ...urls.script])
 let bytes = 0
+let missing = false
 const heavy = []
 for (const href of eager) {
     const buf = read(href)
-    if (!buf) { console.error(`introuvable sur disque : ${href}`); process.exit(2) }
+    if (!buf) { console.error(`introuvable sur disque : ${href}`); missing = true; break }
     bytes += buf.length
     if (buf.includes('WebGLRenderer')) heavy.push(href)
 }
-let prefetchBytes = 0
-for (const href of urls.prefetch) prefetchBytes += read(href)?.length ?? 0
+if (missing) {
+    process.exitCode = 2
+} else {
+    let prefetchBytes = 0
+    for (const href of urls.prefetch) prefetchBytes += read(href)?.length ?? 0
 
-const ko = (n) => `${Math.round(n / 1024)} Ko`
-console.log(`préchargés (modulepreload + script) : ${eager.size} fichiers, ${ko(bytes)}`)
-console.log(`prefetch : ${urls.prefetch.size} fichiers, ${ko(prefetchBytes)}`)
-let failed = false
-if (bytes / 1024 > MAX_KO) { console.error(`ÉCHEC : ${ko(bytes)} > ${MAX_KO} Ko`); failed = true }
-if (heavy.length) { console.error(`ÉCHEC : three (WebGLRenderer) dans un chunk préchargé : ${heavy.join(', ')}`); failed = true }
-if (!failed) console.log('OK')
-process.exit(failed ? 1 : 0)
+    const ko = (n) => `${Math.round(n / 1024)} Ko`
+    console.log(`préchargés (modulepreload + script) : ${eager.size} fichiers, ${ko(bytes)}`)
+    console.log(`prefetch : ${urls.prefetch.size} fichiers, ${ko(prefetchBytes)}`)
+    let failed = false
+    if (bytes / 1024 > MAX_KO) { console.error(`ÉCHEC : ${ko(bytes)} > ${MAX_KO} Ko`); failed = true }
+    if (heavy.length) { console.error(`ÉCHEC : three (WebGLRenderer) dans un chunk préchargé : ${heavy.join(', ')}`); failed = true }
+    if (!failed) console.log('OK')
+    process.exitCode = failed ? 1 : 0
+}
