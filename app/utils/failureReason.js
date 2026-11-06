@@ -27,6 +27,11 @@ const REASON_KEYS = {
     local_unknown: 'localCompute.error',
 }
 
+// Plantage du moteur natif : engine.py cite la fin de son stderr (« engine failed
+// (rc=…): thread … panicked at crates\… »). Ce texte ne dit rien à l'utilisateur
+// et cite des chemins : il n'a pas sa place dans le bandeau.
+const ENGINE_TRACE = /\bengine failed \(rc=|\bpanicked at\b/
+
 export function failureReasonKey(information) {
     const code = String(information || '').trim()
     return Object.prototype.hasOwnProperty.call(REASON_KEYS, code) ? REASON_KEYS[code] : null
@@ -38,8 +43,9 @@ export function failureReasonKey(information) {
  * `errorCode` n'est posé que pour un calcul navigateur (local-fail, sweeper) : le
  * message est celui du direct, jamais le texte brut du moteur.
  * Job du worker : son texte est la seule cause connue, rendu tel quel, comme dans
- * la fenêtre de résultat. `error` n'est pas exposé au client, il peut citer un
- * chemin ou une trace : sans `information`, le libellé d'échec.
+ * la fenêtre de résultat, sauf la trace du moteur natif (`ENGINE_TRACE`).
+ * `error` n'est pas exposé au client, il peut citer un chemin ou une trace : sans
+ * `information`, le libellé d'échec.
  */
 export function failureBannerText(job, t, mapLocalError) {
     const code = job?.errorCode
@@ -47,6 +53,7 @@ export function failureBannerText(job, t, mapLocalError) {
     const information = String(job?.information || '').trim()
     const key = failureReasonKey(information)
     if (key) return t(key)
+    if (ENGINE_TRACE.test(information)) return t('result.failed')
     return information || t('result.failed')
 }
 

@@ -76,6 +76,17 @@ describe('failureBannerText', () => {
         expect(failureBannerText({ information: 'local_interrupted' }, t)).toBe('t:results.localInterrupted')
     })
 
+    it('plantage du moteur natif : le libellé d’échec, jamais la trace', () => {
+        const trace = "Nesting failed: engine failed (rc=3221226505, reason=unknown): thread '<unnamed>' panicked at crates\jagua-rs\src\probs\spp\entities\problem.rs:35:48:\ncalled `Result::unwrap()` on an `Err` value"
+        expect(failureBannerText({ information: trace }, t)).toBe('t:result.failed')
+        // Le stderr peut être vide, ou la mention du moteur absente.
+        expect(failureBannerText({ information: 'Nesting failed: engine failed (rc=1, reason=unknown): ' }, t)).toBe('t:result.failed')
+        expect(failureBannerText({ information: "thread 'main' panicked at src/main.rs:1:1" }, t)).toBe('t:result.failed')
+        // Un refus lisible du worker reste affiché, même s'il parle du moteur.
+        const lisible = 'Nesting failed: the engine found no valid position for part 1 of "a.dxf"'
+        expect(failureBannerText({ information: lisible }, t)).toBe(lisible)
+    })
+
     it('aucune cause écrite : le libellé d’échec, jamais un bandeau vide', () => {
         for (const information of [null, undefined, '', '   ']) {
             expect(failureBannerText({ information }, t)).toBe('t:result.failed')
