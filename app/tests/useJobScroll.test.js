@@ -25,6 +25,12 @@ function fakePage({ vh = 900, y = 641, liveInFlight = false } = {}) {
     })
     page.section = element('section', 200, 1010, (top) => top)
     page.banner = element('banner', 1228, 82, (top, height) => top + height / 2 - vh / 2)
+    // Refus de Nest sous l'atelier : page défilée à y=222 (Nest visible), il est à top=1006 pour un écran de 900.
+    page.refusal = element('refusal', 1228, 60, (top, height) => top + height / 2 - vh / 2)
+    page.refusalWhole = () => {
+        const r = page.refusal.getBoundingClientRect()
+        return r.top >= 0 && r.bottom <= vh
+    }
     page.bannerWhole = () => {
         const r = page.banner.getBoundingClientRect()
         return r.top >= 0 && r.bottom <= vh
@@ -74,9 +80,10 @@ describe('useJobScroll, sur le vrai registre local', () => {
 
     // Monte comme la page : le bandeau n'existe qu'une fois rendu, donc après
     // les watchers de la transition (`v-if`, d'où le watch post-flush).
-    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), serverJob = ref(null), onFailed, seen = new Set(), panel = false, staleBanner = false } = {}) {
+    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), serverJob = ref(null), onFailed, seen = new Set(), panel = false, staleBanner = false, refusals = ref(0), refusalText = ref('') } = {}) {
         const scope = effectScope()
         const failureEl = ref(null)
+        const refusalEl = ref(null)
         let scroll
         scope.run(() => {
             scroll = useJobScroll({
@@ -86,6 +93,8 @@ describe('useJobScroll, sur le vrai registre local', () => {
                 serverJob: () => serverJob.value,
                 liveEl: ref(page.section),
                 failureEl,
+                refusal: () => refusals.value,
+                refusalEl,
                 onFailed,
                 target: page.target,
                 seen,
@@ -99,8 +108,10 @@ describe('useJobScroll, sur le vrai registre local', () => {
                 (show) => { failureEl.value = show ? page.banner : null },
                 { flush: 'post', immediate: true },
             )
+            // Le bandeau de refus n'existe que tant que le texte est posé (v-if).
+            watch(refusalText, (text) => { refusalEl.value = text ? page.refusal : null }, { flush: 'post', immediate: true })
         })
-        return { scope, projectSlug, serverSlug, serverJob, seen, scroll }
+        return { scope, projectSlug, serverSlug, serverJob, seen, scroll, refusals, refusalText }
     }
 
     describe('vue live', () => {
@@ -708,6 +719,111 @@ describe('useJobScroll, sur le vrai registre local', () => {
             await frame('a')
             await fail('a')
             expect(page.calls.map((c) => c.behavior)).toEqual(['auto', 'auto'])
+        })
+    })
+
+    describe('refus de Nest par le serveur', () => {
+        // Comme le store : le clic arme (nestBusy), le message disparaît, puis le
+        // refus pose le texte et compte un refus de plus.
+        const click = (m) => {
+            m.refusalText.value = ''
+            m.scroll.expectJob()
+        }
+        const refuse = async (m, text = 'Another job is running') => {
+            m.refusalText.value = text
+            m.refusals.value += 1
+            await flush()
+        }
+
+        it('clic puis refus hors écran : le message est amené, une seule fois', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page)
+            click(m)
+            expect(page.refusalWhole()).toBe(false)
+            await refuse(m)
+            expect(names(page)).toEqual(['refusal'])
+            expect(page.calls[0]).toMatchObject({ block: 'center', behavior: 'smooth' })
+            expect(page.refusalWhole()).toBe(true)
+        })
+
+        it('message déjà entier à l’écran : aucun défilement', async () => {
+            const page = fakePage({ y: 800 })
+            const m = mount(page)
+            click(m)
+            expect(page.refusalWhole()).toBe(true)
+            await refuse(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('deuxième refus au texte identique après un défilement de l’utilisateur : ramené aussi', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page)
+            click(m)
+            await refuse(m)
+            page.wheel(-800)
+            expect(page.refusalWhole()).toBe(false)
+            click(m)
+            await refuse(m)
+            expect(names(page)).toEqual(['refusal', 'refusal'])
+            expect(page.refusalWhole()).toBe(true)
+        })
+
+        it('mouvement réduit : défilement immédiat', async () => {
+            const page = fakePage({ y: 222 })
+            page.calm = true
+            const m = mount(page)
+            click(m)
+            await refuse(m)
+            expect(page.calls.map((c) => c.behavior)).toEqual(['auto'])
+        })
+
+        it('refus qui ne suit pas un clic de cette page : aucun défilement', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page)
+            await refuse(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('page remontée sur un refus déjà affiché : aucun défilement', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page, { refusals: ref(3), refusalText: ref('Another job is running') })
+            await flush()
+            expect(page.calls).toEqual([])
+            expect(m.refusals.value).toBe(3)
+        })
+
+        it('le clic est consommé par son refus : un refus suivant sans clic ne défile pas', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page)
+            click(m)
+            await refuse(m)
+            page.wheel(-800)
+            page.calls.length = 0
+            await refuse(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('l’utilisateur a quitté le projet entre le clic et le refus : aucun défilement', async () => {
+            const page = fakePage({ y: 222 })
+            const m = mount(page)
+            click(m)
+            m.projectSlug.value = 'p2'
+            await refuse(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('le refus n’empêche pas le défilement d’un échec de job qui suit', async () => {
+            const page = fakePage({ y: 641 })
+            const m = mount(page)
+            click(m)
+            await refuse(m)
+            page.y = 641
+            page.calls.length = 0
+            m.refusalText.value = ''
+            start('a')
+            await frame('a')
+            await fail('a')
+            expect(names(page)).toEqual(['section', 'banner'])
         })
     })
 

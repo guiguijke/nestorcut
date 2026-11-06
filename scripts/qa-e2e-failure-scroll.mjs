@@ -33,6 +33,16 @@
 //                        le bandeau reste et rien ne défile.
 //   serveur_echec_direct le job apparaît directement en erreur, avant la fin de la
 //                        requête Nest (échec entre deux ticks du flux) : même résultat.
+//   refus_409_reel       un job en cours sur le projet B ; sur le projet A, page défilée
+//                        juste assez pour voir Nest, clic : le serveur refuse pour de
+//                        vrai (409 concurrent_limit). Le message du refus finit entier à
+//                        l'écran, en en et fr, à 1440x900, 1440x800 et 390x844, avec UN
+//                        défilement, Nest reste actif. Un deuxième clic refusé après un
+//                        défilement de l'utilisateur ramène le message (même texte) ; au
+//                        rechargement et au retour sur la page, rien ne défile.
+//   refus_5xx            même parcours avec une réponse 500 du POST.
+//   refus_capacite       refus 422 du pré-contrôle : le panneau de capacité garde son
+//                        défilement (un seul, le sien), le refus de soumission se tait.
 //   fusion_morte         les walks aboutissent, les workers meurent à la fusion : le
 //                        job est livré sans bandeau d'échec, et la carte le dit, après
 //                        rechargement aussi.
@@ -177,9 +187,9 @@ function instrument() {
     }
 }
 
-async function openContext({ width = 1440, height = 900 } = {}) {
+async function openContext({ width = 1440, height = 900, locale = 'en-US' } = {}) {
     await resetAccount()
-    const ctx = await browser.newContext({ viewport: { width, height }, locale: 'en-US', storageState: session, hasTouch: width < 500 })
+    const ctx = await browser.newContext({ viewport: { width, height }, locale, storageState: session, hasTouch: width < 500 })
     const page = await ctx.newPage()
     await page.addInitScript(instrument)
     return { ctx, page }
@@ -230,6 +240,26 @@ const liveCalls = (r) => r.scrolls.filter((s) => s.el === 'atelier').length
 const show = (r) => JSON.stringify(r)
 const nestDisabled = (page) => page.evaluate(() => document.querySelector('.atelier__nest')?.classList.contains('button--disabled'))
 const bannerText = (page) => page.evaluate(() => document.querySelector('.content__error')?.textContent.trim() ?? '')
+const REFUSAL = '[data-testid="nest-refusal"]'
+const refusalCalls = (r) => r.scrolls.filter((s) => s.el === 'content__error').length
+const refusalText = (page) => page.evaluate((sel) => document.querySelector(sel)?.textContent.trim() ?? '', REFUSAL)
+// Page défilée juste assez pour voir Nest, en bas de l'écran : le message du refus est dessous.
+const scrollNestToEdge = async (page) => {
+    await page.evaluate(() => {
+        const r = document.querySelector('.atelier__nest').getBoundingClientRect()
+        window.scrollTo({ top: r.bottom + window.scrollY - window.innerHeight + 10, behavior: 'instant' })
+    })
+    await sleep(300)
+}
+const finishRefusal = async (page, name) => {
+    await sleep(SETTLE_MS)
+    await page.screenshot({ path: path.join(OUT, `${name}.png`) })
+    const refusal = await page.evaluate((sel) => {
+        const r = document.querySelector(sel)?.getBoundingClientRect()
+        return r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), whole: r.top >= 0 && r.bottom <= window.innerHeight } : null
+    }, REFUSAL)
+    return { y: Math.round(await page.evaluate(() => window.scrollY)), refusal, scrolls: await scrolls(page) }
+}
 const SERVER_CAUSE = 'Nesting failed: qa cause from the worker'
 const serverJob = async (projectPath, status, extra = {}) => {
     const owner = await db.collection('users').findOne({ email: EMAIL })
@@ -435,6 +465,106 @@ const SCENARIOS = {
         check('serveur_echec_direct : bandeau entier à l’écran', r.banner?.whole === true, show(r))
         check('serveur_echec_direct : un seul défilement vers le bandeau', bannerCalls(r) === 1, show(r.scrolls))
         check('serveur_echec_direct : Nest actif, y compris après la fin de la requête', (await nestDisabled(page)) === false)
+        await ctx.close()
+    },
+    // Refus de la demande de Nest : le message est sous l'atelier, sans job à suivre.
+    async refus_409_reel() {
+        const texts = { 'en-US': /already running/i, 'fr-FR': /déjà en cours/i }
+        for (const [locale, width, height] of [['en-US', 1440, 900], ['en-US', 1440, 800], ['en-US', 390, 844], ['fr-FR', 1440, 900], ['fr-FR', 390, 844]]) {
+            const tag = `refus_409_reel ${locale} ${width}x${height}`
+            const { ctx, page } = await openContext({ width, height, locale })
+            const pB = await newProject(page, [SMALL])
+            const pA = await newProject(page, [SMALL])
+            await serverJob(pB, 'processing')
+            await sleep(1500)
+            await scrollNestToEdge(page)
+            const before = await probe(page)
+            const statuses = []
+            page.on('response', (r) => { if (r.request().method() === 'POST' && /\/nest$/.test(r.url())) statuses.push(r.status()) })
+            await clickNest(page)
+            await page.waitForSelector(REFUSAL, { timeout: 30000 })
+            const r = await finishRefusal(page, `refus_409_reel_${locale}_${width}x${height}`)
+            check(`${tag} : le serveur refuse pour de vrai`, statuses[0] === 409, show(statuses))
+            check(`${tag} : le message est entier à l'écran`, r.refusal?.whole === true, show(r))
+            check(`${tag} : un seul défilement vers le message`, refusalCalls(r) === 1, show(r.scrolls))
+            check(`${tag} : le texte est celui de la langue`, texts[locale].test(await refusalText(page)), await refusalText(page))
+            check(`${tag} : Nest reste actif`, (await nestDisabled(page)) === false)
+            if (width === 1440 && height === 900 && locale === 'en-US') {
+                // Deuxième clic refusé après que l'utilisateur a défilé : même texte, ramené aussi.
+                const first = await refusalText(page)
+                await wheelOverPage(page, -1500)
+                await sleep(800)
+                const gone = await probe(page)
+                const n0 = refusalCalls({ scrolls: await scrolls(page) })
+                // Nest revu en bas d'écran (sans quoi Playwright défile seul pour cliquer) :
+                await scrollNestToEdge(page)
+                await clickNest(page)
+                await page.waitForFunction((sel) => document.querySelector(sel), REFUSAL, { timeout: 30000 })
+                const r2 = await finishRefusal(page, 'refus_409_reel_deuxieme')
+                check(`${tag} : le message avait quitté l'écran avant le deuxième clic`, gone.y < before.y, show({ gone, before }))
+                check(`${tag} : deuxième refus, même texte, entier à l'écran`, (await refusalText(page)) === first && r2.refusal?.whole === true, show(r2))
+                check(`${tag} : deuxième refus, un défilement de plus`, refusalCalls(r2) === n0 + 1, show(r2.scrolls))
+                // Rechargement : le refus n'est pas une réponse à un clic de cette page.
+                await page.reload({ waitUntil: 'load' })
+                await sleep(SETTLE_MS)
+                const again = await finishRefusal(page, 'refus_409_reel_recharge')
+                check(`${tag} : au rechargement, aucun défilement`, again.scrolls.length === 0, show(again.scrolls))
+                // Retour sur la page (remontée, même projet) avec un refus affiché : rien ne défile.
+                await page.evaluate(() => window.scrollTo(0, 0))
+                await clickNest(page)
+                await page.waitForSelector(REFUSAL, { timeout: 30000 })
+                await sleep(SETTLE_MS)
+                await route(page, '/home')
+                await page.waitForURL('**/home')
+                await sleep(600)
+                await page.evaluate(() => { window.__scrolls.length = 0 })
+                await route(page, pA)
+                await page.waitForURL('**' + pA)
+                await sleep(SETTLE_MS)
+                check(`${tag} : au retour sur la page, aucun défilement`, (await scrolls(page)).length === 0, show(await scrolls(page)))
+            }
+            await ctx.close()
+        }
+    },
+    async refus_5xx() {
+        for (const [width, height] of [[1440, 900], [390, 844]]) {
+            const tag = `refus_5xx ${width}x${height}`
+            const { ctx, page } = await openContext({ width, height })
+            await newProject(page, [SMALL])
+            await scrollNestToEdge(page)
+            await ctx.route('**/nest', (r) => (r.request().method() === 'POST'
+                ? r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ statusCode: 500, statusMessage: 'boom' }) })
+                : r.continue()))
+            await clickNest(page)
+            await page.waitForSelector(REFUSAL, { timeout: 30000 })
+            const r = await finishRefusal(page, `refus_5xx_${width}x${height}`)
+            check(`${tag} : le message est entier à l'écran`, r.refusal?.whole === true, show(r))
+            check(`${tag} : un seul défilement vers le message`, refusalCalls(r) === 1, show(r.scrolls))
+            check(`${tag} : Nest reste actif`, (await nestDisabled(page)) === false)
+            await ctx.close()
+        }
+    },
+    // Le panneau de capacité garde son propre défilement : un refus 422 ne passe pas par le refus de soumission.
+    async refus_capacite() {
+        const { ctx, page } = await openContext()
+        await newProject(page, [SMALL])
+        await scrollNestToEdge(page)
+        const unfit = { reason: 'capacity', ratio: 4.2, sheetsNeeded: 5, maxPartsAtSpacing: 12, maxSpacingForFitMm: 0.4 }
+        await ctx.route('**/nest', (r) => (r.request().method() === 'POST'
+            ? r.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ statusCode: 422, statusMessage: 'capacity_exceeded', data: { unfit } }) })
+            : r.continue()))
+        await clickNest(page)
+        await sleep(SETTLE_MS)
+        await page.screenshot({ path: path.join(OUT, 'refus_capacite.png') })
+        const st = await page.evaluate(() => {
+            const el = document.querySelector('.atelier__nest')?.closest('aside')?.lastElementChild
+            const panels = [...document.querySelectorAll('aside div')].filter((d) => d.querySelector('[class*="capacity"]'))
+            const r = (panels[panels.length - 1] || el)?.getBoundingClientRect()
+            return { scrolls: window.__scrolls, panel: r ? { top: Math.round(r.top), bottom: Math.round(r.bottom), whole: r.top >= 0 && r.bottom <= window.innerHeight } : null, refusal: Boolean(document.querySelector('[data-testid="nest-refusal"]')) }
+        })
+        check('refus_capacite : le panneau est à l’écran', st.panel?.whole === true || (st.panel && st.panel.top < 900 && st.panel.bottom > 0), show(st))
+        check('refus_capacite : pas de bandeau de refus de soumission, pas de défilement vers lui', !st.refusal && st.scrolls.filter((s) => s.el === 'content__error').length === 0, show(st))
+        check('refus_capacite : un seul défilement, celui du panneau', st.scrolls.length === 1, show(st.scrolls))
         await ctx.close()
     },
     async fusion_morte() {

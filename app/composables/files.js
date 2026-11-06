@@ -148,6 +148,9 @@ function createFilesState() {
         // soumission non gérée ailleurs (409 concurrent_limit, 5xx…) — avant,
         // l'erreur était avalée ET lastParams marqué → bouton grisé muet.
         nestError: '',
+        // Nombre de refus de soumission posés (nestError) : le texte peut être le
+        // même d'un refus au suivant, la page a besoin d'un événement, pas d'un texte.
+        nestRefusals: 0,
         // Z1 (vérif 2026-09-05) : payload structuré du refus 422 capacité
         // (aire gonflée > seuil) — {reason, ratio, sheetsNeeded,
         // maxPartsAtSpacing, maxSpacingForFitMm} pour le bandeau à leviers.
@@ -1200,6 +1203,10 @@ async function nest(slug) {
     // A abîmerait B : erreur rouge, bouton Nest grisé (lastParams prend le
     // corps de B), fenêtre de résultat de A.
     const stillOnSubmittedProject = () => state.projectSlug === API_ROUTES.PROJECT(slug)
+    const refuseSubmission = (key) => {
+        state.nestError = key
+        state.nestRefusals += 1
+    }
     try {
         try {
             state.nestError = ''
@@ -1232,7 +1239,7 @@ async function nest(slug) {
                 // d6 (02/11) : borne technique serveur (400, avant toute
                 // charge) — le miroir client (sheetCountTooHigh) grise Nest
                 // d'ordinaire avant ; ici le client a été contourné.
-                if (stillOnSubmittedProject()) state.nestError = 'nest.error.maxSheets'
+                if (stillOnSubmittedProject()) refuseSubmission('nest.error.maxSheets')
                 return
             }
             if (error?.response?.status === 402) {
@@ -1272,9 +1279,9 @@ async function nest(slug) {
             // réglages à la main. Message visible + sortie propre :
             // isNewParams reste vrai, le bouton reste utilisable.
             if (!stillOnSubmittedProject()) return
-            state.nestError = error?.data?.statusMessage === 'concurrent_limit'
+            refuseSubmission(error?.data?.statusMessage === 'concurrent_limit'
                 ? 'nest.error.concurrent'
-                : 'nest.error.generic'
+                : 'nest.error.generic')
             return
         }
 
@@ -1330,6 +1337,7 @@ export const filesStore = readonly({
         // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
         sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),
         nestError: getter((state) => state.nestError),
+        nestRefusals: getter((state) => state.nestRefusals),
         nestUnfit: getter((state) => state.nestUnfit),
         nestBusy: getter((state) => state.nestBusy),
         params: getter((state) => state.params),

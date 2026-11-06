@@ -150,7 +150,7 @@
         <div v-if="nestRequestError && !capacityPanel" class="content__error">
             {{ t(nestRequestError) }}
         </div>
-        <div v-if="nestSubmitError" class="content__error">
+        <div v-if="nestSubmitError" ref="nestRefusalEl" class="content__error" data-testid="nest-refusal">
             {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
         <div v-if="localImportError" class="content__error">
@@ -331,6 +331,7 @@ const localLive = computed(() => {
 // useJobScroll brings each of them into view, once per job.
 const liveSection = ref(null);
 const jobErrorEl = ref(null);
+const nestRefusalEl = ref(null);
 const serverJob = computed(() => serverJobState(unref(resultsList), unref(pageSlug)));
 const jobScroll = useJobScroll({
     projectSlug: () => unref(pageSlug),
@@ -339,6 +340,10 @@ const jobScroll = useJobScroll({
     serverJob: () => unref(serverJob),
     liveEl: liveSection,
     failureEl: jobErrorEl,
+    // Refus de la demande de Nest (409, 5xx) : message sous l'atelier, sans job
+    // à suivre — le composable l'amène à l'écran après un clic de cette page.
+    refusal: () => filesStore.getters.nestRefusals,
+    refusalEl: nestRefusalEl,
     target: import.meta.client ? window : null,
     // Le job échoué n'a rien produit et le message propose de réessayer : Nest
     // redevient actif avec les MÊMES réglages (comme après une annulation, AA2).

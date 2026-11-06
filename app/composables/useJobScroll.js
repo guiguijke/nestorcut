@@ -19,6 +19,14 @@
  * directement en erreur : `expectJob()`, appelé quand la demande part, désigne le
  * premier nouveau slug du projet comme ce job-là.
  *
+ * Refus d'une demande de Nest par le serveur (409 concurrent_limit, 5xx) : le
+ * message est sous l'atelier, donc hors écran, et aucun job n'existe pour
+ * défiler. `refusal()` compte les refus posés (le texte peut être identique d'un
+ * refus au suivant) ; `expectJob()` arme le défilement, donc seul un refus qui
+ * suit un clic de CETTE page défile (jamais au retour sur la page ni au
+ * rechargement). Un refus = au plus un défilement, seulement si le message n'est
+ * pas déjà entier à l'écran.
+ *
  * La page ne fournit que ses refs : tout le reste est ici pour que les tests
  * exécutent le vrai code (app/tests/useJobScroll.test.js).
  */
@@ -27,6 +35,7 @@ import { isActiveLocalPhase } from '../utils/liveJob'
 import {
     createLiveScrollGate,
     failureScrollNeeded,
+    isWhollyInView,
     liveScrollSlug,
     scrolledJobSlugs,
     watchUserScroll,
@@ -40,13 +49,15 @@ import {
  *                   (`serverJobState`), ou null
  * @param liveEl     ref de la section live
  * @param failureEl  ref du bandeau d'échec (null tant qu'il n'est pas rendu)
+ * @param refusal    () => nombre de refus de soumission posés par le store
+ * @param refusalEl  ref du message de refus (null tant qu'il n'est pas rendu)
  * @param target     window côté navigateur, null au rendu serveur (ne fait rien)
  * @param onFailed   (slug) => job en échec vu par cette page, transition ou retour
  *                   dessus, défilement ou non
  * @param seen       slugs déjà amenés à l'écran (survit au démontage de la page)
  * @returns {{ expectJob: () => void }}
  */
-export function useJobScroll({ projectSlug = () => null, progress, serverSlug, serverJob = () => null, liveEl, failureEl, target, onFailed, seen = scrolledJobSlugs }) {
+export function useJobScroll({ projectSlug = () => null, progress, serverSlug, serverJob = () => null, liveEl, failureEl, refusal = () => 0, refusalEl = null, target, onFailed, seen = scrolledJobSlugs }) {
     if (!target) return { expectJob() {} }
     const gesture = watchUserScroll(target)
     onScopeDispose(() => gesture.stop())
@@ -79,6 +90,18 @@ export function useJobScroll({ projectSlug = () => null, progress, serverSlug, s
         })
         if (needed) el.scrollIntoView({ behavior: behavior(), block: 'center' })
     }
+
+    // Projet du dernier clic sur Nest vu par cette page, consommé par son refus.
+    let refusalExpectedFor = null
+    watch(refusal, async () => {
+        const armed = refusalExpectedFor
+        refusalExpectedFor = null
+        if (armed === null || armed !== projectSlug()) return
+        await nextTick()
+        const el = refusalEl?.value
+        if (!el || isWhollyInView(el.getBoundingClientRect(), target.innerHeight)) return
+        el.scrollIntoView({ behavior: behavior(), block: 'center' })
+    })
 
     let expected = null
     const isExpectedServerJob = (slug) => {
@@ -120,6 +143,7 @@ export function useJobScroll({ projectSlug = () => null, progress, serverSlug, s
     return {
         expectJob() {
             expected = { before: serverJob()?.slug ?? null, project: projectSlug() }
+            refusalExpectedFor = projectSlug() ?? ''
             liveDepartedSlug = null
             gesture.reset()
         },
