@@ -101,9 +101,11 @@
    **Panique restante, connue, non corrigée** : `import_solution` (`import.rs`)
    fait `change_strip_width(ext_solution.strip_width)`, c'est-à-dire
    `try_change_strip_width(..).unwrap()`. `nest-engine/src/spp.rs::map_back_solution`
-   l'appelle pour les directions left, balanced et bottom avec un couloir jamais
-   construit à la hauteur d'origine (le moteur a travaillé transposé) : sur une tôle
-   absurde le conteneur n'existe pas, `problem.rs:35` panique. Mesuré en left, sans
+   l'appelle pour les directions left, balanced et bottom et pour le mode sans `biases`,
+   avec un couloir jamais construit à la hauteur d'origine (le moteur a travaillé
+   transposé) : sur une tôle absurde, haute ou plate (balanced, W = 1000, H = 1e-5), le
+   conteneur n'existe pas, `problem.rs:35` panique. `merge.rs:547` l'appelle aussi, dans
+   le repli sans `used_height`, que le pool n'atteint pas. Mesuré en left, sans
    espacement, une pièce carrée qui tient dans la tôle : livre à W = 2 pour H = 6e7,
    panique pour H = 7e7 ; livre à W = 0,2 pour H = 8e6, panique pour H = 1e7 ; livre à
    W = 20 pour H = 1e9, panique pour H = 2e9 ; soit H / (W - espacement) de 3e7 livré

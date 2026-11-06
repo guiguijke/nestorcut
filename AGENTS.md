@@ -104,8 +104,8 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    `Strip::try_container` décide (`panic = "abort"`, VENDORED.patch.md point 5).
    `From<Strip>` et `change_strip_width` (qui fait `try_change_strip_width(..)
    .unwrap()`) ne valent que pour une largeur dont le conteneur a DÉJÀ été
-   construit. **Un chemin ne tient pas cette promesse, panique restante, connue et
-   non corrigée** : `nest-engine/src/spp.rs::map_back_solution` (retour de repère
+   construit. **Deux chemins ne tiennent pas cette promesse, panique restante, connue
+   et non corrigée**. Le premier : `nest-engine/src/spp.rs::map_back_solution` (retour de repère
    des directions left, balanced et bottom : les trois font travailler le moteur
    transposé) appelle `import_solution` (jagua-rs `import.rs`), qui fait
    `change_strip_width(corridor)` avec un couloir jamais construit à la hauteur
@@ -122,20 +122,28 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    paniqué (W = 2, H jusqu'à 1e9, jusqu'à 40 exemplaires, 8 graines), 20 pièces de
    1,9 x 0,7 si : W = 2, H = 1e8, payload de `buildLocalPayload`, 7 graines sur 8. Avec
    espacement 2 (W = 10) le job passe par le chemin BPP : refus propre « no pole
-   found » à H = 1e9, pas de panique. Le formulaire ne bloque pas ces tôles
-   (`isValidNumber`, `files.js` : chiffres seulement ; le serveur : > 0 et fini) :
-   2 x 1e8 mm part au calcul navigateur, et l'issue y dépend du nombre de directions
-   (`localPool.js`, mesuré dans le navigateur à W = 2, H = 1e8, sans espacement) :
-   - **Une direction** : `settleFromChampion` livre le meilleur frame live et coupe
-     les workers. `checkAllSettled` n'y est pour rien : il sort tant qu'un walk n'a
-     pas d'issue. Left, pièce de 1 x 1 : 1 walk démarré en Free, 8 en Pro, aucun ne
-     répond ni ne panique, job livré. Bottom, 20 pièces de 1,9 x 0,7 : un walk panique
-     (`unreachable`, `problem.rs:35` en console), job livré 20/20 quand même.
-   - **Plusieurs directions** (`multiBias`) : pas de chrono champion (piège 7b), chaque
-     walk va au bout, et un seul survivant suffit à la fusion (`checkAllSettled`). Si
-     tous meurent, rien n'est livré : left + balanced, pièce de 1 x 1, 8 walks,
-     8 paniques, `engine_error`, 0 pièce posée, message `localMode.crashLocal`
-     (`crashError` hors projet local), remboursement.
+   found » à H = 1e9, pas de panique. Elle touche aussi le mode sans `biases`
+   (`spp.rs:914` : W = 2, H = 6e7 livre, H = 1e8 panique) et des tôles plates en balanced
+   (W = 1000 ou 3000, H = 1e-5, deux phases). Le second chemin : `merge.rs:547` appelle
+   aussi `import_solution`, dans le repli sans `used_height`, avec la même panique ; le
+   pool ne l'atteint pas, ses runs portent `used_height` (lu dans le code). Le formulaire
+   ne bloque pas ces tôles (`isValidNumber`, `files.js` : chiffres seulement ; le
+   serveur : > 0 et fini) : 2 x 1e8 mm part au calcul navigateur, et l'issue y est une
+   COURSE, pas une affaire de nombre de directions (`localPool.js`, mesuré dans le
+   navigateur à W = 2, H = 1e8, sans espacement) :
+   - **Le chrono champion part d'abord** (`settleFromChampion`, une direction seulement ;
+     `championIdleMs` se réarme à chaque progrès) : le meilleur frame live est livré et
+     les workers coupés. Left ou balanced, pièce de 1 x 1 : aucun walk ne répond ni ne
+     panique, job livré (1 walk en Free, 8 en payant). Bottom, 20 pièces de 1,9 x 0,7, en
+     Free, où les walks tournent un par un : un walk panique (`unreachable`,
+     `problem.rs:35` en console), job livré 20/20 quand même.
+   - **Tous les walks meurent d'abord** (`checkAllSettled` clôt quand chacun a une issue) :
+     rien n'est livré, `engine_error`, 0 pièce posée. Les mêmes 20 pièces en bottom seule,
+     Standard ou Pro : 8 walks en parallèle, 8 paniques en 4 s environ, avant le chrono.
+     Left + balanced, pièce de 1 x 1 (`multiBias`, pas de chrono, piège 7b : un seul
+     survivant aurait suffi à la fusion) : 8 paniques. Message `localMode.crashLocal`
+     (`crashError` hors projet local). Rien n'est consommé sur un compte payant
+     (`charge.refunded`) ; une charge Free est remboursée (vu sur un crash simulé).
 2c. **`geo_buffer` s'effondre sur un canal plus étroit que le gonflement.**
    L'inflation d'import (`space/2`) décale les deux bords d'un canal étroit
    l'un à travers l'autre : le contour rendu se recoupe, `SPolygon::new` le
