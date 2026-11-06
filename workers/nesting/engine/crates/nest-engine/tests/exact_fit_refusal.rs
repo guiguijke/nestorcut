@@ -7,8 +7,8 @@
 //! export. Maintenant : refus typé `item_unplaceable:<id>:` qui NOMME la
 //! pièce (modèle de `import_error.rs`), jamais une panique.
 //!
-//! Chaque cas est rejoué en natif ; le même jeu passe par le wasm dans
-//! `bench/determinism_lock.py` / `bench/j7a_node_check.mjs`.
+//! Chaque cas est rejoué en natif ici ; la couverture par le vrai wasm est dans
+//! `app/tests/localEngineLotA.test.js` (pièce à la cote exacte, SPP et BPP).
 //!
 //! En release (`cargo test --release -p nest-engine`).
 
