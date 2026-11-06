@@ -101,15 +101,18 @@
    **Panique restante, connue, non corrigée** : `import_solution` (`import.rs`)
    fait `change_strip_width(ext_solution.strip_width)`, c'est-à-dire
    `try_change_strip_width(..).unwrap()`. `nest-engine/src/spp.rs::map_back_solution`
-   l'appelle pour les directions left et balanced avec un couloir jamais construit
-   à la hauteur d'origine (le moteur a travaillé transposé) : sur une tôle absurde
-   le conteneur n'existe pas, `problem.rs:35` panique. Mesuré sans espacement, une pièce
-   carrée qui tient dans la tôle : livre à W = 2 pour H = 6e7, panique pour H = 7e7 ; livre à W = 0,2 pour
-   H = 8e6, panique pour H = 1e7 ; livre à W = 20 pour H = 1e9, panique pour
-   H = 2e9 ; soit H / (W - espacement) de 3e7 livré à 1e8 en panique, sans seuil
-   net. Aucune panique mesurée en direction bottom ni, avec espacement 2, sur le
-   chemin BPP (refus propre). À corriger dans `import_solution` (version
-   faillible, comme `try_change_strip_width`), pas par une borne en mm.
+   l'appelle pour les directions left, balanced et bottom avec un couloir jamais
+   construit à la hauteur d'origine (le moteur a travaillé transposé) : sur une tôle
+   absurde le conteneur n'existe pas, `problem.rs:35` panique. Mesuré en left, sans
+   espacement, une pièce carrée qui tient dans la tôle : livre à W = 2 pour H = 6e7,
+   panique pour H = 7e7 ; livre à W = 0,2 pour H = 8e6, panique pour H = 1e7 ; livre à
+   W = 20 pour H = 1e9, panique pour H = 2e9 ; soit H / (W - espacement) de 3e7 livré
+   à 1e8 en panique, sans seuil net. En bottom le retour de repère est un repli : des
+   pièces de 1 x 1 en deux phases n'ont pas paniqué (8 graines), 20 pièces de
+   1,9 x 0,7 à W = 2, H = 1e8 paniquent pour 7 graines sur 8. Avec espacement 2, chemin
+   BPP : refus propre, pas de panique. À corriger dans `import_solution` (version faillible, comme
+   `try_change_strip_width`), pas par une borne en mm. Ce que voit le navigateur :
+   AGENTS.md, piège 2b.
 
 6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
    voisins) — pièce À LA COTE EXACTE, lot A :
