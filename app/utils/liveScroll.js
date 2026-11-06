@@ -14,11 +14,13 @@
 /**
  * Slug du job dont la vue live est à l'écran, ou null.
  * Le serveur passe en premier ; le calcul navigateur compte tant qu'il tourne
- * ET qu'il a produit une frame (avant, la scène est vide : rien à montrer).
+ * ET qu'il a produit une frame DE CE JOB : la page garde la dernière frame du
+ * job précédent jusqu'à la première frame du suivant, donc une frame d'un
+ * autre job (`localJobSlug`) ne compte pas.
  */
-export function liveScrollSlug({ serverSlug, localRunning, localFrameSlug }) {
+export function liveScrollSlug({ serverSlug, localRunning, localFrameSlug, localJobSlug }) {
     if (serverSlug) return serverSlug
-    if (localRunning && localFrameSlug) return localFrameSlug
+    if (localRunning && localFrameSlug && localFrameSlug === localJobSlug) return localFrameSlug
     return null
 }
 
@@ -26,9 +28,13 @@ export function liveScrollSlug({ serverSlug, localRunning, localFrameSlug }) {
  * Garde « une fois par job ». `claim(slug)` rend true la première fois qu'un
  * slug est vu, false ensuite : les frames suivantes, un retour sur le projet ou
  * un changement de projet ne réarment pas le défilement.
+ *
+ * `seen` est l'ensemble des slugs déjà amenés à l'écran. Une page démontée
+ * puis remontée repart d'une garde neuve : pour qu'un retour sur un job déjà
+ * défilé ne défile pas de nouveau, la page passe un ensemble qui survit au
+ * démontage (côté navigateur seulement : jamais partagé entre requêtes SSR).
  */
-export function createLiveScrollGate() {
-    const seen = new Set()
+export function createLiveScrollGate(seen = new Set()) {
     return {
         claim(slug) {
             if (!slug || seen.has(slug)) return false
@@ -37,3 +43,6 @@ export function createLiveScrollGate() {
         },
     }
 }
+
+/** Slugs déjà défilés, conservés d'un montage de page à l'autre (navigateur). */
+export const scrolledJobSlugs = new Set()

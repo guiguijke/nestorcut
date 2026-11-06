@@ -189,7 +189,7 @@ import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
-import { createLiveScrollGate, liveScrollSlug } from "~/utils/liveScroll";
+import { createLiveScrollGate, liveScrollSlug, scrolledJobSlugs } from "~/utils/liveScroll";
 import {
     DEMO_NESTING_LIMIT,
     DEMO_PROJECT_SLUG,
@@ -304,6 +304,9 @@ const localReveal = ref(null);
 // vue affiche AUSSI les stats en mode local (progress/compute étaient
 // null → compteur et ×N cœurs jamais visibles).
 const localLiveFrame = ref(null);
+// Job du registre local dont la page suit l'avancement (la frame ci-dessus peut
+// encore être celle du job précédent).
+const localJobSlug = ref(null);
 const localEvals = ref(null);
 // J-093 : taille effective du pool de walks (injectée dans les frames live).
 const localWalks = ref(1);
@@ -333,12 +336,13 @@ const localLive = computed(() => {
 // n'arrivait jamais ici. Une fois PAR JOB (la garde mémorise les slugs), donc
 // ni à chaque frame ni au retour sur un projet.
 const liveSection = ref(null);
-const liveScrollGate = createLiveScrollGate();
+const liveScrollGate = createLiveScrollGate(import.meta.client ? scrolledJobSlugs : undefined);
 watch(
     () => liveScrollSlug({
         serverSlug: unref(liveResult)?.slug,
         localRunning: unref(localComputeRunning),
         localFrameSlug: unref(localLiveFrame)?.slug,
+        localJobSlug: unref(localJobSlug),
     }),
     async (slug) => {
         if (!liveScrollGate.claim(slug)) return;
@@ -452,6 +456,7 @@ watch(
         localWalks.value = p.walks || 1;
         localEvals.value = p.evals ?? null;
         localZonePhase.value = p.zone ?? null;
+        localJobSlug.value = p.slug ?? null;
         localLiveFrame.value = p.frame
             ? {
                 slug: p.slug,
@@ -789,6 +794,7 @@ watch(pageSlug, async (s, prev) => {
         localEvals.value = null
         localZonePhase.value = null
         localLiveFrame.value = null
+        localJobSlug.value = null
         localReveal.value = null
     }
     await getProject(
