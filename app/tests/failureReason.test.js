@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { failureReasonKey } from '../utils/failureReason'
 import en from '../utils/i18n/en'
@@ -10,7 +11,7 @@ import pt from '../utils/i18n/pt'
 const CODES = [
     'memory_cap', 'entity_limit', 'geometry_missing', 'all_alternatives_invalid',
     'capacity_exceeded', 'item_geometry', 'item_unplaceable', 'part_too_large', 'spacing_too_large',
-    'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'local_unknown',
+    'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'merge_failed', 'merge_parse', 'local_unknown',
 ]
 
 describe('failureReasonKey', () => {
@@ -29,5 +30,22 @@ describe('failureReasonKey', () => {
         expect(failureReasonKey('')).toBeNull()
         expect(failureReasonKey(null)).toBeNull()
         expect(failureReasonKey('toString')).toBeNull()
+    })
+
+    // Verrou de couverture : tout code que local-fail accepte peut finir dans
+    // `information` du job, donc doit avoir une cause à l'écran après
+    // rechargement. Les deux seules exceptions ne sont jamais écrites dans
+    // `information` : `local_geometry_missing` n'est qu'un `detail` (le code
+    // d'erreur envoyé est `geometry_missing`), `engine_error` est la catégorie
+    // posée par le serveur dans `errorCode` pour un texte moteur libre.
+    it('chaque code accepté par local-fail a une raison, sauf les deux codes jamais affichés', () => {
+        const src = readFileSync(new URL('../../server/api/results/[slug]/local-fail.post.js', import.meta.url), 'utf8')
+        const block = src.match(/LOCAL_FAIL_CODES = new Set\(\[([\s\S]*?)\]\)/)
+        expect(block, 'liste LOCAL_FAIL_CODES introuvable').toBeTruthy()
+        const accepted = [...block[1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1])
+        expect(accepted.length).toBeGreaterThan(10)
+        const NEVER_SHOWN = ['local_geometry_missing', 'engine_error']
+        const missing = accepted.filter((c) => !NEVER_SHOWN.includes(c) && !failureReasonKey(c))
+        expect(missing).toEqual([])
     })
 })

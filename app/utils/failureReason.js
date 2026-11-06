@@ -22,6 +22,8 @@ const REASON_KEYS = {
     local_interrupted: 'results.localInterrupted',
     payload_build: 'localCompute.error',
     pool_failed: 'localCompute.error',
+    merge_failed: 'localCompute.error',
+    merge_parse: 'localCompute.error',
     local_unknown: 'localCompute.error',
 }
 
