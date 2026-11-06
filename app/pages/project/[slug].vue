@@ -138,7 +138,7 @@
         <div v-if="localImportNotice" class="content__notice content__notice--warn">
             {{ localImportNoticeText }}
         </div>
-        <div v-if="localComputeError && !capacityPanel" class="content__error">
+        <div v-if="localComputeError && !capacityPanel" ref="localErrorEl" class="content__error">
             {{ localErrorText }}
         </div>
         <div v-if="isDemo && demoQuotaReached && !demoUnlimited" class="content__error">
@@ -189,7 +189,7 @@ import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
 import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
-import { createLiveScrollGate, liveScrollSlug, scrolledJobSlugs } from "~/utils/liveScroll";
+import { createLiveScrollGate, isWhollyInView, liveScrollSlug, scrolledJobSlugs, watchUserScroll } from "~/utils/liveScroll";
 import {
     DEMO_NESTING_LIMIT,
     DEMO_PROJECT_SLUG,
@@ -353,6 +353,24 @@ watch(
     }
 );
 
+// Échec d'un job de cette page : le bandeau d'erreur (celui qui nomme la
+// pièce) est SOUS l'atelier, donc hors écran quand la page est restée défilée
+// (clic sur « Nest » en bas d'écran, ou défilement vers la vue live). On
+// l'amène à l'écran UNE fois par job — l'échec n'est vu qu'une fois passant de
+// « en cours » à « erreur » dans cette instance de page, donc jamais au retour
+// sur un job déjà échoué — sauf si l'utilisateur a défilé lui-même depuis le
+// lancement (il lit autre chose pendant un long calcul).
+const localErrorEl = ref(null);
+const userScroll = import.meta.client ? watchUserScroll(window) : null;
+onBeforeUnmount(() => userScroll?.stop());
+const scrollToFailure = async () => {
+    await nextTick();
+    const el = localErrorEl.value;
+    if (!el || isWhollyInView(el.getBoundingClientRect(), window.innerHeight)) return;
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'center' });
+};
+
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
 // les messages d'erreur locaux prennent leurs variantes dédiées.
 // Lot E0 : géométrie d'une pièce refusée par le moteur — { slug, part } du
@@ -448,10 +466,13 @@ watch(
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
                 localModeCtl.startTimer();
+                userScroll?.reset();
             }
         } else {
+            const justFailed = localComputeRunning.value && Boolean(localComputeError.value);
             localModeCtl.stopTimer();
             localComputeRunning.value = false;
+            if (justFailed && userScroll && !userScroll.moved()) scrollToFailure();
         }
         localWalks.value = p.walks || 1;
         localEvals.value = p.evals ?? null;

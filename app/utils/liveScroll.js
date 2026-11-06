@@ -46,3 +46,35 @@ export function createLiveScrollGate(seen = new Set()) {
 
 /** Slugs déjà défilés, conservés d'un montage de page à l'autre (navigateur). */
 export const scrolledJobSlugs = new Set()
+
+const SCROLL_KEYS = new Set(['PageDown', 'PageUp', 'Home', 'End', 'ArrowDown', 'ArrowUp', ' ', 'Spacebar'])
+
+/**
+ * L'utilisateur a-t-il fait défiler la page lui-même depuis `reset()` ?
+ * Molette, doigt ou touches de défilement : seuls les gestes de l'utilisateur
+ * comptent, pas nos propres défilements (la position ne dit pas qui a bougé).
+ * Sert à ne pas ramener au message d'échec un utilisateur qui lisait ailleurs
+ * pendant un long calcul.
+ */
+export function watchUserScroll(target) {
+    let moved = false
+    const onGesture = () => { moved = true }
+    const onKey = (e) => { if (SCROLL_KEYS.has(e?.key)) moved = true }
+    target.addEventListener('wheel', onGesture, { passive: true })
+    target.addEventListener('touchmove', onGesture, { passive: true })
+    target.addEventListener('keydown', onKey)
+    return {
+        reset() { moved = false },
+        moved() { return moved },
+        stop() {
+            target.removeEventListener('wheel', onGesture)
+            target.removeEventListener('touchmove', onGesture)
+            target.removeEventListener('keydown', onKey)
+        },
+    }
+}
+
+/** Le rectangle est-il entièrement à l'écran ? (`rect` de getBoundingClientRect) */
+export function isWhollyInView(rect, viewportHeight) {
+    return Boolean(rect) && rect.top >= 0 && rect.bottom <= viewportHeight
+}

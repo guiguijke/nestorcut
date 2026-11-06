@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { ref, watch } from 'vue'
-import { createLiveScrollGate, liveScrollSlug } from '../utils/liveScroll'
+import { createLiveScrollGate, isWhollyInView, liveScrollSlug, watchUserScroll } from '../utils/liveScroll'
 
 describe('liveScrollSlug', () => {
     it('rend le slug du flux serveur en priorité', () => {
@@ -127,6 +127,39 @@ describe('défilement pendant un calcul navigateur', () => {
     })
 })
 
+describe('watchUserScroll', () => {
+    it('ne bouge pas sans geste, bouge à la molette, au doigt ou à une touche de défilement', () => {
+        for (const [type, init] of [['wheel', {}], ['touchmove', {}], ['keydown', { key: 'PageDown' }]]) {
+            const target = new EventTarget()
+            const w = watchUserScroll(target)
+            expect(w.moved()).toBe(false)
+            target.dispatchEvent(Object.assign(new Event(type), init))
+            expect(w.moved(), type).toBe(true)
+            w.reset()
+            expect(w.moved(), `${type} après reset`).toBe(false)
+            w.stop()
+        }
+    })
+    it('une frappe sans rapport avec le défilement ne compte pas, et stop() détache', () => {
+        const target = new EventTarget()
+        const w = watchUserScroll(target)
+        target.dispatchEvent(Object.assign(new Event('keydown'), { key: 'a' }))
+        expect(w.moved()).toBe(false)
+        w.stop()
+        target.dispatchEvent(new Event('wheel'))
+        expect(w.moved()).toBe(false)
+    })
+})
+
+describe('isWhollyInView', () => {
+    it('vrai seulement si le haut ET le bas sont à l’écran', () => {
+        expect(isWhollyInView({ top: 10, bottom: 80 }, 900)).toBe(true)
+        expect(isWhollyInView({ top: -1, bottom: 80 }, 900)).toBe(false)
+        expect(isWhollyInView({ top: 850, bottom: 910 }, 900)).toBe(false)
+        expect(isWhollyInView(null, 900)).toBe(false)
+    })
+})
+
 describe('câblage de la page projet', () => {
     const src = readFileSync(new URL('../pages/project/[slug].vue', import.meta.url), 'utf8')
     it('le watch lit la frame du calcul navigateur, déclarée avant lui', () => {
@@ -141,5 +174,10 @@ describe('câblage de la page projet', () => {
     })
     it('n\'utilise plus le seul slug du flux serveur', () => {
         expect(src).not.toMatch(/lastLiveSlug/)
+    })
+    it('l’échec n’est amené à l’écran que sur la transition en cours -> erreur, sans geste de l’utilisateur', () => {
+        expect(src).toMatch(/const justFailed = localComputeRunning\.value && Boolean\(localComputeError\.value\)/)
+        expect(src).toMatch(/justFailed && userScroll && !userScroll\.moved\(\)\) scrollToFailure\(\)/)
+        expect(src).toMatch(/ref="localErrorEl" class="content__error"/)
     })
 })
