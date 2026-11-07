@@ -54,7 +54,7 @@ import { themeType } from '~~/constants/theme.constants'
 import { statusType } from '~~/constants/status.constants'
 import { trackEvent } from '~/utils/track'
 import { SQMM_PER_SQIN, fmtLengthValue as fmtLengthValueRaw } from '~/utils/units'
-import { displayDirectionArrow } from '~/utils/sheetView'
+import { directionWordKey, displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
 import { capacityPanelModel } from '~/utils/capacityPanel'
@@ -641,7 +641,10 @@ const strategyLabel = (strategy) => {
     // Directional alternatives are tagged by the engine (left/bottom/
     // balanced); legacy names (max offcut, compact) pass through translated
     // when known, raw otherwise.
-    const key = `alts.strategy.${strategy}`
+    // Sens pur (–X / –Y) : dit en mots vers quel côté les pièces sont
+    // poussées, pas par un jargon d'axes.
+    const dirKey = directionWordKey(strategy, previewSheet.value.w, previewSheet.value.h)
+    const key = dirKey || `alts.strategy.${strategy}`
     const translated = t(key)
     const name = translated === key ? strategy : translated
     const arrow = displayDirectionArrow(strategy, previewSheet.value.w, previewSheet.value.h)
