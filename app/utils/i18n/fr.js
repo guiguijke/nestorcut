@@ -85,6 +85,7 @@ export default {
     'sub.terms.noTrial': "Une carte est demandée aujourd'hui. {price} par mois, prélevés tout de suite.",
     "sub.terms.upgradeTrial": "Votre essai continue tel quel. À sa fin, le tarif Pro de {price} par mois remplace celui d'Unlimited.",
     "sub.terms.upgradeActive": "Le tarif Pro s'applique dès maintenant : {price} par mois. La différence pour la période en cours est calculée au prorata et ajoutée à votre prochaine facture.",
+    "sub.proAfterEnd": "Pour passer à Pro, abonnez-vous de nouveau après cette date.",
     'sub.freeLeft': '{n} imbrication(s) gratuite(s) restante(s) ce mois-ci',
     'banner.remaining': '{n} / {total} imbrications restantes ce mois-ci',
     'banner.empty': 'Vous avez utilisé toutes vos imbrications gratuites ce mois-ci.',

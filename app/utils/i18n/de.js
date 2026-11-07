@@ -80,6 +80,7 @@ export default {
     "sub.terms.noTrial": "Heute wird eine Karte abgefragt. {price} pro Monat, sofort abgebucht.",
     "sub.terms.upgradeTrial": "Ihre Testphase läuft unverändert weiter. Danach gilt statt des Unlimited-Preises der Pro-Preis von {price} pro Monat.",
     "sub.terms.upgradeActive": "Der Pro-Preis gilt ab jetzt: {price} pro Monat. Die Differenz für den laufenden Abrechnungszeitraum wird anteilig berechnet und mit Ihrer nächsten Rechnung abgerechnet.",
+    "sub.proAfterEnd": "Um auf Pro zu wechseln, abonnieren Sie nach diesem Datum erneut.",
     "sub.freeLeft": "Noch {n} kostenlose Nestings in diesem Monat",
     "banner.remaining": "{n} / {total} Nestings in diesem Monat übrig",
     "banner.empty": "Sie haben alle kostenlosen Nestings dieses Monats verbraucht.",

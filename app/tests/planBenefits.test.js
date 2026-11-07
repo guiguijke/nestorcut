@@ -11,6 +11,7 @@ import {
     DELINQUENT_STATUSES,
     checkoutTerms,
     signedInPlanCta,
+    isEndingSubscription,
 } from '../utils/planBenefits'
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
@@ -152,6 +153,19 @@ describe("upgradeTerms : le passage Unlimited vers Pro dit ce qu'il fait", () =>
     })
 })
 
+describe('isEndingSubscription : résilié et encore vivant', () => {
+    it('seulement à l’essai ou actif, avec la résiliation programmée', () => {
+        for (const subscriptionStatus of ['trialing', 'active']) {
+            expect(isEndingSubscription({ subscriptionStatus, cancelAtPeriodEnd: true })).toBe(true)
+            expect(isEndingSubscription({ subscriptionStatus, cancelAtPeriodEnd: false })).toBe(false)
+        }
+        for (const subscriptionStatus of ['canceled', 'past_due', 'unpaid', 'incomplete', null]) {
+            expect(isEndingSubscription({ subscriptionStatus, cancelAtPeriodEnd: true })).toBe(false)
+        }
+        expect(isEndingSubscription(null)).toBe(false)
+    })
+})
+
 describe('formatPlanMoney : suit la langue', () => {
     it('anglais : symbole devant ; français : montant puis symbole', () => {
         expect(formatPlanMoney(19, 'eur', 'en')).toBe('€19')
@@ -162,8 +176,8 @@ describe('formatPlanMoney : suit la langue', () => {
 })
 
 describe('signedInPlanCta : /plans connecté, matrice clic / destination', () => {
-    const cta = (tierKey, level, trialEligible, comingSoon = false, subscriptionStatus = undefined) =>
-        signedInPlanCta({ tierKey, level, trialEligible, comingSoon, subscriptionStatus })
+    const cta = (tierKey, level, trialEligible, comingSoon = false, subscriptionStatus = undefined, cancelAtPeriodEnd = undefined) =>
+        signedInPlanCta({ tierKey, level, trialEligible, comingSoon, subscriptionStatus, cancelAtPeriodEnd })
 
     it("« Votre offre » sur la carte de son offre : inerte pour Free, profil pour un abonné", () => {
         expect(cta('free', 'free', true)).toEqual({ labelKey: 'plans.cta.yourPlan', disabled: true, action: 'profile' })
@@ -190,7 +204,25 @@ describe('signedInPlanCta : /plans connecté, matrice clic / destination', () =>
     })
 
     it("un abonné Unlimited vers Pro : le profil (modification en place), pas d'essai", () => {
-        expect(cta('privacy', 'standard', true)).toEqual({ labelKey: 'plans.cta.getPro', disabled: false, action: 'profile' })
+        expect(cta('privacy', 'standard', true, false, 'active', false)).toEqual({ labelKey: 'plans.cta.getPro', disabled: false, action: 'profile' })
+    })
+
+    it('un abonné Unlimited résilié, ou pas encore lu : la montée n’est pas promise', () => {
+        const manage = { labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' }
+        for (const status of ['trialing', 'active']) {
+            expect(cta('privacy', 'standard', false, false, status, true)).toEqual(manage)
+        }
+        expect(cta('privacy', 'standard', false)).toEqual(manage)
+        // Offres fermées : « bientôt » reste la réponse.
+        expect(cta('privacy', 'standard', false, true, 'active', true).labelKey).toBe('plans.cta.comingSoon')
+    })
+
+    it("après l'échéance (canceled, indicateur resté vrai) : un compte Free qui se réabonne, sans essai", () => {
+        for (const tierKey of ['standard', 'privacy']) {
+            expect(cta(tierKey, 'free', false, false, 'canceled', true)).toEqual({ labelKey: 'sub.subscribe', disabled: false, action: 'dialog' })
+        }
+        // Accès offert par-dessus un ancien abonnement : la montée passe par Checkout.
+        expect(cta('privacy', 'standard', false, false, 'canceled', true).labelKey).toBe('plans.cta.getPro')
     })
 
     it('les cartes en dessous de son offre renvoient au profil', () => {

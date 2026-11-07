@@ -202,6 +202,7 @@ function ctaFor(tier) {
         trialEligible: typeof info?.trialEligible === 'boolean' ? info.trialEligible : undefined,
         comingSoon: tier.comingSoon,
         subscriptionStatus: info?.subscriptionStatus,
+        cancelAtPeriodEnd: info?.cancelAtPeriodEnd,
     })
     return { label: t(cta.labelKey, { days: trialDaysOf(tier.tierKey) }), disabled: cta.disabled, action: cta.action }
 }

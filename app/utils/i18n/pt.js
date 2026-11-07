@@ -74,6 +74,7 @@ export default {
     "sub.terms.noTrial": "Hoje pedimos um cartão. {price} por mês, cobrados imediatamente.",
     "sub.terms.upgradeTrial": "Sua avaliação continua como está. Quando terminar, vale o preço do Pro, {price} por mês, no lugar do Unlimited.",
     "sub.terms.upgradeActive": "O preço do Pro vale a partir de agora: {price} por mês. A diferença do período de cobrança atual é calculada proporcionalmente e somada à sua próxima fatura.",
+    "sub.proAfterEnd": "Para passar ao Pro, assine novamente depois dessa data.",
     "sub.freeLeft": "Nestings gratuitos restantes este mês: {n}",
     "banner.remaining": "{n} / {total} nestings restantes este mês",
     "banner.empty": "Você usou todos os seus nestings gratuitos deste mês.",

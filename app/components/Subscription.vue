@@ -12,6 +12,9 @@
             <p v-else class="subscription__desc">
                 {{ t('sub.activeDesc') }}
             </p>
+            <p v-if="showProAfterEnd" class="subscription__desc" data-testid="subscription-pro-after-end">
+                {{ t('sub.proAfterEnd') }}
+            </p>
             <MainButton
                 v-if="!data?.cancelAtPeriodEnd"
                 :label="t('sub.cancelBtn')"
@@ -68,7 +71,7 @@
             <p class="subscription__desc">{{ t('sub.proActiveDesc') }}</p>
         </div>
 
-        <div v-else-if="isActive && !isPastDue && data?.privacyPlan" class="subscription__card">
+        <div v-else-if="isActive && !isPastDue && !subscriptionEnding && data?.privacyPlan" class="subscription__card">
             <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
             <div class="subscription__price">
                 {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
@@ -196,7 +199,7 @@ import { formatQuotaReset } from '~/utils/quotaReset'
 import { hasPaidAccess } from '~/utils/entitlementUi'
 import { flagOn } from '~/utils/runtimeFlag'
 import { trackEvent } from '~/utils/track'
-import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney } from '~/utils/planBenefits'
+import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney, isEndingSubscription } from '~/utils/planBenefits'
 import { writeCheckoutIntent } from '~/utils/checkoutReturn'
 import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
 
@@ -253,6 +256,13 @@ const isActive = computed(() => isStripeActive.value || isGranted.value)
 // (sans prix Stripe) — jamais une offre de « passer à Pro » à 0 € puis 39 €.
 const alreadyPro = computed(
     () => Boolean(unref(data)?.isPrivacyTier) || (isGranted.value && unref(userMe)?.compute?.level === 'privacy'),
+)
+// Résilié en fin de période : l'abonnement s'arrête à la date annoncée, aucune
+// montée n'est offerte. Pro reste possible APRÈS cette date, par un nouveau
+// Checkout (le serveur le refuse tant que l'abonnement vit), sans essai.
+const subscriptionEnding = computed(() => isEndingSubscription(unref(data)))
+const showProAfterEnd = computed(
+    () => subscriptionEnding.value && !alreadyPro.value && Boolean(unref(data)?.privacyPlan) && !paidDisabled.value,
 )
 // past_due / unpaid / incomplete : le paiement a échoué, l'accès est coupé tant
 // que la carte n'est pas mise à jour (via le portail Stripe). `unpaid` =

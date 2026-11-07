@@ -86,6 +86,7 @@ export default {
     'sub.terms.noTrial': 'A card is requested today. {price} per month, charged right away.',
     'sub.terms.upgradeTrial': 'Your trial continues as it is. When it ends, the Pro price of {price} per month applies instead of the Unlimited price.',
     'sub.terms.upgradeActive': 'The Pro price starts now: {price} per month. The difference for the current billing period is prorated and added to your next invoice.',
+    'sub.proAfterEnd': 'To move to Pro, subscribe again after that date.',
     'sub.freeLeft': '{n} free nesting operation(s) left this month',
     'banner.remaining': '{n} / {total} nestings left this month',
     'banner.empty': "You've used all your free nestings for this month.",

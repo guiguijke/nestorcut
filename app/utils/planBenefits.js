@@ -68,6 +68,8 @@ export function checkoutTerms({ trialEligible, trialDays, amount, currency, now 
  * sans page Stripe récapitulative). Côté Stripe : `create_prorations` — la
  * différence n'est PAS facturée tout de suite, elle part en éléments de
  * facture en attente sur la prochaine facture ; un essai en cours continue.
+ * Jamais pour un abonnement résilié (isEndingSubscription) : aucune facture ne
+ * suit, ces phrases seraient fausses.
  * @returns {{ key: string, params: Record<string, string> }}
  */
 export function upgradeTerms({ status, amount, currency, locale = 'en' }) {
@@ -78,18 +80,33 @@ export function upgradeTerms({ status, amount, currency, locale = 'en' }) {
 }
 
 /**
+ * Abonnement vivant dont la résiliation est programmée : il s'arrête à
+ * `currentPeriodEnd` et rien ne le reprend depuis l'interface. Aucune montée en
+ * Pro n'est offerte. Une fois l'échéance passée (statut « canceled », l'indicateur
+ * peut rester vrai), c'est un compte sans abonnement, qui peut en reprendre un.
+ * @param {{ subscriptionStatus?: string|null, cancelAtPeriodEnd?: boolean }|null|undefined} info
+ *   réponse de /api/payment/subscription
+ * @returns {boolean}
+ */
+export function isEndingSubscription(info) {
+    return Boolean(info?.cancelAtPeriodEnd) && ['trialing', 'active'].includes(info?.subscriptionStatus)
+}
+
+/**
  * CTA d'une carte de /plans pour un compte connecté.
  * `level` : palier de calcul (free | standard | privacy). `trialEligible` :
  * true/false une fois /api/payment/subscription lu, undefined avant — on ne
  * promet alors JAMAIS d'essai (un compte qui l'a consommé ne le retrouve pas).
  * `subscriptionStatus` : statut Stripe de la même réponse ; un paiement
  * échoué laisse le palier à « free » sans effacer l'abonnement.
+ * `cancelAtPeriodEnd` : même réponse, undefined avant lecture — la montée n'est
+ * alors pas promise, pas plus qu'à un abonnement résilié.
  * `action` : 'dialog' ouvre la fenêtre d'abonnement (avantages et conditions,
  * sans changer de page) ; 'profile' va au profil, seul chemin qui gère la
  * montée en place et la gestion d'un abonnement existant.
  * @returns {{ labelKey: string, disabled: boolean, action: 'dialog'|'profile' }}
  */
-export function signedInPlanCta({ tierKey, level, trialEligible, comingSoon, subscriptionStatus }) {
+export function signedInPlanCta({ tierKey, level, trialEligible, comingSoon, subscriptionStatus, cancelAtPeriodEnd }) {
     const cardLevel = tierKey === 'standard' ? 'standard' : tierKey === 'privacy' ? 'privacy' : 'free'
     if (DELINQUENT_STATUSES.includes(subscriptionStatus)) {
         // Abonnement existant, carte à régulariser : la fenêtre porte le bouton.
@@ -108,6 +125,10 @@ export function signedInPlanCta({ tierKey, level, trialEligible, comingSoon, sub
     // Carte au-dessus de l'offre actuelle.
     if (comingSoon) return { labelKey: 'plans.cta.comingSoon', disabled: true, action: 'profile' }
     if (current === 'standard') {
+        // Résilié, ou pas encore lu : le profil dit l'état exact, rien n'est promis.
+        if (cancelAtPeriodEnd === undefined || isEndingSubscription({ subscriptionStatus, cancelAtPeriodEnd })) {
+            return { labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' }
+        }
         // Abonné Unlimited vers Pro : modification en place, depuis le profil.
         return { labelKey: 'plans.cta.getPro', disabled: false, action: 'profile' }
     }
