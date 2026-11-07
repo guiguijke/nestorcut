@@ -221,6 +221,9 @@ import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStag
 const props = defineProps({
     result: { type: Object, required: true },
     compact: { type: Boolean, default: false },
+    // Le job ENTIER est fini (posé par la page d'après l'état réel du calcul).
+    // Seul ce signal autorise « Terminé » ; une frame `final` ne suffit pas.
+    jobDone: { type: Boolean, default: false },
 });
 
 const { t, fmtPercent } = useLocale();
@@ -511,7 +514,7 @@ const best = computed(() => {
 });
 
 const liveStage = computed(() => resolveLiveStage(props.result, best.value?.stage));
-const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, liveStage.value) : null));
+const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, props.jobDone) : null));
 const badgeText = computed(() => ({
     done: t('live.feasible'),
     fits: t('live.fitsSheet'),
