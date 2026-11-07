@@ -186,7 +186,7 @@ export function fmtArea(mm2, unit, locale, scaleMm2) {
         : Math.abs(v)
     if (scale >= 1e6) {
         // Une aire minuscule à côté d'une grande ne s'écrit pas « 0 m² ».
-        const small = v !== 0 && Math.abs(v) < 1e4
+        const small = v !== 0 && Math.abs(v) < 1e5
         return `${nf(small ? 4 : 2).format(v / 1e6)} m²`
     }
     return `${nf(0).format(v)} mm²`

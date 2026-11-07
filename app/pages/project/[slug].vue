@@ -110,7 +110,7 @@
                 <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
                     {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
                 </p>
-                <p v-if="ctaHint" class="atelier__cta-hint">{{ ctaHint }}</p>
+                <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
                 <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
                      les premières tôles seulement ; le dire avant le calcul. -->
                 <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">

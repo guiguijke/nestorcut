@@ -54,6 +54,11 @@ describe('fmtArea : une seule unité sur une même ligne', () => {
         expect(fmtArea(1500, 'mm', 'en', 2000000)).toBe('0.0015 m²')
     })
 
+    it('entre 1e4 et 1e5 mm² : quatre décimales, rien n'est arrondi à moitié', () => {
+        expect(fmtArea(14000, 'mm', 'en', 2000000)).toBe('0.014 m²')
+        expect(fmtArea(9000, 'mm', 'en', 2000000)).toBe('0.009 m²')
+    })
+
     it('une échelle sous le seuil garde les mm²', () => {
         expect(fmtArea(221598, 'mm', 'en', 500000)).toBe('221,598 mm²')
     })
