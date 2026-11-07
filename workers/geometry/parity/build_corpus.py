@@ -158,6 +158,22 @@ def save_new(doc, name):
         save(doc, name)
 
 
+def d_shape(blk):
+    """Pièce à trou et à un seul coin arrondi : l'ARC n'a aucune symétrie, un miroir
+    lu comme une rotation de 180° le pose ailleurs et le contour ne se referme plus."""
+    blk.add_line((0, 0), (40, 0))
+    blk.add_arc((40, 20), 20, -90, 0)
+    blk.add_line((60, 20), (60, 40))
+    blk.add_line((60, 40), (0, 40))
+    blk.add_line((0, 40), (0, 0))
+    blk.add_circle((25, 20), 8)
+
+
+def tilted_ellipse_point(t):
+    """Point de l'ellipse de grand axe (30, 20), ratio 0,4, centrée à l'origine."""
+    return (30 * math.cos(t) - 0.4 * 20 * math.sin(t), 20 * math.cos(t) + 0.4 * 30 * math.sin(t))
+
+
 def main_cut_cases():
     os.makedirs(OUT, exist_ok=True)
 
@@ -197,6 +213,68 @@ def main_cut_cases():
     msp.add_blockref("TAB", (300, 300), dxfattribs={"yscale": -1, "rotation": 60})
     msp.add_blockref("TAB", (500, 500), dxfattribs={"xscale": -2, "yscale": 1, "rotation": 90})
     save_new(doc, "block_mirror_rotation.dxf")
+
+    # --- ARC et ELLIPSE dans un bloc miroir : xscale=-1, -2 uniforme, -2 inégal,
+    # miroir tourné. Le contour ne se referme que si l'arc reste du bon côté.
+    # Pièces empilées loin l'une de l'autre : compare.py juge les pièces dans
+    # l'ordre, et celui de GEOS ne suit y-min que si leurs hauteurs sont disjointes.
+    def mirrored_block_doc(build_block):
+        doc = new_doc()
+        build_block(doc.blocks.new(name="SHAPE"))
+        for k, attribs in enumerate((
+            {"xscale": -1},
+            {"xscale": -2, "yscale": 2},
+            {"xscale": -2, "yscale": 1},
+            {"yscale": -1, "rotation": 30},
+            {"xscale": -1.5, "yscale": 1, "rotation": 45},
+            {"xscale": 1, "yscale": 3},
+        )):
+            doc.modelspace().add_blockref("SHAPE", (200 * k, 400 * k), dxfattribs=attribs)
+        return doc
+
+    def half_ellipse(blk):
+        blk.add_ellipse((0, 0), major_axis=(30, 0), ratio=0.5, start_param=0, end_param=math.pi)
+        blk.add_line((-30, 0), (30, 0))
+
+    def tilted_ellipse(blk):
+        blk.add_ellipse((0, 0), major_axis=(30, 20), ratio=0.4,
+                        start_param=math.pi / 4, end_param=5 * math.pi / 4)
+        blk.add_line(tilted_ellipse_point(math.pi / 4), tilted_ellipse_point(5 * math.pi / 4))
+
+    save_new(mirrored_block_doc(d_shape), "block_mirror_arc.dxf")
+    save_new(mirrored_block_doc(half_ellipse), "block_mirror_ellipse.dxf")
+    save_new(mirrored_block_doc(tilted_ellipse), "block_mirror_ellipse_tilted.dxf")
+
+    # --- Miroirs imbriqués : deux miroirs s'annulent, un miroir + un non.
+    doc = new_doc()
+    d_shape(doc.blocks.new(name="D"))
+    doc.blocks.new(name="ONE_MIRROR").add_blockref("D", (0, 0), dxfattribs={"xscale": -1})
+    doc.blocks.new(name="MIRROR_ROTATED").add_blockref(
+        "D", (10, 5), dxfattribs={"xscale": -2, "yscale": 2, "rotation": 30})
+    msp = doc.modelspace()
+    msp.add_blockref("ONE_MIRROR", (100, 0))
+    msp.add_blockref("ONE_MIRROR", (300, 400), dxfattribs={"xscale": -1})
+    msp.add_blockref("ONE_MIRROR", (500, 800), dxfattribs={"rotation": 90})
+    msp.add_blockref("MIRROR_ROTATED", (100, 1200), dxfattribs={"yscale": -1})
+    msp.add_blockref("MIRROR_ROTATED", (400, 1600), dxfattribs={"xscale": -1, "rotation": 45})
+    save_new(doc, "block_mirror_nested.dxf")
+
+    # --- Polylignes à arcs dans un bloc miroir : le bulge change de signe ; sous
+    # une échelle inégale elles éclatent en LINE + ELLIPSE, comme ezdxf.
+    doc = new_doc()
+    blk = doc.blocks.new(name="BULGED")
+    blk.add_lwpolyline([(0, 0, 0.5), (60, 0, 0.0), (60, 40, -0.3), (0, 40, 0.0)], format="xyb", close=True)
+    blk.add_polyline2d([(20, 10, 0.2), (40, 10, 0.0), (40, 30, 0.2), (20, 30, 0.0)], format="xyb", close=True)
+    msp = doc.modelspace()
+    for k, attribs in enumerate((
+        {"xscale": -1},
+        {"xscale": -2, "yscale": 2},
+        {"xscale": -2, "yscale": 1},
+        {"xscale": 2, "yscale": 1, "rotation": 30},
+        {"xscale": -1, "rotation": 60},
+    )):
+        msp.add_blockref("BULGED", (300 * k, 400 * k), dxfattribs=attribs)
+    save_new(doc, "block_mirror_bulge.dxf")
 
     print(f"cas fichier de coupe -> {OUT}")
 

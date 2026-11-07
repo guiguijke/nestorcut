@@ -32,7 +32,6 @@ sys.path.insert(0, os.path.join(REPO, "workers", "fileprocessing"))
 import logging  # noqa: E402
 
 import ezdxf  # noqa: E402
-from ezdxf import path as ezpath  # noqa: E402
 from ezdxf import recover  # noqa: E402
 from ezdxf.math import Matrix44  # noqa: E402
 from shapely.geometry import LineString, Point  # noqa: E402
@@ -54,12 +53,26 @@ TOLERANCE_MM = 0.01
 PLACEMENTS = [(0.0, 0.0, 0.0), (math.radians(37.0), 20.0, 10.0)]
 
 
+def curve_points(entity):
+    """Sommets de la courbe en coordonnées monde, aplatis par ezdxf lui-même
+    (pas par ezdxf.path : ses arcs passent par des Bézier, écart jusqu'à 0,01 mm
+    selon l'angle de départ)."""
+    t = entity.dxftype()
+    if t == "LINE":
+        return [entity.dxf.start, entity.dxf.end]
+    if t in ("ARC", "CIRCLE", "ELLIPSE", "SPLINE"):
+        return list(entity.flattening(0.002))
+    if t in ("LWPOLYLINE", "POLYLINE"):
+        return [v for sub in entity.virtual_entities() for v in curve_points(sub)]
+    return []
+
+
 def curve(entity):
     """La courbe d'une entité en coordonnées monde, arcs compris."""
     if entity.dxftype() == "POINT":
         loc = entity.dxf.location
         return Point(loc.x, loc.y)
-    pts = [(v.x, v.y) for v in ezpath.make_path(entity).flattening(0.002, segments=8)]
+    pts = [(v[0], v[1]) for v in curve_points(entity)]
     if len(pts) < 2:
         return Point(pts[0]) if pts else None
     return LineString(pts)

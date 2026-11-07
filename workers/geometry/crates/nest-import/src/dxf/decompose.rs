@@ -1,11 +1,27 @@
 //! INSERT resolution (ezdxf recursive_decompose twin): block references are
 //! replaced by their member primitives with the reference transform applied —
-//! BEFORE unit scaling (AGENTS #26). Nested INSERTs recurse; negative/mirror
-//! scales follow ezdxf's angle handling; non-uniform scale turns ARC/CIRCLE
-//! into ELLIPSE (ezdxf's Ellipse.from_arc path).
+//! BEFORE unit scaling (AGENTS #26). Nested INSERTs recurse.
+//!
+//! Le chemin Rust n'a pas d'OCS : tout ce qui sort d'ici est en coordonnées
+//! monde, normale +Z. Là où ezdxf inverse l'extrusion sous un miroir (0,0,-1) et
+//! garde ses valeurs brutes, on réfléchit les angles et les bulges. La courbe est
+//! la même (verrou : parity/wcs_check.py), les valeurs brutes non.
+//!
+//! Échelle non uniforme (`Affine::is_uniform`) : ARC/CIRCLE deviennent ELLIPSE,
+//! et une polyligne à arcs éclate en LINE + ELLIPSE, comme ezdxf.
 
-use super::entities::{Block, Entity};
+use super::entities::{self, Block, Entity};
 use super::flatten::Primitive;
+use std::f64::consts::{FRAC_PI_2, PI, TAU};
+
+/// Python math.isclose(a, b, rel_tol=1e-9, abs_tol).
+fn isclose(a: f64, b: f64, abs_tol: f64) -> bool {
+    (a - b).abs() <= (1e-9 * a.abs().max(b.abs())).max(abs_tol)
+}
+
+fn norm(v: [f64; 2]) -> f64 {
+    (v[0] * v[0] + v[1] * v[1]).sqrt()
+}
 
 /// 2×2 matrix + translation (row-major [[a,b],[c,d]]).
 #[derive(Debug, Clone, Copy)]
@@ -21,6 +37,14 @@ struct Affine {
 impl Affine {
     fn identity() -> Self {
         Self { a: 1.0, b: 0.0, c: 0.0, d: 1.0, tx: 0.0, ty: 0.0 }
+    }
+    fn is_identity(&self) -> bool {
+        self.a == 1.0
+            && self.b == 0.0
+            && self.c == 0.0
+            && self.d == 1.0
+            && self.tx == 0.0
+            && self.ty == 0.0
     }
     fn apply(&self, p: [f64; 2]) -> [f64; 2] {
         [
@@ -45,13 +69,28 @@ impl Affine {
             self.c * p[0] + self.d * p[1],
         ]
     }
+    /// Déterminant négatif : la transformation retourne le plan. Les arcs
+    /// changent de sens (ezdxf : l'extrusion passe à -Z).
+    fn mirrors(&self) -> bool {
+        self.a * self.d - self.b * self.c < 0.0
+    }
+    /// Un cercle reste un cercle : axes de même longueur (test d'ezdxf,
+    /// transform_extrusion) et orthogonaux. ezdxf n'a pas à tester
+    /// l'orthogonalité parce qu'il applique les matrices d'INSERT une à une ; on
+    /// les compose, et deux INSERT imbriqués peuvent cisailler le plan.
+    fn is_uniform(&self) -> bool {
+        let xx = self.a * self.a + self.c * self.c;
+        let yy = self.b * self.b + self.d * self.d;
+        let dot = self.a * self.b + self.c * self.d;
+        isclose(xx, yy, 1e-9) && dot.abs() <= 1e-9 * xx.max(yy)
+    }
 }
 
 /// INSERT transform (ezdxf Insert.matrix44, default OCS). ezdxf compose en
 /// vecteur-LIGNE : p' = p·S·R, donc l'échelle s'applique AVANT la rotation.
 /// En vecteur-colonne : M = R(rotation) ∘ S(xs,ys) ; t = insert − M·base_point.
 fn insert_affine(block: &Block, at: [f64; 2], xs: f64, ys: f64, rotation_deg: f64) -> Affine {
-    let theta = rotation_deg * (std::f64::consts::PI / 180.0);
+    let theta = rotation_deg * (PI / 180.0);
     let (s, c) = libm::sincos(theta);
     // R * S
     let a = xs * c;
@@ -70,22 +109,6 @@ fn insert_affine(block: &Block, at: [f64; 2], xs: f64, ys: f64, rotation_deg: f6
     }
 }
 
-pub fn decompose(entities: &[Entity], blocks: &[Block]) -> Vec<Primitive> {
-    let mut out = Vec::new();
-    decompose_into(entities, blocks, Affine::identity(), &mut out);
-    out
-}
-
-/// INSERT resolution at the ENTITY level (J-090): same recursion as
-/// `decompose`, but keeps the full entity payload (bulges, color, layer) for
-/// the canonical DXF rebuild — handles are (re)assigned downstream
-/// (dxf/canonical.rs), mirroring ezdxf's fresh sequence on the rebuilt doc.
-pub fn decompose_to_entities(entities: &[Entity], blocks: &[Block]) -> Vec<Entity> {
-    let mut out = Vec::new();
-    decompose_entities_into(entities, blocks, Affine::identity(), &mut out);
-    out
-}
-
 /// Dépassement de l'expansion des INSERT (lot 2a) : plafond dur d'entités
 /// atteint, ou graphe de blocs trop profond / cyclique.
 #[derive(Debug, Clone, Copy)]
@@ -95,11 +118,15 @@ pub struct Overflow {
     pub depth_exceeded: bool,
 }
 
-/// `decompose_to_entities` BORNÉE (lot 2a — garde posée avant la
-/// décomposition, `budget.rs`) : arrêt net au plafond dur d'entités et à la
-/// profondeur d'INSERT, au lieu de saturer la mémoire (ou la pile, sur un
-/// graphe de blocs cyclique) avant le refus. Miroir de `decompose_bounded` +
-/// `assert_insert_depth` (worker_common/geometry/dxf_bounds.py).
+/// INSERT resolution at the ENTITY level (J-090) : garde la charge complète de
+/// l'entité (bulges, couleur, calque) pour le DXF canonique — les handles sont
+/// (ré)attribués en aval (dxf/canonical.rs), comme la séquence ezdxf fraîche.
+///
+/// BORNÉE (lot 2a — garde posée avant la décomposition, `budget.rs`) : arrêt net
+/// au plafond dur d'entités et à la profondeur d'INSERT, au lieu de saturer la
+/// mémoire (ou la pile, sur un graphe de blocs cyclique) avant le refus. Miroir
+/// de `decompose_bounded` + `assert_insert_depth`
+/// (worker_common/geometry/dxf_bounds.py).
 pub fn decompose_to_entities_bounded(
     entities: &[Entity],
     blocks: &[Block],
@@ -149,88 +176,75 @@ fn decompose_entities_bounded_into(
                         depth + 1,
                     )?;
                 }
+                // Missing block definition: ezdxf raises — recover skips.
             }
             _ => {
                 if out.len() >= ceiling {
                     return Err(false);
                 }
-                out.push(transform_entity(e, m));
+                transform_into(e, &m, out);
             }
         }
     }
     Ok(())
 }
 
-fn decompose_into(entities: &[Entity], blocks: &[Block], m: Affine, out: &mut Vec<Primitive>) {
-    for e in entities {
-        match e {
-            Entity::Insert(ins) => {
-                if let Some(block) = blocks.iter().find(|b| b.name == ins.block) {
-                    let local = insert_affine(block, ins.at, ins.xscale, ins.yscale, ins.rotation);
-                    decompose_into(&block.entities, blocks, m.then(&local), out);
-                }
-                // Missing block definition: ezdxf raises — recover skips.
-            }
-            _ => out.push(apply(e, m)),
-        }
-    }
-}
-
-fn decompose_entities_into(entities: &[Entity], blocks: &[Block], m: Affine, out: &mut Vec<Entity>) {
-    for e in entities {
-        match e {
-            Entity::Insert(ins) => {
-                if let Some(block) = blocks.iter().find(|b| b.name == ins.block) {
-                    let local = insert_affine(block, ins.at, ins.xscale, ins.yscale, ins.rotation);
-                    decompose_entities_into(&block.entities, blocks, m.then(&local), out);
-                }
-            }
-            _ => out.push(transform_entity(e, m)),
-        }
-    }
-}
-
 /// Applies the affine map to one entity, keeping the full payload (common,
-/// bulges, knots/weights). `apply` below is then a pure geometry projection
-/// (`primitive_of`) of this — SINGLE implementation of the transform math,
-/// so the nesting rings and the canonical entities can never drift apart.
-/// Bit-identical to the former direct mapping (same expressions, same order).
-fn transform_entity(e: &Entity, m: Affine) -> Entity {
+/// bulges, knots/weights). The nesting rings then read the geometry through
+/// `primitive_of` : a SINGLE implementation of the transform math, so the rings
+/// and the canonical entities can never drift apart. Une polyligne à arcs sous
+/// une échelle non uniforme rend plusieurs entités (ezdxf : virtual_entities).
+fn transform_into(e: &Entity, m: &Affine, out: &mut Vec<Entity>) {
+    // Hors bloc, ezdxf ne transforme rien : aucune valeur ne doit bouger d'un bit.
+    if m.is_identity() {
+        out.push(e.clone());
+        return;
+    }
+    let has_arc = |bulges: &[f64]| bulges.iter().any(|b| *b != 0.0);
     match e {
-        Entity::Line(l) => Entity::Line(super::entities::Line {
+        Entity::LwPolyline(p) if !m.is_uniform() && has_arc(&p.bulges) => {
+            explode_polyline(&p.points, &p.bulges, p.closed, &p.common, m, out);
+        }
+        Entity::Polyline(p) if !m.is_uniform() && has_arc(&p.bulges) => {
+            explode_polyline(&p.points, &p.bulges, p.closed, &p.common, m, out);
+        }
+        _ => out.push(transform_entity(e, m)),
+    }
+}
+
+fn transform_entity(e: &Entity, m: &Affine) -> Entity {
+    match e {
+        Entity::Line(l) => Entity::Line(entities::Line {
             start: m.apply(l.start),
             end: m.apply(l.end),
             common: l.common.clone(),
         }),
-        Entity::LwPolyline(p) => Entity::LwPolyline(super::entities::LwPolyline {
+        Entity::LwPolyline(p) => Entity::LwPolyline(entities::LwPolyline {
             points: p.points.iter().map(|&pt| m.apply(pt)).collect(),
-            bulges: p.bulges.clone(),
+            bulges: mapped_bulges(&p.bulges, m),
             closed: p.closed,
             common: p.common.clone(),
         }),
-        Entity::Polyline(p) => Entity::Polyline(super::entities::Polyline {
+        Entity::Polyline(p) => Entity::Polyline(entities::Polyline {
             points: p.points.iter().map(|&pt| m.apply(pt)).collect(),
-            bulges: p.bulges.clone(),
+            bulges: mapped_bulges(&p.bulges, m),
             closed: p.closed,
             common: p.common.clone(),
             vertex_handles: p.vertex_handles.clone(),
             seqend_handle: p.seqend_handle.clone(),
         }),
-        Entity::Point(p) => Entity::Point(super::entities::Point {
+        Entity::Point(p) => Entity::Point(entities::Point {
             at: m.apply(p.at),
             common: p.common.clone(),
         }),
-        Entity::Circle(c) => circle_entity(m.apply(c.center), c.radius, &m, &c.common),
-        Entity::Arc(a) => arc_entity(m.apply(a.center), a.radius, a.start_angle, a.end_angle, &m, &a.common),
-        Entity::Ellipse(el) => Entity::Ellipse(super::entities::Ellipse {
-            center: m.apply(el.center),
-            major: m.apply_dir(el.major),
-            ratio: el.ratio,
-            start_param: el.start_param,
-            end_param: el.end_param,
-            common: el.common.clone(),
-        }),
-        Entity::Spline(sp) => Entity::Spline(super::entities::Spline {
+        Entity::Circle(c) => circle_entity(c, m),
+        Entity::Arc(a) => arc_entity(a.center, a.radius, a.start_angle, a.end_angle, m, &a.common),
+        Entity::Ellipse(el) => {
+            // Petit axe = +Z × grand axe, à la longueur grand axe × ratio.
+            let minor = [-el.major[1] * el.ratio, el.major[0] * el.ratio];
+            transform_ellipse(el.center, el.major, minor, el.start_param, el.end_param, m, &el.common)
+        }
+        Entity::Spline(sp) => Entity::Spline(entities::Spline {
             degree: sp.degree,
             knots: sp.knots.clone(),
             control: sp.control.iter().map(|&pt| m.apply(pt)).collect(),
@@ -238,8 +252,17 @@ fn transform_entity(e: &Entity, m: Affine) -> Entity {
             common: sp.common.clone(),
         }),
         Entity::Unsupported(kind) => Entity::Unsupported(kind.clone()),
-        // INSERT never reaches here — resolved by decompose_*_into.
+        // INSERT never reaches here — resolved by decompose_entities_bounded_into.
         Entity::Insert(ins) => Entity::Insert(ins.clone()),
+    }
+}
+
+/// Le bulge garde sa valeur sous une similitude, son SIGNE suit le sens du plan.
+fn mapped_bulges(bulges: &[f64], m: &Affine) -> Vec<f64> {
+    if m.mirrors() {
+        bulges.iter().map(|b| if *b == 0.0 { 0.0 } else { -*b }).collect()
+    } else {
+        bulges.to_vec()
     }
 }
 
@@ -306,78 +329,240 @@ pub fn primitive_of(e: &Entity) -> Primitive {
     }
 }
 
-/// Applies the affine map to one entity's geometry (entity-level, like ezdxf
-/// entity.transform), projected to a Primitive — `primitive_of(transform_entity)`.
-fn apply(e: &Entity, m: Affine) -> Primitive {
-    primitive_of(&transform_entity(e, m))
-}
-
 /// CIRCLE under an affine map (entity level): uniform scale stays a Circle
-/// (radius × s) ; non-uniform converts to an ellipse (ezdxf behavior).
-fn circle_entity(center: [f64; 2], radius: f64, m: &Affine, common: &super::entities::Common) -> Entity {
-    let sx = (m.a * m.a + m.c * m.c).sqrt();
-    let sy = (m.b * m.b + m.d * m.d).sqrt();
-    let uniform = (sx - sy).abs() <= 1e-9 * sx.max(1.0) && m.a * m.b + m.c * m.d == 0.0;
-    if uniform {
-        Entity::Circle(super::entities::Circle {
-            center,
-            radius: radius * sx,
-            common: common.clone(),
+/// (radius × s) ; non-uniform converts to an ellipse (ezdxf Ellipse.from_arc).
+fn circle_entity(c: &entities::Circle, m: &Affine) -> Entity {
+    if m.is_uniform() {
+        Entity::Circle(entities::Circle {
+            center: m.apply(c.center),
+            radius: c.radius * norm([m.a, m.c]),
+            common: c.common.clone(),
         })
     } else {
-        let major = m.apply_dir([radius, 0.0]);
-        let minor = m.apply_dir([0.0, radius]);
-        let ratio = (minor[0] * minor[0] + minor[1] * minor[1]).sqrt()
-            / (major[0] * major[0] + major[1] * major[1]).sqrt();
-        Entity::Ellipse(super::entities::Ellipse {
-            center,
-            major,
-            ratio,
-            start_param: 0.0,
-            end_param: std::f64::consts::TAU,
-            common: common.clone(),
-        })
+        let r = c.radius.abs();
+        transform_ellipse(c.center, [r, 0.0], [0.0, r], 0.0, TAU, m, &c.common)
     }
 }
 
-/// ARC/CIRCLE under an affine map (entity level). Uniform scale: radius × s,
-/// angles += θ. Non-uniform (or mirrored): converted to an ellipse (ezdxf).
+/// ARC under an affine map (entity level). Uniform scale: radius × s, angles
+/// rotated, and swapped when the plane flips: a direction at angle φ maps to
+/// α − φ (α = image of the x axis), so the counter-clockwise arc s→e becomes the
+/// counter-clockwise arc (α−e)→(α−s). Non-uniform: ELLIPSE (ezdxf from_arc).
 fn arc_entity(
     center: [f64; 2],
     radius: f64,
     start_angle: f64,
     end_angle: f64,
     m: &Affine,
-    common: &super::entities::Common,
+    common: &entities::Common,
 ) -> Entity {
-    let sx = (m.a * m.a + m.c * m.c).sqrt();
-    let sy = (m.b * m.b + m.d * m.d).sqrt();
-    let uniform = (sx - sy).abs() <= 1e-9 * sx.max(1.0) && m.a * m.b + m.c * m.d == 0.0;
-    if uniform {
-        // Pure rotation+uniform scale: rotate angles by the map's rotation.
+    if m.is_uniform() {
         let theta = libm::atan2(m.c, m.a).to_degrees();
-        Entity::Arc(super::entities::Arc {
-            center,
-            radius: radius * sx,
-            start_angle: start_angle + theta,
-            end_angle: end_angle + theta,
+        let (start_angle, end_angle) = if m.mirrors() {
+            (theta - end_angle, theta - start_angle)
+        } else {
+            (start_angle + theta, end_angle + theta)
+        };
+        Entity::Arc(entities::Arc {
+            center: m.apply(center),
+            radius: radius * norm([m.a, m.c]),
+            start_angle,
+            end_angle,
             common: common.clone(),
         })
     } else {
-        // ezdxf converts ARC/CIRCLE to ELLIPSE on non-uniform scale, then
-        // transforms: major axis = (r,0) mapped by M, ratio preserved by the
-        // minor axis mapped likewise.
-        let major = m.apply_dir([radius, 0.0]);
-        let minor = m.apply_dir([0.0, radius]);
-        let ratio = (minor[0] * minor[0] + minor[1] * minor[1]).sqrt()
-            / (major[0] * major[0] + major[1] * major[1]).sqrt();
-        Entity::Ellipse(super::entities::Ellipse {
+        let r = radius.abs();
+        transform_ellipse(
             center,
-            major,
-            ratio,
-            start_param: start_angle * (std::f64::consts::PI / 180.0),
-            end_param: end_angle * (std::f64::consts::PI / 180.0),
+            [r, 0.0],
+            [0.0, r],
+            start_angle * (PI / 180.0),
+            end_angle * (PI / 180.0),
+            m,
+            common,
+        )
+    }
+}
+
+/// ezdxf bulge_to_arc : (centre, début, fin, rayon) d'un arc toujours orienté
+/// dans le sens trigonométrique, angles en degrés. Le rayon SIGNÉ place le centre,
+/// le rayon renvoyé est |r| (AGENTS #1).
+fn bulge_to_arc(a: [f64; 2], b: [f64; 2], bulge: f64) -> ([f64; 2], f64, f64, f64) {
+    let angle = |p: [f64; 2], q: [f64; 2]| libm::atan2(q[1] - p[1], q[0] - p[0]);
+    let chord = norm([b[0] - a[0], b[1] - a[1]]);
+    let r = chord * (1.0 + bulge * bulge) / 4.0 / bulge;
+    let t = angle(a, b) + (FRAC_PI_2 - libm::atan(bulge) * 2.0);
+    let c = [a[0] + libm::cos(t) * r, a[1] + libm::sin(t) * r];
+    let (start, end) = if bulge < 0.0 { (b, a) } else { (a, b) };
+    (c, angle(c, start).to_degrees(), angle(c, end).to_degrees(), r.abs())
+}
+
+/// Polyligne à arcs sous échelle non uniforme : ses segments deviennent des LINE
+/// et ses arcs des ELLIPSE (ezdxf _virtual_polyline_entities + from_arc).
+fn explode_polyline(
+    points: &[[f64; 2]],
+    bulges: &[f64],
+    closed: bool,
+    common: &entities::Common,
+    m: &Affine,
+    out: &mut Vec<Entity>,
+) {
+    let n = points.len();
+    if n < 2 {
+        return;
+    }
+    let segments = if closed { n } else { n - 1 };
+    for i in 0..segments {
+        let (a, b) = (points[i], points[(i + 1) % n]);
+        let bulge = bulges.get(i).copied().unwrap_or(0.0);
+        if bulge != 0.0 {
+            let (center, start, end, radius) = bulge_to_arc(a, b, bulge);
+            if radius > 0.0 {
+                out.push(arc_entity(center, radius, start, end, m, common));
+            }
+        } else {
+            out.push(Entity::Line(entities::Line {
+                start: m.apply(a),
+                end: m.apply(b),
+                common: common.clone(),
+            }));
+        }
+    }
+}
+
+/// Rytz (ezdxf rytz_axis_construction) : les vrais axes d'une ellipse à partir de
+/// deux demi-diamètres conjugués. Rend (grand axe, petit axe, ratio).
+fn rytz_axes(d1: [f64; 2], d2: [f64; 2]) -> Option<([f64; 2], [f64; 2], f64)> {
+    let q = d1;
+    let p1 = [d2[1], -d2[0]]; // d2 tourné de -90°
+    let d = [(p1[0] + q[0]) / 2.0, (p1[1] + q[1]) / 2.0];
+    let radius = norm(d);
+    let qp = [q[0] - p1[0], q[1] - p1[1]];
+    let qp_len = norm(qp);
+    if qp_len == 0.0 {
+        return None;
+    }
+    let rv = [qp[0] / qp_len * radius, qp[1] / qp_len * radius];
+    let a = [d[0] - rv[0], d[1] - rv[1]];
+    let b = [d[0] + rv[0], d[1] + rv[1]];
+    let major_len = norm([a[0] - q[0], a[1] - q[1]]);
+    let minor_len = norm([b[0] - q[0], b[1] - q[1]]);
+    let (a_len, b_len) = (norm(a), norm(b));
+    if major_len == 0.0 || minor_len == 0.0 || a_len == 0.0 || b_len == 0.0 {
+        return None;
+    }
+    Some((
+        [b[0] / b_len * major_len, b[1] / b_len * major_len],
+        [a[0] / a_len * minor_len, a[1] / a_len * minor_len],
+        minor_len / major_len,
+    ))
+}
+
+/// ELLIPSE sous une transformation quelconque : portage de
+/// ConstructionEllipse.transform (ezdxf). Sous cisaillement les images des axes ne
+/// sont plus orthogonales (Rytz, et les paramètres sont recalculés), un ratio > 1
+/// échange les axes. Le résultat est ramené en normale +Z : sous un miroir ezdxf
+/// garde (0,0,-1) et ses paramètres, ici on rend (-fin, -début), même courbe.
+fn transform_ellipse(
+    center: [f64; 2],
+    major: [f64; 2],
+    minor: [f64; 2],
+    start_param: f64,
+    end_param: f64,
+    m: &Affine,
+    common: &entities::Common,
+) -> Entity {
+    let vertex = |c: [f64; 2], maj: [f64; 2], min: [f64; 2], p: f64| -> [f64; 2] {
+        let (cos, sin) = (libm::cos(p), libm::sin(p));
+        [c[0] + cos * maj[0] + sin * min[0], c[1] + cos * maj[1] + sin * min[1]]
+    };
+    let new_center = m.apply(center);
+    let mut new_major = m.apply_dir(major);
+    let mut new_minor = m.apply_dir(minor);
+    let (major_len, minor_len) = (norm(new_major), norm(new_minor));
+    let degenerate = || {
+        Entity::Ellipse(entities::Ellipse {
+            center: new_center,
+            major: [0.0, 0.0],
+            ratio: 1.0,
+            start_param: 0.0,
+            end_param: TAU,
             common: common.clone(),
         })
+    };
+    // Une échelle nulle aplatit la courbe : aucune géométrie, jamais de NaN.
+    if major_len == 0.0 || minor_len == 0.0 {
+        return degenerate();
     }
+    let dot = (new_major[0] * new_minor[0] + new_major[1] * new_minor[1]) / (major_len * minor_len);
+    let (mut start, mut end) = (start_param, end_param);
+    let mut ratio;
+    if dot.abs() > 1e-6 {
+        let Some((axis_major, axis_minor, r)) = rytz_axes(new_major, new_minor) else {
+            return degenerate();
+        };
+        new_major = axis_major;
+        new_minor = axis_minor;
+        ratio = r;
+        if !isclose(start, end, 1e-9) {
+            // Ellipse ouverte : les paramètres se recalculent sur les vrais axes.
+            let old_span = (end - start).rem_euclid(TAU);
+            let (x_len, y_len) = (norm(new_major), norm(new_minor));
+            let x_axis = [new_major[0] / x_len, new_major[1] / x_len];
+            let y_axis = [new_minor[0] / y_len, new_minor[1] / y_len];
+            let param = |v: [f64; 2]| -> f64 {
+                let dx = x_axis[0] * v[0] + x_axis[1] * v[1];
+                let dy = (y_axis[0] * v[0] + y_axis[1] * v[1]) / ratio;
+                libm::atan2(dy, dx).rem_euclid(TAU)
+            };
+            let relative = |p: [f64; 2]| [p[0] - new_center[0], p[1] - new_center[1]];
+            start = param(relative(m.apply(vertex(center, major, minor, start_param))));
+            end = param(relative(m.apply(vertex(center, major, minor, end_param))));
+            // Le bon côté de la courbe : même étendue qu'avant ; à π exactement
+            // l'étendue ne tranche pas, on regarde le point du milieu.
+            if !isclose(old_span, PI, 1e-9) {
+                if !isclose(old_span, (end - start).rem_euclid(TAU), 1e-9) {
+                    std::mem::swap(&mut start, &mut end);
+                }
+            } else {
+                let mid = |s: f64, e: f64| (s + if e < s { e + TAU } else { e }) / 2.0;
+                let old_chk = m.apply(vertex(center, major, minor, mid(start_param, end_param)));
+                let new_chk = vertex(new_center, new_major, new_minor, mid(start, end));
+                if !isclose(old_chk[0], new_chk[0], 1e-9) || !isclose(old_chk[1], new_chk[1], 1e-9) {
+                    std::mem::swap(&mut start, &mut end);
+                }
+            }
+        }
+    } else {
+        ratio = minor_len / major_len;
+    }
+    // Sens du plan après transformation : la normale (grand × petit) vaut ±Z.
+    let positive = new_major[0] * new_minor[1] - new_major[1] * new_minor[0] >= 0.0;
+    if ratio > 1.0 {
+        // Le grand axe devient normale × grand axe, à la longueur du petit.
+        let z = if positive { 1.0 } else { -1.0 };
+        new_major = [-z * new_major[1] * ratio, z * new_major[0] * ratio];
+        ratio = 1.0 / ratio;
+        if !(start == 0.0 && isclose(end, TAU, 0.0)) {
+            start -= FRAC_PI_2;
+            end -= FRAC_PI_2;
+        }
+    }
+    start = start.rem_euclid(TAU);
+    end = end.rem_euclid(TAU);
+    if isclose(start, end, 0.0) {
+        start = 0.0;
+        end = TAU;
+    } else if !positive {
+        // (0,0,-1) → +Z : p(t) = c + cos t·M − sin t·N, soit t' = −t.
+        (start, end) = ((-end).rem_euclid(TAU), (-start).rem_euclid(TAU));
+    }
+    Entity::Ellipse(entities::Ellipse {
+        center: new_center,
+        major: new_major,
+        ratio: ratio.max(1e-6),
+        start_param: start,
+        end_param: end,
+        common: common.clone(),
+    })
 }
