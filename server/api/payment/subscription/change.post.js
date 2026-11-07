@@ -16,8 +16,8 @@ import {
  *                           self-serve cancel endpoint.
  *  - targetTier 'privacy' → upgrade standard → Privacy+ by UPDATING the
  *                           subscription price in place with proration (the
- *                           difference is charged immediately on the card on
- *                           file; an active trial keeps running). Never a new
+ *                           difference is billed with the next invoice, not
+ *                           immediately; an active trial keeps running). Never a new
  *                           Checkout — that would stack a second subscription.
  *
  * Free accounts have no subscription to update: their upgrade path stays the

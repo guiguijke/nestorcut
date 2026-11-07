@@ -236,9 +236,9 @@ export async function deleteCustomer(customerId) {
 
 /**
  * Switches an existing subscription to a different price IN PLACE (Stripe
- * subscription update), with proration — the upgrade difference is charged
- * immediately on the card on file, and a trialing subscription keeps its
- * trial. This is the proper upgrade path: creating a new Checkout session
+ * subscription update), with proration (`create_prorations`) — the upgrade
+ * difference is NOT invoiced right away: it becomes pending invoice items
+ * billed with the next invoice. A trialing subscription keeps its trial. This is the proper upgrade path: creating a new Checkout session
  * for an existing subscriber would stack a SECOND subscription on the same
  * customer (double billing).
  * @param {string} subscriptionId

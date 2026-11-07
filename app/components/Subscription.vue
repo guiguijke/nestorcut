@@ -61,22 +61,27 @@
             <p class="subscription__desc">{{ t('sub.grantDesc') }}</p>
         </div>
 
-        <div v-if="isActive && data?.isPrivacyTier" class="subscription__card">
+        <div v-if="isActive && alreadyPro" class="subscription__card">
             <div class="subscription__status">
                 <UiBadge tone="ok" dot>{{ t('sub.proPrivacy') }}</UiBadge>
             </div>
             <p class="subscription__desc">{{ t('sub.proActiveDesc') }}</p>
         </div>
 
-        <div v-else-if="isActive && data?.privacyPlan" class="subscription__card">
+        <div v-else-if="isActive && !isPastDue && data?.privacyPlan" class="subscription__card">
             <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
             <div class="subscription__price">
                 {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
-                <span class="subscription__interval">/ {{ data.privacyPlan.interval }}</span>
+                <span class="subscription__interval">/ {{ intervalLabel(data.privacyPlan.interval) }}</span>
             </div>
             <p class="subscription__desc">{{ t('sub.proDesc') }}</p>
             <p v-if="!isStripeActive && !paidDisabled" class="subscription__terms" data-testid="subscription-terms-pro">
                 {{ t(proTerms.key, proTerms.params) }}
+            </p>
+            <!-- Abonné Stripe : modification en place, sans page Stripe
+                 récapitulative — la phrase dit ce que le changement fait. -->
+            <p v-else-if="isStripeActive && !paidDisabled" class="subscription__terms" data-testid="subscription-terms-upgrade">
+                {{ t(upgradeTermsText.key, upgradeTermsText.params) }}
             </p>
             <MainButton
                 v-if="!paidDisabled"
@@ -98,7 +103,7 @@
             />
         </div>
 
-        <div v-else-if="!isGranted && !isPastDue" class="subscription__card">
+        <div v-else-if="!isActive && !isPastDue" class="subscription__card">
             <p v-if="ctxMessage" class="subscription__context" data-testid="subscription-context">
                 {{ t(ctxMessage.key, ctxMessage.params) }}
             </p>
@@ -106,7 +111,7 @@
                 <div class="subscription__plan-title">{{ data.plan.title || t('sub.monthlyPlan') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.plan.amount, data.plan.currency) }}
-                    <span class="subscription__interval">/ {{ data.plan.interval }}</span>
+                    <span class="subscription__interval">/ {{ intervalLabel(data.plan.interval) }}</span>
                 </div>
                 <div v-if="!ctxMessage" class="subscription__free">
                     {{ t('sub.freeLeft', { n: data.freeRemaining }) }}
@@ -115,7 +120,7 @@
                     {{ t('sub.resetsAt', { date: quotaResetLabel }) }}
                 </div>
                 <ul class="subscription__features" data-testid="subscription-features">
-                    <li v-for="key in UNLIMITED_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
+                    <li v-for="key in UNLIMITED_DIALOG_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
                 </ul>
                 <p v-if="!paidDisabled" class="subscription__terms" data-testid="subscription-terms">
                     {{ t(unlimitedTerms.key, unlimitedTerms.params) }}
@@ -146,7 +151,7 @@
                 <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
-                    <span class="subscription__interval">/ {{ data.privacyPlan.interval }}</span>
+                    <span class="subscription__interval">/ {{ intervalLabel(data.privacyPlan.interval) }}</span>
                 </div>
                 <ul class="subscription__features">
                     <li v-for="key in PRO_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
@@ -164,8 +169,16 @@
                     class="subscription__btn"
                     @click="subscribePro"
                 />
+                <MainButton
+                    v-else
+                    :label="t('sub.comingSoon')"
+                    :theme="themeType.secondary"
+                    :size="sizeType.m"
+                    :isDisable="true"
+                    class="subscription__btn"
+                />
             </div>
-            <div v-else class="subscription__desc">
+            <div v-if="!data?.plan" class="subscription__desc">
                 {{ t('sub.unavailable') }}
             </div>
         </div>
@@ -183,13 +196,13 @@ import { formatQuotaReset } from '~/utils/quotaReset'
 import { hasPaidAccess } from '~/utils/entitlementUi'
 import { flagOn } from '~/utils/runtimeFlag'
 import { trackEvent } from '~/utils/track'
-import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, formatPlanMoney } from '~/utils/planBenefits'
+import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney } from '~/utils/planBenefits'
 import { writeCheckoutIntent } from '~/utils/checkoutReturn'
 import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
 
 // D13 : pourquoi la fenêtre s'ouvre (useBuyCreditsContext, posé par
 // BuyCreditsDialog) — null sur la carte du profil et pour les ouvreurs sans
-// contexte : la carte est alors identique à celle d'avant le lot.
+// contexte : pas de phrase de contexte.
 const props = defineProps({
     context: { type: Object, default: null },
 })
@@ -236,6 +249,11 @@ const isGranted = computed(() => {
     return level === 'standard' || level === 'privacy'
 })
 const isActive = computed(() => isStripeActive.value || isGranted.value)
+// Pro déjà acquis : prix Pro côté Stripe, ou accès Pro offert par l'admin
+// (sans prix Stripe) — jamais une offre de « passer à Pro » à 0 € puis 39 €.
+const alreadyPro = computed(
+    () => Boolean(unref(data)?.isPrivacyTier) || (isGranted.value && unref(userMe)?.compute?.level === 'privacy'),
+)
 // past_due / unpaid / incomplete : le paiement a échoué, l'accès est coupé tant
 // que la carte n'est pas mise à jour (via le portail Stripe). `unpaid` =
 // relances épuisées mais l'abonnement existe encore : jamais la carte
@@ -257,9 +275,11 @@ const statusLabel = computed(() => {
     return status || ''
 })
 
-const formatPrice = formatPlanMoney
+const formatPrice = (amount, currency) => formatPlanMoney(amount, currency, locale.value)
+// Le serveur rend l'intervalle brut (« month ») : traduit comme sur /plans.
+const intervalLabel = (interval) => (interval === 'month' ? t('plans.interval.month') : interval)
 
-// D02 : ce que fait le Checkout, dit AVANT le clic. Prix et devise viennent
+// Ce que fait le Checkout, dit AVANT le clic. Prix et devise viennent
 // du plan lu côté serveur ; la date = aujourd'hui + durée d'essai connue.
 const termsFor = (plan) =>
     checkoutTerms({
@@ -272,6 +292,15 @@ const termsFor = (plan) =>
     })
 const unlimitedTerms = computed(() => termsFor(unref(data)?.plan))
 const proTerms = computed(() => termsFor(unref(data)?.privacyPlan))
+// Montée en Pro d'un abonné Stripe (en place, sans Checkout).
+const upgradeTermsText = computed(() =>
+    upgradeTerms({
+        status: unref(data)?.subscriptionStatus,
+        amount: unref(data)?.privacyPlan?.amount,
+        currency: unref(data)?.privacyPlan?.currency,
+        locale: locale.value,
+    }),
+)
 
 // O3 « sans recharger » : le palier de l'interface (useNuxtData('user')) se
 // rafraîchit dès que l'abonnement est actif côté Stripe alors que l'interface
@@ -359,6 +388,11 @@ const subscribe = async () => {
 // Sans abonnement Stripe (accès offert par l'admin), le Checkout reste la voie.
 const subscribePro = async () => {
     if (isLoading.value) return
+    // Aucune page Stripe ne récapitule ce changement : on le confirme ici.
+    if (isStripeActive.value) {
+        const terms = upgradeTermsText.value
+        if (!window.confirm(`${t('sub.upgradePro')}\n\n${t(terms.key, terms.params)}`)) return
+    }
     error.value = ''
     isLoading.value = true
     if (!isStripeActive.value) {

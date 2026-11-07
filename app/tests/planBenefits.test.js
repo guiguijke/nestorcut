@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { LOCALES, translate } from '../utils/i18n'
 import {
     UNLIMITED_FEATURE_KEYS,
+    UNLIMITED_DIALOG_FEATURE_KEYS,
     PRO_FEATURE_KEYS,
+    formatPlanMoney,
+    upgradeTerms,
     DELINQUENT_STATUSES,
     checkoutTerms,
     signedInPlanCta,
@@ -68,23 +71,36 @@ describe('checkoutTerms : ce que fait le Checkout, dit avant le clic', () => {
 })
 
 describe("avantages : une seule source pour /plans et la fenêtre d'abonnement", () => {
-    it('chaque clé existe dans les 6 langues', () => {
-        for (const locale of LOCALES) {
-            for (const key of [...UNLIMITED_FEATURE_KEYS, ...PRO_FEATURE_KEYS]) {
-                expect(translate(key, locale), `${locale} ${key}`).not.toBe(key)
-            }
-        }
+    it("la fenêtre liste les avantages d'Unlimited SAUF le coffre, ouvert à toutes les offres", () => {
+        expect(UNLIMITED_FEATURE_KEYS).toContain('plans.unlimited.f5')
+        expect(UNLIMITED_DIALOG_FEATURE_KEYS).not.toContain('plans.unlimited.f5')
+        expect(UNLIMITED_DIALOG_FEATURE_KEYS).toEqual(UNLIMITED_FEATURE_KEYS.filter((k) => k !== 'plans.unlimited.f5'))
     })
 
     it('/plans et la fenêtre lisent les mêmes listes, sans seconde liste en dur', () => {
         const plans = read('../pages/plans.vue')
         const sub = read('../components/Subscription.vue')
+        expect(plans).toContain('UNLIMITED_FEATURE_KEYS')
+        expect(sub).toContain('UNLIMITED_DIALOG_FEATURE_KEYS')
         for (const source of [plans, sub]) {
-            expect(source).toContain('UNLIMITED_FEATURE_KEYS')
             expect(source).toContain('PRO_FEATURE_KEYS')
             expect(source).not.toMatch(/plans\.unlimited\.f\d/)
             expect(source).not.toMatch(/plans\.pro\.f\d/)
         }
+    })
+
+    it("« offre indisponible » ne dépend que du plan Unlimited : jamais sous une offre valide", () => {
+        const sub = read('../components/Subscription.vue')
+        expect(sub).toMatch(/<div v-if="!data\?\.plan" class="subscription__desc">/)
+        expect(sub).not.toMatch(/<div v-else class="subscription__desc">/)
+        // La carte d'achat n'est jamais montrée à un abonné Stripe vivant.
+        expect(sub).toContain('v-else-if="!isActive && !isPastDue"')
+    })
+
+    it('le bouton Pro a son repli « bientôt » quand les offres payantes sont fermées', () => {
+        const sub = read('../components/Subscription.vue')
+        const proBlock = sub.slice(sub.indexOf('data-testid="subscription-pro-offer"'))
+        expect(proBlock.slice(0, proBlock.indexOf('v-if="!data?.plan"'))).toContain("t('sub.comingSoon')")
     })
 
     it('la fenêtre : durée et prix du plan serveur, aucune durée ni prix en dur', () => {
@@ -99,6 +115,49 @@ describe("avantages : une seule source pour /plans et la fenêtre d'abonnement",
         const sub = read('../components/Subscription.vue')
         expect(sub).toContain('data-testid="subscription-pro-offer"')
         expect(sub).toMatch(/subscription_start_trial_pro[\s\S]{0,200}@click="subscribePro"/)
+    })
+})
+
+describe("upgradeTerms : le passage Unlimited vers Pro dit ce qu'il fait", () => {
+    it("à l'essai : l'essai continue, le prix de Pro prend le relais ensuite", () => {
+        expect(upgradeTerms({ status: 'trialing', amount: 39, currency: 'eur' })).toEqual({
+            key: 'sub.terms.upgradeTrial',
+            params: { price: '€39' },
+        })
+    })
+
+    it('abonnement actif : prorata sur la PROCHAINE facture, pas un prélèvement immédiat', () => {
+        const terms = upgradeTerms({ status: 'active', amount: 39, currency: 'eur' })
+        expect(terms.key).toBe('sub.terms.upgradeActive')
+        for (const locale of LOCALES) {
+            const text = translate('sub.terms.upgradeActive', locale, null)
+            expect(text, locale).toContain('{price}')
+            expect(text, locale).not.toMatch(/immédiat|immediate|sofort|inmediat|immediat/i)
+        }
+    })
+
+    it('les 2 phrases existent dans les 6 langues avec leur prix', () => {
+        for (const locale of LOCALES) {
+            for (const key of ['sub.terms.upgradeTrial', 'sub.terms.upgradeActive']) {
+                const text = translate(key, locale, null)
+                expect(text, `${locale} ${key}`).not.toBe(key)
+                expect(text, `${locale} ${key}`).toContain('{price}')
+            }
+        }
+    })
+
+    it('la montée en place est confirmée avant l’appel', () => {
+        const sub = read('../components/Subscription.vue')
+        expect(sub).toMatch(/window\.confirm\([\s\S]{0,120}upgradePro[\s\S]{0,400}payment\/subscription\/change/)
+    })
+})
+
+describe('formatPlanMoney : suit la langue', () => {
+    it('anglais : symbole devant ; français : montant puis symbole', () => {
+        expect(formatPlanMoney(19, 'eur', 'en')).toBe('€19')
+        const fr = formatPlanMoney(19, 'eur', 'fr')
+        expect(fr.startsWith('19')).toBe(true)
+        expect(fr.endsWith('€')).toBe(true)
     })
 })
 
