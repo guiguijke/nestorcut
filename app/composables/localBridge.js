@@ -107,9 +107,13 @@ function _blockExpandedTransforms(transforms, partsById) {
  * reste au niveau enveloppe — conservative par construction, elle ne peut
  * pas lire les gaps INTERNES d'un dessin rigide comme des violations. */
 export function applyTrueAreasToReport(report, containers, partsById) {
-    if (!report || report.error || !Array.isArray(report.sheets)) return report
+    // Le rapport wasm range ses lignes sous `per_sheet` (compute_report) ;
+    // `sheets` est l'ancienne forme. Lire seulement `sheets` laissait l'aire
+    // de l'ENVELOPPE du bloc dans la carte et la fenêtre (31,7 % au lieu de 3,5 %).
+    const rows = Array.isArray(report?.per_sheet) ? report.per_sheet : report?.sheets
+    if (!report || report.error || !Array.isArray(rows)) return report
     let trueTotal = 0
-    report.sheets.forEach((s, i) => {
+    rows.forEach((s, i) => {
         const c = containers[i]
         if (!c || !s) return
         let area = 0

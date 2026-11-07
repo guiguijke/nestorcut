@@ -1043,6 +1043,19 @@ describe('E4-a — blocs (§8.1)', () => {
         expect(report.totals.densityPct).toBe(41.3)
     })
 
+    it('applyTrueAreasToReport : le rapport wasm range ses tôles sous per_sheet', () => {
+        const report = {
+            per_sheet: [{ sheetAreaMm2: 1000, partsAreaMm2: 850, freeAreaMm2: 150, densityPct: 85 }],
+            totals: { sheetAreaMm2: 1000, partsAreaMm2: 850, freeAreaMm2: 150, densityPct: 85 },
+        }
+        const containers = [{ bin_width: 100, bin_height: 10, transforms: [{ item_id: '7' }, { item_id: '8' }] }]
+        applyTrueAreasToReport(report, containers, partsById)
+        expect(report.per_sheet[0].partsAreaMm2).toBe(412.5)
+        expect(report.per_sheet[0].densityPct).toBe(41.3)
+        expect(report.totals.partsAreaMm2).toBe(412.5)
+        expect(report.totals.densityPct).toBe(41.3)
+    })
+
     it('applyTrueAreasToReport : sans blocs, la valeur mesurée est confirmée telle quelle', () => {
         const report = {
             sheets: [{ sheetAreaMm2: 1000, partsAreaMm2: 100, freeAreaMm2: 900, densityPct: 10 }],
