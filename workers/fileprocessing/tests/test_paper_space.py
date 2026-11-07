@@ -4,6 +4,7 @@ dire, et un dessin entièrement en espace papier qui ressortait vide.
 """
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -52,6 +53,8 @@ def test_the_worker_records_the_reason_of_the_refusal(monkeypatch):
     doc = {"_id": 1, "slug": "s", "ownerId": "u", "isDxfCopyExist": False}
     data = (CORPUS / "paperspace_only_r2010.dxf").read_bytes()
     recorded = []
+    monkeypatch.setattr(main_mod, "db", {"user_dxf_files": MagicMock()})
+    monkeypatch.setattr(main_mod, "user_dxf_bucket", object())
     monkeypatch.setattr(main_mod, "get_dek", lambda *a, **k: None)
     monkeypatch.setattr(main_mod, "read_gridfs", lambda *a, **k: data)
     monkeypatch.setattr(main_mod, "_record_import_error", lambda d, code: recorded.append(code))
@@ -66,6 +69,10 @@ def test_the_finding_survives_the_reread_of_the_canonical_copy(monkeypatch):
     doc = {"_id": 1, "slug": "s2", "ownerId": "u", "isDxfCopyExist": False, "flattening": 0.01}
     data = (CORPUS / "paperspace_r2010.dxf").read_bytes()
     written = {}
+    files = MagicMock()
+    monkeypatch.setattr(main_mod, "db", {"user_dxf_files": files})
+    monkeypatch.setattr(main_mod, "user_dxf_bucket", object())
+    monkeypatch.setattr(main_mod, "valid_dxf_bucket", MagicMock())
     monkeypatch.setattr(main_mod, "get_dek", lambda *a, **k: None)
     monkeypatch.setattr(main_mod, "read_gridfs",
                         lambda bucket, slug, owner, dek: written.get("copy", data))
@@ -76,7 +83,7 @@ def test_the_finding_survives_the_reread_of_the_canonical_copy(monkeypatch):
     assert doc["paperSpaceSkipped"] == 10
     _, parts = main_mod._close_polygon_from_dxf(doc, "test")
     assert len(parts) == 1
-    report = [c.args[1]["$set"]["importReport"] for c in main_mod.db["user_dxf_files"].update_one.call_args_list
+    report = [c.args[1]["$set"]["importReport"] for c in files.update_one.call_args_list
               if "importReport" in c.args[1].get("$set", {})][-1]
     codes = {f["code"]: f["count"] for f in report["findings"]}
     assert codes["import.paperSpaceSkipped"] == 10
