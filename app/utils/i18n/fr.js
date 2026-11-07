@@ -219,7 +219,7 @@ export default {
     'demo.badge': 'Démo',
     'demo.projectName': 'Démo — Tôlerie marine',
     "home.demo.title": "Essayez le projet démo",
-    "home.demo.text": "Un projet d'exemple prêt à l'emploi : lancez une imbrication dans votre navigateur sans déposer de fichier.",
+    "home.demo.text": "Un projet d'exemple prêt à l'emploi : lancez une imbrication dans votre navigateur sans déposer de fichier.",
     "home.demo.cta": "Ouvrir la démo",
     'demo.banner': "Projet d'exemple en lecture seule : {n} imbrications de démonstration gratuites par mois, pleine qualité du moteur dans votre navigateur (1 sens au choix parmi 3). Quantités et réglages ajustables — amusez-vous avec.",
     'demo.bannerLocal': "Projet d'exemple en lecture seule, calculé sur cet appareil — imbrications démo illimitées. Un sens par lancement, au choix parmi 3. Quantités et réglages ajustables.",
