@@ -499,8 +499,8 @@ export default {
     'live.finishing': 'Finishing the last sheet',
     'live.elapsed': 'elapsed',
     'live.elapsedTitle': 'Elapsed time',
-    'live.score': 'strip density',
-    'live.scoreTitle': 'Sheet utilization of the current best layout',
+    'live.score': "material density",
+    'live.scoreTitle': "Parts area divided by sheet area, the same figure as in the result",
     'live.waiting': 'Searching for a first layout…',
     // C10/C28 (lot 3) : ligne d'état pendant le calcul local.
     'live.statusLine': 'Searching · {time} · best {score} · {n} search(es) in parallel · auto-stops at stagnation',

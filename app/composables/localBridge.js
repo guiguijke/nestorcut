@@ -1419,17 +1419,10 @@ export function decorateLiveLayout(evt, payload) {
         const h = Number(sheets[0]?.[1]) || 0
         const nSheets = Math.max(1, usedBins.size || 1)
         const sheetArea = w * h * nSheets
-        // SPP : quand la frame porte une bande qui TIENT dans la tôle, la
-        // densité affichée est celle du moteur sur la bande utilisée — même
-        // échelle que le modal (pièces/bande). La densité pièces/tôle-entière
-        // est constante pour un job donné (55,4 % sur le cas 100+800 quel
-        // que soit le packing) : elle reste le repli des frames hors-tôle
-        // et des bundles wasm antérieurs au champ used_height.
-        const bandW = Number(evt.strip_width)
-        const bandOk = !isBpp && Number.isFinite(bandW) && bandW > 0 && w > 0 && bandW <= w + 0.5
-        const density = bandOk
-            ? (evt.density ?? (sheetArea > 0 ? partsArea / sheetArea : null))
-            : (sheetArea > 0 ? partsArea / sheetArea : (evt.density ?? null))
+        // Une seule définition partout : aire des pièces / aire des tôles,
+        // celle du résultat. Pas de repli sur la densité du moteur (pièces
+        // sur bande utilisée, autre échelle) : sans tôle connue, pas de chiffre.
+        const density = sheetArea > 0 ? partsArea / sheetArea : null
         return { ...evt, items, holesFilled, density }
     } catch {
         return evt

@@ -484,8 +484,8 @@ export default {
     'live.finishing': 'Finition de la dernière tôle',
     'live.elapsed': 'écoulé',
     'live.elapsedTitle': 'Temps écoulé',
-    'live.score': 'densité de la bande',
-    'live.scoreTitle': "Utilisation de la tôle du meilleur agencement actuel",
+    'live.score': "densité matière",
+    'live.scoreTitle': "Aire des pièces divisée par l'aire des tôles, le même chiffre que dans le résultat",
     'live.waiting': "Recherche d'un premier agencement…",
     // C10/C28 (lot 3) : ligne d'état pendant le calcul local.
     'live.statusLine': 'Recherche · {time} · meilleur {score} · {n} recherche(s) en parallèle · arrêt automatique dès stagnation',

@@ -13,7 +13,7 @@ import {
 
 /** Frame finale synthétique pour la vue live (même forme que le reveal
  * serveur : [item_id, bin, rot_deg, x, y]). */
-export function buildLiveLayout(result, payload, bestAlt) {
+export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null) {
     const layouts = normalizeLayouts(bestAlt?.solution)
     const items = []
     layouts.forEach((layout, bin) => {
@@ -32,7 +32,9 @@ export function buildLiveLayout(result, payload, bestAlt) {
         stage: 'final',
         feasible: true,
         bias: bestAlt?.bias ?? null,
-        density: bestAlt?.solution?.density ?? bestAlt?.density ?? null,
+        // Même définition que le résultat (pièces / tôles) : la densité brute
+        // du moteur (pièces / bande) n'est jamais montrée.
+        density: measuredDensity,
         strip_width: bestAlt?.solution?.strip_width ?? bestAlt?.strip_width ?? null,
         used_height: bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null,
         bins: layouts.length,
@@ -250,7 +252,7 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
             alternatives[rank].altId = rank
         }
         liveLayout = buildLiveLayout(result, payload,
-            result.alternatives[idx[0]] ?? bestRaw)
+            result.alternatives[idx[0]] ?? bestRaw, alternatives[0]?.density ?? null)
     } catch (e) {
         if (e?.message === 'all_alternatives_invalid') {
             allAlternativesInvalid = true
