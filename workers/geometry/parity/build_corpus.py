@@ -495,6 +495,48 @@ def main_svg():
         "svg_holed_plate.svg",
     )
 
+    # <defs> n'est jamais rendu, <use> instancie (x/y, transform, symbol,
+    # xlink:href). Le cadre de <defs> ne doit pas devenir une pièce.
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'viewBox="0 0 200 150">'
+        '<defs><rect id="frame" x="0" y="0" width="200" height="150"/>'
+        '<rect id="plate" x="0" y="0" width="30" height="20"/>'
+        '<symbol id="dot"><circle cx="10" cy="10" r="8"/></symbol></defs>'
+        '<use xlink:href="#plate" x="10" y="10"/>'
+        '<use href="#plate" transform="translate(100 50) rotate(90)"/>'
+        '<use href="#dot" x="150" y="100"/>'
+        '</svg>',
+        "svg_defs_use.svg",
+    )
+    # <use> de groupe transformé, <use> imbriqués, id en double (le dernier
+    # gagne), cible absente, display:none, <use> rangé dans <defs>.
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 120">'
+        '<defs>'
+        '<g id="inner" transform="scale(2)"><rect x="0" y="0" width="10" height="10"/></g>'
+        '<g id="pair"><use href="#inner" x="5"/><circle cx="60" cy="10" r="6"/></g>'
+        '<rect id="dup" x="0" y="0" width="5" height="5"/>'
+        '<rect id="dup" x="0" y="0" width="12" height="12"/>'
+        '<use href="#inner" x="150" y="0"/>'
+        '</defs>'
+        '<use href="#pair" transform="translate(20 20)" x="10" y="10"/>'
+        '<use href="#dup" x="150" y="60"/>'
+        '<use href="#nowhere" x="1"/>'
+        '<use href="#inner" display="none"/>'
+        '<use href="#inner" transform="translate(0 70)"/>'
+        '</svg>',
+        "svg_use_nested.svg",
+    )
+    # <use> qui se contient lui-même : svgelements refuse le fichier
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+        '<rect x="0" y="0" width="10" height="10"/>'
+        '<g id="a"><use href="#a"/></g>'
+        '</svg>',
+        "svg_use_cycle.svg",
+    )
+
     print(f"svg corpus -> {SVG_OUT} ({len(os.listdir(SVG_OUT))} files)")
 
 

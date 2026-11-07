@@ -163,3 +163,49 @@ class TestRejections:
     def test_no_geometry_raises(self):
         with pytest.raises(ValueError, match='No convertible geometry'):
             svg_bytes_to_drawing(_wrap('<text x="10" y="10">hello</text>'))
+
+
+def _bboxes(doc):
+    """Boîtes (xmin, ymin, xmax, ymax) en mm de chaque polyligne, triées."""
+    boxes = []
+    for e in doc.modelspace():
+        pts = list(e.get_points('xy'))
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        boxes.append((min(xs), min(ys), max(xs), max(ys)))
+    return sorted(boxes)
+
+
+class TestDefsAndUse:
+    """Contrat que le chemin navigateur (Rust) doit suivre : parity/corpus_svg."""
+
+    DEFS = (
+        '<defs><rect id="frame" x="0" y="0" width="200" height="150"/>'
+        '<rect id="plate" x="0" y="0" width="30" height="20"/></defs>'
+    )
+
+    def test_defs_content_is_not_drawn(self):
+        with pytest.raises(ValueError, match='No convertible geometry'):
+            svg_bytes_to_drawing(_wrap(self.DEFS, viewbox='0 0 200 150'))
+
+    def test_use_instantiates_with_position_and_transform(self):
+        doc = svg_bytes_to_drawing(_wrap(
+            self.DEFS
+            + '<use href="#plate" x="10" y="10"/>'
+            + '<use href="#plate" transform="translate(100 50) rotate(90)"/>',
+            width='200', height='150', viewbox='0 0 200 150',
+        ))
+        got = _bboxes(doc)
+        assert len(got) == 2
+        want = [
+            (10 * MM_PER_PX, -30 * MM_PER_PX, 40 * MM_PER_PX, -10 * MM_PER_PX),
+            (80 * MM_PER_PX, -80 * MM_PER_PX, 100 * MM_PER_PX, -50 * MM_PER_PX),
+        ]
+        for g, w in zip(got, want):
+            assert g == pytest.approx(w, abs=1e-6)
+
+    def test_use_cycle_is_unreadable(self):
+        with pytest.raises(ValueError, match='Unreadable SVG'):
+            svg_bytes_to_drawing(_wrap(
+                '<rect x="0" y="0" width="10" height="10"/><g id="a"><use href="#a"/></g>'
+            ))
