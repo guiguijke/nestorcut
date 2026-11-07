@@ -175,7 +175,7 @@
                         </g>
                     </svg>
                     <span v-if="card.champ" class="live__card-metric">
-                        <template v-if="card.champ.density != null">{{ formatScore(card.champ.density) }}</template>
+                        <template v-if="frameDensity(card.champ) != null">{{ formatScore(frameDensity(card.champ)) }}</template>
                         <template v-else-if="card.champ.strip_width != null">{{ fmtLength(card.champ.strip_width) }}</template>
                         <template v-else-if="card.champ.bins != null">{{ t('live.sheets') }} {{ card.champ.bins }}</template>
                     </span>
@@ -209,7 +209,7 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
-import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength } from '~/utils/liveJob';
+import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity } from '~/utils/liveJob';
 
 const props = defineProps({
     result: { type: Object, required: true },
@@ -672,6 +672,12 @@ const elapsedSec = computed(() => {
     return n != null ? Number(n) : null;
 });
 
+// Densité d'une frame, ou null quand elle ne peut pas être celle du résultat
+// (frame d'un ancien worker serveur : densité brute du moteur).
+function frameDensity(frame) {
+    return liveDensity(frame, props.result);
+}
+
 function formatScore(density) {
     const n = Number(density);
     if (!Number.isFinite(n)) return null;
@@ -695,7 +701,8 @@ const usedLengthLabel = computed(() => {
 
 const scoreLabel = computed(() => {
     const live = best.value || props.result?.liveLayout;
-    return live?.density != null ? formatScore(live.density) : null;
+    const d = frameDensity(live);
+    return d != null ? formatScore(d) : null;
 })
 
 // C12 (audit UX 2026-09-05) : les compteurs « combinaisons » (itérations

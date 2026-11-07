@@ -110,6 +110,7 @@ export default defineEventHandler(async (event) => {
                     stage: 'final',
                     feasible: true,
                     density: best.density,
+                    densityMeasured: true,
                     bins: best.cost ?? best.layoutCount,
                     sheets: (job.params?.sheets || []).map((s) => [Number(s.width), Number(s.height)]),
                     isSpp: job.localPayload?.problem === 'spp',

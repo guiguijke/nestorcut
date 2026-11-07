@@ -1278,6 +1278,10 @@ def _nesting_process_impl(doc):
                 # reste invisible de la vue.
                 "used_height": event.get("used_height"),
                 "density": density,
+                # Marque la densité comme MESURÉE (pièces / tôles) : un
+                # client récent n'affiche pas une frame d'un ancien worker,
+                # dont la densité est celle du moteur (pièces / bande).
+                "densityMeasured": True,
                 "bins": event.get("bins"),
                 "unplaced": event.get("unplaced"),
                 "remnant": event.get("remnant"),
@@ -2001,6 +2005,7 @@ def _nesting_process_impl(doc):
             "bias": engine_alt.get("bias"),
             "strip_width": engine_alt.get("metrics", {}).get("strip_width"),
             "density": reveal_density,
+            "densityMeasured": True,
             # C12 : bins = NOMBRE de tôles (l'ancien champ portait le
             # coût — fausse « quantité » dès que le coût/tôle ≠ 1).
             "bins": len(solution.get("layouts") or []),

@@ -176,3 +176,19 @@ export function liveUsedLength(frame, stage) {
     if (Number.isFinite(w) && w > 0 && n > w + 0.5) return null
     return n
 }
+
+/**
+ * Densité affichable d'une frame live, ou null.
+ * Une frame d'un job serveur (le document porte un `status`) n'est affichée
+ * que si le worker l'a marquée `densityMeasured` : pièces / tôles, le chiffre
+ * du résultat. Un ancien worker envoie la densité brute du moteur (pièces /
+ * bande) : mieux vaut aucun chiffre qu'un chiffre qui ne sera pas celui de
+ * la carte. Les frames du calcul sur l'appareil n'ont pas de `status` et
+ * mesurent déjà pièces / tôles.
+ */
+export function liveDensity(frame, result) {
+    if (!frame || frame.density == null) return null
+    const fromServerJob = typeof result?.status === 'string'
+    if (fromServerJob && frame.densityMeasured !== true) return null
+    return frame.density
+}
