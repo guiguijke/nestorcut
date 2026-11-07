@@ -65,6 +65,7 @@ export default {
     "sub.proPrivacy": "Pro — Máximo de processamento",
     "sub.activeDesc": "Você tem nesting ilimitado enquanto sua assinatura estiver ativa.",
     "sub.cancelNotice": "Sua assinatura terminará em {date}. Você mantém o acesso até lá.",
+    "sub.trialEndsOn": "Sua avaliação gratuita termina em {date}.",
     "sub.cancelBtn": "Cancelar assinatura",
     "sub.cancelConfirm": "Sua assinatura será cancelada no fim do período de cobrança atual. Você manterá o acesso até lá. Continuar?",
     "sub.upgradePro": "Assinar o Pro",

@@ -73,6 +73,7 @@ export default {
     "sub.proPrivacy": "Pro — Cálculo al máximo",
     "sub.activeDesc": "Tienes nesting ilimitado mientras tu suscripción esté activa.",
     "sub.cancelNotice": "Tu suscripción terminará el {date}. Mantienes el acceso hasta entonces.",
+    "sub.trialEndsOn": "Tu prueba gratuita termina el {date}.",
     "sub.cancelBtn": "Cancelar suscripción",
     "sub.cancelConfirm": "Tu suscripción se cancelará al final del periodo de facturación en curso. Mantendrás el acceso hasta entonces. ¿Continuar?",
     "sub.upgradePro": "Pasar a Pro",

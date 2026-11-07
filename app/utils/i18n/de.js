@@ -71,6 +71,7 @@ export default {
     "sub.proPrivacy": "Pro — Maximale Rechenleistung",
     "sub.activeDesc": "Sie haben unbegrenztes Nesting, solange Ihr Abo aktiv ist.",
     "sub.cancelNotice": "Ihr Abo endet am {date}. Bis dahin behalten Sie den Zugang.",
+    "sub.trialEndsOn": "Ihre kostenlose Testphase endet am {date}.",
     "sub.cancelBtn": "Abo kündigen",
     "sub.cancelConfirm": "Ihr Abo wird am Ende des aktuellen Abrechnungszeitraums gekündigt. Bis dahin behalten Sie den Zugang. Fortfahren?",
     "sub.upgradePro": "Auf Pro upgraden",

@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import * as sass from 'sass'
 import { describe, expect, it, vi } from 'vitest'
 import { ref } from 'vue'
 import { LOCALES, translate } from '../utils/i18n'
@@ -297,5 +299,44 @@ describe("fenêtre ouverte depuis une carte de /plans : l'offre choisie arrive �
         const label = dict('plans.cta.startTrial', 'fr', { days: 7 })
         expect(cards.standard.props['aria-label']).toBe(`${label} (${dict('plans.tier.unlimited', 'fr')})`)
         expect(cards.pro.props['aria-label']).toBe(`${label} (${dict('plans.tier.pro', 'fr')})`)
+    })
+})
+
+describe('carte de la fenêtre : la note, la date, la mise en forme', () => {
+    const free = serverInfo({ subscriptionStatus: null, trialEligible: true, canManageBilling: false, currentPeriodEnd: null })
+
+    it('offres fermées : la note sur l’essai disparaît avec le bouton', async () => {
+        const open = await mountCard(free, { level: 'free' })
+        expect(open.view.text()).toContain(dict('sub.cancelTrialNote', 'fr'))
+        const closed = await mountCard(free, { level: 'free', paidDisabled: true })
+        expect(closed.view.text()).toContain(dict('sub.comingSoon', 'fr'))
+        expect(closed.view.text()).not.toContain(dict('sub.cancelTrialNote', 'fr'))
+    })
+
+    for (const [locale, date] of [['fr', '12 novembre 2026'], ['en', 'November 12, 2026']]) {
+        it(`à l'essai (${locale}) : la date de fin vient de la réponse serveur`, async () => {
+            const { view } = await mountCard(serverInfo({ subscriptionStatus: 'trialing' }), { locale })
+            expect(view.textOf(view.byTestId('subscription-trial-end'))).toBe(dict('sub.trialEndsOn', locale, { date }))
+        })
+    }
+
+    it('la date de fin d’essai ne double pas celle d’une résiliation, et ne vise que l’essai', async () => {
+        const ending = await mountCard(serverInfo({ subscriptionStatus: 'trialing', cancelAtPeriodEnd: true }))
+        expect(ending.view.byTestId('subscription-trial-end')).toBeNull()
+        const active = await mountCard(serverInfo({ subscriptionStatus: 'active' }))
+        expect(active.view.byTestId('subscription-trial-end')).toBeNull()
+        const noDate = await mountCard(serverInfo({ subscriptionStatus: 'trialing', currentPeriodEnd: null }))
+        expect(noDate.view.byTestId('subscription-trial-end')).toBeNull()
+    })
+
+    it('la phrase existe dans les 6 langues avec sa date', () => {
+        for (const locale of LOCALES) expect(dict('sub.trialEndsOn', locale), locale).toContain('{date}')
+    })
+
+    it('un espace sépare le texte du bouton, et les avantages ont leurs puces', () => {
+        const style = readFileSync(file('../components/Subscription.vue'), 'utf8').match(/<style lang="scss" scoped>([\s\S]*)<\/style>/)[1]
+        const css = sass.compileString(style, { logger: sass.Logger.silent }).css.replace(/\s+/g, ' ')
+        expect(css).toMatch(/\.subscription__card \.subscription__btn \{[^}]*margin-top: 16px;/)
+        expect(css).toMatch(/\.subscription__features \{[^}]*list-style: disc;/)
     })
 })

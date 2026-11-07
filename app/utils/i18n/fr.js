@@ -75,6 +75,7 @@ export default {
     'sub.proPrivacy': 'Pro — Calcul max',
     'sub.activeDesc': "Vous bénéficiez d'imbrications illimitées pendant votre abonnement.",
     'sub.cancelNotice': "Votre abonnement se terminera le {date}. Vous gardez l'accès jusque-là.",
+    'sub.trialEndsOn': 'Votre essai gratuit se termine le {date}.',
     'sub.cancelBtn': 'Se désabonner',
     'sub.cancelConfirm':
         "Votre abonnement sera annulé à la fin de la période de facturation en cours. Vous conserverez l'accès jusque-là. Continuer ?",

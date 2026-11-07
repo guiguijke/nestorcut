@@ -76,6 +76,7 @@ export default {
     'sub.proPrivacy': 'Pro — Max compute',
     'sub.activeDesc': 'You have unlimited nesting while your subscription is active.',
     'sub.cancelNotice': 'Your subscription will end on {date}. You keep access until then.',
+    'sub.trialEndsOn': 'Your free trial ends on {date}.',
     'sub.cancelBtn': 'Cancel subscription',
     'sub.cancelConfirm':
         'Your subscription will be canceled at the end of the current billing period. You will keep access until then. Continue?',

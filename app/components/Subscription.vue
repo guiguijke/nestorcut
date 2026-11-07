@@ -12,6 +12,9 @@
             <p v-else class="subscription__desc">
                 {{ t('sub.activeDesc') }}
             </p>
+            <p v-if="trialEndLabel" class="subscription__desc" data-testid="subscription-trial-end">
+                {{ t('sub.trialEndsOn', { date: trialEndLabel }) }}
+            </p>
             <p v-if="showProAfterEnd" class="subscription__desc" data-testid="subscription-pro-after-end">
                 {{ t('sub.proAfterEnd') }}
             </p>
@@ -146,7 +149,7 @@
                     :isDisable="true"
                     class="subscription__btn"
                 />
-                <p v-if="trialEligible" class="subscription__note">
+                <p v-if="trialEligible && !paidDisabled" class="subscription__note">
                     {{ t('sub.cancelTrialNote') }}
                 </p>
             </div>
@@ -265,6 +268,11 @@ const subscriptionEnding = computed(() => isEndingSubscription(unref(data)))
 const showProAfterEnd = computed(
     () => subscriptionEnding.value && !alreadyPro.value && Boolean(unref(data)?.privacyPlan) && !paidDisabled.value,
 )
+// Essai en cours : sa date de fin. Une résiliation annonce déjà la sienne.
+const trialEndLabel = computed(() => {
+    const info = unref(data)
+    return info?.subscriptionStatus === 'trialing' && !info.cancelAtPeriodEnd ? formatDate(info.currentPeriodEnd) : ''
+})
 // past_due / unpaid / incomplete : le paiement a échoué, l'accès est coupé tant
 // que la carte n'est pas mise à jour (via le portail Stripe). `unpaid` =
 // relances épuisées mais l'abonnement existe encore : jamais la carte
@@ -545,6 +553,7 @@ const cancelSubscription = async () => {
     &__card &__btn {
         width: 100%;
         max-width: 280px;
+        margin-top: 16px;
     }
 
     &__btn--cancel {
@@ -568,6 +577,7 @@ const cancelSubscription = async () => {
     &__features {
         margin: 14px 0 0;
         padding-left: 18px;
+        list-style: disc;
         font-size: var(--fs-13);
         color: var(--label-secondary);
         line-height: 1.5;
