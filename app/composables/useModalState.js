@@ -29,7 +29,8 @@ export const useVaultMenuOpen = () => {
 };
 /** D13 : contexte de la fenêtre d'abonnement — null ou
  * { source: 'locked_sheets'|'quota'|'export'|'turbo'|'plans',
- *   lockedSheets?: { total: number, cap: number, resultSlug: string, projectSlug: string|null } }
+ *   lockedSheets?: { total: number, cap: number, resultSlug: string, projectSlug: string|null },
+ *   offer?: 'standard'|'privacy' } — offer : la carte de /plans cliquée, montrée à l'ouverture.
  * Vidé par BuyCreditsDialog à la fermeture. Ne JAMAIS l'envoyer au serveur ni au suivi. */
 export const useBuyCreditsContext = () => {
     return useState("buyCreditsContext", () => null);

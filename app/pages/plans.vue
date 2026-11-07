@@ -41,6 +41,7 @@
                 <MainButton
                     :theme="tier.highlighted ? themeType.primary : themeType.secondary"
                     :label="ctaFor(tier).label"
+                    :aria-label="offerButtonName(ctaFor(tier).label, tier.name)"
                     :isDisable="ctaFor(tier).disabled"
                     @click="onTierClick(tier)"
                     class="cards__cta"
@@ -96,7 +97,7 @@ import {
     PRO_PRICE_LABEL,
 } from '~~/shared/constants/payment.constants'
 import { flagOn } from '~/utils/runtimeFlag'
-import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, signedInPlanCta } from '~/utils/planBenefits'
+import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, signedInPlanCta, offerButtonName } from '~/utils/planBenefits'
 
 onMounted(() => {
     trackEvent('page_view', { page: 'plans' })
@@ -309,7 +310,7 @@ function onTierClick(tier) {
     if (userIsSet.value) {
         const cta = ctaFor(tier)
         if (cta.disabled) return
-        if (cta.action === 'dialog') openBuyCredits({ source: 'plans' })
+        if (cta.action === 'dialog') openBuyCredits({ source: 'plans', offer: tier.tierKey })
         else navigateTo('/profile')
         return
     }

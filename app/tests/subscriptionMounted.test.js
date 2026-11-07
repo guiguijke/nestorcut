@@ -239,3 +239,63 @@ describe('suivi de la montée en Pro : compté après acceptation, jamais avant'
         expect(trackEvent.mock.calls.filter(([name]) => name === 'click_subscription_start_trial_pro')).toHaveLength(1)
     })
 })
+
+describe("fenêtre ouverte depuis une carte de /plans : l'offre choisie arrive à l'écran", () => {
+    const free = serverInfo({ subscriptionStatus: null, trialEligible: true, canManageBilling: false, currentPeriodEnd: null })
+    const shown = (node) => node.calls.map(([name]) => name)
+
+    it('carte Pro : le clic transmet l’offre, et la fenêtre amène et focalise le bloc Pro', async () => {
+        const { view, cards, openBuyCredits } = await mountPlans({ info: free })
+        await view.click(cards.pro)
+        expect(openBuyCredits).toHaveBeenCalledWith({ source: 'plans', offer: 'privacy' })
+
+        const card = await mountCard(free, { level: 'free', context: openBuyCredits.mock.calls[0][0] })
+        const pro = card.view.byTestId('subscription-pro-offer')
+        expect(pro.calls).toEqual([['focus', { preventScroll: true }], ['scrollIntoView', { block: 'nearest' }]])
+        expect(shown(card.view.byTestId('subscription-unlimited-offer'))).toEqual([])
+    })
+
+    it('carte Unlimited : le clic transmet l’offre, le bloc Unlimited et lui seul', async () => {
+        const { view, cards, openBuyCredits } = await mountPlans({ info: free })
+        await view.click(cards.standard)
+        expect(openBuyCredits).toHaveBeenCalledWith({ source: 'plans', offer: 'standard' })
+
+        const card = await mountCard(free, { level: 'free', context: openBuyCredits.mock.calls[0][0] })
+        expect(shown(card.view.byTestId('subscription-unlimited-offer'))).toEqual(['focus', 'scrollIntoView'])
+        expect(shown(card.view.byTestId('subscription-pro-offer'))).toEqual([])
+    })
+
+    it('sans offre choisie (profil, autres ouvreurs) : rien ne bouge', async () => {
+        for (const context of [null, { source: 'quota' }]) {
+            const card = await mountCard(free, { level: 'free', context })
+            expect(shown(card.view.byTestId('subscription-unlimited-offer'))).toEqual([])
+            expect(shown(card.view.byTestId('subscription-pro-offer'))).toEqual([])
+        }
+    })
+
+    it('offre sans bloc à montrer (paiement échoué) : pas d’erreur', async () => {
+        const card = await mountCard(serverInfo({ subscriptionStatus: 'past_due' }), { level: 'free', context: { source: 'plans', offer: 'privacy' } })
+        expect(card.view.byTestId('subscription-pro-offer')).toBeNull()
+    })
+
+    it("le nom accessible de chaque bouton de la fenêtre dit de quelle offre il s'agit", async () => {
+        const { view } = await mountCard(free, { level: 'free' })
+        const label = dict('sub.startTrial', 'fr', { days: 7 })
+        const buttons = view.byClass('subscription__btn')
+        expect(buttons.map((node) => view.textOf(node))).toEqual([label, label])
+        expect(buttons.map((node) => node.props['aria-label'])).toEqual([`${label} (${PLAN.title})`, `${label} (${PRO.title})`])
+    })
+
+    it('essai consommé : « S’abonner » deux fois, chacun avec son offre', async () => {
+        const { view } = await mountCard(serverInfo({ subscriptionStatus: 'canceled', cancelAtPeriodEnd: true }), { level: 'free' })
+        const label = dict('sub.subscribe', 'fr')
+        expect(view.byClass('subscription__btn').map((node) => node.props['aria-label'])).toEqual([`${label} (${PLAN.title})`, `${label} (${PRO.title})`])
+    })
+
+    it('/plans : même chose pour les boutons des cartes', async () => {
+        const { cards } = await mountPlans({ info: free })
+        const label = dict('plans.cta.startTrial', 'fr', { days: 7 })
+        expect(cards.standard.props['aria-label']).toBe(`${label} (${dict('plans.tier.unlimited', 'fr')})`)
+        expect(cards.pro.props['aria-label']).toBe(`${label} (${dict('plans.tier.pro', 'fr')})`)
+    })
+})

@@ -250,7 +250,7 @@ describe('signedInPlanCta : /plans connecté, matrice clic / destination', () =>
         const plans = read('../pages/plans.vue')
         expect(plans).toContain('signedInPlanCta')
         expect(plans).toContain('subscriptionStatus: info?.subscriptionStatus')
-        expect(plans).toContain("openBuyCredits({ source: 'plans' })")
+        expect(plans).toContain("openBuyCredits({ source: 'plans', offer: tier.tierKey })")
         expect(read('../layouts/default.vue')).toContain('<BuyCreditsDialog')
         expect(plans).toContain("'/api/payment/subscription'")
         expect(plans).not.toContain("userIsSet ? t('plans.cta.manageInProfile')")

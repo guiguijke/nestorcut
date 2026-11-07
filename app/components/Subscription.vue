@@ -109,7 +109,7 @@
             <p v-if="ctxMessage" class="subscription__context" data-testid="subscription-context">
                 {{ t(ctxMessage.key, ctxMessage.params) }}
             </p>
-            <div v-if="data?.plan" class="subscription__plan">
+            <div v-if="data?.plan" ref="unlimitedOfferEl" class="subscription__plan" tabindex="-1" data-testid="subscription-unlimited-offer">
                 <div class="subscription__plan-title">{{ data.plan.title || t('sub.monthlyPlan') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.plan.amount, data.plan.currency) }}
@@ -129,7 +129,8 @@
                 </p>
                 <MainButton
                     v-if="!paidDisabled"
-                    :label="trialEligible ? t('sub.startTrial', { days: data.plan.trialDays }) : t('sub.subscribe')"
+                    :label="unlimitedCta"
+                    :aria-label="offerButtonName(unlimitedCta, data.plan.title || t('sub.monthlyPlan'))"
                     :theme="themeType.primary"
                     :size="sizeType.m"
                     :isDisable="isLoading"
@@ -149,7 +150,7 @@
                     {{ t('sub.cancelTrialNote') }}
                 </p>
             </div>
-            <div v-if="data?.plan && data?.privacyPlan" class="subscription__plan subscription__plan--pro" data-testid="subscription-pro-offer">
+            <div v-if="data?.plan && data?.privacyPlan" ref="proOfferEl" class="subscription__plan subscription__plan--pro" tabindex="-1" data-testid="subscription-pro-offer">
                 <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
@@ -163,7 +164,8 @@
                 </p>
                 <MainButton
                     v-if="!paidDisabled"
-                    :label="trialEligible ? t('sub.startTrial', { days: data.privacyPlan.trialDays }) : t('sub.subscribe')"
+                    :label="proCta"
+                    :aria-label="offerButtonName(proCta, data.privacyPlan.title || t('sub.proPrivacy'))"
                     :theme="themeType.secondary"
                     :size="sizeType.m"
                     :isDisable="isLoading"
@@ -198,7 +200,7 @@ import { formatQuotaReset } from '~/utils/quotaReset'
 import { hasPaidAccess } from '~/utils/entitlementUi'
 import { flagOn } from '~/utils/runtimeFlag'
 import { trackEvent } from '~/utils/track'
-import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney, isEndingSubscription } from '~/utils/planBenefits'
+import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney, isEndingSubscription, offerButtonName } from '~/utils/planBenefits'
 import { writeCheckoutIntent } from '~/utils/checkoutReturn'
 import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
 
@@ -276,6 +278,22 @@ const isPastDue = computed(() => {
 // doit pas promettre d'essai gratuit.
 const trialEligible = computed(() => unref(data)?.trialEligible !== false)
 const canManageBilling = computed(() => Boolean(unref(data)?.canManageBilling))
+const ctaLabelFor = (plan) => (trialEligible.value ? t('sub.startTrial', { days: plan?.trialDays }) : t('sub.subscribe'))
+const unlimitedCta = computed(() => ctaLabelFor(unref(data)?.plan))
+const proCta = computed(() => ctaLabelFor(unref(data)?.privacyPlan))
+
+// Clic sur une carte de /plans : la fenêtre montre l'offre choisie, pas seulement
+// la première, et le focus s'y pose pour que Tab mène à son bouton. Le focus
+// initial de DialogWrapper est déjà passé : ce composant se monte après sa lecture.
+const unlimitedOfferEl = ref(null)
+const proOfferEl = ref(null)
+onMounted(() => {
+    const offer = props.context?.offer
+    const el = offer === 'privacy' ? proOfferEl.value : offer === 'standard' ? unlimitedOfferEl.value : null
+    if (!el) return
+    el.focus({ preventScroll: true })
+    el.scrollIntoView({ block: 'nearest' })
+})
 
 const statusLabel = computed(() => {
     const status = unref(data)?.subscriptionStatus
@@ -560,6 +578,11 @@ const cancelSubscription = async () => {
         font-size: var(--fs-13);
         color: var(--label-primary);
         line-height: 1.4;
+    }
+
+    // Focus posé par le code (offre choisie sur /plans), jamais atteint à la tabulation.
+    &__plan:focus {
+        outline: none;
     }
 
     &__plan--pro {

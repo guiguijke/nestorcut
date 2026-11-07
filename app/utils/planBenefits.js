@@ -39,6 +39,14 @@ export function formatPlanMoney(amount, currency, locale = 'en') {
 }
 
 /**
+ * Nom accessible d'un bouton d'offre : le libellé visible, puis l'offre. Deux
+ * « Essayer 7 jours » ne se confondent plus au clavier ni au lecteur d'écran.
+ */
+export function offerButtonName(label, offerName) {
+    return `${label} (${offerName})`
+}
+
+/**
  * Phrase « conditions » affichée AVANT le clic. Le serveur (subscribe.get.js
  * → createSubscriptionCheckout) ouvre un Checkout en mode abonnement : la carte
  * est toujours demandée ; avec `trial_period_days` rien n'est débité
