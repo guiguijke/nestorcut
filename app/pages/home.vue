@@ -53,6 +53,26 @@
             </div>
         </section>
 
+        <!-- Compte neuf : la démo en avant, au lieu d'une ligne tronquée
+             dans la liste de gauche. -->
+        <section
+            v-if="demoProject"
+            class="home__demo demo"
+            data-testid="home-demo"
+        >
+            <h2 class="demo__title">{{ t('home.demo.title') }}</h2>
+            <p class="demo__text">{{ t('home.demo.text') }}</p>
+            <MainButton
+                tag="a"
+                :href="`/project/${demoProject.slug}`"
+                :theme="themeType.primary"
+                :label="t('home.demo.cta')"
+                trackingTag="home_demo_open"
+                class="demo__cta"
+                @click.prevent="router.push(`/project/${demoProject.slug}`)"
+            />
+        </section>
+
         <!-- U1 passe 2 (retouche 4) : la section « Projets récents »
              disparaît — la colonne de gauche liste déjà les mêmes projets,
              une seule liste. -->
@@ -63,6 +83,8 @@
 
 <script setup>
     import { sizeType } from '~~/constants/size.constants'
+    import { themeType } from '~~/constants/theme.constants'
+    import { demoToPromote } from '~/utils/homeFresh'
     import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 
     const { t } = useLocale()
@@ -276,6 +298,11 @@
     const $apiFetch = useApiFetch()
     const projectsData = globalGetters.projectsList ? null : await $apiFetch(API_ROUTES.PROJECTS).catch(() => null)
 
+    // Compte sans projet à lui : la démo passe devant (homeFresh.js).
+    const demoProject = computed(() =>
+        demoToPromote(unref(globalGetters.projectsList) || projectsData?.projects || [])
+    )
+
     onMounted(async () => {
         // Hydrate the shared store so the aside's project list survives
         // navigation back to /home without a refetch.
@@ -368,6 +395,30 @@
             background-color: var(--error-background);
             border: solid 1px var(--error-border);
             border-radius: var(--radius-l);
+        }
+    }
+
+    // ---------- Démo mise en avant (compte neuf) ----------
+    .demo {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--sp-2);
+        padding: var(--sp-3);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-l);
+        background: var(--surface);
+        text-align: left;
+
+        &__title {
+            font-family: var(--font-display);
+            font-size: var(--fs-18);
+            color: var(--text);
+        }
+
+        &__text {
+            color: var(--label-secondary);
+            font-size: var(--fs-14);
         }
     }
 </style>
