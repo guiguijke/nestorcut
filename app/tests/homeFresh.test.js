@@ -8,9 +8,10 @@ describe('accueil d\'un compte neuf', () => {
         expect(hasActivity({ projects: 0, nestings: 0, partsNested: 0 })).toBe(false)
     })
 
-    it('montre les statistiques dès qu\'il y a un projet ou un calcul', () => {
-        expect(hasActivity({ projects: 1, nestings: 0 })).toBe(true)
+    it("attend le premier calcul : un projet sans calcul ne montre pas de 0 % de réussite", () => {
+        expect(hasActivity({ projects: 1, nestings: 0, dxfFiles: 4 })).toBe(false)
         expect(hasActivity({ projects: 0, nestings: 3 })).toBe(true)
+        expect(hasActivity({ projects: 2, nestings: 1 })).toBe(true)
     })
 
     it('met la démo en avant seulement quand le compte n\'a aucun projet à lui', () => {

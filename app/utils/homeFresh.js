@@ -5,14 +5,14 @@
  */
 
 /**
- * Les statistiques ne valent d'être montrées que si le compte a une activité.
- * Tant qu'elles ne sont pas chargées, ou quand projets ET calculs sont à zéro,
- * on ne montre rien plutôt que cinq tuiles à zéro.
+ * Les statistiques ne valent d'être montrées qu'après le PREMIER calcul.
+ * Un projet créé sans calcul donnerait des tuiles à zéro, dont « 0 % de
+ * réussite » : on attend, on ne montre rien. Rien non plus avant chargement.
  * @param {object|null} stats — réponse de /api/user/stats, ou null avant chargement
  */
 export function hasActivity(stats) {
     if (!stats || typeof stats !== 'object') return false
-    return Number(stats.projects) > 0 || Number(stats.nestings) > 0
+    return Number(stats.nestings) > 0
 }
 
 /**
