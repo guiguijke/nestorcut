@@ -350,6 +350,26 @@ def item_geometry_message(item_id, target, file_name=None):
     }
 
 
+def too_large_message(unplaceable, sheets, space):
+    """Refus de pré-vol : pièces plus grandes que toute tôle. Cite le NOM du
+    fichier de l'utilisateur entre guillemets doubles (comme les autres refus
+    du worker), jamais l'identifiant interne ; inconnu → « one of the files ».
+    `unplaceable` : [{name, width, height, count}] avec name = nom du fichier
+    ou None."""
+    details = ", ".join(
+        (f'"{p["name"]}"' if p.get("name") else "one of the files")
+        + f' ({p["width"]:.0f}x{p["height"]:.0f}mm, x{p["count"]})'
+        for p in unplaceable[:5]
+    )
+    sheet_desc = " / ".join(
+        f"{float(s.get('width')):.0f}x{float(s.get('height')):.0f}mm" for s in sheets
+    )
+    return (
+        f"Part(s) too large for the sheet: {details} — sheet(s): {sheet_desc}, "
+        f"spacing: {space}mm. Use a larger sheet, allow more rotations, or reduce spacing."
+    )
+
+
 def item_unplaceable_message(item_id, target, file_name=None):
     """Lot A : message utilisateur + champ structure pour une piece que le
     moteur n'arrive a poser nulle part (cote exacte de la tole, espacement

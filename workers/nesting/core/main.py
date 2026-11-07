@@ -15,6 +15,7 @@ from core.nesting_input_builder import (
 )
 from core.engine import (EngineCancelled, EngineError,
                          item_geometry_message, item_unplaceable_message,
+                         too_large_message,
                          original_item_id, parse_item_geometry,
                          parse_item_unplaceable,
                          run_engine, thin_parts)
@@ -643,25 +644,26 @@ def _nesting_process_impl(doc):
         if not fits_anywhere:
             bx = poly.bounds
             unplaceable.append({
-                "name": item.get("file_slug"),
+                "slug": item.get("file_slug"),
                 "width": bx[2] - bx[0],
                 "height": bx[3] - bx[1],
                 "count": item.get("count"),
             })
 
     if unplaceable:
-        details = ", ".join(
-            f"'{p['name']}' ({p['width']:.0f}x{p['height']:.0f}mm, x{p['count']})"
-            for p in unplaceable[:5]
-        )
-        sheet_desc = " / ".join(
-            f"{float(s.get('width')):.0f}x{float(s.get('height')):.0f}mm" for s in sheets
-        )
-        message = (
-            f"Part(s) too large for the sheet: {details} — sheet(s): {sheet_desc}, "
-            f"spacing: {space}mm. Use a larger sheet, allow more rotations, or reduce spacing."
-        )
-        logger.warning("Unplaceable parts detected", extra={"unplaceable": unplaceable})
+        # Nom du fichier de l'utilisateur, jamais le slug interne.
+        for p in unplaceable:
+            p["name"] = None
+            if p.get("slug"):
+                try:
+                    p["name"] = (db["user_dxf_files"].find_one(
+                        {"slug": p["slug"]}, {"name": 1}) or {}).get("name")
+                except Exception:
+                    p["name"] = None
+        message = too_large_message(unplaceable, sheets, space)
+        logger.warning("Unplaceable parts detected", extra={
+            "unplaceable": [{k: v for k, v in p.items() if k != "name"}
+                            for p in unplaceable]})
         db["nesting_jobs"].update_one(
             { "slug": slug },
             {

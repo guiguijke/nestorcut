@@ -48,14 +48,30 @@ const SERVER_REFUSALS = [
     { code: 'strip_height', pattern: /strip_height_below_separation:/ },
     { code: 'item_geometry', pattern: /has an outline the engine cannot use/ },
     { code: 'item_unplaceable', pattern: /found no valid position for part/ },
+    // Pré-vol du worker : « Part(s) too large for the sheet: "a.dxf" (2000x50mm, x1) — … ».
+    { code: 'part_too_large', pattern: /^\s*Part\(s\) too large for the sheet:/ },
 ]
 
 export function serverRefusalCode(information) {
     // Le worker cite le nom du fichier de l'utilisateur entre guillemets : on le
     // retire avant de chercher un fragment, un nom ne reclasse pas le refus.
-    const text = String(information || '').replace(/"[^"]*"/g, '""')
+    // Glouton : un nom qui contient lui-même un guillemet disparaît en entier
+    // (les fragments reconnus sont avant ou après le nom, jamais dedans).
+    const text = String(information || '').replace(/"[\s\S]*"/g, '""')
     const hit = SERVER_REFUSALS.find((r) => r.pattern.test(text))
     return hit ? hit.code : null
+}
+
+/**
+ * Pièce trop grande citée par le refus de pré-vol du worker : { file, w, h }
+ * pour la PREMIÈRE pièce nommée, ou `null` (nom inconnu, ancien worker qui
+ * citait un identifiant interne entre apostrophes) : mieux vaut la phrase sans
+ * nom qu'un identifiant.
+ */
+export function tooLargeParams(information) {
+    const m = /^\s*Part\(s\) too large for the sheet: "(.+?)" \((\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)mm/
+        .exec(String(information || ''))
+    return m ? { file: m[1], w: m[2], h: m[3] } : null
 }
 
 /** Code de refus d'un `information` : un code stable, ou le refus d'un worker. */
@@ -111,6 +127,9 @@ export function failureBannerText(job, t, mapLocalError, files = []) {
     if (code) {
         if (ITEM_CODES.has(code) && typeof mapLocalError === 'function') {
             return mapLocalError(code, failureItemParams(job, files))
+        }
+        if (code === 'part_too_large' && typeof mapLocalError === 'function') {
+            return mapLocalError(code, tooLargeParams(information))
         }
         return t(REASON_KEYS[code])
     }

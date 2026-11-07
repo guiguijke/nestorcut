@@ -163,3 +163,19 @@ def test_sans_reduction_l_id_est_inchange():
 def test_id_hors_de_l_idmap_n_est_pas_devine():
     assert original_item_id(5, {"idMap": [0, 2]}) is None
     assert original_item_id(-1, {"idMap": [0, 2]}) is None
+
+
+def test_too_large_message_cite_le_nom_jamais_lidentifiant():
+    from core.engine import too_large_message
+    sheets = [{"width": 1500, "height": 1000}]
+    nommee = too_large_message(
+        [{"name": "support.dxf", "slug": "f-a1b2c3", "width": 2000, "height": 50, "count": 1}],
+        sheets, 2.0)
+    assert '"support.dxf" (2000x50mm, x1)' in nommee
+    assert "f-a1b2c3" not in nommee
+    inconnue = too_large_message(
+        [{"name": None, "slug": "f-a1b2c3", "width": 2000, "height": 50, "count": 1}],
+        sheets, 2.0)
+    assert "f-a1b2c3" not in inconnue
+    assert "one of the files (2000x50mm, x1)" in inconnue
+    assert inconnue.startswith("Part(s) too large for the sheet:")

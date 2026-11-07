@@ -141,3 +141,42 @@ describe('serveur : la pièce refusée arrive jusqu’au bandeau', () => {
         expect(read('../pages/project/[slug].vue')).toContain('files: projectFiles.value')
     })
 })
+
+describe('refus de pré-vol : pièce trop grande pour la tôle', () => {
+    const TOO_LARGE = 'Part(s) too large for the sheet: "support.dxf" (2000x50mm, x1) — sheet(s): 1500x1000mm, spacing: 2.0mm. Use a larger sheet, allow more rotations, or reduce spacing.'
+    const OLD_WORKER = "Part(s) too large for the sheet: 'f-a1b2c3.dxf' (2000x50mm, x1) — sheet(s): 1500x1000mm, spacing: 2.0mm. Use a larger sheet, allow more rotations, or reduce spacing."
+    const mapper = (code, params) => `local:${code}:${params ? `${params.file}|${params.w}x${params.h}` : '-'}`
+
+    it('est reconnu, la carte donne la phrase traduite', () => {
+        expect(serverRefusalCode(TOO_LARGE)).toBe('part_too_large')
+        expect(failureReasonKey(TOO_LARGE)).toBe('localMode.partTooLargePlain')
+    })
+
+    it('le bandeau cite le nom du fichier et ses dimensions', () => {
+        expect(failureBannerText({ information: TOO_LARGE }, t, mapper, files)).toBe('local:part_too_large:support.dxf|2000x50')
+    })
+
+    it('un ancien worker (identifiant interne) : phrase sans nom, jamais l’identifiant', () => {
+        const out = failureBannerText({ information: OLD_WORKER }, t, mapper, files)
+        expect(out).toBe('local:part_too_large:-')
+        expect(out).not.toContain('f-a1b2c3')
+    })
+
+    it('un nom de fichier avec un guillemet reste reconnu et cité en entier', () => {
+        const info = TOO_LARGE.replace('support.dxf', 'pièce 5" a.dxf')
+        expect(serverRefusalCode(info)).toBe('part_too_large')
+        expect(failureBannerText({ information: info }, t, mapper, files)).toBe('local:part_too_large:pièce 5" a.dxf|2000x50')
+    })
+
+    it('un nom qui imite un autre refus ne reclasse pas celui-ci', () => {
+        const info = TOO_LARGE.replace('support.dxf', 'found no valid position for part".dxf')
+        expect(serverRefusalCode(info)).toBe('part_too_large')
+        const geo = SERVER_GEOMETRY.replace('a.dxf', 'x" found no valid position for part "y.dxf')
+        expect(serverRefusalCode(geo)).toBe('item_geometry')
+    })
+
+    it('le worker écrit bien ce texte', () => {
+        const py = read('../../workers/nesting/core/engine.py')
+        expect(py).toContain('Part(s) too large for the sheet:')
+    })
+})
