@@ -123,8 +123,8 @@ def main():
 
 # ---------------------------------------------------------- fichier de coupe
 # Cas où un import faux donnerait un fichier de coupe faux sans avertissement.
-# Le premier passage les a écrits ; les relancer seuls ne touche pas au reste
-# du corpus : python workers/geometry/parity/build_corpus.py coupe
+# Pour écrire seulement ceux qui manquent, sans toucher au reste du corpus :
+#     python workers/geometry/parity/build_corpus.py coupe
 
 
 def plate_with_bulges(msp):
@@ -151,22 +151,52 @@ def r12_no_handle_polyline(vertices):
     return out + "0\nSEQEND\n8\nCUT\n"
 
 
+def save_new(doc, name):
+    """N'écrit qu'un fichier absent : ezdxf y met une date et des GUID, réécrire
+    un échantillon déjà commité ferait un faux changement de corpus."""
+    if not os.path.exists(os.path.join(OUT, name)):
+        save(doc, name)
+
+
 def main_cut_cases():
     os.makedirs(OUT, exist_ok=True)
 
     # --- POLYLINE classique à bulges : R2010, R12, R12 écrit à la main.
     doc = new_doc()
     plate_with_bulges(doc.modelspace())
-    save(doc, "polyline_bulge.dxf")
+    save_new(doc, "polyline_bulge.dxf")
 
     doc = ezdxf.new("R12")
     plate_with_bulges(doc.modelspace())
-    save(doc, "polyline_bulge_r12.dxf")
+    save_new(doc, "polyline_bulge_r12.dxf")
 
     with open(os.path.join(OUT, "polyline_bulge_r12_nohandle.dxf"), "w", encoding="ascii") as f:
         f.write(R12_NO_HANDLE_HEAD
                 + r12_no_handle_polyline([(0.0, 0.0, 1.0), (100.0, 0.0, 0), (100.0, 50.0, 0), (0.0, 50.0, 0)])
                 + "0\nENDSEC\n0\nEOF\n")
+
+    # --- INSERT à échelle inégale + rotation : l'échelle s'applique AVANT la
+    # rotation (ezdxf Insert.matrix44). Pièces à trou, point de base non nul.
+    doc = new_doc()
+    blk = doc.blocks.new(name="PLATE", base_point=(5, 5))
+    blk.add_lwpolyline([(0, 0), (30, 0), (30, 10), (0, 10)], close=True)
+    blk.add_lwpolyline([(10, 3), (20, 3), (20, 7), (10, 7)], close=True)
+    msp = doc.modelspace()
+    msp.add_blockref("PLATE", (100, 0), dxfattribs={"xscale": 2, "yscale": 1, "rotation": 90})
+    msp.add_blockref("PLATE", (0, 200), dxfattribs={"xscale": 2, "yscale": 0.5, "rotation": 30})
+    msp.add_blockref("PLATE", (300, 400), dxfattribs={"xscale": 0.5, "yscale": 3, "rotation": 225})
+    save_new(doc, "block_scale_rotation.dxf")
+
+    # --- Miroir tourné (xscale ou yscale négatif + rotation), sans arc : la
+    # pièce reste congruente, c'est sa position qui change.
+    doc = new_doc()
+    blk = doc.blocks.new(name="TAB")
+    blk.add_lwpolyline([(0, 0), (40, 0), (40, 10), (10, 30), (0, 30)], close=True)
+    msp = doc.modelspace()
+    msp.add_blockref("TAB", (100, 100), dxfattribs={"xscale": -1, "rotation": 30})
+    msp.add_blockref("TAB", (300, 300), dxfattribs={"yscale": -1, "rotation": 60})
+    msp.add_blockref("TAB", (500, 500), dxfattribs={"xscale": -2, "yscale": 1, "rotation": 90})
+    save_new(doc, "block_mirror_rotation.dxf")
 
     print(f"cas fichier de coupe -> {OUT}")
 

@@ -47,15 +47,16 @@ impl Affine {
     }
 }
 
-/// INSERT transform (ezdxf Insert.matrix44, default OCS):
-/// M = S(xs,ys) ∘ R(rotation) ; t = insert − M·base_point.
+/// INSERT transform (ezdxf Insert.matrix44, default OCS). ezdxf compose en
+/// vecteur-LIGNE : p' = p·S·R, donc l'échelle s'applique AVANT la rotation.
+/// En vecteur-colonne : M = R(rotation) ∘ S(xs,ys) ; t = insert − M·base_point.
 fn insert_affine(block: &Block, at: [f64; 2], xs: f64, ys: f64, rotation_deg: f64) -> Affine {
     let theta = rotation_deg * (std::f64::consts::PI / 180.0);
     let (s, c) = libm::sincos(theta);
-    // S * R
+    // R * S
     let a = xs * c;
-    let b = -xs * s;
-    let cc = ys * s;
+    let b = -ys * s;
+    let cc = xs * s;
     let d = ys * c;
     let bx = a * block.base[0] + b * block.base[1];
     let by = cc * block.base[0] + d * block.base[1];

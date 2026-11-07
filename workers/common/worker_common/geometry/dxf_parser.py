@@ -39,12 +39,15 @@ def flatten_entity(entity, tol: float):
         pts = [_vec2(entity.dxf.start), _vec2(entity.dxf.end)]
 
     elif kind == "LWPOLYLINE":
-        pts = [_vec2(p) for p in entity.get_points(format="xy")]
+        # Coordonnées MONDE : get_points() rend l'OCS brut, or un bloc miroir
+        # inverse l'extrusion sans déplacer ces coordonnées (l'anneau partirait
+        # à l'opposé de l'entité que le fichier de coupe va tracer).
+        pts = [_vec2(p) for p in entity.vertices_in_wcs()]
         if entity.closed:
             pts.append(pts[0])
 
     elif kind == "POLYLINE":
-        pts = [_vec2(p) for p in entity.points()]
+        pts = [_vec2(p) for p in entity.points_in_wcs()]
         if getattr(entity, "is_closed", False):
             pts.append(pts[0])
 
