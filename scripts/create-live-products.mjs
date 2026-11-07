@@ -42,7 +42,7 @@ const PLANS = [
     {
         key: 'standard',
         product: {
-            name: 'NestorCut Standard',
+            name: 'NestorCut Unlimited',
             description:
                 'Nesting illimité : multi-tôles, pièces hétérogènes, 3 layouts alternatifs, 4 vCores de calcul.',
             metadata: { type: 'subscription', tier: 'standard' },
@@ -57,7 +57,7 @@ const PLANS = [
     {
         key: 'privacy',
         product: {
-            name: 'NestorCut Confidentialité+',
+            name: 'NestorCut Pro',
             description:
                 'Tout Standard, plus le coffre zéro-connaissance (fichiers chiffrés côté client) et 8 vCores prioritaires.',
             metadata: { type: 'subscription', tier: 'privacy' },
