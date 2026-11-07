@@ -267,6 +267,8 @@ export default {
     'nest.capacity.freeDownloadNote': 'On the Free plan, you download the first {cap} sheets; Unlimited unlocks them all.',
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': 'Expired (24 h purge)',
+    'file.quantityLabel': 'Quantity',
+    'files.quantityHint': 'Every part is set to 1. Use the Quantity counter on each card to set how many to cut.',
     'file.quantity': 'Quantity for {name}',
     'files.expired': 'Expired (24 h purge) — re-upload this file to nest it again',
     'files.importFailed': 'Import failed',

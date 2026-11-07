@@ -242,6 +242,8 @@ export default {
     "nest.capacity.refunded": "Il nesting non è stato addebitato.",
     "nest.capacity.freeDownloadNote": "Con il piano Free scarichi le prime {cap} lamiere; Unlimited le sblocca tutte.",
     "results.expired": "Scaduto (pulizia 24 h)",
+    "file.quantityLabel": "Quantità",
+    "files.quantityHint": "Tutti i pezzi sono a 1. Imposta il contatore «Quantità» di ogni scheda per indicare quanti tagliarne.",
     "file.quantity": "Quantità per {name}",
     "files.expired": "Scaduto (pulizia 24 h) — ricarica questo file per annidarlo di nuovo",
     "files.importFailed": "Importazione non riuscita",

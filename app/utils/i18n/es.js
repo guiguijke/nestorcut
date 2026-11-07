@@ -247,6 +247,8 @@ export default {
     "nest.capacity.refunded": "El nesting no se ha cobrado.",
     "nest.capacity.freeDownloadNote": "En el plan Free descargas las primeras {cap} chapas; Unlimited las desbloquea todas.",
     "results.expired": "Caducado (purga de 24 h)",
+    "file.quantityLabel": "Cantidad",
+    "files.quantityHint": "Todas las piezas están en 1. Ajuste el contador «Cantidad» de cada ficha para indicar cuántas cortar.",
     "file.quantity": "Cantidad para {name}",
     "files.expired": "Caducado (purga de 24 h) — vuelve a subir este archivo para anidarlo de nuevo",
     "files.importFailed": "Importación fallida",

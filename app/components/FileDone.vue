@@ -42,6 +42,7 @@
                 {{ findingLine.line }}
             </p>
             <div class="file__counter counter">
+                <span class="counter__label" data-testid="file-quantity-label">{{ t('file.quantityLabel') }}</span>
                 <MainButton :size="sizeType.s" :icon="iconType.minus" :isDisable="file.count < 1" :isLabelShow="false"
                     trackingTag="file_decrement" @click="decrement(fileIndex, $event)" label="decrement" class="counter__btn" />
                 <input
@@ -295,6 +296,12 @@ const openModal = () => {
 .counter {
     display: flex;
     align-items: center;
+
+    &__label {
+        margin-right: 8px;
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
+    }
 
     &__value {
         padding-left: 4px;

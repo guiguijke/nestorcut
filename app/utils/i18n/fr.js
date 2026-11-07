@@ -266,7 +266,9 @@ export default {
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': "Expiré (purge 24 h)",
     'file.quantity': 'Quantité pour {name}',
-    'files.expired': "Expiré (purge 24 h) — réimportez ce fichier pour le nester à nouveau",
+    'file.quantityLabel': 'Quantité',
+    'files.quantityHint': 'Toutes les pièces sont à 1. Réglez le compteur « Quantité » de chaque fiche pour indiquer combien en découper.',
+    'files.expired': "Expiré (purge 24 h) — réimportez ce fichier pour le nester à nouveau",
     'files.importFailed': "Échec de l'import",
     'files.importError.dwgMissing': 'Conversion DWG indisponible sur ce serveur : enregistrez le fichier en DXF puis réimportez-le.',
     'files.importError.dwgTimeout': 'Conversion DWG trop longue (dessin très complexe) : enregistrez le fichier en DXF puis réimportez-le.',

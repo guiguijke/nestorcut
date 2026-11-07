@@ -245,6 +245,8 @@ export default {
     "nest.capacity.refunded": "Das Nesting wurde nicht abgerechnet.",
     "nest.capacity.freeDownloadNote": "Im Free-Plan laden Sie die ersten {cap} Bleche herunter; Unlimited schaltet alle frei.",
     "results.expired": "Abgelaufen (24-h-Bereinigung)",
+    "file.quantityLabel": "Stückzahl",
+    "files.quantityHint": "Alle Teile stehen auf 1. Stellen Sie mit dem Zähler „Stückzahl“ jeder Karte ein, wie viele zugeschnitten werden sollen.",
     "file.quantity": "Stückzahl für {name}",
     "files.expired": "Abgelaufen (24-h-Bereinigung) — laden Sie diese Datei erneut hoch, um sie wieder zu verschachteln",
     "files.importFailed": "Import fehlgeschlagen",

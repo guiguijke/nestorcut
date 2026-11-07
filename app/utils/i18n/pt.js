@@ -239,6 +239,8 @@ export default {
     "nest.capacity.refunded": "O nesting não foi cobrado.",
     "nest.capacity.freeDownloadNote": "No plano Free, você baixa as primeiras {cap} chapas; o Unlimited desbloqueia todas.",
     "results.expired": "Expirado (limpeza de 24 h)",
+    "file.quantityLabel": "Quantidade",
+    "files.quantityHint": "Todas as peças estão em 1. Ajuste o contador «Quantidade» de cada ficha para indicar quantas cortar.",
     "file.quantity": "Quantidade para {name}",
     "files.expired": "Expirado (limpeza de 24 h) — reenvie este arquivo para aninhá-lo novamente",
     "files.importFailed": "Falha na importação",
