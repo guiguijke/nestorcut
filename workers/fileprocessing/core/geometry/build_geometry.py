@@ -3,6 +3,7 @@ from typing import Dict, List, Tuple
 
 from worker_common.geometry.cleanup import is_micro_void, strip_spurs
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
+from worker_common.geometry.import_findings import NOTABLE_SAGITTA_MM
 
 from ezdxf.document import Drawing
 # Use the top-level shapely (2.0) functions — `shapely.ops.unary_union` does not
@@ -24,6 +25,35 @@ GRID_SIZE = 1e-4
 
 # Parts whose contours are this close (mm) or closer are merged into one polygon.
 MERGE_DISTANCE = 0.1
+
+
+def polyline_sagittas(entity) -> List[float]:
+    """Flèche (mm) de chaque segment à bulge d'une LWPOLYLINE ou d'une POLYLINE 2D :
+    |bulge| x corde / 2. Le segment de fermeture compte (bulge du dernier sommet).
+    L'imbrication lit ces polylignes en cordes (D-IMP-8) ; le fichier de coupe garde l'arc."""
+    kind = entity.dxftype()
+    if kind == "LWPOLYLINE":
+        verts = [(p[0], p[1], p[2]) for p in entity.get_points("xyb")]
+        closed = bool(entity.closed)
+    elif kind == "POLYLINE" and entity.is_2d_polyline:
+        verts = [(v.dxf.location.x, v.dxf.location.y, v.dxf.bulge) for v in entity.vertices]
+        closed = bool(entity.is_closed)
+    else:
+        return []
+    n = len(verts)
+    out: List[float] = []
+    for i, (x, y, bulge) in enumerate(verts):
+        if not bulge:
+            continue
+        if i + 1 < n:
+            j = i + 1
+        elif closed and n > 2:
+            j = 0
+        else:
+            continue
+        chord = ((verts[j][0] - x) ** 2 + (verts[j][1] - y) ** 2) ** 0.5
+        out.append(abs(bulge) * chord / 2.0)
+    return out
 
 
 def collect_footprints(drawing: Drawing, tolerance: float) -> List[Tuple[str, BaseGeometry]]:
@@ -276,10 +306,16 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
 
     linework: List[LineString] = []
     footprints: List[Tuple[str, BaseGeometry]] = []
+    kind_by_handle: Dict[str, str] = {}
 
     for entity_idx, entity in enumerate(msp):
         if deadline is not None:
             deadline.check(entity_idx)
+        if stats is not None:
+            for sagitta in polyline_sagittas(entity):
+                stats["bulgeMaxSagitta"] = max(stats.get("bulgeMaxSagitta", 0.0), sagitta)
+                if sagitta >= NOTABLE_SAGITTA_MM:
+                    stats["bulgeSegments"] = stats.get("bulgeSegments", 0) + 1
         try:
             dxf_geometry = convert_entity_to_shapely(entity, tolerance)
         except Exception as e:
@@ -303,6 +339,7 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
             continue
 
         footprints.append((dxf_geometry.handle, geometry))
+        kind_by_handle[dxf_geometry.handle] = entity.dxftype()
 
         if geometry.geom_type == "Polygon":
             # Closed contours contribute their boundary to the planar graph;
@@ -459,6 +496,16 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
 
     for idx, (body, _silhouette) in enumerate(silhouettes):
         result.append(ClosedPolygon(geometry=body, handles=assigned[idx]))
+
+    if stats is not None:
+        # Entités lues mais rattachées à AUCUNE pièce : le fichier de coupe est
+        # construit pièce par pièce, elles n'y seront pas (constat entitiesUncut).
+        attached = {h for hs in assigned.values() for h in hs}
+        uncut = stats.setdefault("uncut", {})
+        for handle, _geom in footprints:
+            if handle not in attached:
+                kind = kind_by_handle.get(handle, "?")
+                uncut[kind] = uncut.get(kind, 0) + 1
 
     logger.info(
         "Computed closed polygons",

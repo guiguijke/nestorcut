@@ -73,7 +73,7 @@ const fileModalData = computed(() => getters.fileModalData);
 
 const { t, fmtNumber } = useLocale();
 const findingList = computed(() =>
-    composeFindingList(fileModalData.value?.findings, t, (v) => fmtNumber(v, 0)),
+    composeFindingList(fileModalData.value?.findings, t, (v) => fmtNumber(v, 0), (v) => fmtNumber(v, 2)),
 );
 
 const isFullScreen = useFullScreen();

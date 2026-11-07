@@ -33,6 +33,11 @@ NOISE_ENTITIES = (
     "ACAD_TABLESTYLE", "LAYOUT", "VERTEX",
 )
 
+# Flèche (mm) à partir de laquelle un bulge de polyligne est dit : l'imbrication
+# lit la corde (D-IMP-8), le fichier de coupe garde l'arc. Miroir de
+# `NOTABLE_SAGITTA_MM` côté Rust.
+NOTABLE_SAGITTA_MM = 0.1
+
 LEVEL_INFO = "info"
 LEVEL_ATTENTION = "attention"
 
@@ -65,6 +70,9 @@ def empty_stats() -> dict:
         "paperSpaceSkipped": 0, # entités de dessin écartées de l'espace papier
         "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
         "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
+        "uncut": {},            # type d'entité rattachée à aucune pièce -> occurrences
+        "bulgeSegments": 0,     # segments de polyligne à bulge, flèche >= seuil
+        "bulgeMaxSagitta": 0.0, # plus grande flèche (mm), tous segments à bulge
         "scaleApplied": 1.0,    # facteur d'échelle appliqué à l'import (E2)
     }
 
@@ -104,6 +112,16 @@ def build_findings(stats: dict) -> list:
         ))
     if stats["danglingPaths"] > 0:
         out.append(_finding("import.contoursDropped", LEVEL_ATTENTION, stats["danglingPaths"]))
+    if stats["uncut"]:
+        uncut = sorted(((str(k).upper(), int(n)) for k, n in stats["uncut"].items()),
+                       key=lambda kv: (-kv[1], kv[0]))
+        out.append(_finding(
+            "import.entitiesUncut", LEVEL_ATTENTION,
+            sum(n for _, n in uncut), [k for k, _ in uncut],
+        ))
+    if stats["bulgeSegments"] > 0:
+        out.append(_finding("import.bulgesChorded", LEVEL_ATTENTION, stats["bulgeSegments"],
+                            value=f"{float(stats['bulgeMaxSagitta']):.2f}"))
     if stats["droppedParts"] > 0:
         out.append(_finding("import.partsDropped", LEVEL_ATTENTION, stats["droppedParts"]))
     # Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte

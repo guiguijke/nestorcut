@@ -30,6 +30,7 @@ export const FINDING_LEVELS = { info: 0, attention: 1, refusal: 2 }
 const CARD_CODES = new Set([
     'import.entitiesSkipped',
     'import.contoursDropped',
+    'import.entitiesUncut',
     'import.partsDropped',
     'import.paperSpaceSkipped',
     'import.unitUnknown',
@@ -86,15 +87,20 @@ export function sortFindings(findings) {
 
 /**
  * Paramètres i18n d'un constat : le compte, les types (trois au plus sur la
- * carte, tous dans la fiche) et la valeur nue quand il y en a une.
+ * carte, tous dans la fiche) et la valeur nue quand il y en a une. La flèche
+ * des arcs imbriqués en cordes est un nombre en mm : `fmtValue` la met dans la
+ * locale (« 0,59 » en français), les autres valeurs sont des noms ou des codes.
  */
-export function findingParams(finding, { maxTypes = 3 } = {}) {
+export function findingParams(finding, { maxTypes = 3, fmtValue = (v) => String(v) } = {}) {
     const types = Array.isArray(finding?.types) ? finding.types : []
     const shown = maxTypes > 0 ? types.slice(0, maxTypes) : types
     return {
         n: finding?.count ?? 0,
         types: shown.join(', ') + (types.length > shown.length ? '…' : ''),
-        value: finding?.value ?? '',
+        value:
+            finding?.code === 'import.bulgesChorded'
+                ? fmtValue(finding.value)
+                : (finding?.value ?? ''),
     }
 }
 
@@ -106,13 +112,13 @@ export function findingParams(finding, { maxTypes = 3 } = {}) {
  * `t` est le traducteur (useLocale) ; `fmt` formate les nombres dans la
  * locale (piège #24 : « 1 337 tracés ouverts », jamais « 1337 »).
  */
-export function composeCardLine(findings, t, fmt = (v) => String(v)) {
+export function composeCardLine(findings, t, fmt = (v) => String(v), fmtValue) {
     const shown = sortFindings(findings).filter((f) => CARD_CODES.has(f?.code))
     if (!shown.length) return null
     const head = shown.slice(0, MAX_CARD_FRAGMENTS)
     const rest = shown.length - head.length
     const fragments = head.map((f) => {
-        const p = findingParams(f)
+        const p = findingParams(f, { fmtValue })
         return t(f.code, { ...p, n: fmt(p.n) })
     })
     let line = fragments.join(', ')
@@ -124,9 +130,9 @@ export function composeCardLine(findings, t, fmt = (v) => String(v)) {
  * La LISTE de la fiche fichier : tous les constats, chacun avec son niveau
  * et son texte complet (tous les types, pas trois). Jamais de résumé ici.
  */
-export function composeFindingList(findings, t, fmt = (v) => String(v)) {
+export function composeFindingList(findings, t, fmt = (v) => String(v), fmtValue) {
     return sortFindings(findings).map((f) => {
-        const p = findingParams(f, { maxTypes: 0 })
+        const p = findingParams(f, { maxTypes: 0, fmtValue })
         return { code: f.code, level: f.level, text: t(f.code, { ...p, n: fmt(p.n) }) }
     })
 }

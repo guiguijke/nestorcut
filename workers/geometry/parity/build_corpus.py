@@ -380,6 +380,41 @@ def main_cut_cases():
     msp.add_blockref("COLUMN", (0, 5000), dxfattribs={"rotation": 90})
     save_new(doc, "minsert_edge_cases.dxf")
 
+    # --- Ce qui ne sera pas découpé : une plaque à trou, et à côté des entités qui ne
+    # touchent aucune pièce (une ligne, une polyligne ouverte, une spline ouverte, un
+    # point) ; du texte, retiré à la lecture.
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (100, 0), (100, 50), (0, 50)], close=True)
+    msp.add_circle((50, 25), 10)
+    msp.add_line((300, 0), (340, 0))
+    msp.add_lwpolyline([(400, 0), (450, 20), (470, 60)])
+    msp.add_open_spline([(500, 0), (520, 30), (560, 40), (600, 10)], degree=3)
+    msp.add_point((700, 700))
+    msp.add_text("REF 12", dxfattribs={"insert": (10, 60), "height": 5})
+    msp.add_text("TOLERANCE", dxfattribs={"insert": (10, 70), "height": 5})
+    msp.add_mtext("NOTE", dxfattribs={"insert": (10, 80)})
+    save_new(doc, "uncut_entities.dxf")
+
+    # --- Arcs de polylignes imbriqués en cordes : la flèche est |bulge| x corde / 2.
+    # LWPOLYLINE : 0,006 sur 100 mm = 0,30 mm (dit), 0,0016 sur 100 mm = 0,08 mm (sous le seuil).
+    doc = new_doc()
+    doc.modelspace().add_lwpolyline(
+        [(0, 0, 0.006), (100, 0, 0.0), (100, 50, 0.0016), (0, 50, 0.0)], format="xyb", close=True)
+    save_new(doc, "bulge_notable_lwpolyline.dxf")
+
+    # POLYLINE classique : 0,01 sur 100 mm et -0,02 sur 50 mm (segment de fermeture), 0,50 mm chacun.
+    doc = new_doc()
+    doc.modelspace().add_polyline2d(
+        [(0, 0, 0.01), (100, 0, 0.0), (100, 50, 0.0), (0, 50, -0.02)], format="xyb", close=True)
+    save_new(doc, "bulge_notable_polyline.dxf")
+
+    # Sous le seuil partout : rien à dire.
+    doc = new_doc()
+    doc.modelspace().add_lwpolyline(
+        [(0, 0, 0.0016), (100, 0, 0.0), (100, 50, 0.0), (0, 50, 0.0)], format="xyb", close=True)
+    save_new(doc, "bulge_negligible.dxf")
+
     print(f"cas fichier de coupe -> {OUT}")
 
 
@@ -581,6 +616,15 @@ def main_svg():
         '<rect x="10%" y="10%" width="50%" height="50%"/>'
         '</svg>',
         "svg_percent_shapes_no_viewbox.svg",
+    )
+
+    # un tracé ouvert seul, loin de la pièce : il n'est rattaché à rien, donc pas découpé
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">'
+        '<rect x="10" y="10" width="100" height="60"/>'
+        '<path d="M 200 20 L 260 60 L 300 30" fill="none"/>'
+        '</svg>',
+        "svg_open_path_uncut.svg",
     )
 
     print(f"svg corpus -> {SVG_OUT} ({len(os.listdir(SVG_OUT))} files)")

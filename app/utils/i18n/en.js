@@ -315,8 +315,10 @@ export default {
     // Lot 2c — constats d'import (catalogue : docs/qa/import-2026-09-09/
     // rapport-reparation.md). Tout nombre porte son libellé (piège #24).
     'import.entitiesSkipped': '{n} unsupported entities skipped ({types}) — the material they described will not be cut.',
-    'import.annotationsSkipped': 'Text and dimensions skipped ({n} entities) — only contours are cut.',
+    'import.annotationsSkipped': 'Text and dimensions skipped ({n} entities: {types}) — only contours are cut.',
     'import.contoursDropped': '{n} open paths will not be cut — close them in your CAD.',
+    'import.entitiesUncut': '{n} entities belong to no part and will not be cut ({types}) — close or connect them in your CAD.',
+    'import.bulgesChorded': '{n} polyline arc(s) are nested as straight segments (up to {value} mm off) — the cut file keeps the arc, so leave at least that much spacing between parts.',
     'import.partsDropped': '{n} parts too small to cut were dropped.',
     'import.paperSpaceSkipped': '{n} paper space entities ignored (frames, title blocks) — only model space is cut. Check that no part was left there.',
     'import.unitConverted': '{value} units detected — converted to millimeters.',

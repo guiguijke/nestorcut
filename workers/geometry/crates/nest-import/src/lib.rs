@@ -209,6 +209,10 @@ pub fn import_dxf_limited(
         .map_err(|e| out_of_time(count, limits, e))?;
     stats.dangling_paths = asm.dangling_paths;
     stats.dropped_parts = asm.dropped_parts;
+    for h in &asm.uncut_handles {
+        let kind = stats.kinds_by_handle.get(h).copied().unwrap_or("?");
+        *stats.uncut.entry(kind.to_string()).or_insert(0) += 1;
+    }
     stats.micro_voids = asm.micro_voids;
     stats.spurs_removed = asm.spurs_removed;
     Ok(ImportResult {

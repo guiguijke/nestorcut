@@ -129,7 +129,7 @@ const count = computed({
 // Lot 2c : la ligne de constats, composée par les règles du §4 du
 // catalogue (gravité d'abord, trois fragments au plus, « et N autres »).
 const findingLine = computed(() =>
-    composeCardLine(props.file.findings, t, (v) => fmtNumber(v, 0)),
+    composeCardLine(props.file.findings, t, (v) => fmtNumber(v, 0), (v) => fmtNumber(v, 2)),
 )
 
 const emit = defineEmits(['openModal', 'scale', 'resetScale', 'explode'])

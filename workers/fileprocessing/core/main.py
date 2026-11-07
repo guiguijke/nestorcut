@@ -157,12 +157,16 @@ def _make_dxf_copy(doc) -> Drawing:
     # La copie relue ensuite n'a plus d'espace papier : le constat voyage avec le
     # document fichier jusqu'à l'assemblage (_close_polygon_from_dxf).
     paper_space_skipped = (getattr(dxf_copy, "import_stats", None) or {}).get("paperSpaceSkipped", 0)
+    # Idem pour les entités retirées à la lecture (TEXT, MTEXT, IMAGE, SOLID) : la copie
+    # n'en contient plus, la relecture ne peut plus les compter.
+    read_skipped = dict((getattr(dxf_copy, "import_stats", None) or {}).get("skipped") or {})
     
     db["user_dxf_files"].update_one(
         {"_id": doc["_id"]},
         {"$set": {
             "isDxfCopyExist": True,
             "paperSpaceSkipped": paper_space_skipped,
+            "importSkipped": read_skipped,
             # Declared drawing units of the SOURCE file ($INSUNITS code,
             # 0 = unitless). Geometry is normalized to mm at import; this is
             # pure traceability for support/debugging.
@@ -171,6 +175,7 @@ def _make_dxf_copy(doc) -> Drawing:
     )
     doc["isDxfCopyExist"] = True
     doc["paperSpaceSkipped"] = paper_space_skipped
+    doc["importSkipped"] = read_skipped
     
     logger.info("Dxf copy made", extra={"dxf_file_slug": dxf_file_slug})
 
@@ -396,7 +401,7 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
     # supprimées, blocs, splines — portés par le document reconstruit) plus
     # ceux de l'assemblage, remplis ci-dessous.
     stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
-    stats.setdefault("skipped", {})
+    stats["skipped"] = dict(doc.get("importSkipped") or {})
     stats["paperSpaceSkipped"] = doc.get("paperSpaceSkipped") or 0
     closed_parts = build_geometry(
         drawing,
@@ -414,7 +419,7 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
         _rewrite_scaled_copy(doc, drawing, factor, logger)
         drawing = _getting_drawing(doc)
         stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
-        stats.setdefault("skipped", {})
+        stats["skipped"] = dict(doc.get("importSkipped") or {})
         stats["paperSpaceSkipped"] = doc.get("paperSpaceSkipped") or 0
         closed_parts = build_geometry(
             drawing,

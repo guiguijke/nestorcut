@@ -732,7 +732,7 @@ fn dissolve_boundary(
 }
 
 /// Constats de l'assemblage (lot 2c) : ce que l'assemblage a laissé de côté.
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct AssemblyStats {
     /// Tracés ouverts qui ne referment aucune pièce (« dangles » de GEOS),
     /// comptés en CHAÎNES, comme `len(dangles.geoms)` côté shapely.
@@ -743,6 +743,10 @@ pub struct AssemblyStats {
     pub micro_voids: usize,
     /// Sommets retirés par `strip_spurs` (aller-retours de largeur nulle).
     pub spurs_removed: usize,
+    /// Handles des entités rattachées à AUCUNE pièce (avant les filtres
+    /// d'émission, dont les handles des corps écartés partent déjà avec eux
+    /// sous `dropped_parts`). Miroir de `build_geometry.py`.
+    pub uncut_handles: Vec<String>,
 }
 
 /// Tracés ouverts d'un jeu d'arêtes : pelage itératif des sommets de degré 1
@@ -1000,6 +1004,16 @@ pub fn build_parts_stats_until(
         .collect();
     let assigned =
         crate::attach::attach_handles_until(&lw.footprints, &bodies, tol.max(1e-6), dl)?;
+    {
+        let attached: std::collections::HashSet<&str> =
+            assigned.iter().flatten().map(|h| h.as_str()).collect();
+        asm.uncut_handles = lw
+            .footprints
+            .iter()
+            .filter(|f| !attached.contains(f.handle.as_str()))
+            .map(|f| f.handle.clone())
+            .collect();
+    }
     let mut out: Vec<Part> = Vec::new();
     for ((outer, holes), handles) in parts.into_iter().zip(assigned) {
         let mut ext = reduce_ring(&outer);

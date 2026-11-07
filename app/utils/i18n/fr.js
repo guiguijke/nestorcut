@@ -307,8 +307,10 @@ export default {
     // Lot 2c — constats d'import (catalogue : docs/qa/import-2026-09-09/
     // rapport-reparation.md). Tout nombre porte son libellé (piège #24).
     'import.entitiesSkipped': "{n} entités non prises en charge ignorées ({types}) — la matière qu'elles décrivaient ne sera pas découpée.",
-    'import.annotationsSkipped': "Textes et cotes ignorés ({n} entités) — seuls les contours sont découpés.",
+    'import.annotationsSkipped': "Textes et cotes ignorés ({n} entités : {types}) — seuls les contours sont découpés.",
     'import.contoursDropped': "{n} tracés ouverts ne seront pas découpés — refermez-les dans votre CAO.",
+    'import.entitiesUncut': "{n} entité(s) ne font partie d'aucune pièce et ne seront pas découpées ({types}) — refermez ou rattachez-les dans votre CAO.",
+    'import.bulgesChorded': "{n} arc(s) de polyligne sont imbriqués comme des segments droits (écart jusqu'à {value} mm) — le fichier de coupe garde l'arc : laissez au moins cet espacement entre les pièces.",
     'import.partsDropped': "{n} pièces trop petites pour être découpées ont été écartées.",
     'import.paperSpaceSkipped': "{n} entités de l'espace papier ignorées (cadres, cartouches) — seul l'espace objet est découpé. Vérifiez qu'aucune pièce n'y est restée.",
     'import.unitConverted': "Unités {value} détectées — converties en millimètres.",

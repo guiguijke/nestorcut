@@ -437,6 +437,10 @@ pub fn import_svg_limited(
     };
     stats.dangling_paths = asm.dangling_paths;
     stats.dropped_parts = asm.dropped_parts;
+    // Un SVG devient des LWPOLYLINE : c'est le type que nomme aussi le serveur.
+    if !asm.uncut_handles.is_empty() {
+        stats.uncut.insert("LWPOLYLINE".to_string(), asm.uncut_handles.len());
+    }
     Ok(ImportResult {
         parts,
         source_units: 4,
