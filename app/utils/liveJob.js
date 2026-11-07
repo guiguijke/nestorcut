@@ -53,6 +53,23 @@ export function serverJobState(list, projectSlug) {
     return { slug: job.slug, phase, job }
 }
 
+/**
+ * Dernier job du projet, calculé sur le SERVEUR et terminé avec un résultat :
+ * la vue live se retire à la fin (le worker supprime `liveLayout`), la scène
+ * s'appuie sur ce job pour montrer ce qui a été produit au lieu de revenir à
+ * « Prêt à imbriquer ». Null tant qu'il tourne, s'il a échoué, s'il a été
+ * calculé dans un navigateur (sa géométrie n'est pas sur le serveur), s'il est
+ * purgé, ou sans aperçu à montrer.
+ */
+export function pickFinishedServerJob(list, projectSlug) {
+    const job = (list || []).find((r) => belongsToProject(r, projectSlug))
+    if (!job || job.isInProgress) return null
+    if (job.status !== 'done' && job.status !== 'completed') return null
+    if (job.localOnly || job.purgedAt) return null
+    if (!Array.isArray(job.svgs) || !job.svgs.length) return null
+    return job
+}
+
 // ---------------------------------------------------------------------------
 // Champion live — UNE définition partagée (registre + LiveNestingView).
 // R-6 (audit 2026-08-31 §R-6) : la couche registre filtrait les frames avec

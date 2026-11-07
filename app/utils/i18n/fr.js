@@ -710,6 +710,8 @@ export default {
     'live.best': 'Meilleur',
     'live.title': 'Imbrication en direct',
     'live.ready': 'Prêt à imbriquer',
+    'live.finished': 'Imbrication terminée',
+    'live.openResult': 'Ouvrir le résultat',
     'live.walks': 'parcours',
     'result.failed': 'Échec du nesting',
     'result.failed.nofit': "Les pièces ne tiennent pas",

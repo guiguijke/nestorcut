@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
     belongsToProject,
     pickAwaitingLocal,
+    pickFinishedServerJob,
     pickLiveJob,
     pickRunningJob,
     frameFitsSheet,
@@ -220,5 +221,27 @@ describe('liveJob : badge et longueur utilisée', () => {
         expect(liveUsedLength({ ...fit, strip_width: 0 }, 'exploration')).toBe(null)
         expect(liveUsedLength({ ...fit, strip_width: NaN }, 'exploration')).toBe(null)
         expect(liveUsedLength(null, 'exploration')).toBe(null)
+    })
+})
+
+describe("liveJob — résultat d'un calcul serveur terminé", () => {
+    const done = { slug: 'jS', projectSlug: 'pA', status: 'done', isInProgress: false, liveLayout: null, svgs: ['/api/files/result/svg/a.svg'] }
+    it('rend le dernier job du projet quand il est fini avec un aperçu', () => {
+        expect(pickFinishedServerJob([done], 'pA')).toBe(done)
+    })
+    it('ne rend rien tant que le job tourne, ni pour un échec', () => {
+        expect(pickFinishedServerJob([{ ...done, status: 'processing', isInProgress: true }], 'pA')).toBe(null)
+        expect(pickFinishedServerJob([{ ...done, status: 'failed' }], 'pA')).toBe(null)
+    })
+    it('un job plus récent, en cours, masque le résultat plus ancien', () => {
+        const running = { ...done, slug: 'jN', status: 'pending', isInProgress: true, svgs: [] }
+        expect(pickFinishedServerJob([running, done], 'pA')).toBe(null)
+    })
+    it('ignore un autre projet, un job calculé ailleurs, purgé ou sans aperçu', () => {
+        expect(pickFinishedServerJob([done], 'pB')).toBe(null)
+        expect(pickFinishedServerJob([{ ...done, localOnly: true }], 'pA')).toBe(null)
+        expect(pickFinishedServerJob([{ ...done, purgedAt: '2026-11-07' }], 'pA')).toBe(null)
+        expect(pickFinishedServerJob([{ ...done, svgs: [] }], 'pA')).toBe(null)
+        expect(pickFinishedServerJob(null, 'pA')).toBe(null)
     })
 })

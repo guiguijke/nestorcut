@@ -634,6 +634,8 @@ export default {
     "live.best": "Melhor",
     "live.title": "Nesting ao vivo",
     "live.ready": "Pronto para aninhar",
+    "live.finished": "Nesting concluído",
+    "live.openResult": "Abrir o resultado",
     "live.walks": "walks",
     "result.failed": "Nesting falhou",
     "result.failed.nofit": "Não foi possível colocar todas as peças",

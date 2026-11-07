@@ -640,6 +640,8 @@ export default {
     "live.best": "Beste",
     "live.title": "Live-Nesting",
     "live.ready": "Bereit zum Verschachteln",
+    "live.finished": "Nesting abgeschlossen",
+    "live.openResult": "Ergebnis öffnen",
     "live.walks": "Walks",
     "result.failed": "Nesting fehlgeschlagen",
     "result.failed.nofit": "Nicht alle Teile konnten platziert werden",

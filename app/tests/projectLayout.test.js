@@ -36,3 +36,14 @@ describe('page projet : les pièces d\'abord', () => {
         expect(main).not.toMatch(/overflow:\s*hidden;/)
     })
 })
+
+describe('page projet : le résultat d\'un calcul serveur reste visible', () => {
+    const page = source('app/pages/project/[slug].vue')
+
+    it('la scène montre le résultat plutôt que « Prêt à imbriquer » et ouvre la fenêtre du résultat', () => {
+        expect(page).toContain('v-else-if="stageResult"')
+        expect(page).toContain("t('live.finished')")
+        expect(page).toContain('data-testid="stage-result-open"')
+        expect(page).toContain('globalStore.actions.setModalResultData(job)')
+    })
+})

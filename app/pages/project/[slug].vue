@@ -86,6 +86,27 @@
                     </p>
                 </div>
                 <LiveNestingView v-if="stageLive" :result="stageLive" :job-done="stageJobDone" />
+                <!-- Calcul sur le serveur terminé : la vue live s'est retirée,
+                     la scène montre la première tôle produite et invite à
+                     ouvrir le résultat (même fenêtre que la carte). -->
+                <div v-else-if="stageResult" class="stage__done" data-testid="stage-result">
+                    <button type="button" class="stage__done-thumb" :aria-label="t('live.openResult')" @click="openStageResult">
+                        <SheetSvgPreview
+                            :src="stageResult.svgs[0]"
+                            :width="idleSheet.w"
+                            :height="idleSheet.h"
+                            class="stage__sheet"
+                        />
+                    </button>
+                    <p class="stage__done-line" data-testid="stage-result-line">{{ stageResultLine }}</p>
+                    <MainButton
+                        :theme="themeType.secondary"
+                        :label="t('live.openResult')"
+                        class="stage__done-open"
+                        data-testid="stage-result-open"
+                        @click="openStageResult"
+                    />
+                </div>
                 <div v-else class="stage__idle">
                     <svg
                         :viewBox="idleViewBox"
@@ -191,7 +212,8 @@ import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
-import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { belongsToProject, pickAwaitingLocal, pickFinishedServerJob, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { altDensityPctOf } from "~/utils/resultQuality";
 import { jobErrorBannerText } from "~/utils/failureReason";
 import { useJobScroll } from "~/composables/useJobScroll";
 import {
@@ -719,9 +741,36 @@ const stageJobDone = computed(() => liveJobDone({
     reveal: unref(localReveal),
 }));
 
+// Résultat du dernier calcul serveur, tant que les réglages sont ceux qui l'ont
+// produit : dès qu'on en change, la scène redevient « prête » (le bouton Nest
+// est de nouveau actif, le résultat affiché ne serait plus celui des réglages).
+const stageResult = computed(() => {
+    if (unref(stageLive) || unref(isNewParams)) return null
+    return pickFinishedServerJob(unref(resultsList), unref(pageSlug))
+});
+const stageResultLine = computed(() => {
+    const job = unref(stageResult)
+    if (!job) return ''
+    const alt = job.alternatives?.[0]
+    const sheetN = alt?.layoutCount || job.svgs.length
+    const bits = []
+    const pct = altDensityPctOf(alt)
+    if (pct != null) bits.push(`${fmtPercent(pct)} ${t('result.densityShort')}`)
+    bits.push(sheetN === 1 ? t('result.sheetCountOne') : t('result.sheetCount', { n: sheetN }))
+    return bits.join(' · ')
+});
+const resultDialog = useResultDialog();
+const openStageResult = () => {
+    const job = unref(stageResult)
+    if (!job) return
+    globalStore.actions.setModalResultData(job)
+    resultDialog.value = true
+};
+
 const stageHeading = computed(() => {
     if (unref(localComputeRunning)) return t('localCompute.title')
     if (unref(stageLive)) return t('live.title')
+    if (unref(stageResult)) return t('live.finished')
     return t('live.ready')
 });
 
@@ -1231,6 +1280,36 @@ const startsNest = () => {
 
         :deep(.live) {
             min-height: 60vh;
+        }
+    }
+
+    &__done {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    &__done-thumb {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+    }
+
+    &__done-line {
+        margin: 0;
+        font-size: var(--fs-14);
+        font-weight: 600;
+        color: var(--label-primary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__done-open {
+        :deep(.button) {
+            min-width: 200px;
         }
     }
 
