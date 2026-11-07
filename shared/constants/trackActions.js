@@ -86,6 +86,7 @@ export const TRACK_ACTIONS = [
     'click_result_try_again',
     'click_subscription',
     'click_subscription_start_trial',
+    'click_subscription_start_trial_pro',
     'click_subscription_upgrade_pro',
     'click_support_chat_close',
     'click_support_chat_send',
