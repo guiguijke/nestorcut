@@ -209,3 +209,21 @@ class TestDefsAndUse:
             svg_bytes_to_drawing(_wrap(
                 '<rect x="0" y="0" width="10" height="10"/><g id="a"><use href="#a"/></g>'
             ))
+
+
+class TestPercentSize:
+    RECT = '<rect x="0" y="0" width="500" height="300"/>'
+
+    def test_percent_size_keeps_viewbox_scale(self):
+        doc = svg_bytes_to_drawing(_wrap(
+            self.RECT, width='100%', height='100%', viewbox='0 0 500 300'))
+        assert _bboxes(doc)[0] == pytest.approx(
+            (0, -300 * MM_PER_PX, 500 * MM_PER_PX, 0), abs=1e-6)
+
+    def test_one_percent_attribute_resolves_alone(self):
+        # width 1000 px, height 50 % de 300 : échelle 0,5, dessin centré.
+        doc = svg_bytes_to_drawing(_wrap(
+            '<rect x="0" y="0" width="200" height="100"/>',
+            width='1000', height='50%', viewbox='0 0 500 300'))
+        assert _bboxes(doc)[0] == pytest.approx(
+            (375 * MM_PER_PX, -50 * MM_PER_PX, 475 * MM_PER_PX, 0), abs=1e-6)

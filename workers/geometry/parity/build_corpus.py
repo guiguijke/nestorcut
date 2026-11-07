@@ -537,6 +537,52 @@ def main_svg():
         "svg_use_cycle.svg",
     )
 
+    # width / height en pourcentage : contre le viewBox (échelle 1 à 100 %)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 500 300">'
+        '<rect x="10" y="10" width="480" height="280"/>'
+        '<circle cx="250" cy="150" r="50"/>'
+        '</svg>',
+        "svg_width_percent.svg",
+    )
+    # un seul des deux en pourcentage, l'autre en px (la hauteur borne l'échelle)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="50%" viewBox="0 0 500 300">'
+        '<rect x="0" y="0" width="200" height="100"/>'
+        '</svg>',
+        "svg_width_percent_mixed.svg",
+    )
+    # un seul attribut présent, en pourcentage : l'autre vaut 100 % du viewBox
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="50%" viewBox="0 0 400 200">'
+        '<rect x="20" y="20" width="360" height="160"/>'
+        '</svg>',
+        "svg_width_percent_only.svg",
+    )
+    # sans viewBox : un pourcentage n'a pas d'effet d'échelle
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">'
+        '<rect x="0" y="0" width="100" height="60"/>'
+        '</svg>',
+        "svg_width_percent_no_viewbox.svg",
+    )
+    # longueurs en % des formes : contre le viewBox, pas contre la taille physique
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 200 100">'
+        '<rect x="10%" y="10%" width="50%" height="50%"/>'
+        '<circle cx="75%" cy="85%" r="10"/>'
+        '</svg>',
+        "svg_percent_shapes_viewbox.svg",
+    )
+    # sans viewBox, svgelements résout contre la taille physique avec largeur et
+    # hauteur permutées (SVG.parse : height, width = s.width, s.height)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+        '<rect x="10%" y="10%" width="50%" height="50%"/>'
+        '</svg>',
+        "svg_percent_shapes_no_viewbox.svg",
+    )
+
     print(f"svg corpus -> {SVG_OUT} ({len(os.listdir(SVG_OUT))} files)")
 
 

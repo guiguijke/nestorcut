@@ -289,35 +289,52 @@ fn emit_path(p: &path::PathBuf, prims: &mut Vec<Primitive>) {
     }
 }
 
-/// ViewBox + viewport handling (SVG.parse root twin): physical width/height
-/// (96 dpi) defaulting to viewBox dims or 1000; viewport transform string.
-fn root_viewport(node: &roxmltree::Node) -> ((f64, f64), String) {
+/// Taille du viewport racine et transform viewBox → viewport (SVG.parse
+/// twin, svgelements 1.9.6).
+///
+/// * `width` / `height` absents valent `100%`, et un pourcentage se résout
+///   contre les dimensions du viewBox (1000 sans viewBox) : `width="100%"`
+///   garde donc l'échelle 1 du viewBox, `width="50%"` la divise par deux.
+///   Chaque attribut se résout seul : un seul des deux en pourcentage, ou
+///   un seul présent, ne change pas l'autre.
+/// * Longueurs `%` des formes : contre le viewBox s'il y en a un ; sinon
+///   svgelements les résout contre la taille physique avec largeur et
+///   hauteur permutées (`height, width = s.width, s.height` dans
+///   `SVG.parse`). Reproduit tel quel : le fichier de coupe doit sortir
+///   pareil des deux chemins.
+/// * viewBox de largeur ou hauteur nulle, ou taille physique nulle avec
+///   viewBox : svgelements rend un document vide (`None` ici).
+fn root_viewport(node: &roxmltree::Node) -> Option<((f64, f64), String)> {
     let viewbox = node.attribute("viewBox").and_then(|vb| {
         let nums = tokenize_floats(vb);
-        if nums.len() == 4 && nums[2] != 0.0 && nums[3] != 0.0 {
+        if nums.len() == 4 {
             Some((nums[0], nums[1], nums[2], nums[3]))
         } else {
             None
         }
     });
     let aspect = node.attribute("preserveAspectRatio").unwrap_or("").to_string();
-    let (w_px, h_px) = match (node.attribute("width"), node.attribute("height")) {
-        (Some(w), Some(h)) => (
-            Length::parse(w).value_px(None),
-            Length::parse(h).value_px(None),
-        ),
-        _ => match viewbox {
-            Some((_, _, vw, vh)) => (vw, vh),
-            None => (1000.0, 1000.0),
-        },
+    let (ref_w, ref_h) = match viewbox {
+        Some((_, _, vw, vh)) => (vw, vh),
+        None => (1000.0, 1000.0),
     };
-    let viewport_transform = match viewbox {
-        None => String::new(),
+    let resolve = |name: &str, rel: f64| -> f64 {
+        Length::parse(node.attribute(name).unwrap_or("100%")).value_px(Some(rel))
+    };
+    let w_px = resolve("width", ref_w);
+    let h_px = resolve("height", ref_h);
+    match viewbox {
+        None => Some(((h_px, w_px), String::new())),
         Some((vbx, vby, vbw, vbh)) => {
-            viewbox_transform(0.0, 0.0, w_px, h_px, vbx, vby, vbw, vbh, &aspect)
+            if w_px == 0.0 || h_px == 0.0 || vbw == 0.0 || vbh == 0.0 {
+                return None;
+            }
+            Some((
+                (vbw, vbh),
+                viewbox_transform(0.0, 0.0, w_px, h_px, vbx, vby, vbw, vbh, &aspect),
+            ))
         }
-    };
-    ((w_px, h_px), viewport_transform)
+    }
 }
 
 /// Viewbox.viewbox_transform twin (SVG 2.0 8.2).
@@ -441,7 +458,11 @@ fn svg_primitives(bytes: &[u8]) -> Result<(Vec<Primitive>, Vec<String>, usize), 
     if root.tag_name().name() != "svg" {
         return Err(ImportError::Corrupt("Unreadable SVG file: root is not <svg>".into()));
     }
-    let (vp, viewport_transform) = root_viewport(&root);
+    let Some((vp, viewport_transform)) = root_viewport(&root) else {
+        return Err(ImportError::Corrupt(
+            "No convertible geometry found in SVG (paths/shapes only)".to_string(),
+        ));
+    };
     // svgelements : transform propre de la racine PUIS viewport transform.
     let mut root_transform = String::new();
     if let Some(t) = attr(&root, "transform") {
