@@ -139,6 +139,10 @@
                         :class="displayClasses"
                         class="modal__display"
                     />
+                    <!-- « Télécharger la tôle n » est secondaire : la fenêtre
+                         multi-tôles porte toujours « Tout télécharger »
+                         (volet du rapport), l'action principale. Deux boutons
+                         pleins côte à côte ne disent plus laquelle choisir. -->
                     <!-- D21 : @pointerdown.stop — sinon setPointerCapture de
                          la scène peut avaler le clic. -->
                     <MainButton
@@ -149,7 +153,7 @@
                         tag="a"
                         :isDisable="isHaveError || isUnfit"
                         :size="sizeType.s"
-                        :theme="themeType.primary"
+                        :theme="themeType.secondary"
                         trackingTag="result_part_download"
                         @pointerdown.stop
                     />
@@ -159,7 +163,7 @@
                         :label="t('result.downloadSheet', { n: activePart + 1 })"
                         :isDisable="isHaveError || isUnfit"
                         :size="sizeType.s"
-                        :theme="themeType.primary"
+                        :theme="themeType.secondary"
                         trackingTag="result_part_download"
                         @pointerdown.stop
                         @click="downloadLocalSheet"
