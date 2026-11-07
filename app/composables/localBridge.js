@@ -1431,7 +1431,11 @@ export function decorateLiveLayout(evt, payload) {
         // Une seule définition partout : aire des pièces / aire des tôles,
         // celle du résultat. Pas de repli sur la densité du moteur (pièces
         // sur bande utilisée, autre échelle) : sans tôle connue, pas de chiffre.
-        const density = sheetArea > 0 ? partsArea / sheetArea : null
+        // La frame finale porte déjà la densité du résultat : ne pas la recalculer
+        // ici, ses `sheets` ne citent qu'un format.
+        const density = evt.densityMeasured
+            ? (evt.density ?? null)
+            : (sheetArea > 0 ? partsArea / sheetArea : null)
         return { ...evt, items, holesFilled, density }
     } catch {
         return evt

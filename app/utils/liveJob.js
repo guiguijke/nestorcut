@@ -169,8 +169,8 @@ export function liveBadgeKind(frame, jobDone = false) {
  * en cours ET la scène affiche le résultat reçu (pas une frame de recherche).
  * Sur le serveur, la vue se retire à la fin : ce signal reste faux.
  */
-export function liveJobDone({ computeRunning, stage, reveal }) {
-    return !computeRunning && !!reveal && stage === reveal
+export function liveJobDone({ computeRunning, jobPending = false, stage, reveal }) {
+    return !computeRunning && !jobPending && !!reveal && stage === reveal
 }
 
 /**

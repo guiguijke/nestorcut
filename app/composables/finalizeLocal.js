@@ -35,6 +35,7 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
         // Même définition que le résultat (pièces / tôles) : la densité brute
         // du moteur (pièces / bande) n'est jamais montrée.
         density: measuredDensity,
+        densityMeasured: true,
         strip_width: bestAlt?.solution?.strip_width ?? bestAlt?.strip_width ?? null,
         used_height: bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null,
         bins: layouts.length,

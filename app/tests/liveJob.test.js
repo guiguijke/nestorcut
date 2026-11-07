@@ -204,6 +204,8 @@ describe('liveJob : badge et longueur utilisée', () => {
         expect(liveJobDone({ computeRunning: true, stage: reveal, reveal })).toBe(false)
         expect(liveJobDone({ computeRunning: false, stage: frame, reveal })).toBe(false)
         expect(liveJobDone({ computeRunning: false, stage: reveal, reveal })).toBe(true)
+        // Bouton encore sur « Calcul en cours » : pas encore « Terminé ».
+        expect(liveJobDone({ computeRunning: false, jobPending: true, stage: reveal, reveal })).toBe(false)
         // serveur : pas de résultat local, jamais fini
         expect(liveJobDone({ computeRunning: false, stage: frame, reveal: null })).toBe(false)
         expect(liveJobDone({ computeRunning: false, stage: null, reveal: null })).toBe(false)

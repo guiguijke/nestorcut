@@ -706,11 +706,13 @@ const stageLive = computed(() => {
     return unref(liveResult) || unref(localReveal) || null
 });
 
-// Le job entier est fini : sur l'appareil, plus aucun calcul en cours ET le
-// résultat reçu est ce que la scène affiche. Sur le serveur la vue se retire
-// à la fin : ce signal peut ne jamais être vrai.
+// Le job entier est fini : sur l'appareil, plus aucun calcul en cours, le bouton
+// est libéré (job du serveur reçu) ET le résultat reçu est ce que la scène
+// affiche. Sur le serveur la vue se retire à la fin : ce signal peut ne jamais
+// être vrai.
 const stageJobDone = computed(() => liveJobDone({
     computeRunning: unref(localComputeRunning),
+    jobPending: !!unref(runningJob) || !!unref(awaitingLocalJob),
     stage: unref(stageLive),
     reveal: unref(localReveal),
 }));
