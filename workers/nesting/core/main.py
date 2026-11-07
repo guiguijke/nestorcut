@@ -1244,8 +1244,12 @@ def _nesting_process_impl(doc):
                 ]
             sheet_pairs = [[float(s.get("width")), float(s.get("height"))] for s in sheets]
             holes_filled = 0
-            density = event.get("density")
-            if items and (meta or has_holes):
+            # Même sans meta ni trous, on repasse par decorate_live_items :
+            # il ne fait alors que mesurer la densité (aire des pièces /
+            # aire des tôles), le chiffre que montre aussi le résultat. La
+            # densité brute du moteur (pièces / bande) ne sort jamais.
+            density = None
+            if items:
                 from core.holefill import decorate_live_items
                 # AA4 (vérif L1 2026-09-05) : PAS d'apply_hole_fill en live —
                 # chaque frame refaisait tout le remplissage (100 hôtes) pour

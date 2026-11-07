@@ -269,6 +269,19 @@ def test_decorate_live_items_expands_meta_without_mutating_source():
     assert src == [[0, 0.0, 0.0, 0.0]]
 
 
+def test_decorate_live_items_sans_meta_mesure_pieces_sur_toles():
+    """Sans meta ni remplissage, la densité vaut aire des pièces / aire des
+    tôles (le chiffre du résultat), et les items sortent inchangés."""
+    from core.holefill import decorate_live_items
+    sq = {"id": 0, "coords": [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+          "holes": [], "count": 1, "rotations": [0]}
+    out, stats = decorate_live_items(
+        [[0, 0.0, 0.0, 0.0]], [sq], 2.0, apply_fill=False, sheets=[[100.0, 100.0]],
+    )
+    assert out == [[0, 0.0, 0.0, 0.0]]
+    assert abs(stats["density"] - 0.01) < 1e-9
+
+
 # --- J4-bis : la forme compressée ne doit jamais avaler une pièce ---------
 #
 # `reduce_for_solve` RETIRE de l'instance moteur la demande des fillers du
