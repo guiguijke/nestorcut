@@ -19,6 +19,23 @@ function statsBlock() {
     return template.slice(start, end)
 }
 
+describe('vue en direct : longueur utilisée', () => {
+    it('le gabarit rend la statistique dans .live__stats, sous usedLengthLabel', () => {
+        const block = statsBlock()
+        expect(block).toContain('data-testid="live-stat-length"')
+        expect(block).toMatch(/v-if="usedLengthLabel"[\s\S]*?data-testid="live-stat-length"/)
+        expect(block).toContain(":value=\"usedLengthLabel\"")
+    })
+
+    it('visible en recherche SPP, absente à l’étape finale et hors SPP', () => {
+        const frame = { feasible: true, isSpp: true, strip_width: 1200, sheets: [[2000, 1000]], items: [] }
+        expect(liveUsedLength(frame, 'searching')).toBe(1200)
+        expect(liveUsedLength(frame, 'final')).toBeNull()
+        expect(liveUsedLength(frame, 'reveal')).toBeNull()
+        expect(liveUsedLength({ ...frame, isSpp: false }, 'searching')).toBeNull()
+    })
+})
+
 describe('vue en direct : densité d’un job serveur', () => {
     const serverJob = { status: 'running' }
 

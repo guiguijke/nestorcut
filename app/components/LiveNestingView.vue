@@ -32,6 +32,13 @@
                     data-testid="live-stat-density"
                 />
                 <UiStat
+                    v-if="usedLengthLabel"
+                    :value="usedLengthLabel"
+                    :label="t('live.width')"
+                    :title="t('live.widthTitle')"
+                    data-testid="live-stat-length"
+                />
+                <UiStat
                     v-if="sheetCount"
                     :value="sheetCount"
                     :label="t('live.sheets')"
