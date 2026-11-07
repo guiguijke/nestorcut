@@ -1245,6 +1245,12 @@ def _nesting_process_impl(doc):
                     for i in items
                 ]
             sheet_pairs = [[float(s.get("width")), float(s.get("height"))] for s in sheets]
+            # Densité : seuls les formats réellement en stock comptent (les
+            # formats à 0 tôle sont filtrés du moteur).
+            density_pairs = [
+                p for s, p in zip(sheets, sheet_pairs)
+                if int(s.get("count") or 0) > 0
+            ] or sheet_pairs
             holes_filled = 0
             # Même sans meta ni trous, on repasse par decorate_live_items :
             # il ne fait alors que mesurer la densité (aire des pièces /
@@ -1263,7 +1269,7 @@ def _nesting_process_impl(doc):
                     items, input_items, space,
                     meta=meta,
                     apply_fill=False,
-                    sheets=sheet_pairs,
+                    sheets=density_pairs,
                 )
                 holes_filled = live_stats.get("holesFilled") or 0
                 if live_stats.get("density") is not None:
@@ -1995,9 +2001,22 @@ def _nesting_process_impl(doc):
         # layouts sont déjà remappés, expansés et remplis. La densité brute
         # du moteur (pièces / bande) ne sort jamais sur le fil live.
         from core.holefill import measured_density
+        # Le format de chaque tôle se lit sur la vraie mise en page
+        # (container_id moteur -> dimensions du format d'origine).
+        _layouts = solution.get("layouts") or []
+        _reveal_bin_dims = {}
+        for li, layout in enumerate(_layouts):
+            dims = bin_dims_engine.get(layout.get("container_id", 0))
+            if dims is None:
+                _reveal_bin_dims = None
+                break
+            _reveal_bin_dims[li] = dims
         reveal_density = measured_density(
             items, input_items,
-            [[float(s.get("width")), float(s.get("height"))] for s in sheets])
+            [[float(s.get("width")), float(s.get("height"))] for s in sheets
+             if int(s.get("count") or 0) > 0] or
+            [[float(s.get("width")), float(s.get("height"))] for s in sheets],
+            bin_dims=None if is_spp else _reveal_bin_dims)
         return {
             "stage": "reveal",
             "worker": rank,

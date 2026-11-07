@@ -564,6 +564,29 @@ def test_measured_density_pieces_sur_toles_multi_bins():
     assert measured_density(items, [sq], None) is None
 
 
+def test_measured_density_deux_formats_aucun_chiffre_faux():
+    """Deux formats différents déclarés : l'indice de tôle d'une frame ne dit
+    pas le format. Ni la première tôle multipliée, ni un chiffre inventé."""
+    from core.holefill import measured_density
+    sq = {"id": 0, "coords": [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+          "holes": [], "count": 3, "rotations": [0]}
+    items = [[0, 0, 0.0, 0.0, 0.0], [0, 1, 0.0, 0.0, 0.0], [0, 1, 0.0, 20.0, 0.0]]
+    sheets = [[100.0, 100.0], [200.0, 200.0]]
+    assert measured_density(items, [sq], sheets) is None
+    # deux formats mais identiques : le chiffre reste sûr
+    assert abs(measured_density(items, [sq], [[100.0, 100.0], [100.0, 100.0]])
+               - 300.0 / 20000.0) < 1e-9
+    # formats connus par la vraie mise en page : somme des vraies aires
+    d = measured_density(items, [sq], sheets,
+                         bin_dims={0: (100.0, 100.0), 1: (200.0, 200.0)})
+    assert abs(d - 300.0 / (10000.0 + 40000.0)) < 1e-9
+    # une tôle utilisée sans format connu : aucun chiffre
+    assert measured_density(items, [sq], sheets, bin_dims={0: (100.0, 100.0)}) is None
+    # SPP : la bande reste l'unique tôle
+    spp = [[0, 0.0, 0.0, 0.0], [0, 0.0, 20.0, 0.0]]
+    assert abs(measured_density(spp, [sq], sheets) - 200.0 / 10000.0) < 1e-9
+
+
 def test_trame_finale_ne_reprend_pas_la_densite_moteur():
     """La trame de révélation mesure la densité ; elle ne lit plus
     metrics.density (pièces / bande) du moteur."""
@@ -573,3 +596,14 @@ def test_trame_finale_ne_reprend_pas_la_densite_moteur():
     body = src[start:start + 3000]
     assert "measured_density(" in body
     assert 'get("metrics", {}).get("density")' not in body
+
+
+def test_trame_finale_lit_le_format_de_chaque_tole():
+    """La trame de révélation lit le format de chaque tôle sur la vraie mise
+    en page (container_id), pas sur la première tôle déclarée."""
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1].joinpath("core", "main.py").read_text(encoding="utf-8")
+    start = src.index("def _alt_to_live(")
+    body = src[start:start + 4500]
+    assert "bin_dims_engine.get(layout.get(\"container_id\", 0))" in body
+    assert "bin_dims=" in body

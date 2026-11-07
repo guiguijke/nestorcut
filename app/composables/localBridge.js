@@ -1419,10 +1419,15 @@ export function decorateLiveLayout(evt, payload) {
             if (isBpp) usedBins.add(raw[1])
         }
         const sheets = evt.sheets || []
-        const w = Number(sheets[0]?.[0]) || 0
-        const h = Number(sheets[0]?.[1]) || 0
-        const nSheets = Math.max(1, usedBins.size || 1)
-        const sheetArea = w * h * nSheets
+        // Une frame ne dit pas quel format porte chaque tôle utilisée : avec
+        // plusieurs formats différents, l'aire des tôles est inconnue — aucun
+        // chiffre plutôt qu'un chiffre faux (première tôle × nombre de tôles).
+        const dims = sheets.map((s) => [Number(s?.[0]) || 0, Number(s?.[1]) || 0])
+        const w = dims[0]?.[0] || 0
+        const h = dims[0]?.[1] || 0
+        const sameFormat = dims.every(([a, b]) => a === w && b === h)
+        const nSheets = isBpp ? Math.max(1, usedBins.size || 1) : 1
+        const sheetArea = (!isBpp || sameFormat) ? w * h * nSheets : 0
         // Une seule définition partout : aire des pièces / aire des tôles,
         // celle du résultat. Pas de repli sur la densité du moteur (pièces
         // sur bande utilisée, autre échelle) : sans tôle connue, pas de chiffre.

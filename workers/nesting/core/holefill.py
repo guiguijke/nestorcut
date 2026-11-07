@@ -881,10 +881,21 @@ def _part_area(item):
     return _ring_area(coords) - sum(_ring_area(h) for h in holes)
 
 
-def measured_density(items, input_items, sheets):
+def _same_dims(sheets):
+    first = (float(sheets[0][0]), float(sheets[0][1]))
+    return all((float(s[0]), float(s[1])) == first for s in sheets)
+
+
+def measured_density(items, input_items, sheets, bin_dims=None):
     """Densité MESURÉE d'une liste d'items live : aire des pièces posées /
     aire des tôles utilisées (le chiffre que montre aussi le résultat).
-    Jamais la densité brute du moteur (pièces / bande). None sans tôle."""
+    Jamais la densité brute du moteur (pièces / bande). None sans tôle.
+
+    Une frame ne dit pas quel FORMAT porte chaque tôle utilisée : son indice
+    de tôle est un rang de mise en page, pas un format. Avec plusieurs formats
+    différents déclarés, l'aire des tôles n'est donc connue que si l'appelant
+    donne `bin_dims` ({indice de tôle: (largeur, hauteur)}, lu sur les vraies
+    mises en page) ; sinon aucun chiffre plutôt qu'un chiffre faux."""
     if not items or not input_items or not sheets:
         return None
     is_bpp = any(isinstance(raw, (list, tuple)) and len(raw) >= 5 for raw in items)
@@ -897,9 +908,20 @@ def measured_density(items, input_items, sheets):
             parts_area += _part_area(it)
         if is_bpp and len(raw) >= 2:
             bins.add(raw[1])
-    w, h = float(sheets[0][0]), float(sheets[0][1])
-    n_sheets = max(1, len(bins) or 1)
-    sheet_area = w * h * n_sheets
+    if not is_bpp:
+        # SPP : la bande est l'unique tôle.
+        sheet_area = float(sheets[0][0]) * float(sheets[0][1])
+    elif bin_dims is not None:
+        sheet_area = 0.0
+        for b in (bins or {0}):
+            dims = bin_dims.get(b)
+            if not dims:
+                return None
+            sheet_area += float(dims[0]) * float(dims[1])
+    elif _same_dims(sheets):
+        sheet_area = float(sheets[0][0]) * float(sheets[0][1]) * max(1, len(bins))
+    else:
+        return None
     return parts_area / sheet_area if sheet_area > 0 else None
 
 
