@@ -105,17 +105,21 @@
                         {{ t('nest.computing') }}
                     </template>
                 </MainButton>
+                <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
+                     grisé, avant tout clic (en bas de page il sortait de l'écran). -->
+                <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
+                    {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+                </p>
                 <p v-if="ctaHint" class="atelier__cta-hint">{{ ctaHint }}</p>
                 <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
                      les premières tôles seulement ; le dire avant le calcul. -->
-                <p v-if="ctaFreeNote" class="atelier__cta-hint" data-testid="free-download-note">
+                <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
                     {{ ctaFreeNote }}
                 </p>
                 </div>
                 <div v-if="capacityPanel" ref="capacityPanelEl">
                 <CapacityPanel
                     :panel="capacityPanel"
-                    :free-note="capacityFreeNote"
                     @add-sheet="onCapacityAddSheet"
                     @reduce-spacing="onCapacityReduceSpacing"
                     @retry="startsNest"
@@ -160,9 +164,6 @@
              paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
         <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
             {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
-        </div>
-        <div v-if="!sizesIsAvailable && !nestRequestError" class="content__error">
-            {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
         </div>
         <ProjectFiles
             :projectFiles="projectFiles"
@@ -852,6 +853,7 @@ const capacityPanel = computed(() => {
         sheets: unref(currentSheets),
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
+        preflightSheets: unref(preflightReport)?.sheetsNeeded ?? null,
     });
 });
 // C04 : le panneau est ancré sous le bouton Nest — sur un petit viewport il
@@ -880,10 +882,8 @@ const freeDownloadNoteText = computed(() =>
 const ctaFreeNote = computed(() =>
     freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
         ? unref(freeDownloadNoteText) : '');
-// Dans le panneau de capacité : levier « environ N tôles nécessaires ».
-const capacityFreeNote = computed(() =>
-    freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
-        ? unref(freeDownloadNoteText) : '');
+// Pas de note Free dans le panneau de refus : rien n'est calculé ni livré, la
+// limite de téléchargement ne concerne pas ce refus.
 // D11 : « Ajouter environ k tôles et relancer » — ajoute k au premier format
 // actif (le plan est calculé par capacityPanelModel), ferme le panneau, trace
 // le clic, puis RELANCE : le bouton Nest respecte ses gardes (btnIsDisable).
@@ -1149,6 +1149,15 @@ const startsNest = () => {
         font-size: var(--fs-12);
         color: var(--label-secondary);
         text-align: center;
+
+        &--refusal {
+            padding: 8px 10px;
+            background-color: var(--error-background);
+            border: solid 1px var(--error-border);
+            border-radius: var(--radius-l);
+            font-size: var(--fs-13);
+            text-align: left;
+        }
     }
 }
 

@@ -246,7 +246,10 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
         expect(slugVue).toContain('data-testid="max-sheets-error"')
         expect(slugVue).toContain('unref(sheetCountTooHigh)')
         expect(slugVue).toContain('data-testid="free-download-note"')
-        expect(slugVue).toContain(':free-note="capacityFreeNote"')
+        // Le refus n'affiche pas la note Free (rien n'est livré) : ni le panneau
+        // de la page, ni la note sous le bouton pendant le refus.
+        expect(slugVue).not.toContain('capacityFreeNote')
+        expect(slugVue).toContain('v-if="ctaFreeNote && !capacityPanel"')
         // k du panneau, trace, puis relance après nextTick (D11).
         expect(slugVue).toMatch(/const onCapacityAddSheet = async \(\) =>/)
         expect(slugVue).toContain("trackEvent('capacity_add_sheets_click'")
@@ -262,5 +265,38 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
         // K et démo transmis explicitement au calcul de l'état (D3).
         expect(slugVue).toContain('paidPlansDisabled: config.public.paidPlansDisabled')
         expect(slugVue).toContain('projectSlug: unref(pageSlug)')
+    })
+})
+
+describe('refus sans contradiction (une source, pas de 0 mm, pas de note Free)', () => {
+    const unfit = { reason: 'capacity', sheetsNeeded: 5, maxPartsAtSpacing: 3, maxSpacingForFitMm: 0 }
+
+    it('le chiffre du pré-vol du bouton remplace celui du refus, partout dans le modèle', () => {
+        const m = capacityPanelModel(unfit, {
+            sheets: [{ width: '1000', height: '1000', count: '1' }], spaceMm: 3, preflightSheets: 6,
+        })
+        expect(m.levers.sheetsNeeded).toBe(6)
+        expect(m.addSheets).toBe(5)
+    })
+
+    it('sans pré-vol, le chiffre du refus reste', () => {
+        const m = capacityPanelModel(unfit, { sheets: [{ width: '1000', height: '1000', count: '1' }], spaceMm: 3 })
+        expect(m.levers.sheetsNeeded).toBe(5)
+    })
+
+    it('un espacement maximal de 0 mm ne se chiffre ni ne se propose : « même sans espacement »', () => {
+        const m = capacityPanelModel(unfit, { sheets: [], spaceMm: 3, kerfMm: null })
+        expect(m.levers.maxSpacingMm).toBeNull()
+        expect(m.reduceSpacingToMm).toBeNull()
+        expect(m.noSpacingGain).toBe(true)
+    })
+
+    it('[slug].vue : le refus « pièce trop grande » est dans le bloc du bouton Nest', () => {
+        const slugVue = source('app/pages/project/[slug].vue')
+        const cta = slugVue.slice(slugVue.indexOf('class="atelier__cta"'), slugVue.indexOf('<CapacityPanel'))
+        expect(cta).toContain("t('project.minSheet'")
+        expect(cta).toContain('data-testid="min-sheet-error"')
+        // plus de second exemplaire en bas de page, hors écran
+        expect(slugVue.match(/t\('project\.minSheet'/g)).toHaveLength(1)
     })
 })
