@@ -55,6 +55,14 @@ svg_result_bucket = get_bucket("nestSvg")
 logger = setup_logger("core_nesting")
 
 
+class UserFacingError(Exception):
+    """Refus dont le message est écrit pour l'utilisateur et peut citer le nom
+    de son fichier. Le gestionnaire générique du worker ne journalise que
+    `log_message`, jamais ce texte."""
+
+    log_message = "Job refused (message withheld from logs: may name a user file)"
+
+
 class JobCancelled(Exception):
     """The user cancelled the job while it was being processed. The job doc
     is already finalized (status=cancelled) when this is raised — the daemon
@@ -677,7 +685,7 @@ def _nesting_process_impl(doc):
                 "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""}
             },
         )
-        raise Exception(message)
+        raise UserFacingError(message)
 
     jaguar_items = []
 
@@ -1470,7 +1478,7 @@ def _nesting_process_impl(doc):
                 "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""}
             },
         )
-        raise Exception(information) from e
+        raise UserFacingError(information) from e
     finally:
         # P2 : flush de la dernière frame live puis arrêt du décorateur,
         # sur tous les chemins (succès, annulation, erreur).
