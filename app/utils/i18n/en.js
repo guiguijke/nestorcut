@@ -571,7 +571,6 @@ export default {
     'report.copy': 'Copy report',
     'report.copied': 'Copied!',
     'report.csv': 'Export CSV',
-    'report.exportLocked': 'Export — Unlimited',
     'report.total': 'Total',
     'report.text.title': 'Nesting report — {name}',
     'report.text.material': 'Material to plan: {formats}',

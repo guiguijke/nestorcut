@@ -305,7 +305,7 @@
             <div class="controls" data-testid="report-actions"><HelpDot topic="downloads" />
                 <MainButton
                     v-if="reportSheets.length"
-                    :label="exportLocked ? t('report.exportLocked') : (copied ? t('report.copied') : t('report.copy'))"
+                    :label="copied ? t('report.copied') : t('report.copy')"
                     :icon="exportLocked ? iconType.lock : undefined"
                     :isDisable="exportDisabled"
                     :size="sizeType.s"
@@ -315,7 +315,7 @@
                 />
                 <MainButton
                     v-if="reportSheets.length"
-                    :label="exportLocked ? t('report.exportLocked') : t('report.csv')"
+                    :label="t('report.csv')"
                     :icon="exportLocked ? iconType.lock : undefined"
                     :isDisable="exportDisabled"
                     :size="sizeType.s"

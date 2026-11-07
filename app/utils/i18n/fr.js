@@ -554,7 +554,6 @@ export default {
     'report.copy': "Copier le rapport",
     'report.copied': "Copié !",
     'report.csv': "Exporter CSV",
-    'report.exportLocked': "Export — Unlimited",
     'report.total': "Total",
     'report.text.title': "Rapport de nesting — {name}",
     'report.text.material': "Matière à prévoir : {formats}",

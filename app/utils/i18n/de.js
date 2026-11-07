@@ -504,7 +504,6 @@ export default {
     "report.copy": "Bericht kopieren",
     "report.copied": "Kopiert!",
     "report.csv": "CSV-Export",
-    "report.exportLocked": "Export — Unlimited",
     "report.total": "Gesamt",
     "report.text.title": "Nesting-Bericht — {name}",
     "report.text.material": "Zu planendes Material: {formats}",
