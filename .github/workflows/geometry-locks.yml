@@ -101,8 +101,8 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Dépendances Python (ezdxf, shapely, svgelements)
-        run: pip install ezdxf==1.4.4 shapely==2.0.7 svgelements==1.9.6 numpy==2.1.3
+      - name: Dépendances Python (ezdxf, shapely, svgelements, pymongo pour dxf_utils)
+        run: pip install ezdxf==1.4.4 shapely==2.0.7 svgelements==1.9.6 numpy==2.1.3 pymongo==4.18.3
       - name: Build CLI natifs
         working-directory: workers/geometry
         run: cargo build --release -p nest-import -p nest-export -p nest-report

@@ -9,6 +9,12 @@
 //!
 //! Échelle non uniforme (`Affine::is_uniform`) : ARC/CIRCLE deviennent ELLIPSE,
 //! et une polyligne à arcs éclate en LINE + ELLIPSE, comme ezdxf.
+//!
+//! Deux écarts connus avec ezdxf, tous deux sur un INSERT imbriqué : les matrices sont
+//! composées ici, alors qu'Insert.transform réécrit l'enfant dans le repère du parent
+//! et perd ce que ce repère ne sait pas dire (enfant tourné sous parent à échelle
+//! inégale, grille de MINSERT sous parent miroir). Verrous : tests block_transforms
+//! et minsert.
 
 use super::entities::{self, Block, Entity, Insert};
 use super::flatten::Primitive;
