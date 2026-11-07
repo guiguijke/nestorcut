@@ -78,6 +78,11 @@ pub struct LwPolyline {
 #[derive(Debug, Clone, Default)]
 pub struct Polyline {
     pub points: Vec<[f64; 2]>,
+    /// Bulge par sommet (groupe 42 du VERTEX), parallèle à `points`, défaut 0.
+    /// Même canal de préservation que `LwPolyline::bulges` : écrit dans le DXF
+    /// canonique et le DXF exporté, jamais lu pour les anneaux de nesting
+    /// (cordes, D-IMP-8). Toujours à 0 hors POLYLINE 2D (3D, maillages).
+    pub bulges: Vec<f64>,
     pub closed: bool,
     pub common: Common,
     /// Handles des sous-entités VERTEX / SEQEND — vides à la lecture source ;
@@ -246,20 +251,22 @@ pub fn read_entity<'a>(
             // Legacy: header codes then VERTEX sub-entities until SEQEND.
             // Mesh vertices (flags 16/32/64) are skipped (ezdxf points() parity).
             let mut e = Polyline::default();
-            let mut cur: Option<([f64; 2], i32)> = None;
+            let mut header_flags = 0;
+            let mut cur: Option<([f64; 2], i32, f64)> = None;
             while let Some((c, v)) = r.next() {
                 if c == 0 {
                     let tag = v.trim();
-                    if let Some((pt, vflags)) = cur.take() {
+                    if let Some((pt, vflags, bulge)) = cur.take() {
                         if vflags & (16 | 32 | 64) == 0 {
                             e.points.push(pt);
+                            e.bulges.push(bulge);
                         }
                     }
                     if tag == "SEQEND" {
                         break;
                     }
                     if tag == "VERTEX" {
-                        cur = Some(([0.0, 0.0], 0));
+                        cur = Some(([0.0, 0.0], 0, 0.0));
                     } else {
                         look = Some((0, tag.to_string()));
                         break;
@@ -279,12 +286,19 @@ pub fn read_entity<'a>(
                             cur = Some(cv);
                         }
                     }
+                    // Bulge du segment qui PART de ce sommet (ezdxf : VERTEX.bulge).
+                    42 => {
+                        if let Some(cv) = cur.as_mut() {
+                            cv.2 = f(v);
+                        }
+                    }
                     70 => {
                         let flags = i(&v, 0);
                         if let Some(mut cv) = cur.take() {
                             cv.1 = flags;
                             cur = Some(cv);
                         } else {
+                            header_flags = flags;
                             e.closed = (flags & 1) != 0;
                         }
                     }
@@ -295,6 +309,10 @@ pub fn read_entity<'a>(
                     _ if cur.is_none() => common_apply(&mut common, c, v),
                     _ => {}
                 }
+            }
+            // Un bulge n'a de sens que sur une POLYLINE 2D (ezdxf : has_arc).
+            if header_flags & (8 | 16 | 64) != 0 {
+                e.bulges.iter_mut().for_each(|b| *b = 0.0);
             }
             e.common = common;
             entity!(Entity::Polyline(e))

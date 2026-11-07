@@ -209,6 +209,7 @@ fn transform_entity(e: &Entity, m: Affine) -> Entity {
         }),
         Entity::Polyline(p) => Entity::Polyline(super::entities::Polyline {
             points: p.points.iter().map(|&pt| m.apply(pt)).collect(),
+            bulges: p.bulges.clone(),
             closed: p.closed,
             common: p.common.clone(),
             vertex_handles: p.vertex_handles.clone(),

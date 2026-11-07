@@ -105,9 +105,11 @@ jobs:
         run: pip install ezdxf==1.4.4 shapely==2.0.7 svgelements==1.9.6 numpy==2.1.3
       - name: Build CLI natifs
         working-directory: workers/geometry
-        run: cargo build --release -p nest-export -p nest-report
+        run: cargo build --release -p nest-import -p nest-export -p nest-report
       - name: Harnais de parité exports (3 régimes)
         run: python workers/geometry/parity/exports_check.py
+      - name: Courbes du DXF canonique et exporté contre ezdxf (WCS, arcs compris)
+        run: python workers/geometry/parity/wcs_check.py
 
   client-server-diff:
     # PR4 : le bundle WASM (chemin navigateur) doit produire les mêmes

@@ -88,11 +88,17 @@ fn write_entity(s: &mut String, e: &Entity, aff: &Affine, handle: &str) -> bool 
             common(s, &p.common, handle);
             int_grp(s, 70, if p.closed { 1 } else { 0 });
             int_grp(s, 66, 1);
-            for pt in &p.points {
+            for (i, pt) in p.points.iter().enumerate() {
                 let q = aff.apply(*pt);
                 grp(s, 0, "VERTEX");
                 num(s, 10, q[0]);
                 num(s, 20, q[1]);
+                // Rotation + translation + échelle uniforme : le bulge ne
+                // change pas. Sans lui, l'arc sort en corde du fichier de coupe.
+                let b = p.bulges.get(i).copied().unwrap_or(0.0);
+                if b != 0.0 {
+                    num(s, 42, b);
+                }
                 int_grp(s, 70, 0);
             }
             grp(s, 0, "SEQEND");

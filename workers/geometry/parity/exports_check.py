@@ -181,6 +181,10 @@ def _canon(doc):
         elif t == "LWPOLYLINE":
             g = ("P", e.closed,
                  tuple(tuple(round(c, 6) for c in p) for p in e.get_points(format="xyb")))
+        elif t == "POLYLINE":
+            g = ("PL", e.is_closed,
+                 tuple((round(v.dxf.location.x, 6), round(v.dxf.location.y, 6), round(v.dxf.bulge, 6))
+                       for v in e.vertices))
         elif t == "ELLIPSE":
             g = ("E", tuple(e.dxf.center)[:2], tuple(e.dxf.major_axis)[:2], e.dxf.ratio,
                  e.dxf.start_param, e.dxf.end_param)
@@ -237,6 +241,8 @@ def dxf_parity():
     msp = src.modelspace()
     msp.add_line((0, 0), (50, 0), dxfattribs={"layer": "CUT"})
     msp.add_lwpolyline([(0, 0, 0.3), (40, 0, 0.0), (40, 20, 0.0), (0, 20, 0.0)],
+                       format="xyb", close=True, dxfattribs={"layer": "CUT"})
+    msp.add_polyline2d([(70, 0, 1.0), (110, 0, 0.0), (110, 20, -0.4), (70, 20, 0.0)],
                        format="xyb", close=True, dxfattribs={"layer": "CUT"})
     msp.add_arc((25, 25), 10, 0, 120, dxfattribs={"layer": "CUT"})
     msp.add_circle((60, 30), 8, dxfattribs={"layer": "CUT"})

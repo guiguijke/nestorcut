@@ -335,6 +335,10 @@ fn write_entity(s: &mut String, e: &Entity) -> bool {
                 grp(s, 100, "AcDbPolyline2dVertex");
                 num(s, 10, pt[0]);
                 num(s, 20, pt[1]);
+                let b = p.bulges.get(i).copied().unwrap_or(0.0);
+                if b != 0.0 {
+                    num(s, 42, b);
+                }
                 int(s, 70, 0);
             }
             grp(s, 0, "SEQEND");
@@ -542,6 +546,7 @@ mod tests {
         let mut ents = vec![
             Entity::Polyline(entities::Polyline {
                 points: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                bulges: vec![0.0; 4],
                 closed: true,
                 common: entities::Common::default(),
                 vertex_handles: vec![],

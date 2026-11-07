@@ -7,6 +7,7 @@ Run from repo root: python workers/geometry/parity/build_corpus.py
 """
 import math
 import os
+import sys
 
 import ezdxf
 
@@ -120,6 +121,54 @@ def main():
     print(f"extended corpus -> {OUT} ({len(os.listdir(OUT))} files)")
 
 
+# ---------------------------------------------------------- fichier de coupe
+# Cas où un import faux donnerait un fichier de coupe faux sans avertissement.
+# Le premier passage les a écrits ; les relancer seuls ne touche pas au reste
+# du corpus : python workers/geometry/parity/build_corpus.py coupe
+
+
+def plate_with_bulges(msp):
+    """Plaque à trou et pièce à arcs de sens opposés, en POLYLINE classique."""
+    msp.add_polyline2d([(0, 0, 1.0), (100, 0, 0.0), (100, 50, 0.0), (0, 50, 0.0)],
+                       format="xyb", close=True)
+    msp.add_polyline2d([(30, 15, 0.2), (50, 15, 0.2), (50, 35, 0.2), (30, 35, 0.2)],
+                       format="xyb", close=True)
+    msp.add_polyline2d([(200, 100, 0.4142135623730951), (240, 100, 0.0),
+                        (240, 140, -0.5), (200, 140, 0.0)], format="xyb", close=True)
+
+
+R12_NO_HANDLE_HEAD = "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n"
+
+
+def r12_no_handle_polyline(vertices):
+    """POLYLINE fermée écrite à la main : R12 sans aucun handle, comme le font
+    d'anciens exporteurs. Le bulge est porté par le groupe 42 du VERTEX."""
+    out = "0\nPOLYLINE\n8\nCUT\n66\n1\n70\n1\n"
+    for x, y, b in vertices:
+        out += f"0\nVERTEX\n8\nCUT\n10\n{x}\n20\n{y}\n"
+        if b:
+            out += f"42\n{b}\n"
+    return out + "0\nSEQEND\n8\nCUT\n"
+
+
+def main_cut_cases():
+    os.makedirs(OUT, exist_ok=True)
+
+    # --- POLYLINE classique à bulges : R2010, R12, R12 écrit à la main.
+    doc = new_doc()
+    plate_with_bulges(doc.modelspace())
+    save(doc, "polyline_bulge.dxf")
+
+    doc = ezdxf.new("R12")
+    plate_with_bulges(doc.modelspace())
+    save(doc, "polyline_bulge_r12.dxf")
+
+    with open(os.path.join(OUT, "polyline_bulge_r12_nohandle.dxf"), "w", encoding="ascii") as f:
+        f.write(R12_NO_HANDLE_HEAD
+                + r12_no_handle_polyline([(0.0, 0.0, 1.0), (100.0, 0.0, 0), (100.0, 50.0, 0), (0.0, 50.0, 0)])
+                + "0\nENDSEC\n0\nEOF\n")
+
+    print(f"cas fichier de coupe -> {OUT}")
 
 
 # ---------------------------------------------------------------- SVG corpus
@@ -238,5 +287,9 @@ def main_svg():
 
 
 if __name__ == "__main__":
-    main()
-    main_svg()
+    if sys.argv[1:] == ["coupe"]:
+        main_cut_cases()
+    else:
+        main()
+        main_svg()
+        main_cut_cases()

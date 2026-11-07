@@ -8,6 +8,7 @@ use nest_export::Placement;
 const BLOCKS_NESTED: &[u8] = include_bytes!("../../../parity/corpus_extra/blocks_nested.dxf");
 const PIECE_TROU: &[u8] = include_bytes!("../../../../fileprocessing/tests/fixtures/Piece_Trou.DXF");
 const SVG_HOLED: &[u8] = include_bytes!("../../../parity/corpus_svg/svg_holed_plate.svg");
+const POLYLINE_BULGE: &[u8] = include_bytes!("../../../parity/corpus_extra/polyline_bulge.dxf");
 
 fn count_entities(dxf: &str) -> usize {
     dxf.lines()
@@ -75,6 +76,59 @@ fn export_identity_finds_every_entity_by_handle_piece_trou() {
 #[test]
 fn export_identity_finds_every_entity_by_handle_svg_holed() {
     roundtrip_identity("svg_holed", SVG_HOLED);
+}
+
+/// Bulges des VERTEX, lus dans le TEXTE exporté par paires (code, valeur).
+fn vertex_bulges(dxf: &str) -> Vec<f64> {
+    let lines: Vec<&str> = dxf.lines().collect();
+    let mut out = Vec::new();
+    let mut in_vertex = false;
+    for pair in lines.chunks(2) {
+        let [code, value] = pair else { break };
+        match code.trim() {
+            "0" => {
+                in_vertex = value.trim() == "VERTEX";
+                if in_vertex {
+                    out.push(0.0);
+                }
+            }
+            "42" if in_vertex => *out.last_mut().unwrap() = value.trim().parse().unwrap(),
+            _ => {}
+        }
+    }
+    out
+}
+
+#[test]
+fn a_placed_classic_polyline_keeps_its_arcs_in_the_cut_file() {
+    // La tôle tourne et translate la pièce : le bulge ne change pas. Valeurs
+    // lues par ezdxf 1.4.4 dans polyline_bulge.dxf (plaque, trou, pièce 3).
+    let res = nest_import::import_file(POLYLINE_BULGE, 0.01).expect("import");
+    let canonical = nest_import::canonical_dxf(POLYLINE_BULGE, 0.01).expect("canonical");
+    let doc = nest_import::dxf::Document::parse(&canonical).expect("reparse");
+    let mut sources = std::collections::HashMap::new();
+    sources.insert("src".to_string(), (doc.entities, doc.blocks));
+    let handles: Vec<String> = res.parts.iter().flat_map(|p| p.handles.clone()).collect();
+    assert_eq!(handles.len(), 3, "les trois POLYLINE sont rattachées à une pièce");
+    let transforms = vec![Placement {
+        item_id: "p".into(),
+        file_slug: "src".into(),
+        handles,
+        angle: std::f64::consts::FRAC_PI_2,
+        x: 500.0,
+        y: 20.0,
+        color: None,
+    }];
+    let out = nest_export::build_part_dxf(&sources, &transforms, false, 0.0, None, None, "mm");
+    let mut bulges = vertex_bulges(&out);
+    bulges.sort_by(f64::total_cmp);
+    let mut expected = vec![
+        1.0, 0.0, 0.0, 0.0, // plaque
+        0.2, 0.2, 0.2, 0.2, // trou
+        0.4142135623730951, 0.0, -0.5, 0.0, // pièce à arcs de sens opposés
+    ];
+    expected.sort_by(f64::total_cmp);
+    assert_eq!(bulges, expected);
 }
 
 #[test]
