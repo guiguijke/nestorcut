@@ -27,6 +27,7 @@ import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 // dans le chemin d'annulation hors transform Nuxt). Le reste du pass
 // structurel reste en import dynamique (lazy).
 import { ZONE_CANCELLED } from './structureClient'
+import { serverRefusalCode } from '~/utils/failureReason'
 
 /**
  * Pass structurel navigateur (miroir de core/structure.py + intégration
@@ -555,7 +556,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         const { itemUnplaceableTarget } = await import('./localGeomError')
         const unplaceable = geomHit ? null : itemUnplaceableTarget(outcome.error, itemMap || payload?.itemMap, payload?.meta?.idMap)
         const geom = geomHit || unplaceable
-        const code = geomHit ? 'item_geometry' : unplaceable ? 'item_unplaceable' : null
+        // Moteur : la bande n'a pas de place pour le conteneur (tôle trop petite pour
+        // les pièces et l'espacement) — son message anglais ne part pas à l'écran.
+        const stripTooSmall = !geomHit && !unplaceable && serverRefusalCode(outcome.error) === 'strip_height'
+        const code = geomHit ? 'item_geometry' : unplaceable ? 'item_unplaceable' : stripTooSmall ? 'strip_height' : null
         await $fetch(`/api/results/${jobSlug}/local-fail`, {
             method: 'POST',
             body: {

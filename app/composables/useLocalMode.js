@@ -78,6 +78,9 @@ export function useLocalMode(projectSlug) {
         // Lot A1 (audit P3-6d) : espacement plus grand que la bande initiale
         // de l'instance — les leviers sont l'espacement et le stock.
         if (err === 'spacing_too_large') return t('localMode.spacingTooLarge')
+        // La tôle est trop petite pour que le moteur y construise une zone : sa phrase
+        // brute (« leaves no room for item separation 0 ») est fausse à espacement 0.
+        if (err === 'strip_height') return t('localMode.stripTooSmall')
         if (err === 'crash') {
             return localOnly ? t('localMode.crashLocal') : t('localMode.crashError')
         }

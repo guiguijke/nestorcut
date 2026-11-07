@@ -8,7 +8,7 @@ import { connectDB } from "~~/server/db/mongo";
 const RESULT_FIELDS = [
     'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly',
     'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
-    'information', 'errorCode', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
+    'information', 'errorCode', 'itemGeometry', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
     'dxf_files', 'svg_files',
     'alternatives.alt_id', 'alternatives.seed', 'alternatives.density',
     'alternatives.usedSheetShare', 'alternatives.strategy', 'alternatives.offcut',
@@ -95,6 +95,10 @@ export async function getResults(userId, projectSlug) {
             // Catégorie d'échec d'un calcul navigateur (liste fermée, local-fail) :
             // le bandeau rejoue le message du direct après un rechargement.
             errorCode: queueItem.errorCode ?? null,
+            // Pièce nommée par un refus du moteur ({ slug, part } 0-based, posé par
+            // local-fail et par le worker) : le bandeau retrouve le nom du fichier
+            // et le rang après un rechargement. Null sur les jobs sans refus nommé.
+            itemGeometry: queueItem.itemGeometry ?? null,
             // Livraison dégradée d'un calcul navigateur (code de liste fermée,
             // posé par local-quota) : la carte le dit, après rechargement aussi.
             degraded: queueItem.degraded ?? null,

@@ -68,6 +68,8 @@ import {
     sheetGateModel,
 } from '~/utils/sheetDownloadGate'
 import { isOnJobProject } from '~/utils/resultNav'
+import { failureDetailText } from '~/utils/failureReason'
+import { useLocalMode } from '~/composables/useLocalMode'
 import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
 
 // Z1/Z3 (vérif 2026-09-05) : actions correctives des bandeaux unfit /
@@ -793,6 +795,15 @@ const onJobProject = computed(() => isOnJobProject(
 // lieu des lignes brutes (« capacity_exceeded »).
 const capacityErrorPanel = computed(() =>
     unref(isHaveError) && Boolean(unref(capacityPanel)) && unref(unfitData)?.reason === 'capacity')
+// Cause de l'échec : la règle du bandeau de la page projet (message traduit, pièce
+// nommée si son fichier est connu, jamais la trace brute du moteur natif).
+const localModeCtl = useLocalMode()
+const failureDetail = computed(() => failureDetailText(
+    unref(resultModalData),
+    t,
+    (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocal), params: params || null }),
+    unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
+))
 // D26 : information Free avant de relancer un calcul de plus de 2 tôles.
 const freeDownloadNote = computed(() =>
     (freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
@@ -898,6 +909,7 @@ const bundle = computed(() => ({
     onJobProject: unref(onJobProject),
     capacityErrorPanel: unref(capacityErrorPanel),
     freeDownloadNote: unref(freeDownloadNote),
+    failureDetail: unref(failureDetail),
     currentSvgs: unref(currentSvgs),
     currentDxfs: unref(currentDxfs),
     previewSheet: unref(previewSheet),

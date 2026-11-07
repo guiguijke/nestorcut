@@ -93,8 +93,8 @@
                 <span class="info__label">
                     {{ t('result.noSolution') }}
                 </span>
-                <span v-if="resultModalData.information" class="info__label info__label--detail">
-                    {{ resultModalData.information }}
+                <span v-if="failureDetail" class="info__label info__label--detail" data-testid="failure-detail">
+                    {{ failureDetail }}
                 </span>
                 <span class="info__label">
                     {{ t('result.neededToPlace', { n: resultModalData.requested }) }}
@@ -484,6 +484,8 @@ const unlockOffered = computed(() => Boolean(props.d.unlockOffered))
 const unlockTotal = computed(() => props.d.unlockTotal)
 const checkoutChecking = computed(() => Boolean(props.d.checkoutChecking))
 const freeDownloadNote = computed(() => props.d.freeDownloadNote || '')
+// Cause de l'échec, avec la même règle que le bandeau de la page : jamais la trace brute du moteur.
+const failureDetail = computed(() => props.d.failureDetail || '')
 const onJobProject = computed(() => Boolean(props.d.onJobProject))
 const capacityErrorPanel = computed(() => Boolean(props.d.capacityErrorPanel))
 // D12 (02/11) : hors du projet du job, un seul bouton « Ouvrir le projet »

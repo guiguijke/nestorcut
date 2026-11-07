@@ -384,7 +384,8 @@ const jobErrorText = computed(() => {
         localErrorText: localComputeError.value ? localErrorText.value : '',
         serverJob: unref(serverJob),
         t,
-        mapLocalError: (code) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject) }),
+        mapLocalError: (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject), params: params || null }),
+        files: projectFiles.value,
     });
 });
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
@@ -445,6 +446,7 @@ watch(
               : p.error === 'item_unplaceable' ? 'item_unplaceable'
               : p.error === 'part_too_large' ? 'part_too_large'
               : p.error === 'spacing_too_large' ? 'spacing_too_large'
+              : p.error === 'strip_height' ? 'strip_height'
               : p.error === 'cancelled' ? null
               : 'crash')
             : null;

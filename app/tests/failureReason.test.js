@@ -11,7 +11,7 @@ import pt from '../utils/i18n/pt'
 const CODES = [
     'memory_cap', 'entity_limit', 'geometry_missing', 'all_alternatives_invalid',
     'capacity_exceeded', 'item_geometry', 'item_unplaceable', 'part_too_large', 'spacing_too_large',
-    'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'merge_failed', 'merge_parse', 'local_unknown',
+    'strip_height', 'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'merge_failed', 'merge_parse', 'local_unknown',
 ]
 
 describe('failureReasonKey', () => {
@@ -54,7 +54,7 @@ describe('failureBannerText', () => {
     const t = (key) => `t:${key}`
 
     it('texte du worker : tel quel, c’est la seule cause connue', () => {
-        const information = 'Nesting failed: the engine found no valid position for part 1 of "a.dxf"'
+        const information = 'Nesting failed: qa cause from the worker'
         expect(failureBannerText({ information }, t)).toBe(information)
     })
 
@@ -82,8 +82,8 @@ describe('failureBannerText', () => {
         // Le stderr peut être vide, ou la mention du moteur absente.
         expect(failureBannerText({ information: 'Nesting failed: engine failed (rc=1, reason=unknown): ' }, t)).toBe('t:result.failed')
         expect(failureBannerText({ information: "thread 'main' panicked at src/main.rs:1:1" }, t)).toBe('t:result.failed')
-        // Un refus lisible du worker reste affiché, même s'il parle du moteur.
-        const lisible = 'Nesting failed: the engine found no valid position for part 1 of "a.dxf"'
+        // Un texte libre lisible du worker reste affiché, même s'il parle du moteur.
+        const lisible = 'Nesting failed: the engine stopped on a precise cause'
         expect(failureBannerText({ information: lisible }, t)).toBe(lisible)
     })
 

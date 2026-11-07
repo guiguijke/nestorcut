@@ -73,6 +73,7 @@ const fullJob = (i, extra = {}) => ({
     information: 'info',
     degraded: 'merge_unavailable',
     errorCode: 'engine_error',
+    itemGeometry: { slug: 'f', part: 2 },
     unfit: { reason: 'partial' },
     progress: { stage: 's', done: 1, total: 2 },
     liveLayout: { sheets: [[1, 2]] },
@@ -111,6 +112,8 @@ describe('getResults — projection, borne et index', () => {
         expect(done.zipDownloadUrl).toBe('/api/files/result/zip/job-1')
         expect(done.degraded).toBe('merge_unavailable')
         expect(done.errorCode).toBe('engine_error')
+        // Pièce nommée par un refus : exposée, sinon le bandeau perd son nom après un rechargement.
+        expect(done.itemGeometry).toEqual({ slug: 'f', part: 2 })
     })
 
     it('un job sans livraison dégradée n’en annonce aucune', async () => {
