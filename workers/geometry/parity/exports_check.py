@@ -129,7 +129,7 @@ def report_parity(tol=1e-6):
     if err:
         return ("report", False, json.dumps(py), json.dumps(rs), err)
     # Régime band (layout > budget) : offcut doit matcher exactement ici.
-    err2 = band_offcut_parity(cmp)
+    err2 = band_offcut_parity(cmp) or nested_in_hole_parity(cmp)
     return ("report", err2 is None, json.dumps(py), json.dumps(rs), err2)
 
 
@@ -155,6 +155,35 @@ def band_offcut_parity(cmp):
         input=json.dumps(spec), capture_output=True, text=True)
     rs = json.loads(r.stdout)["per_sheet"]
     return cmp(py, rs, "band")
+
+
+def nested_in_hole_parity(cmp):
+    """Pièce en L dans un trou en L, et deux vrais chevauchements : le centroïde d'un L fin
+    tombe dans l'encoche du trou, donc dans la matière de l'hôte (B11)."""
+    from core import metrics
+    host = {"id": "host", "coords": [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+            "holes": [[[10, 10], [90, 10], [90, 30], [30, 30], [30, 90], [10, 90], [10, 10]]]}
+
+    def thin_l(dx):
+        pts = [[12 + dx, 12], [88 + dx, 12], [88 + dx, 18], [18 + dx, 18], [18 + dx, 88], [12 + dx, 88]]
+        return {"id": "in", "coords": pts + [pts[0]], "holes": []}
+
+    square = {"id": "sq", "coords": [[92, 92], [98, 92], [98, 98], [92, 98], [92, 92]], "holes": []}
+    for name, other in (("L dans le trou", thin_l(0)), ("L qui mord la paroi", thin_l(-5)),
+                        ("carre sur la matiere", square)):
+        ts = [T("host", 20, 20, 0.0), T(other["id"], 20, 20, 0.0)]
+        items = [host, other]
+        py = metrics.verify_layout([C(200.0, 200.0, ts)], items, 2.0)
+        spec = {"items": items,
+                "containers": [{"bin_width": 200.0, "bin_height": 200.0,
+                                "transforms": [{"item_id": t.item_id, "angle": 0.0, "x": t.x, "y": t.y}
+                                               for t in ts]}],
+                "space": 2.0}
+        rs = json.loads(run([REPORT_CLI], json.dumps(spec)))["verify"]
+        err = cmp(py, rs, name)
+        if err:
+            return err
+    return None
 
 
 def list_of_items(items):

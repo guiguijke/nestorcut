@@ -389,10 +389,25 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                 // la paroi du trou, pas contre l'anneau externe (matériau
                 // fantôme → faux badge overlap / gap 0 côté Python si on ne
                 // soustrait pas les trous ; ici on traite le cas explicitement).
+                //
+                // « i dans un trou de j » se décide par CONTENANCE de l'anneau entier
+                // (ring_inside_ring), pas par le centroïde : celui d'un L fin tombe dans
+                // son encoche, donc dans la matière de l'hôte, et la pièce parfaitement
+                // posée dans un trou en L passait pour un chevauchement (B11). Le centroïde
+                // reste le second critère, pour qu'une pièce qui mord la paroi d'un trou
+                // ne soit jamais lue comme libre : elle tombe alors dans le contrôle ci-dessous.
                 let cc_i = centroids[i];
                 let cc_j = centroids[j];
-                let hole_of_j = placed_polys[j].1.iter().find(|h| geom::point_in_ring(cc_i, h));
-                let hole_of_i = placed_polys[i].1.iter().find(|h| geom::point_in_ring(cc_j, h));
+                let hole_of_j = placed_polys[j]
+                    .1
+                    .iter()
+                    .find(|h| ring_inside_ring(&placed_polys[i].0, h))
+                    .or_else(|| placed_polys[j].1.iter().find(|h| geom::point_in_ring(cc_i, h)));
+                let hole_of_i = placed_polys[i]
+                    .1
+                    .iter()
+                    .find(|h| ring_inside_ring(&placed_polys[j].0, h))
+                    .or_else(|| placed_polys[i].1.iter().find(|h| geom::point_in_ring(cc_j, h)));
                 match (hole_of_i, hole_of_j) {
                     (None, None) => {
                         let d = geom::ring_distance(&placed_polys[i].0, &placed_polys[j].0);
@@ -411,21 +426,27 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                     }
                     (Some(h), None) => {
                         // j nichée dans un trou de i.
-                        let g = geom::ring_gap(&placed_polys[j].0, h);
-                        if g < smallest_gap {
-                            smallest_gap = g;
-                        }
-                        if !ring_inside_ring(&placed_polys[j].0, h) {
+                        if ring_inside_ring(&placed_polys[j].0, h) {
+                            let g = geom::ring_gap(&placed_polys[j].0, h);
+                            if g < smallest_gap {
+                                smallest_gap = g;
+                            }
+                        } else {
+                            // Elle mord la paroi : écart nul, comme shapely.
+                            smallest_gap = 0.0;
                             overlap_free = false;
                         }
                     }
                     (None, Some(h)) => {
                         // i nichée dans un trou de j.
-                        let g = geom::ring_gap(&placed_polys[i].0, h);
-                        if g < smallest_gap {
-                            smallest_gap = g;
-                        }
-                        if !ring_inside_ring(&placed_polys[i].0, h) {
+                        if ring_inside_ring(&placed_polys[i].0, h) {
+                            let g = geom::ring_gap(&placed_polys[i].0, h);
+                            if g < smallest_gap {
+                                smallest_gap = g;
+                            }
+                        } else {
+                            // Elle mord la paroi : écart nul, comme shapely.
+                            smallest_gap = 0.0;
                             overlap_free = false;
                         }
                     }
@@ -768,5 +789,100 @@ mod tests {
         assert_eq!(r["smallestGapMm"], serde_json::json!(2.0), "{r}");
         assert_eq!(r["spacingOk"], serde_json::json!(true), "{r}");
         assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+    }
+
+    // ---- Pièce en L dans un trou en L (B11). Valeurs de référence : shapely, par
+    // `metrics.verify_layout` du worker nesting, sur les mêmes anneaux, tôle 200 x 200,
+    // espacement 2, hôte et pièce posés en (20 ; 20).
+    //   L dans le trou          : smallestGapMm 2.0, overlapFree true,  duplicatePoses 0
+    //   L qui mord la matière   : smallestGapMm 0.0, overlapFree false, duplicatePoses 0
+    //   carré sur la matière    : smallestGapMm 0.0, overlapFree false, duplicatePoses 1
+    // Le centroïde du L fin (33,2 ; 33,2) tombe dans l'encoche du trou, donc dans la matière
+    // de l'hôte : il ne dit pas que la pièce est dans le trou.
+
+    fn closed(mut ring: Vec<Pt>) -> Vec<Pt> {
+        ring.push(ring[0]);
+        ring
+    }
+
+    fn l_hole_host() -> Item {
+        Item {
+            id: "host".into(),
+            coords: closed(vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]),
+            holes: vec![closed(vec![
+                [10.0, 10.0], [90.0, 10.0], [90.0, 30.0], [30.0, 30.0], [30.0, 90.0], [10.0, 90.0],
+            ])],
+        }
+    }
+
+    fn thin_l(dx: f64) -> Item {
+        Item {
+            id: "in".into(),
+            coords: closed(vec![
+                [12.0 + dx, 12.0], [88.0 + dx, 12.0], [88.0 + dx, 18.0],
+                [18.0 + dx, 18.0], [18.0 + dx, 88.0], [12.0 + dx, 88.0],
+            ]),
+            holes: vec![],
+        }
+    }
+
+    fn pair_report(other: Item) -> serde_json::Value {
+        let c = Container {
+            bin_width: 200.0,
+            bin_height: 200.0,
+            transforms: vec![
+                Transform { item_id: "host".into(), angle: 0.0, x: 20.0, y: 20.0 },
+                Transform { item_id: other.id.clone(), angle: 0.0, x: 20.0, y: 20.0 },
+            ],
+        };
+        verify_layout(&[c], &[l_hole_host(), other], 2.0)
+    }
+
+    #[test]
+    fn an_l_part_inside_an_l_hole_is_not_an_overlap() {
+        let r = pair_report(thin_l(0.0));
+        assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(2.0), "{r}");
+        assert_eq!(r["spacingOk"], serde_json::json!(true), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+    }
+
+    #[test]
+    fn an_l_part_biting_into_the_host_material_is_still_an_overlap() {
+        // Décalée de 5 mm vers la gauche : ses sommets (7 ; 12) passent la paroi du trou.
+        let r = pair_report(thin_l(-5.0));
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+        assert_eq!(r["spacingOk"], serde_json::json!(false), "{r}");
+    }
+
+    #[test]
+    fn a_part_lying_on_the_host_material_is_still_an_overlap() {
+        let square = Item {
+            id: "sq".into(),
+            coords: closed(vec![[92.0, 92.0], [98.0, 92.0], [98.0, 98.0], [92.0, 98.0]]),
+            holes: vec![],
+        };
+        let r = pair_report(square);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(1), "{r}");
+    }
+
+    #[test]
+    fn the_order_of_the_pair_does_not_matter() {
+        // La même paire, pièce posée avant l'hôte : le sens i / j s'inverse.
+        let other = thin_l(0.0);
+        let c = Container {
+            bin_width: 200.0,
+            bin_height: 200.0,
+            transforms: vec![
+                Transform { item_id: other.id.clone(), angle: 0.0, x: 20.0, y: 20.0 },
+                Transform { item_id: "host".into(), angle: 0.0, x: 20.0, y: 20.0 },
+            ],
+        };
+        let r = verify_layout(&[c], &[l_hole_host(), other], 2.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(2.0), "{r}");
     }
 }
