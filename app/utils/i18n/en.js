@@ -231,7 +231,6 @@ export default {
     'settings.nestFiles': 'Nest {n} parts',
     'settings.nestFiles.one': 'Nest {n} part',
     'settings.nestFiles.other': 'Nest {n} parts',
-    'settings.directions': 'Layout directions',
     'settings.directions.help': "Each direction packs the parts towards one edge of the sheet (in the drawing's coordinate system): left edge (X = 0), bottom edge (Y = 0), or a balanced mix. Fewer directions = faster result.",
     'settings.directions.left': 'Left edge',
     'settings.directions.leftHint': "Towards the left edge of the sheet (X = 0), in the drawing's axes — follow the arrow",
@@ -267,9 +266,9 @@ export default {
     'nest.capacity.freeDownloadNote': 'On the Free plan, you download the first {cap} sheets; Unlimited unlocks them all.',
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': 'Expired (24 h purge)',
+    'file.quantity': 'Quantity for {name}',
     'file.quantityLabel': 'Quantity',
     'files.quantityHint': 'Every part is set to 1. Use the Quantity counter on each card to set how many to cut.',
-    'file.quantity': 'Quantity for {name}',
     'files.expired': 'Expired (24 h purge) — re-upload this file to nest it again',
     'files.importFailed': 'Import failed',
     'files.importError.dwgMissing': 'DWG conversion is not available on this server: export the file as DXF and upload it again.',
