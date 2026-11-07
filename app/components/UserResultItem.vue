@@ -536,15 +536,17 @@ const onDownload = () => {
         background: var(--danger-bg);
     }
 
+    /* Miniature lisible : une tôle seule occupe la largeur de la carte
+       (plus 64 × 36 px), plusieurs tôles se rangent sur deux colonnes. */
     &__svg-row {
-        max-width: 160px;
+        max-width: 220px;
         display: grid;
         grid-template-columns: 1fr;
-        gap: 4px;
+        gap: 6px;
         margin-bottom: 8px;
 
         &--multi {
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 
@@ -555,6 +557,19 @@ const onDownload = () => {
         height: 36px;
         min-height: 36px;
         overflow: hidden;
+    }
+
+    &__svg-row &__display {
+        width: 100%;
+        height: 96px;
+        min-height: 96px;
+        border: 1px solid var(--separator-secondary);
+        border-radius: var(--radius);
+    }
+
+    &__svg-row--multi &__display {
+        height: 60px;
+        min-height: 60px;
     }
 
     &__placeholder {

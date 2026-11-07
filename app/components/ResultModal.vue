@@ -81,7 +81,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing', 'unfit-open
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
 const { t, tp, fmtPercent, fmtNumber } = useLocale()
-const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
+const { unit, fmtArea: fmtAreaUnit, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
 // passent par les contenus persistés (localDownloads), jamais par une URL
@@ -365,6 +365,17 @@ const previewSheet = computed(() => {
     return { w: 0, h: 0 }
 })
 const reportTotals = computed(() => unref(activeReport)?.totals || null)
+// Une seule unité de surface dans tout le rapport : mm² ou m² se décide sur
+// la plus grande aire en jeu (les tôles), pas valeur par valeur — sinon la
+// même ligne dit « 221 598 mm² de pièces · 1,78 m² libres ».
+const areaScaleMm2 = computed(() => {
+    const r = unref(activeReport)
+    if (!r) return 0
+    const sheetsArea = (Array.isArray(r.sheets) ? r.sheets : [])
+        .reduce((sum, s) => sum + (Number(s?.widthMm) || 0) * (Number(s?.heightMm) || 0), 0)
+    return Math.max(Number(r.sheetAreaMm2) || 0, Number(r.totals?.partsAreaMm2) || 0, sheetsArea)
+})
+const fmtArea = (mm2) => fmtAreaUnit(mm2, unref(areaScaleMm2))
 // Enriched offcut ({widthMm, heightMm, areaMm2, reusable}) — the legacy
 // alternative.offcut {width, height, area} stays the fallback.
 const activeReportOffcut = computed(() => {
@@ -706,9 +717,7 @@ const headlineTitle = computed(() => {
     const quality = []
     const density = altDensityPct(alt)
     if (density != null) quality.push(`${t('result.densityFull')} ${fmtPercent(density)}`)
-    if (alt?.offcut && alt.offcut.area > 1) {
-        quality.push(t('result.cleanOffcut', { w: fmtLength(alt.offcut.width), h: fmtLength(alt.offcut.height) }))
-    }
+    // La chute n'est plus répétée ici : le bloc « Material to plan » la porte.
     const score = quality.join(' · ')
     return score ? `${strategy} · ${score}` : strategy
 })

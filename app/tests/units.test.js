@@ -5,7 +5,7 @@
 // « 1,24 m² » avec une virgule). Verrou exigé par la relecture :
 // fmtLength(1040.4, 'mm', 'it'|'fr') ⇒ « 1040,4 mm », 'en' ⇒ « 1040.4 mm ».
 import { describe, expect, it } from 'vitest'
-import { fmtLength, fmtLengthValue } from '../utils/units'
+import { fmtArea, fmtLength, fmtLengthValue } from '../utils/units'
 
 describe('fmtLength suit la locale (relecture A L2)', () => {
     it('la virgule décimale suit la langue de l\'application', () => {
@@ -35,5 +35,26 @@ describe('fmtLength suit la locale (relecture A L2)', () => {
         // 48,5 mm = 1,909" — la valeur d'entrée est TOUJOURS en mm.
         expect(fmtLengthValue(48.5, 'inch', undefined, 'en')).toBe('1.909')
         expect(fmtLengthValue(48.9, 'inch', undefined, 'fr')).toBe('1,925')
+    })
+})
+
+describe('fmtArea : une seule unité sur une même ligne', () => {
+    it('sans échelle, chaque valeur choisit son unité (comportement historique)', () => {
+        expect(fmtArea(221598, 'mm', 'en')).toBe('221,598 mm²')
+        expect(fmtArea(1780000, 'mm', 'en')).toBe('1.78 m²')
+    })
+
+    it('avec l\'échelle des tôles, pièces et libre sont dans la même unité', () => {
+        expect(fmtArea(221598, 'mm', 'en', 2000000)).toBe('0.22 m²')
+        expect(fmtArea(1778402, 'mm', 'en', 2000000)).toBe('1.78 m²')
+        expect(fmtArea(0, 'mm', 'en', 2000000)).toBe('0 m²')
+    })
+
+    it('une petite aire à côté d\'une grande ne s\'écrit pas 0 m²', () => {
+        expect(fmtArea(1500, 'mm', 'en', 2000000)).toBe('0.0015 m²')
+    })
+
+    it('une échelle sous le seuil garde les mm²', () => {
+        expect(fmtArea(221598, 'mm', 'en', 500000)).toBe('221,598 mm²')
     })
 })

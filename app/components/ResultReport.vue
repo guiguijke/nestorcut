@@ -108,11 +108,28 @@
                 ref="reportEl"
                 class="modal__report report"
             >
-                <!-- U3 passe 2 : la densite vit dans l'en-tete du volet
-                     (grand chiffre) — la repeter ici faisait doublon. -->
-                <div class="report__row report__row--detail">
-                    <span>{{ t('report.areas', { parts: fmtArea(activeReport.partsAreaMm2), free: fmtArea(freeAreaMm2) }) }}</span>
-                    <span v-if="activeReportOffcut" class="report__offcut">
+                <!-- Bloc de tête « quoi commander » : le format et le nombre de
+                     tôles en gros, les aires dans UNE seule unité, la chute
+                     une seule fois (la densité vit dans l'en-tête du volet). -->
+                <section
+                    class="report__order order"
+                    data-testid="report-order"
+                    :aria-label="t('report.material')"
+                >
+                    <h3 class="order__title">{{ t('report.material') }}</h3>
+                    <p
+                        v-if="reportTotals && materialFormats"
+                        class="order__formats"
+                        data-testid="report-material"
+                    >{{ materialFormats }}</p>
+                    <p class="order__areas" data-testid="report-areas">
+                        {{ t('report.areas', { parts: fmtArea(activeReport.partsAreaMm2), free: fmtArea(freeAreaMm2) }) }}
+                    </p>
+                    <p
+                        v-if="activeReportOffcut"
+                        class="order__offcut report__offcut"
+                        data-testid="report-offcut"
+                    >
                         {{ t('report.offcut', { w: fmtLengthValue(activeReportOffcut.widthMm), h: fmtLengthValue(activeReportOffcut.heightMm), unit: unitLabel }) }}
                         · {{ fmtArea(activeReportOffcut.areaMm2) }}
                         <span
@@ -122,9 +139,13 @@
                             {{ activeReportOffcut.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap') }}
                         </span>
                         <span class="report__hint">&nbsp;({{ t('report.offcut.atLeast') }})<HelpDot topic="offcut" /></span>
-                    </span>
-                    <span v-else-if="activeOffcut">{{ t('report.offcut', { w: fmtLengthValue(activeOffcut.width), h: fmtLengthValue(activeOffcut.height), unit: unitLabel }) }}</span>
-                </div>
+                    </p>
+                    <p
+                        v-else-if="activeOffcut"
+                        class="order__offcut"
+                        data-testid="report-offcut"
+                    >{{ t('report.offcut', { w: fmtLengthValue(activeOffcut.width), h: fmtLengthValue(activeOffcut.height), unit: unitLabel }) }}</p>
+                </section>
                 <!-- Lot J4-bis : les constats de réserve d'amorce. Sans eux
                      la dégradation est SÛRE mais MUETTE : un trou laissé vide
                      parce que l'amorce n'y tenait pas ne se voyait nulle part.
@@ -140,13 +161,6 @@
                         class="report__hint"
                     >{{ note }}</span>
                 </div>
-                <div
-                    v-if="reportTotals"
-                    class="report__row report__row--detail report__material"
-                >
-                    <span class="report__label">{{ t('report.material') }}</span>
-                    <span class="report__value">{{ materialFormats }}</span>
-                </div>
                 <!-- a11y : une zone qui défile doit être atteignable au
                      clavier (axe « scrollable-region-focusable » en mobile,
                      ou le tableau n'est jamais lisible sans souris). -->
@@ -157,23 +171,26 @@
                     role="region"
                     :aria-label="t('report.material')"
                 >
-                    <table class="report__table">
-                        <thead>
-                            <tr>
-                                <th>{{ t('report.sheet.num') }}</th>
-                                <th>{{ t('report.sheet.format') }}</th>
-                                <th>{{ t('report.sheet.parts') }}</th>
-                                <th class="report__col-area">{{ t('report.sheet.used') }}</th>
-                                <th class="report__col-area">{{ t('report.sheet.free') }}</th>
-                                <th>{{ t('report.sheet.density') }}</th>
-                                <th>{{ t('report.sheet.offcut') }}</th>
+                    <!-- Rôles explicites : sur téléphone le tableau devient une
+                         pile de mini-cartes (display: block) et garde ainsi
+                         sa sémantique de tableau. -->
+                    <table class="report__table" role="table">
+                        <thead role="rowgroup">
+                            <tr role="row">
+                                <th role="columnheader">{{ t('report.sheet.num') }}</th>
+                                <th role="columnheader">{{ t('report.sheet.format') }}</th>
+                                <th role="columnheader">{{ t('report.sheet.parts') }}</th>
+                                <th role="columnheader" class="report__col-area">{{ t('report.sheet.used') }}</th>
+                                <th role="columnheader" class="report__col-area">{{ t('report.sheet.free') }}</th>
+                                <th role="columnheader">{{ t('report.sheet.density') }}</th>
+                                <th v-if="showOffcutCol" role="columnheader">{{ t('report.sheet.offcut') }}</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            <tr v-for="s in reportSheets" :key="s.index" data-testid="report-row">
-                                <td>{{ s.index + 1 }}</td>
-                                <td class="report__cell-sheet">
-                                    {{ fmtLengthValue(s.widthMm) }} × {{ fmtLengthValue(s.heightMm) }} {{ unitLabel }}
+                        <tbody role="rowgroup">
+                            <tr v-for="s in reportSheets" :key="s.index" role="row" data-testid="report-row">
+                                <td role="cell" :data-label="t('report.sheet.num')">{{ s.index + 1 }}</td>
+                                <td role="cell" class="report__cell-sheet" :data-label="t('report.sheet.format')">
+                                    <span class="report__dims">{{ sheetDims(s.widthMm, s.heightMm) }}</span>
                                     <!-- Volet etroit : « Utilise » et « Libre »
                                          ne sont pas perdus, ils passent en
                                          ligne secondaire sous le format. -->
@@ -182,19 +199,19 @@
                                         · {{ t('report.sheet.free') }} {{ fmtArea(s.freeAreaMm2) }}
                                     </span>
                                 </td>
-                                <td>{{ s.partCount }}</td>
-                                <td class="report__col-area">
+                                <td role="cell" :data-label="t('report.sheet.parts')">{{ s.partCount }}</td>
+                                <td role="cell" class="report__col-area">
                                     <span class="report__area">{{ fmtAreaStacked(s.partsAreaMm2).main }}</span>
                                     <span v-if="fmtAreaStacked(s.partsAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.partsAreaMm2).sub }}</span>
                                 </td>
-                                <td class="report__col-area">
+                                <td role="cell" class="report__col-area">
                                     <span class="report__area">{{ fmtAreaStacked(s.freeAreaMm2).main }}</span>
                                     <span v-if="fmtAreaStacked(s.freeAreaMm2).sub" class="report__area-sub">{{ fmtAreaStacked(s.freeAreaMm2).sub }}</span>
                                 </td>
-                                <td>{{ s.densityPct != null ? fmtPercent(s.densityPct) : '—' }}</td>
-                                <td class="report__cell-offcut">
+                                <td role="cell" :data-label="t('report.sheet.density')">{{ s.densityPct != null ? fmtPercent(s.densityPct) : '—' }}</td>
+                                <td v-if="showOffcutCol" role="cell" class="report__cell-offcut" :data-label="t('report.sheet.offcut')">
                                     <template v-if="s.offcut">
-                                        {{ fmtLengthValue(s.offcut.widthMm) }} × {{ fmtLengthValue(s.offcut.heightMm) }} {{ unitLabel }}
+                                        <span class="report__dims">{{ sheetDims(s.offcut.widthMm, s.offcut.heightMm) }}</span>
                                         <span
                                             class="report__badge report__badge--block"
                                             :class="{ 'report__badge--scrap': !s.offcut.reusable }"
@@ -419,6 +436,7 @@
 import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
+import { nbspDims, showSheetOffcutColumn } from '~/utils/reportLayout'
 
 const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
@@ -433,6 +451,11 @@ const fmtArea = (...a) => props.d.fmtArea(...a)
 const fmtLength = (...a) => props.d.fmtLength(...a)
 const fmtLengthValue = (...a) => props.d.fmtLengthValue(...a)
 const fmtAreaStacked = (...a) => props.d.fmtAreaStacked(...a)
+// Dimensions d'un seul tenant (espaces insécables) et colonne « Chute » seulement
+// si elle apporte une information que le bloc de tête n'a pas déjà.
+const sheetDims = (w, h) => nbspDims(fmtLengthValue(w), fmtLengthValue(h), props.d.unitLabel)
+const showOffcutCol = computed(() =>
+    showSheetOffcutColumn(props.d.reportSheets, props.d.activeReportOffcut || props.d.activeOffcut))
 const unitLabel = computed(() => props.d.unitLabel)
 const resultModalData = computed(() => props.d.resultModalData)
 const isHaveError = computed(() => props.d.isHaveError)
@@ -783,13 +806,6 @@ defineExpose({ reportEl })
         color: var(--label-tertiary);
     }
 
-    &__material {
-        padding-top: 10px;
-        margin-top: 2px;
-        border-top: 1px solid var(--separator-secondary);
-        font-size: var(--fs-14);
-    }
-
     /* U3 passe 3 : le tableau s'adapte a la LARGEUR DU VOLET (requete de
        conteneur), pas a celle de la fenetre. Sous 1200 px de volet il
        tombe a cinq colonnes — #, Tole, Pieces, Densite, Chute — et
@@ -876,12 +892,119 @@ defineExpose({ reportEl })
         }
     }
 
+    &__dims {
+        white-space: nowrap;
+    }
+
+    /* Téléphone : le tableau devient une pile de mini-cartes, une par tôle —
+       chaque valeur porte son libellé, plus aucune colonne coupée. */
+    @container (max-width: 560px) {
+        .report__table {
+            display: block;
+            white-space: normal;
+
+            thead {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip-path: inset(50%);
+            }
+
+            tbody {
+                display: block;
+            }
+
+            tbody tr {
+                display: block;
+                padding: 8px 0;
+
+                &:not(:last-child) {
+                    border-bottom: 1px solid var(--separator-secondary);
+                }
+            }
+
+            tbody tr:not(:last-child) td {
+                border-bottom: 0;
+            }
+
+            td {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 2px 12px;
+                padding: 2px 0;
+                text-align: right;
+
+                &::before {
+                    content: attr(data-label);
+                    flex-shrink: 0;
+                    font-weight: 600;
+                    text-align: left;
+                    color: var(--label-tertiary);
+                }
+            }
+
+            td.report__col-area {
+                display: none;
+            }
+        }
+
+        .report__cell-sheet,
+        .report__cell-offcut {
+            min-width: 0;
+        }
+
+        .report__sheet-sub {
+            flex: 1 1 100%;
+            text-align: right;
+        }
+
+        .report__badge--block {
+            margin-top: 0;
+        }
+    }
+
     &__engine {
         font-size: var(--fs-12);
         color: var(--label-tertiary);
         font-variant-numeric: tabular-nums;
     }
 }
+
+/* Bloc de tête « quoi commander » : ce que l'atelier achète, lisible d'un
+   coup d'œil — le format et le nombre de tôles en gros, les aires et la chute
+   en dessous. */
+.order {
+    margin: 0 0 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--separator-secondary);
+    font-variant-numeric: tabular-nums;
+
+    &__title {
+        margin: 0 0 2px;
+        font-size: var(--fs-12);
+        font-weight: 600;
+        color: var(--label-tertiary);
+    }
+
+    &__formats {
+        margin: 0;
+        font-size: var(--fs-18);
+        font-weight: 800;
+        line-height: 1.25;
+        color: var(--label-primary);
+    }
+
+    &__areas,
+    &__offcut {
+        margin: 4px 0 0;
+        font-size: var(--fs-14);
+        color: var(--label-secondary);
+    }
+}
+
 
 .controls {
     display: flex;

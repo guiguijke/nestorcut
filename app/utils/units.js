@@ -157,8 +157,13 @@ export function fmtLength(mm, unit, locale) {
  * numbers stay readable). inch: in² plus ft² in parentheses — square
  * footage is the estimator number for material purchasing (used/free per
  * sheet).
+ *
+ * `scaleMm2` (optionnel) : l'unité (mm² ou m²) se choisit sur CETTE aire et
+ * non sur la valeur affichée. Plusieurs aires affichées ensemble (pièces,
+ * libre, chute) passent la plus grande : toutes dans la même unité, jamais
+ * « 221 598 mm² » à côté de « 1,78 m² » sur la même ligne.
  */
-export function fmtArea(mm2, unit, locale) {
+export function fmtArea(mm2, unit, locale, scaleMm2) {
     const v = Number(mm2)
     if (!Number.isFinite(v)) return '—'
     // L1/A-bis : les aires passent par Intl — en pt-BR le point sépare les
@@ -176,7 +181,14 @@ export function fmtArea(mm2, unit, locale) {
         const ft2 = in2 / SQIN_PER_SQFT
         return `${nf(0).format(in2)} in² (${nf(2).format(ft2)} ft²)`
     }
-    if (Math.abs(v) >= 1e6) return `${nf(2).format(v / 1e6)} m²`
+    const scale = Number.isFinite(Number(scaleMm2)) && scaleMm2 != null
+        ? Math.max(Math.abs(v), Math.abs(Number(scaleMm2)))
+        : Math.abs(v)
+    if (scale >= 1e6) {
+        // Une aire minuscule à côté d'une grande ne s'écrit pas « 0 m² ».
+        const small = v !== 0 && Math.abs(v) < 1e4
+        return `${nf(small ? 4 : 2).format(v / 1e6)} m²`
+    }
     return `${nf(0).format(v)} mm²`
 }
 
