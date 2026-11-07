@@ -40,8 +40,8 @@
                 </div>
                 <MainButton
                     :theme="tier.highlighted ? themeType.primary : themeType.secondary"
-                    :label="userIsSet ? t('plans.cta.manageInProfile') : tier.cta"
-                    :isDisable="Boolean(tier.comingSoon && !userIsSet)"
+                    :label="ctaFor(tier).label"
+                    :isDisable="ctaFor(tier).disabled"
                     @click="onTierClick(tier)"
                     class="cards__cta"
                 />
@@ -96,6 +96,7 @@ import {
     PRO_PRICE_LABEL,
 } from '~~/shared/constants/payment.constants'
 import { flagOn } from '~/utils/runtimeFlag'
+import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, signedInPlanCta } from '~/utils/planBenefits'
 
 onMounted(() => {
     trackEvent('page_view', { page: 'plans' })
@@ -163,6 +164,37 @@ const measuredByTier = computed(() => {
     return out
 })
 
+// Connecté : l'essai n'est offert qu'une fois (serveur : trialEligible). Lu
+// côté client seulement ; tant qu'on ne le sait pas, aucune carte ne promet
+// d'essai (signedInPlanCta).
+const { data: subscriptionInfo, execute: loadSubscriptionInfo } = useFetch('/api/payment/subscription', {
+    key: 'plans-subscription-info',
+    server: false,
+    immediate: false,
+})
+onMounted(() => {
+    if (userIsSet.value) loadSubscriptionInfo()
+})
+watch(userIsSet, (isSet) => {
+    if (isSet && import.meta.client) loadSubscriptionInfo()
+})
+
+// Libellé et état du bouton d'une carte : anonyme = libellé de la carte ;
+// connecté = « Votre offre » / essai / profil selon le palier (signedInPlanCta).
+function ctaFor(tier) {
+    if (!userIsSet.value) {
+        return { label: tier.cta, disabled: Boolean(tier.comingSoon) }
+    }
+    const info = unref(subscriptionInfo)
+    const cta = signedInPlanCta({
+        tierKey: tier.tierKey,
+        level: unref(authGetters.user)?.compute?.level,
+        trialEligible: typeof info?.trialEligible === 'boolean' ? info.trialEligible : undefined,
+        comingSoon: tier.comingSoon,
+    })
+    return { label: t(cta.labelKey, { days: TRIAL_DAYS }), disabled: cta.disabled }
+}
+
 const formatPlanPrice = (plan) => {
     if (!plan?.available) return null
     return new Intl.NumberFormat('en', {
@@ -208,11 +240,7 @@ const tiers = computed(() => {
             highlighted: true,
             description: t('plans.unlimited.desc'),
             features: [
-                t('plans.unlimited.f1'),
-                t('plans.unlimited.f2'),
-                t('plans.unlimited.f3'),
-                t('plans.unlimited.f4'),
-                t('plans.unlimited.f5'),
+                ...UNLIMITED_FEATURE_KEYS.map((key) => t(key)),
             ],
             // When paid plans are disabled, the card stays visible (price +
             // features) but the CTA shows "Coming soon" and does nothing.
@@ -231,9 +259,7 @@ const tiers = computed(() => {
             badgeKind: 'pro',
             description: t('plans.pro.desc'),
             features: [
-                t('plans.pro.f1'),
-                t('plans.pro.f2'),
-                t('plans.pro.f3'),
+                ...PRO_FEATURE_KEYS.map((key) => t(key)),
             ],
             cta: proAvailable && !paidDisabled.value ? t('plans.cta.getPro') : t('plans.cta.comingSoon'),
             comingSoon: !proAvailable || paidDisabled.value,

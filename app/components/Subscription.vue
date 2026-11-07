@@ -75,6 +75,9 @@
                 <span class="subscription__interval">/ {{ data.privacyPlan.interval }}</span>
             </div>
             <p class="subscription__desc">{{ t('sub.proDesc') }}</p>
+            <p v-if="!isStripeActive && !paidDisabled" class="subscription__terms" data-testid="subscription-terms-pro">
+                {{ t(proTerms.key, proTerms.params) }}
+            </p>
             <MainButton
                 v-if="!paidDisabled"
                 :label="t('sub.upgradePro')"
@@ -111,6 +114,12 @@
                 <div v-if="!ctxMessage" class="subscription__reset">
                     {{ t('sub.resetsAt', { date: quotaResetLabel }) }}
                 </div>
+                <ul class="subscription__features" data-testid="subscription-features">
+                    <li v-for="key in UNLIMITED_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
+                </ul>
+                <p v-if="!paidDisabled" class="subscription__terms" data-testid="subscription-terms">
+                    {{ t(unlimitedTerms.key, unlimitedTerms.params) }}
+                </p>
                 <MainButton
                     v-if="!paidDisabled"
                     :label="trialEligible ? t('sub.startTrial', { days: data.plan.trialDays }) : t('sub.subscribe')"
@@ -133,6 +142,29 @@
                     {{ t('sub.cancelTrialNote') }}
                 </p>
             </div>
+            <div v-if="data?.plan && data?.privacyPlan" class="subscription__plan subscription__plan--pro" data-testid="subscription-pro-offer">
+                <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
+                <div class="subscription__price">
+                    {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
+                    <span class="subscription__interval">/ {{ data.privacyPlan.interval }}</span>
+                </div>
+                <ul class="subscription__features">
+                    <li v-for="key in PRO_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
+                </ul>
+                <p v-if="!paidDisabled" class="subscription__terms" data-testid="subscription-terms-pro">
+                    {{ t(proTerms.key, proTerms.params) }}
+                </p>
+                <MainButton
+                    v-if="!paidDisabled"
+                    :label="trialEligible ? t('sub.startTrial', { days: data.privacyPlan.trialDays }) : t('sub.subscribe')"
+                    :theme="themeType.secondary"
+                    :size="sizeType.m"
+                    :isDisable="isLoading"
+                    trackingTag="subscription_start_trial_pro"
+                    class="subscription__btn"
+                    @click="subscribePro"
+                />
+            </div>
             <div v-else class="subscription__desc">
                 {{ t('sub.unavailable') }}
             </div>
@@ -151,6 +183,7 @@ import { formatQuotaReset } from '~/utils/quotaReset'
 import { hasPaidAccess } from '~/utils/entitlementUi'
 import { flagOn } from '~/utils/runtimeFlag'
 import { trackEvent } from '~/utils/track'
+import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, formatPlanMoney } from '~/utils/planBenefits'
 import { writeCheckoutIntent } from '~/utils/checkoutReturn'
 import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
 
@@ -224,14 +257,21 @@ const statusLabel = computed(() => {
     return status || ''
 })
 
-const formatPrice = (amount, currency) => {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-    }).format(amount)
-}
+const formatPrice = formatPlanMoney
+
+// D02 : ce que fait le Checkout, dit AVANT le clic. Prix et devise viennent
+// du plan lu côté serveur ; la date = aujourd'hui + durée d'essai connue.
+const termsFor = (plan) =>
+    checkoutTerms({
+        trialEligible: trialEligible.value,
+        trialDays: plan?.trialDays,
+        amount: plan?.amount,
+        currency: plan?.currency,
+        now: new Date(),
+        locale: locale.value,
+    })
+const unlimitedTerms = computed(() => termsFor(unref(data)?.plan))
+const proTerms = computed(() => termsFor(unref(data)?.privacyPlan))
 
 // O3 « sans recharger » : le palier de l'interface (useNuxtData('user')) se
 // rafraîchit dès que l'abonnement est actif côté Stripe alors que l'interface
@@ -459,6 +499,27 @@ const cancelSubscription = async () => {
         font-size: var(--fs-14);
         line-height: 1.45;
         color: var(--label-primary);
+    }
+
+    &__features {
+        margin: 14px 0 0;
+        padding-left: 18px;
+        font-size: var(--fs-13);
+        color: var(--label-secondary);
+        line-height: 1.5;
+    }
+
+    &__terms {
+        margin-top: 12px;
+        font-size: var(--fs-13);
+        color: var(--label-primary);
+        line-height: 1.4;
+    }
+
+    &__plan--pro {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--separator-secondary);
     }
 
     &__note {
