@@ -752,8 +752,10 @@ const formatElapsed = (sec) => {
 
     &__header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
+        min-width: 0;
         font-size: var(--fs-13);
         color: var(--label-primary);
     }
@@ -783,8 +785,19 @@ const formatElapsed = (sec) => {
     /* U3 passe 3 : rangée de UiStat alignée à droite de l'en-tête. */
     &__stats {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
-        gap: var(--sp-4);
+        gap: var(--sp-2) var(--sp-4);
+        min-width: 0;
+        max-width: 100%;
+
+        // Téléphone : les statistiques passent sous le titre et à la ligne,
+        // libellés entiers (compteur de cœurs compris), au lieu d'une rangée
+        // unique coupée par le bord de l'écran.
+        @media (max-width: 640px) {
+            flex: 1 1 100%;
+            gap: var(--sp-2) var(--sp-3);
+        }
     }
 
     &__stat--accent :deep(.ui-stat__value) {
