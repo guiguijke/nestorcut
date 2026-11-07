@@ -166,4 +166,6 @@ export const TRACK_ACTIONS = [
     'checkout_return',
     'capacity_add_sheets_click',
     'capacity_open_project_click',
+    // Bouton « Ouvrir la démo » de l'accueil (compte sans projet).
+    'click_home_demo_open',
 ]
