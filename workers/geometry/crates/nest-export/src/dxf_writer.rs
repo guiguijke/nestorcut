@@ -237,24 +237,26 @@ pub fn build_part_dxf(
             Some(v) => v,
             None => continue,
         };
-        let by_handle: HashMap<&str, &Entity> =
-            ents.iter().map(|e| (handle_of(e), e)).collect();
+        // Un handle peut porter plusieurs entités : une polyligne à arcs sous normale
+        // oblique sort de la lecture éclatée (copie canonique écrite par ezdxf).
+        let mut by_handle: HashMap<&str, Vec<&Entity>> = HashMap::new();
+        for e in ents {
+            by_handle.entry(handle_of(e)).or_default().push(e);
+        }
         for t in file_transforms {
             let aff = Affine::new(t.angle, t.x, t.y, unit_scale);
             for h in &t.handles {
-                let e = match by_handle.get(h.as_str()) {
-                    Some(e) => *e,
-                    None => continue,
-                };
-                if !layers.iter().any(|(n, _)| *n == layer_of(e)) {
-                    layers.push((layer_of(e), 7));
+                for e in by_handle.get(h.as_str()).into_iter().flatten().copied() {
+                    if !layers.iter().any(|(n, _)| *n == layer_of(e)) {
+                        layers.push((layer_of(e), 7));
+                    }
+                    let hnd = next_handle(&mut hid);
+                    write_entity(&mut body, e, &aff, &hnd);
                 }
-                let hnd = next_handle(&mut hid);
-                write_entity(&mut body, e, &aff, &hnd);
             }
             // OUT_SHAPE bbox (avant scale unité : on accumule en mm puis on
             // scale à l'émission).
-            if let Some(bb) = bbox::entities_bbox(&collected(ents, &t.handles, &by_handle), blocks, &Affine::new(t.angle, t.x, t.y, 1.0))
+            if let Some(bb) = bbox::entities_bbox(&collected(&t.handles, &by_handle), blocks, &Affine::new(t.angle, t.x, t.y, 1.0))
             {
                 out_bbox = Some(match out_bbox {
                     None => bb,
@@ -351,15 +353,12 @@ pub fn build_part_dxf(
     s
 }
 
-fn collected<'a>(
-    ents: &'a [Entity],
-    handles: &[String],
-    by_handle: &HashMap<&'a str, &'a Entity>,
-) -> Vec<Entity> {
-    let _ = (ents,);
+fn collected(handles: &[String], by_handle: &HashMap<&str, Vec<&Entity>>) -> Vec<Entity> {
     handles
         .iter()
-        .filter_map(|h| by_handle.get(h.as_str()).map(|e| (*e).clone()))
+        .filter_map(|h| by_handle.get(h.as_str()))
+        .flatten()
+        .map(|e| (*e).clone())
         .collect()
 }
 

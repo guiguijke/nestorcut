@@ -5,7 +5,7 @@
 //! Protocol: each reader stops AT the (0, name) group that starts the next
 //! entity and RETURNS it as lookahead — the caller re-dispatches it.
 
-use super::{GroupReader, parse_f64};
+use super::{decompose, GroupReader, parse_f64};
 
 pub type Lookahead = Option<(i32, String)>;
 
@@ -141,6 +141,9 @@ pub struct Insert {
     pub xscale: f64,
     pub yscale: f64,
     pub rotation: f64, // degrees CCW
+    /// Repère de l'INSERT : `at` est en OCS. Seule entité à garder son OCS après la
+    /// lecture, parce qu'il compose sa matrice (decompose::insert_affine).
+    pub ocs: Ocs,
     pub common: Common,
 }
 
@@ -149,6 +152,40 @@ pub struct Block {
     pub name: String,
     pub base: [f64; 2],
     pub entities: Vec<Entity>,
+}
+
+/// Repère objet d'une entité, tel que lu : normale (210/220/230) et élévation. Toutes
+/// les entités qui sortent de la lecture sont en WCS, normale +Z ; le reste du pipeline
+/// (anneaux, canonique, export) ne connaît pas l'OCS.
+#[derive(Debug, Clone, Copy)]
+pub struct Ocs {
+    pub normal: [f64; 3],
+    pub elevation: f64,
+    /// Composante z du grand axe d'une ELLIPSE (groupe 31).
+    pub major_z: f64,
+    normal_open: bool,
+}
+
+impl Default for Ocs {
+    fn default() -> Self {
+        Self { normal: [0.0, 0.0, 1.0], elevation: 0.0, major_z: 0.0, normal_open: false }
+    }
+}
+
+impl Ocs {
+    /// ezdxf ne lit la normale que si le groupe 210 l'ouvre : un 230 seul ne compte pas.
+    fn apply(&mut self, code: i32, value: &str) -> bool {
+        match code {
+            210 => {
+                self.normal = [f(value), 0.0, 0.0];
+                self.normal_open = true;
+            }
+            220 if self.normal_open => self.normal[1] = f(value),
+            230 if self.normal_open => self.normal[2] = f(value),
+            _ => return false,
+        }
+        true
+    }
 }
 
 fn common_apply(common: &mut Common, code: i32, value: &str) {
@@ -188,18 +225,26 @@ fn i(v: &str, default: i32) -> i32 {
     }
 }
 
-/// Reads one entity. Returns the entity plus the lookahead group (the
+/// Reads one entity. Returns it in world coordinates (usually one entity: a polyline
+/// with arcs under an oblique normal comes out exploded) plus the lookahead group (the
 /// (0, name) pair opening the NEXT entity), which the caller must dispatch.
 pub fn read_entity<'a>(
     name: &str,
     mut r: GroupReader<'a>,
-) -> (Option<Entity>, Lookahead, GroupReader<'a>) {
+) -> (Vec<Entity>, Lookahead, GroupReader<'a>) {
     let mut common = Common::default();
     let mut look: Lookahead = None;
+    let mut ocs = Ocs::default();
 
     macro_rules! entity {
         ($e:expr) => {
-            return (Some($e), look, r)
+            return (decompose::to_world(vec![$e], &ocs), look, r)
+        };
+    }
+    // Entités en WCS par définition (LINE, SPLINE, POINT) ou repère porté à part.
+    macro_rules! raw_entity {
+        ($e:expr) => {
+            return (vec![$e], look, r)
         };
     }
 
@@ -217,7 +262,7 @@ pub fn read_entity<'a>(
                 }
             }
             e.common = common;
-            entity!(Entity::Line(e))
+            raw_entity!(Entity::Line(e))
         }
         "LWPOLYLINE" => {
             let mut e = LwPolyline::default();
@@ -241,6 +286,8 @@ pub fn read_entity<'a>(
                         }
                     }
                     70 => e.closed = (i(&v, 0) & 1) != 0,
+                    38 => ocs.elevation = f(v),
+                    _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }
             }
@@ -302,6 +349,9 @@ pub fn read_entity<'a>(
                             e.closed = (flags & 1) != 0;
                         }
                     }
+                    // Élévation et normale de l'en-tête, pas d'un VERTEX.
+                    30 if cur.is_none() => ocs.elevation = f(v),
+                    _ if cur.is_none() && ocs.apply(c, v) => {}
                     // Les codes 5/8/62 d'un VERTEX (ou de la SEQEND) sont les
                     // SIENS — ne jamais écraser le common de la POLYLINE
                     // (J-090 : la réémission canonique handlée porte des
@@ -310,11 +360,13 @@ pub fn read_entity<'a>(
                     _ => {}
                 }
             }
-            // Un bulge n'a de sens que sur une POLYLINE 2D (ezdxf : has_arc).
+            e.common = common;
+            // Un bulge et un OCS n'ont de sens que sur une POLYLINE 2D (ezdxf :
+            // has_arc, points_in_wcs) ; les autres sont déjà en WCS.
             if header_flags & (8 | 16 | 64) != 0 {
                 e.bulges.iter_mut().for_each(|b| *b = 0.0);
+                raw_entity!(Entity::Polyline(e))
             }
-            e.common = common;
             entity!(Entity::Polyline(e))
         }
         "ARC" => {
@@ -325,8 +377,10 @@ pub fn read_entity<'a>(
                     10 => e.center[0] = f(v),
                     20 => e.center[1] = f(v),
                     40 => e.radius = f(v),
+                    30 => ocs.elevation = f(v),
                     50 => e.start_angle = f(v),
                     51 => e.end_angle = f(v),
+                    _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }
             }
@@ -340,7 +394,9 @@ pub fn read_entity<'a>(
                 match c {
                     10 => e.center[0] = f(v),
                     20 => e.center[1] = f(v),
+                    30 => ocs.elevation = f(v),
                     40 => e.radius = f(v),
+                    _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }
             }
@@ -356,9 +412,11 @@ pub fn read_entity<'a>(
                     20 => e.center[1] = f(v),
                     11 => e.major[0] = f(v),
                     21 => e.major[1] = f(v),
+                    31 => ocs.major_z = f(v),
                     40 => e.ratio = f(v),
                     41 => e.start_param = f(v),
                     42 => e.end_param = f(v),
+                    _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }
             }
@@ -388,7 +446,7 @@ pub fn read_entity<'a>(
                 }
             }
             e.common = common;
-            entity!(Entity::Spline(e))
+            raw_entity!(Entity::Spline(e))
         }
         "POINT" => {
             let mut e = Point::default();
@@ -401,7 +459,7 @@ pub fn read_entity<'a>(
                 }
             }
             e.common = common;
-            entity!(Entity::Point(e))
+            raw_entity!(Entity::Point(e))
         }
         "INSERT" => {
             let mut e = Insert { xscale: 1.0, yscale: 1.0, ..Default::default() };
@@ -411,14 +469,17 @@ pub fn read_entity<'a>(
                     2 => e.block = v.trim().to_string(),
                     10 => e.at[0] = f(v),
                     20 => e.at[1] = f(v),
+                    30 => ocs.elevation = f(v),
                     41 => e.xscale = f(v),
                     42 => e.yscale = f(v),
                     50 => e.rotation = f(v),
+                    _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }
             }
             e.common = common;
-            entity!(Entity::Insert(e))
+            e.ocs = ocs;
+            raw_entity!(Entity::Insert(e))
         }
         other => {
             // TEXT/MTEXT/IMAGE/SOLID: removed by cleanup (counted like ezdxf).
@@ -431,7 +492,7 @@ pub fn read_entity<'a>(
                     break;
                 }
             }
-            entity!(Entity::Unsupported(other.to_string()))
+            raw_entity!(Entity::Unsupported(other.to_string()))
         }
     }
 }
@@ -457,12 +518,10 @@ pub fn read_block<'a>(mut r: GroupReader<'a>) -> (Block, Lookahead, GroupReader<
                 if v == "ENDBLK" {
                     break;
                 }
-                let (entity, look2, r2) = read_entity(v, r);
+                let (read, look2, r2) = read_entity(v, r);
                 r = r2;
                 look = look2;
-                if let Some(e) = entity {
-                    block.entities.push(e);
-                }
+                block.entities.extend(read);
             }
             _ => {}
         }

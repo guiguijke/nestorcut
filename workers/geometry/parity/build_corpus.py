@@ -308,6 +308,46 @@ def main_cut_cases():
         plate(doc.paperspace())
         save_new(doc, f"paperspace_only_{tag}.dxf")
 
+    # --- Extrusion -Z (normale opposée) : les coordonnées d'ARC, CIRCLE, LWPOLYLINE,
+    # POLYLINE et INSERT sont en OCS (x opposé), celles d'ELLIPSE en WCS mais son petit
+    # axe et ses paramètres tournent autour de -Z.
+    minus_z = {"extrusion": (0, 0, -1)}
+    doc = new_doc()
+    blk = doc.blocks.new(name="CORNER")
+    blk.add_line((0, 0), (40, 0))
+    blk.add_arc((40, 15), 15, -90, 0)
+    blk.add_line((55, 15), (55, 30))
+    blk.add_line((55, 30), (0, 30))
+    blk.add_line((0, 30), (0, 0))
+    msp = doc.modelspace()
+    msp.add_circle((10, 0), 5, dxfattribs=minus_z)
+    msp.add_arc((50, 300), 20, 0, 90, dxfattribs=minus_z)
+    msp.add_line((-70, 300), (-50, 300))
+    msp.add_line((-50, 300), (-50, 320))
+    msp.add_lwpolyline([(200, 600, 0.5), (260, 600, 0.0), (260, 640, -0.25), (200, 640, 0.0)],
+                       format="xyb", close=True, dxfattribs=minus_z)
+    msp.add_polyline2d([(300, 900, 0.5), (360, 900, 0.0), (360, 940, -0.25), (300, 940, 0.0)],
+                       format="xyb", close=True, dxfattribs=minus_z)
+    msp.add_ellipse((0, 1200), major_axis=(30, 0), ratio=0.5, start_param=0, end_param=math.pi,
+                    dxfattribs=minus_z)
+    msp.add_line((-30, 1200), (30, 1200))
+    msp.add_blockref("CORNER", (400, 1500), dxfattribs=minus_z)
+    msp.add_blockref("CORNER", (400, 1800), dxfattribs={**minus_z, "rotation": 30, "xscale": 2, "yscale": 2})
+    save_new(doc, "extrusion_minus_z.dxf")
+
+    # --- Extrusion oblique : pas de vraie pièce plane, mais jamais une position
+    # fausse en silence. ezdxf projette sur XY, le Rust aussi.
+    oblique = {"extrusion": (0, 0.6, 0.8)}
+    doc = new_doc()
+    blk = doc.blocks.new(name="SQUARE")
+    blk.add_lwpolyline([(0, 0), (20, 0), (20, 20), (0, 20)], close=True)
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 200), (40, 200), (40, 230), (0, 230)], close=True,
+                       dxfattribs={"extrusion": (0.6, 0, 0.8), "elevation": 3})
+    msp.add_ellipse((0, 500, 0), major_axis=(30, 0, 0), ratio=0.5, dxfattribs=oblique)
+    msp.add_blockref("SQUARE", (0, 800, 10), dxfattribs=oblique)
+    save_new(doc, "extrusion_oblique.dxf")
+
     print(f"cas fichier de coupe -> {OUT}")
 
 

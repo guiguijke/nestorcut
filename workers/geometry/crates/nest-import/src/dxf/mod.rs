@@ -154,15 +154,15 @@ impl Document {
                             "EOF" => break,
                             _ => {
                                 let paper = next_entity_in_paper_space(&reader);
-                                let (entity, look, r) = entities::read_entity(name, reader);
+                                let (read, look, r) = entities::read_entity(name, reader);
                                 reader = r;
                                 pending = look;
                                 if paper {
                                     if crate::findings::is_material(name) {
                                         paper_space_entities += 1;
                                     }
-                                } else if let Some(e) = entity {
-                                    entities.push(e);
+                                } else {
+                                    entities.extend(read);
                                 }
                             }
                         },

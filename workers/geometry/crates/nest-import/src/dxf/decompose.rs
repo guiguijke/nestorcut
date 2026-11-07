@@ -10,7 +10,7 @@
 //! Échelle non uniforme (`Affine::is_uniform`) : ARC/CIRCLE deviennent ELLIPSE,
 //! et une polyligne à arcs éclate en LINE + ELLIPSE, comme ezdxf.
 
-use super::entities::{self, Block, Entity};
+use super::entities::{self, Block, Entity, Insert};
 use super::flatten::Primitive;
 use std::f64::consts::{FRAC_PI_2, PI, TAU};
 
@@ -89,24 +89,117 @@ impl Affine {
 /// INSERT transform (ezdxf Insert.matrix44, default OCS). ezdxf compose en
 /// vecteur-LIGNE : p' = p·S·R, donc l'échelle s'applique AVANT la rotation.
 /// En vecteur-colonne : M = R(rotation) ∘ S(xs,ys) ; t = insert − M·base_point.
-fn insert_affine(block: &Block, at: [f64; 2], xs: f64, ys: f64, rotation_deg: f64) -> Affine {
-    let theta = rotation_deg * (PI / 180.0);
+/// `at` et la rotation sont dans l'OCS de l'INSERT.
+fn insert_affine(block: &Block, ins: &Insert) -> Affine {
+    let theta = ins.rotation * (PI / 180.0);
     let (s, c) = libm::sincos(theta);
     // R * S
-    let a = xs * c;
-    let b = -ys * s;
-    let cc = xs * s;
-    let d = ys * c;
+    let a = ins.xscale * c;
+    let b = -ins.yscale * s;
+    let cc = ins.xscale * s;
+    let d = ins.yscale * c;
     let bx = a * block.base[0] + b * block.base[1];
     let by = cc * block.base[0] + d * block.base[1];
-    Affine {
+    let local = Affine {
         a,
         b,
         c: cc,
         d,
-        tx: at[0] - bx,
-        ty: at[1] - by,
+        tx: ins.at[0] - bx,
+        ty: ins.at[1] - by,
+    };
+    match ocs_basis(ins.ocs.normal) {
+        Some(basis) => basis.affine(ins.ocs.elevation).then(&local),
+        None => local,
     }
+}
+
+/// Axes de l'OCS en WCS (ezdxf OCS, algorithme de l'axe arbitraire DXF). `None` si la
+/// normale vaut +Z ou est nulle (ezdxf la ramène à +Z) : OCS = WCS.
+struct OcsBasis {
+    ax: [f64; 3],
+    ay: [f64; 3],
+    az: [f64; 3],
+}
+
+fn cross3(u: [f64; 3], v: [f64; 3]) -> [f64; 3] {
+    [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ]
+}
+
+fn unit3(v: [f64; 3]) -> [f64; 3] {
+    let n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    [v[0] / n, v[1] / n, v[2] / n]
+}
+
+fn ocs_basis(normal: [f64; 3]) -> Option<OcsBasis> {
+    if normal == [0.0, 0.0, 0.0] {
+        return None;
+    }
+    let az = unit3(normal);
+    if isclose(az[0], 0.0, 1e-12) && isclose(az[1], 0.0, 1e-12) && isclose(az[2], 1.0, 1e-12) {
+        return None;
+    }
+    let reference = if az[0].abs() < 1.0 / 64.0 && az[1].abs() < 1.0 / 64.0 {
+        [0.0, 1.0, 0.0]
+    } else {
+        [0.0, 0.0, 1.0]
+    };
+    let ax = unit3(cross3(reference, az));
+    let ay = unit3(cross3(az, ax));
+    Some(OcsBasis { ax, ay, az })
+}
+
+impl OcsBasis {
+    /// OCS → plan XY du WCS. La normale -Z donne le miroir x → -x, donc arcs et bulges
+    /// suivent les mêmes règles que sous un INSERT miroir. Une normale oblique est une
+    /// projection non uniforme, comme ezdxf quand il prend x et y du WCS.
+    fn affine(&self, elevation: f64) -> Affine {
+        Affine {
+            a: self.ax[0],
+            b: self.ay[0],
+            c: self.ax[1],
+            d: self.ay[1],
+            tx: self.az[0] * elevation,
+            ty: self.az[1] * elevation,
+        }
+    }
+}
+
+/// Ramène en WCS, normale +Z, des entités lues avec le repère `ocs`. Sans objet à
+/// +Z : les entités passent telles quelles, aucun bit ne bouge.
+pub fn to_world(read: Vec<Entity>, ocs: &entities::Ocs) -> Vec<Entity> {
+    let Some(basis) = ocs_basis(ocs.normal) else {
+        return read;
+    };
+    let mut out = Vec::with_capacity(read.len());
+    for e in &read {
+        match e {
+            // Centre et grand axe d'une ELLIPSE sont déjà en WCS : seul le petit axe
+            // (normale × grand axe) dépend de la normale (ezdxf ConstructionEllipse).
+            Entity::Ellipse(el) => {
+                let major = [el.major[0], el.major[1], ocs.major_z];
+                let n = cross3(basis.az, major);
+                let k = (major[0] * major[0] + major[1] * major[1] + major[2] * major[2]).sqrt()
+                    * el.ratio
+                    / (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+                out.push(transform_ellipse(
+                    el.center,
+                    el.major,
+                    [n[0] * k, n[1] * k],
+                    el.start_param,
+                    el.end_param,
+                    &Affine::identity(),
+                    &el.common,
+                ));
+            }
+            other => transform_into(other, &basis.affine(ocs.elevation), &mut out),
+        }
+    }
+    out
 }
 
 /// Dépassement de l'expansion des INSERT (lot 2a) : plafond dur d'entités
@@ -165,7 +258,7 @@ fn decompose_entities_bounded_into(
         match e {
             Entity::Insert(ins) => {
                 if let Some(block) = blocks.iter().find(|b| b.name == ins.block) {
-                    let local = insert_affine(block, ins.at, ins.xscale, ins.yscale, ins.rotation);
+                    let local = insert_affine(block, ins);
                     decompose_entities_bounded_into(
                         &block.entities,
                         blocks,

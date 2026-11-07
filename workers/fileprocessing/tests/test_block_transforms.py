@@ -59,6 +59,21 @@ def test_classic_polyline_in_a_mirror_block_lands_where_ezdxf_draws_it(tmp_path)
     _assert_bboxes(_bboxes(drawing), [(60.0, 0.0, 90.0, 20.0)])
 
 
+def test_negative_extrusion_at_top_level_lands_where_ezdxf_draws_it():
+    # CIRCLE, ARC et ELLIPSE passaient déjà (aplatis en WCS par ezdxf), pas les
+    # polylignes à (0, 0, -1) : elles sont lues comme le bloc miroir ci-dessus.
+    drawing = read_dxf_file(str(CORPUS / "extrusion_minus_z.dxf"))
+    _assert_bboxes(_bboxes(drawing), [
+        (-484.278, 1800.0, -370.0, 1906.961),
+        (-455.0, 1500.0, -400.0, 1530.0),
+        (-360.0, 900.0, -300.0, 940.0),
+        (-260.0, 600.0, -200.0, 640.0),
+        (-70.0, 300.0, -50.0, 320.0),
+        (-30.0, 1185.0, 30.0, 1200.0),
+        (-15.0, -4.99, -5.0, 4.99),
+    ])
+
+
 def test_unmirrored_drawing_is_unchanged(tmp_path):
     doc = ezdxf.new()
     doc.header["$INSUNITS"] = 4
