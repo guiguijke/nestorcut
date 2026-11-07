@@ -140,6 +140,27 @@ fn every_copy_counts_against_the_ceiling() {
 }
 
 #[test]
+fn a_graph_of_doubled_inserts_is_refused_too() {
+    // Le même compte couvre les INSERT ordinaires : 30 blocs qui insèrent deux fois le
+    // suivant, le dernier vide, soit 2^30 occurrences sans une entité, en 2 ko.
+    let mut dxf = String::from("0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB0\n10\n0.0\n20\n0.0\n0\nENDBLK\n");
+    for k in 1..=30 {
+        dxf += &format!("0\nBLOCK\n2\nB{k}\n10\n0.0\n20\n0.0\n");
+        for _ in 0..2 {
+            dxf += &format!("0\nINSERT\n8\n0\n2\nB{}\n10\n0.0\n20\n0.0\n", k - 1);
+        }
+        dxf += "0\nENDBLK\n";
+    }
+    dxf += "0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nINSERT\n8\n0\n2\nB30\n10\n0.0\n20\n0.0\n0\nENDSEC\n0\nEOF\n";
+    let start = std::time::Instant::now();
+    let json = nest_import::guarded_import_json(dxf.as_bytes(), 0.01, &budget::Limits::browser())
+        .expect("un refus n'est pas une erreur");
+    assert!(start.elapsed().as_secs() < 5, "{:?}", start.elapsed());
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["status"], "refused", "{json}");
+}
+
+#[test]
 fn a_real_grid_over_the_entity_cap_is_refused_with_its_count() {
     // 200 × 100 occurrences d'une LINE : 20 000 entités pour un plafond de 10 000.
     let dxf = "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB\n10\n0.0\n20\n0.0\n\
