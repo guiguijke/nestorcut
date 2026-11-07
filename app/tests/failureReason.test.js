@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { degradedNoteKey, failureBannerText, failureReasonKey, jobErrorBannerText } from '../utils/failureReason'
+import { degradedNoteKey, failureBannerText, failureDetailText, serverRefusalCode, failureReasonKey, jobErrorBannerText } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
 import de from '../utils/i18n/de'
@@ -159,5 +159,24 @@ describe('jobErrorBannerText', () => {
         expect(text({})).toBe('')
         expect(text({ serverJob: { phase: 'processing', job: { information: 'x' } } })).toBe('')
         expect(text({ serverJob: { phase: 'done', job: { information: 'x' } } })).toBe('')
+    })
+})
+
+describe('refus du worker : le nom de fichier ne reclasse pas le message', () => {
+    it('un nom qui ressemble à un autre refus est ignoré', () => {
+        const msg = 'Nesting failed: part 2 of "found no valid position for part.dxf" has an outline the engine cannot use (x)'
+        expect(serverRefusalCode(msg)).toBe('item_geometry')
+        expect(serverRefusalCode('Nesting failed: the engine found no valid position for part 1 of "strip_height_below_separation:.dxf" on the declared sheets')).toBe('item_unplaceable')
+    })
+})
+
+describe('failureDetailText : cause connue par ailleurs', () => {
+    const t = (k) => k
+    const map = (code) => `E:${code}`
+    it('engine_error avec unfit : rien à ajouter', () => {
+        expect(failureDetailText({ errorCode: 'engine_error', unfit: { reason: 'strip' } }, t, map)).toBe('')
+    })
+    it('engine_error sans unfit : le repli plantage', () => {
+        expect(failureDetailText({ errorCode: 'engine_error' }, t, map)).toBe('E:crash')
     })
 })

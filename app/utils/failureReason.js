@@ -51,7 +51,9 @@ const SERVER_REFUSALS = [
 ]
 
 export function serverRefusalCode(information) {
-    const text = String(information || '')
+    // Le worker cite le nom du fichier de l'utilisateur entre guillemets : on le
+    // retire avant de chercher un fragment, un nom ne reclasse pas le refus.
+    const text = String(information || '').replace(/"[^"]*"/g, '""')
     const hit = SERVER_REFUSALS.find((r) => r.pattern.test(text))
     return hit ? hit.code : null
 }
@@ -125,6 +127,9 @@ export function failureDetailText(job, t, mapLocalError, files = []) {
     const information = String(job?.information || '').trim()
     if (!job?.errorCode && !information) return ''
     if (!job?.errorCode && !refusalCode(information) && isEngineTrace(information)) return ''
+    // Échec local sans code connu (repli « crash ») mais cause connue par ailleurs
+    // (tôle trop petite, aucune solution faisable) : la fenêtre la dit déjà.
+    if (job?.errorCode === 'engine_error' && job?.unfit) return ''
     return failureBannerText(job, t, mapLocalError, files)
 }
 
