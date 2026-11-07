@@ -56,6 +56,32 @@ def assert_insert_depth(doc, max_depth=MAX_INSERT_DEPTH):
         raise ValueError(f"DXF block nesting exceeds {max_depth} levels")
 
 
+def assert_insert_copies(doc, max_copies=MAX_DECOMPOSED_ENTITIES):
+    """Refuse un dessin dont les INSERT résolus dépassent le plafond dur, avant de les
+    résoudre. Un MINSERT de 32 000 × 32 000 occurrences d'un bloc VIDE n'émet aucune
+    entité : decompose_bounded ne s'arrêterait pas, et multi_insert accumule ses
+    positions en mémoire. Miroir de `decompose_entities_bounded_into` en Rust.
+    Le graphe de blocs doit être acyclique (assert_insert_depth avant)."""
+    refs = {}
+    for block in doc.blocks:
+        refs[block.name] = [e for e in block if e.dxftype() == "INSERT"]
+
+    memo = {}
+
+    def copies_of(inserts):
+        total = 0
+        for insert in inserts:
+            nested = refs.get(insert.dxf.name) or []
+            if insert.dxf.name not in memo:
+                memo[insert.dxf.name] = copies_of(nested)
+            total += max(insert.mcount, 1) * (1 + memo[insert.dxf.name])
+        return total
+
+    total = copies_of(e for e in doc.modelspace() if e.dxftype() == "INSERT")
+    if total > max_copies:
+        raise ValueError(f"DXF exploded to more than {max_copies} entities")
+
+
 def decompose_bounded(msp, max_entities=MAX_DECOMPOSED_ENTITIES):
     """recursive_decompose with a hard cap on yielded entities."""
     out = []

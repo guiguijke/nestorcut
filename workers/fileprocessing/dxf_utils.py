@@ -14,7 +14,11 @@ from worker_common.geometry.import_findings import empty_stats, is_material
 from ezdxf.math import Matrix44
 from ezdxf.render.hatching import hatch_entity
 from ezdxf.entities import DXFGraphic
-from worker_common.geometry.dxf_bounds import assert_insert_depth, decompose_bounded
+from worker_common.geometry.dxf_bounds import (
+    assert_insert_copies,
+    assert_insert_depth,
+    decompose_bounded,
+)
 
 logger = setup_logger("dxf_utils")
 
@@ -189,6 +193,7 @@ def read_dxf_file(dxf_path: str, normalize_units: bool = True) -> Drawing | None
     new_msp = new_doc.modelspace()
 
     assert_insert_depth(doc)
+    assert_insert_copies(doc)
     flattened_entities = decompose_bounded(msp)
 
     # Decompose FIRST (block INSERTs are resolved into flat primitives in

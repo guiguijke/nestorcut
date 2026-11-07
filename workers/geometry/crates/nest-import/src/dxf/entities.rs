@@ -141,6 +141,12 @@ pub struct Insert {
     pub xscale: f64,
     pub yscale: f64,
     pub rotation: f64, // degrees CCW
+    /// MINSERT (groupes 71, 70, 45, 44) : grille de `rows` × `columns` occurrences. Un
+    /// INSERT ordinaire vaut 1 × 1. Compte nul ou négatif : 1, comme ezdxf.
+    pub rows: i32,
+    pub columns: i32,
+    pub row_spacing: f64,
+    pub column_spacing: f64,
     /// Repère de l'INSERT : `at` est en OCS. Seule entité à garder son OCS après la
     /// lecture, parce qu'il compose sa matrice (decompose::insert_affine).
     pub ocs: Ocs,
@@ -462,7 +468,13 @@ pub fn read_entity<'a>(
             raw_entity!(Entity::Point(e))
         }
         "INSERT" => {
-            let mut e = Insert { xscale: 1.0, yscale: 1.0, ..Default::default() };
+            let mut e = Insert {
+                xscale: 1.0,
+                yscale: 1.0,
+                rows: 1,
+                columns: 1,
+                ..Default::default()
+            };
             while let Some((c, v)) = r.next() {
                 if c == 0 { look = Some((0, v.trim().to_string())); break; }
                 match c {
@@ -472,7 +484,11 @@ pub fn read_entity<'a>(
                     30 => ocs.elevation = f(v),
                     41 => e.xscale = f(v),
                     42 => e.yscale = f(v),
+                    44 => e.column_spacing = f(v),
+                    45 => e.row_spacing = f(v),
                     50 => e.rotation = f(v),
+                    70 => e.columns = i(v, 1).max(1),
+                    71 => e.rows = i(v, 1).max(1),
                     _ if ocs.apply(c, v) => {}
                     _ => common_apply(&mut common, c, v),
                 }

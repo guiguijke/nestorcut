@@ -89,8 +89,27 @@ impl Affine {
 /// INSERT transform (ezdxf Insert.matrix44, default OCS). ezdxf compose en
 /// vecteur-LIGNE : p' = p·S·R, donc l'échelle s'applique AVANT la rotation.
 /// En vecteur-colonne : M = R(rotation) ∘ S(xs,ys) ; t = insert − M·base_point.
+/// Occurrences d'un INSERT (ezdxf Insert.mcount + multi_insert) : les rangées et colonnes
+/// à pas nul sont confondues, et une grille qui se réduit à 1 est un INSERT ordinaire.
+fn insert_grid(ins: &Insert) -> (i32, i32) {
+    let rows = if ins.row_spacing != 0.0 { ins.rows } else { 1 };
+    let columns = if ins.column_spacing != 0.0 { ins.columns } else { 1 };
+    (rows, columns)
+}
+
+/// Point d'insertion d'une occurrence : la grille vit dans l'OCS, tourne avec le bloc et
+/// ne subit pas son échelle (ezdxf multi_insert : « do not apply scaling to the grid »).
+fn grid_position(ins: &Insert, row: i32, column: i32) -> [f64; 2] {
+    if row == 0 && column == 0 {
+        return ins.at;
+    }
+    let (dx, dy) = (column as f64 * ins.column_spacing, row as f64 * ins.row_spacing);
+    let (s, c) = libm::sincos(ins.rotation * (PI / 180.0));
+    [ins.at[0] + dx * c - dy * s, ins.at[1] + dx * s + dy * c]
+}
+
 /// `at` et la rotation sont dans l'OCS de l'INSERT.
-fn insert_affine(block: &Block, ins: &Insert) -> Affine {
+fn insert_affine(block: &Block, ins: &Insert, at: [f64; 2]) -> Affine {
     let theta = ins.rotation * (PI / 180.0);
     let (s, c) = libm::sincos(theta);
     // R * S
@@ -105,8 +124,8 @@ fn insert_affine(block: &Block, ins: &Insert) -> Affine {
         b,
         c: cc,
         d,
-        tx: ins.at[0] - bx,
-        ty: ins.at[1] - by,
+        tx: at[0] - bx,
+        ty: at[1] - by,
     };
     match ocs_basis(ins.ocs.normal) {
         Some(basis) => basis.affine(ins.ocs.elevation).then(&local),
@@ -227,26 +246,32 @@ pub fn decompose_to_entities_bounded(
     max_depth: usize,
 ) -> Result<Vec<Entity>, Overflow> {
     let mut out = Vec::new();
+    let mut copies = 0usize;
     match decompose_entities_bounded_into(
         entities,
         blocks,
         Affine::identity(),
         &mut out,
+        &mut copies,
         ceiling,
         max_depth,
         0,
     ) {
         Ok(()) => Ok(out),
-        Err(depth_exceeded) => Err(Overflow { entities: out.len(), depth_exceeded }),
+        Err(depth_exceeded) => Err(Overflow { entities: out.len().max(copies), depth_exceeded }),
     }
 }
 
-/// Err(true) = profondeur dépassée, Err(false) = plafond d'entités atteint.
+/// Err(true) = profondeur dépassée, Err(false) = plafond d'entités atteint. Chaque
+/// occurrence résolue compte (`copies`) : une grille d'un bloc vide n'émet aucune
+/// entité, le plafond d'entités seul ne l'arrêterait jamais.
+#[allow(clippy::too_many_arguments)]
 fn decompose_entities_bounded_into(
     entities: &[Entity],
     blocks: &[Block],
     m: Affine,
     out: &mut Vec<Entity>,
+    copies: &mut usize,
     ceiling: usize,
     max_depth: usize,
     depth: usize,
@@ -258,16 +283,26 @@ fn decompose_entities_bounded_into(
         match e {
             Entity::Insert(ins) => {
                 if let Some(block) = blocks.iter().find(|b| b.name == ins.block) {
-                    let local = insert_affine(block, ins);
-                    decompose_entities_bounded_into(
-                        &block.entities,
-                        blocks,
-                        m.then(&local),
-                        out,
-                        ceiling,
-                        max_depth,
-                        depth + 1,
-                    )?;
+                    let (rows, columns) = insert_grid(ins);
+                    for row in 0..rows {
+                        for column in 0..columns {
+                            *copies += 1;
+                            if *copies > ceiling {
+                                return Err(false);
+                            }
+                            let local = insert_affine(block, ins, grid_position(ins, row, column));
+                            decompose_entities_bounded_into(
+                                &block.entities,
+                                blocks,
+                                m.then(&local),
+                                out,
+                                copies,
+                                ceiling,
+                                max_depth,
+                                depth + 1,
+                            )?;
+                        }
+                    }
                 }
                 // Missing block definition: ezdxf raises — recover skips.
             }

@@ -348,6 +348,38 @@ def main_cut_cases():
     msp.add_blockref("SQUARE", (0, 800, 10), dxfattribs=oblique)
     save_new(doc, "extrusion_oblique.dxf")
 
+    # --- MINSERT : une grille d'occurrences, toutes à découper. La grille tourne avec
+    # le bloc mais ne subit pas son échelle (ezdxf multi_insert).
+    def minsert_doc():
+        doc = new_doc()
+        blk = doc.blocks.new(name="TILE", base_point=(2, 3))
+        blk.add_lwpolyline([(0, 0), (30, 0), (30, 20), (0, 20)], close=True)
+        blk.add_circle((15, 10), 4)
+        return doc
+
+    doc = minsert_doc()
+    doc.modelspace().add_blockref("TILE", (100, 100), dxfattribs={
+        "row_count": 2, "column_count": 3, "row_spacing": 40, "column_spacing": 60, "rotation": 1})
+    save_new(doc, "minsert_grid.dxf")
+
+    doc = minsert_doc()
+    doc.modelspace().add_blockref("TILE", (0, 0), dxfattribs={
+        "row_count": 3, "column_count": 2, "row_spacing": 90, "column_spacing": 150,
+        "rotation": 30, "xscale": 2, "yscale": 2})
+    save_new(doc, "minsert_rotated_scaled.dxf")
+
+    # Pas nul : une seule rangée, quel que soit row_count. Pas négatif : vers le bas.
+    # Compte à 0 : ramené à 1. MINSERT dans un bloc, lui-même inséré tourné.
+    doc = minsert_doc()
+    msp = doc.modelspace()
+    msp.add_blockref("TILE", (0, 0), dxfattribs={
+        "row_count": 5, "column_count": 3, "row_spacing": 0, "column_spacing": 50, "rotation": 2})
+    msp.add_blockref("TILE", (0, 2000), dxfattribs={"row_count": 3, "row_spacing": -300})
+    msp.add_blockref("TILE", (0, 4000), dxfattribs={"row_count": 0, "column_count": 4, "row_spacing": 10, "column_spacing": 100})
+    doc.blocks.new(name="COLUMN").add_blockref("TILE", (0, 0), dxfattribs={"row_count": 2, "row_spacing": 500})
+    msp.add_blockref("COLUMN", (0, 5000), dxfattribs={"rotation": 90})
+    save_new(doc, "minsert_edge_cases.dxf")
+
     print(f"cas fichier de coupe -> {OUT}")
 
 
