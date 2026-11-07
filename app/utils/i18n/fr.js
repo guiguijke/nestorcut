@@ -284,7 +284,7 @@ export default {
     'files.importError.dwgVersion': 'Fichier DWG trop récent (AutoCAD 2013 ou plus) : enregistrez-le en DXF ou en DWG 2010.',
     'files.importError.dwgCorrupt': 'Fichier DWG illisible (fichier corrompu ou version non prise en charge) : enregistrez-le en DXF puis réimportez-le.',
     'files.importError.dwgOutput': 'DWG converti, mais le DXF produit est illisible : enregistrez le fichier en DXF depuis votre logiciel de CAO.',
-    'files.importError.paperSpaceOnly': "Tout le dessin de ce fichier est dans l'espace papier, son espace objet est vide : déplacez-le dans l'espace objet depuis votre CAO, puis réimportez-le.",
+    'files.importError.paperSpaceOnly': "Tout le dessin de ce fichier est dans l'espace papier, son espace objet est vide : déplacez-le dans l'espace objet depuis votre CAO, puis réimportez-le.",
     // Régime privacy (création + pastille projet).
     'privacy.choice': "Où vivent les pièces",
     'privacy.device.title': "Cet appareil",
