@@ -300,3 +300,17 @@ describe('refus sans contradiction (une source, pas de 0 mm, pas de note Free)',
         expect(slugVue.match(/t\('project\.minSheet'/g)).toHaveLength(1)
     })
 })
+
+describe('espacement maximum du panneau de capacité', () => {
+    it('le nombre passe par la locale : virgule en français, jamais « 2.56 »', async () => {
+        const { formatNumber } = await import('../utils/i18n')
+        expect(formatNumber(2.56, 'fr', 2)).toBe('2,56')
+        expect(formatNumber(2.56, 'en', 2)).toBe('2.56')
+    })
+
+    it('le gabarit formate la valeur au lieu de la passer brute', () => {
+        const panel = source('app/components/CapacityPanel.vue')
+        expect(panel).toContain('v: fmtNumber(panel.levers.maxSpacingMm, 2)')
+        expect(panel).not.toContain('{ v: panel.levers.maxSpacingMm }')
+    })
+})
