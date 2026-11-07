@@ -896,73 +896,80 @@ defineExpose({ reportEl })
         white-space: nowrap;
     }
 
-    /* Téléphone : le tableau devient une pile de mini-cartes, une par tôle —
-       chaque valeur porte son libellé, plus aucune colonne coupée. */
-    @container (max-width: 560px) {
-        .report__table {
-            display: block;
-            white-space: normal;
-
-            thead {
-                position: absolute;
-                width: 1px;
-                height: 1px;
-                overflow: hidden;
-                clip-path: inset(50%);
-            }
-
-            tbody {
+    /* Téléphone seulement : le tableau devient une pile de mini-cartes, une par
+       tôle — chaque valeur porte son libellé, plus aucune colonne coupée.
+       Le volet de bureau (fenêtre ≥ 768 px, deux colonnes) est AUSSI étroit
+       (≈ 400 px) mais garde son tableau : les cartes y allongent le rapport
+       et repoussent la rangée d'actions hors du cadre. La requête de
+       conteneur seule ne sait pas les distinguer, d'où la requête de fenêtre
+       (mêmes 768 px que la mise en page de la fenêtre de résultat). */
+    @media (max-width: 767px) {
+        @container (max-width: 560px) {
+            .report__table {
                 display: block;
-            }
+                white-space: normal;
 
-            tbody tr {
-                display: block;
-                padding: 8px 0;
+                thead {
+                    position: absolute;
+                    width: 1px;
+                    height: 1px;
+                    overflow: hidden;
+                    clip-path: inset(50%);
+                }
 
-                &:not(:last-child) {
-                    border-bottom: 1px solid var(--separator-secondary);
+                tbody {
+                    display: block;
+                }
+
+                tbody tr {
+                    display: block;
+                    padding: 8px 0;
+
+                    &:not(:last-child) {
+                        border-bottom: 1px solid var(--separator-secondary);
+                    }
+                }
+
+                tbody tr:not(:last-child) td {
+                    border-bottom: 0;
+                }
+
+                td {
+                    display: flex;
+                    flex-wrap: wrap;
+                    justify-content: space-between;
+                    align-items: baseline;
+                    gap: 2px 12px;
+                    padding: 2px 0;
+                    text-align: right;
+
+                    &::before {
+                        content: attr(data-label);
+                        flex-shrink: 0;
+                        font-weight: 600;
+                        text-align: left;
+                        color: var(--label-tertiary);
+                    }
+                }
+
+                td.report__col-area {
+                    display: none;
                 }
             }
 
-            tbody tr:not(:last-child) td {
-                border-bottom: 0;
+            .report__cell-sheet,
+            .report__cell-offcut {
+                min-width: 0;
             }
 
-            td {
-                display: flex;
-                flex-wrap: wrap;
-                justify-content: space-between;
-                align-items: baseline;
-                gap: 2px 12px;
-                padding: 2px 0;
+            .report__sheet-sub {
+                flex: 1 1 100%;
                 text-align: right;
-
-                &::before {
-                    content: attr(data-label);
-                    flex-shrink: 0;
-                    font-weight: 600;
-                    text-align: left;
-                    color: var(--label-tertiary);
-                }
             }
 
-            td.report__col-area {
-                display: none;
+            .report__badge--block {
+                margin-top: 0;
             }
-        }
-
-        .report__cell-sheet,
-        .report__cell-offcut {
-            min-width: 0;
-        }
-
-        .report__sheet-sub {
-            flex: 1 1 100%;
-            text-align: right;
-        }
-
-        .report__badge--block {
-            margin-top: 0;
         }
     }
 
