@@ -4,7 +4,7 @@
 /** D15 : intention de checkout, écrite juste avant la redirection vers Stripe. */
 export const CHECKOUT_INTENT_KEY = 'nestorcut:checkoutIntent'
 export const CHECKOUT_INTENT_TTL_MS = 2 * 60 * 60 * 1000
-export const CHECKOUT_SOURCES = ['locked_sheets', 'quota', 'export', 'turbo', 'profile', 'account', 'other']
+export const CHECKOUT_SOURCES = ['locked_sheets', 'quota', 'export', 'turbo', 'plans', 'profile', 'account', 'other']
 export const CHECKOUT_ID_RE = /^[0-9a-f]{24}$/ // generateRandomString(24), strings.js:10-13
 
 // Slug de projet : <adjectif>-<nom>-<12 hex> ou 'demo' — jamais d'autre forme

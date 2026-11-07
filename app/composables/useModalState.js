@@ -28,7 +28,7 @@ export const useVaultMenuOpen = () => {
     return useState("vaultMenuOpen", () => false);
 };
 /** D13 : contexte de la fenêtre d'abonnement — null ou
- * { source: 'locked_sheets'|'quota'|'export'|'turbo',
+ * { source: 'locked_sheets'|'quota'|'export'|'turbo'|'plans',
  *   lockedSheets?: { total: number, cap: number, resultSlug: string, projectSlug: string|null } }
  * Vidé par BuyCreditsDialog à la fermeture. Ne JAMAIS l'envoyer au serveur ni au suivi. */
 export const useBuyCreditsContext = () => {
