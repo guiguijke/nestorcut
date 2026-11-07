@@ -48,3 +48,41 @@ describe('onglets d\'options : pastille lisible sur l\'onglet actif', () => {
         expect(src).not.toContain('text-transform: uppercase')
     })
 })
+
+describe('bas de la fenêtre : Download est la seule action principale', () => {
+    const src = read('../components/ResultReport.vue')
+    const controls = src.slice(src.indexOf('data-testid="report-actions"'), src.indexOf('</script>'))
+    const blocks = controls.split('<MainButton').slice(1).map((b) => b.slice(0, b.indexOf('/>')))
+    const block = (needle) => blocks.find((b) => b.includes(needle))
+
+    it('copier, CSV et recommencer sont au second plan', () => {
+        for (const tag of ['report_copy"', 'report_csv"', 'result_try_again']) {
+            expect(block(tag), tag).toMatch(/themeType\.ghost/)
+        }
+    })
+
+    it('le déblocage n\'est plus principal mais garde cadenas, message et clic', () => {
+        const b = block('report-unlock')
+        expect(b).toMatch(/themeType\.secondary/)
+        expect(b).not.toMatch(/themeType\.primary/)
+        expect(b).toContain(':icon="iconType.lock"')
+        expect(b).toContain("t('results.unlockSheets'")
+        expect(b).toContain("$emit('unlock-sheets', 'modal_actions')")
+    })
+
+    it('les exports verrouillés gardent cadenas et clic vers l\'abonnement', () => {
+        for (const tag of ['report_copy"', 'report_csv"']) {
+            const b = block(tag)
+            expect(b).toContain(':icon="exportLocked ? iconType.lock : undefined"')
+            expect(b).toContain('onExportClick(')
+        }
+    })
+
+    it('seuls les boutons de téléchargement restent principaux', () => {
+        const primary = blocks.filter((b) => b.includes('themeType.primary'))
+        expect(primary.length).toBeGreaterThan(0)
+        for (const b of primary) {
+            expect(b).toMatch(/trackingTag="result_download/)
+        }
+    })
+})

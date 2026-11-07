@@ -309,7 +309,7 @@
                     :icon="exportLocked ? iconType.lock : undefined"
                     :isDisable="exportDisabled"
                     :size="sizeType.s"
-                    :theme="themeType.secondary"
+                    :theme="themeType.ghost"
                     trackingTag="report_copy"
                     @click="onExportClick(copyReport, 'report_copy_locked_click')"
                 />
@@ -319,10 +319,13 @@
                     :icon="exportLocked ? iconType.lock : undefined"
                     :isDisable="exportDisabled"
                     :size="sizeType.s"
-                    :theme="themeType.secondary"
+                    :theme="themeType.ghost"
                     trackingTag="report_csv"
                     @click="onExportClick(exportCsv, 'report_csv_locked_click')"
                 />
+                <!-- Une seule action principale : le téléchargement. Débloquer,
+                     copier, CSV et recommencer passent au second plan sans
+                     rien perdre (cadenas, message, clic vers l'abonnement). -->
                 <!-- O2 (02/11) : le compte télécharge les tôles 1-2 de
                      l'alternative 0 (D4) ; le reste se débloque ici. Pas de
                      trackingTag (D18) : l'orchestrateur trace l'événement
@@ -334,7 +337,7 @@
                     :icon="iconType.lock"
                     :isDisable="checkoutChecking"
                     :size="sizeType.s"
-                    :theme="themeType.primary"
+                    :theme="themeType.secondary"
                     data-testid="report-unlock"
                     @click="$emit('unlock-sheets', 'modal_actions')"
                 />
@@ -406,7 +409,7 @@
                 <MainButton
                     :label="t('result.tryAgain')"
                     :size="sizeType.s"
-                    :theme="themeType.secondary"
+                    :theme="themeType.ghost"
                     trackingTag="result_try_again"
                     @click="$emit('close')"
                 />
