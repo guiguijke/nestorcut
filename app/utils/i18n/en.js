@@ -809,9 +809,9 @@ export default {
     'account.toFreeConfirm':
         'Your subscription will be canceled at the end of the current billing period. You keep your account and data. Continue?',
     'account.toPrivacy': 'Switch to {plan}',
-    'account.toPrivacyNotice': 'You are now on the {plan} plan. The prorated difference was charged to your card.',
+    'account.toPrivacyNotice': "You are now on the {plan} plan. Any prorated difference will be added to your next invoice.",
     'account.toPrivacyConfirm':
-        'Your subscription will switch to the {plan} plan immediately: the prorated difference will be charged to your card on file. Continue?',
+        "Your subscription moves to the {plan} plan right away. Any prorated difference will be added to your next invoice. Continue?",
     'account.discoverPlan': 'Discover the {plan} plan',
     'account.deleteTitle': 'Delete my account',
     'account.deleteDesc':

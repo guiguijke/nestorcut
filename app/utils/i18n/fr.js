@@ -788,9 +788,9 @@ export default {
     'account.toFreeConfirm':
         "Votre abonnement sera annulé à la fin de la période de facturation en cours. Vous conservez votre compte et vos données. Continuer ?",
     'account.toPrivacy': "Passer à {plan}",
-    'account.toPrivacyNotice': "Vous êtes maintenant sur l'offre {plan}. La différence au prorata a été débitée de votre carte.",
+    'account.toPrivacyNotice': "Vous êtes maintenant sur l'offre {plan}. S'il y a une différence au prorata, elle sera ajoutée à votre prochaine facture.",
     'account.toPrivacyConfirm':
-        "Votre abonnement va passer immédiatement à l'offre {plan} : la différence au prorata sera débitée de la carte enregistrée. Continuer ?",
+        "Votre abonnement passe à l'offre {plan} immédiatement. S'il y a une différence au prorata, elle sera ajoutée à votre prochaine facture. Continuer ?",
     'account.discoverPlan': "Découvrir l'offre {plan}",
     'account.deleteTitle': "Supprimer mon compte",
     'account.deleteDesc':
