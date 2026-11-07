@@ -92,7 +92,6 @@
                 :theme="themeType.primary"
                 :size="sizeType.m"
                 :isDisable="isLoading"
-                trackingTag="subscription_upgrade_pro"
                 class="subscription__btn"
                 @click="subscribePro"
             />
@@ -403,6 +402,9 @@ const subscribePro = async () => {
         const terms = upgradeTermsText.value
         if (!window.confirm(`${t('sub.upgradePro')}\n\n${t(terms.key, terms.params)}`)) return
     }
+    // Compté ici et pas sur le bouton : une confirmation refusée n'est pas une
+    // montée. La carte d'achat a son propre compteur, porté par son bouton.
+    if (isActive.value) trackEvent('click_subscription_upgrade_pro')
     error.value = ''
     isLoading.value = true
     if (!isStripeActive.value) {

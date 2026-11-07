@@ -149,7 +149,7 @@ describe("upgradeTerms : le passage Unlimited vers Pro dit ce qu'il fait", () =>
 
     it('la montée en place est confirmée avant l’appel', () => {
         const sub = read('../components/Subscription.vue')
-        expect(sub).toMatch(/window\.confirm\([\s\S]{0,120}upgradePro[\s\S]{0,400}payment\/subscription\/change/)
+        expect(sub).toMatch(/window\.confirm\([\s\S]{0,120}upgradePro[\s\S]{0,800}payment\/subscription\/change/)
     })
 })
 

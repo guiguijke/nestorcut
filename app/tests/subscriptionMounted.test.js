@@ -204,3 +204,38 @@ describe('suppression du compte : même règle pour une alternative « Passer à
         expect((await mountDelete(serverInfo())).buttonNamed(label)).not.toBeNull()
     })
 })
+
+describe('suivi de la montée en Pro : compté après acceptation, jamais avant', () => {
+    const upgrades = (trackEvent) => trackEvent.mock.calls.filter(([name]) => name === 'click_subscription_upgrade_pro')
+
+    it('confirmation refusée : aucun compteur de montée, aucun appel', async () => {
+        const { view, trackEvent, $fetch, confirm } = await mountCard(serverInfo(), { confirm: false })
+        await view.click(view.buttonNamed(dict('sub.upgradePro', 'fr')))
+        expect(confirm).toHaveBeenCalledTimes(1)
+        expect(upgrades(trackEvent)).toHaveLength(0)
+        expect($fetch).not.toHaveBeenCalled()
+    })
+
+    it('confirmation acceptée : compté une fois, puis la montée part', async () => {
+        const { view, trackEvent, $fetch } = await mountCard(serverInfo(), { confirm: true })
+        await view.click(view.buttonNamed(dict('sub.upgradePro', 'fr')))
+        expect(upgrades(trackEvent)).toHaveLength(1)
+        expect($fetch).toHaveBeenCalledWith('/api/payment/subscription/change', { method: 'POST', body: { targetTier: 'privacy' } })
+    })
+
+    it('accès offert, sans confirmation (Checkout) : compté une fois', async () => {
+        const info = serverInfo({ subscriptionStatus: null, granted: true, canManageBilling: false, currentPeriodEnd: null })
+        const { view, trackEvent, confirm } = await mountCard(info)
+        await view.click(view.buttonNamed(dict('sub.upgradePro', 'fr')))
+        expect(confirm).not.toHaveBeenCalled()
+        expect(upgrades(trackEvent)).toHaveLength(1)
+    })
+
+    it('le bouton Pro de la carte d’achat garde son propre compteur', async () => {
+        const info = serverInfo({ subscriptionStatus: null, trialEligible: true, canManageBilling: false, currentPeriodEnd: null })
+        const { view, trackEvent } = await mountCard(info, { level: 'free' })
+        await view.click(view.byClass('subscription__btn').at(-1))
+        expect(upgrades(trackEvent)).toHaveLength(0)
+        expect(trackEvent.mock.calls.filter(([name]) => name === 'click_subscription_start_trial_pro')).toHaveLength(1)
+    })
+})
