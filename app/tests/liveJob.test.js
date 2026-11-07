@@ -6,6 +6,8 @@ import {
     pickRunningJob,
     frameFitsSheet,
     frameIsBetter,
+    liveBadgeKind,
+    liveUsedLength,
     resolveLiveStage,
     serverJobState,
 } from '../utils/liveJob'
@@ -163,5 +165,33 @@ describe('resolveLiveStage — P4 Finalisation visible malgré le champion', () 
         expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, 'final')).toBe('final')
         expect(resolveLiveStage({}, 'compress')).toBe('compress')
         expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, null)).toBe('explore')
+    })
+})
+
+describe('liveJob : badge et longueur utilisée', () => {
+    const fit = { feasible: true, strip_width: 800, sheets: [[1000, 500]], isSpp: true }
+
+    it('« Terminé » seulement à l’étape finale', () => {
+        expect(liveBadgeKind(fit, 'final')).toBe('done')
+        expect(liveBadgeKind(fit, 'reveal')).toBe('done')
+        expect(liveBadgeKind(fit, 'exploration')).toBe('fits')
+        expect(liveBadgeKind(fit, 'finalizing')).toBe('fits')
+        expect(liveBadgeKind(fit, null)).toBe('fits')
+    })
+    it('recherche tant que rien ne tient', () => {
+        expect(liveBadgeKind({ ...fit, feasible: false }, 'exploration')).toBe('searching')
+        expect(liveBadgeKind({ ...fit, strip_width: 1200 }, 'final')).toBe('searching')
+        expect(liveBadgeKind(null, 'final')).toBe(null)
+    })
+    it('longueur utilisée : SPP en recherche, valeur saine seulement', () => {
+        expect(liveUsedLength(fit, 'exploration')).toBe(800)
+        expect(liveUsedLength(fit, 'final')).toBe(null)
+        expect(liveUsedLength({ ...fit, isSpp: false }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: 1200 }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, feasible: false }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: null }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: 0 }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: NaN }, 'exploration')).toBe(null)
+        expect(liveUsedLength(null, 'exploration')).toBe(null)
     })
 })

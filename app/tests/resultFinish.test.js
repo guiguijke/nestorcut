@@ -7,10 +7,13 @@ import { allQuantitiesAtOne } from '../utils/quantityHint'
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
 const DONE = 'done'
 
-describe('« Terminé » partout', () => {
-    it.each(LOCALES.map((l) => l.code || l))('le badge de la vue en direct dit comme la carte (%s)', (code) => {
+describe('badge de la vue en direct', () => {
+    it.each(LOCALES.map((l) => l.code || l))('« Terminé » ne dit pas la même chose que « tient sur la tôle » (%s)', (code) => {
         const d = DICTS[code]
         expect(d['live.feasible']).toBe(d['result.state.done'])
+        expect(d['live.fitsSheet']).toBeTruthy()
+        expect(d['live.fitsSheet']).not.toBe(d['live.feasible'])
+        expect(d['live.widthTitle']).toBeTruthy()
     })
 })
 

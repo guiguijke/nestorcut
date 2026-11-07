@@ -140,3 +140,39 @@ export function resolveLiveStage(result, championStage) {
     if (incoming === 'finalizing') return 'finalizing'
     return championStage || incoming || null
 }
+
+// ---- badge de l'en-tête live ---------------------------------------------------
+/** Étape finale : le calcul est terminé, la frame est le résultat. */
+export function isFinalStage(stage) {
+    return stage === 'final' || stage === 'reveal'
+}
+
+/**
+ * Ce que dit le badge de l'en-tête live :
+ *  - 'done'      : étape finale seulement (le calcul est fini) ;
+ *  - 'fits'      : en cours de recherche, la meilleure disposition tient sur
+ *                  la tôle (ce n'est PAS « terminé » : le moteur continue) ;
+ *  - 'searching' : rien de présentable pour l'instant ;
+ *  - null        : pas de frame, pas de badge.
+ */
+export function liveBadgeKind(frame, stage) {
+    if (!frame) return null
+    if (!frameFitsSheet(frame)) return 'searching'
+    return isFinalStage(stage) ? 'done' : 'fits'
+}
+
+/**
+ * Longueur de tôle utilisée (mm canoniques) d'une frame SPP en cours de
+ * recherche, ou null. Elle diminue quand le moteur progresse. Une valeur
+ * absente, non finie, nulle, ou plus grande que la tôle (frame qui ne tient
+ * pas) n'est pas affichée. Hors SPP ou à l'étape finale : null.
+ */
+export function liveUsedLength(frame, stage) {
+    if (!frame || !frame.isSpp || isFinalStage(stage)) return null
+    if (!frameFitsSheet(frame)) return null
+    const n = Number(frame.strip_width)
+    if (frame.strip_width == null || !Number.isFinite(n) || n <= 0) return null
+    const w = Number(frame.sheets?.[0]?.[0])
+    if (Number.isFinite(w) && w > 0 && n > w + 0.5) return null
+    return n
+}

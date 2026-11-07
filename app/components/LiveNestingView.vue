@@ -4,8 +4,8 @@
              high-contrast text on the panel background. -->
         <div class="live__header">
             <span class="live__stage">{{ stageLabel }}</span>
-            <span v-if="best" class="live__badge" :class="{ 'live__badge--ok': bestFitsSheet }">
-                {{ bestFitsSheet ? t('live.feasible') : t('live.searching') }}
+            <span v-if="badgeKind" class="live__badge" :class="{ 'live__badge--ok': badgeKind !== 'searching' }">
+                {{ badgeText }}
             </span>
             <span class="live__spacer" />
             <!-- U3 passe 3 (plan U2 reporté deux fois) : les statistiques de
@@ -209,7 +209,7 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
-import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage } from '~/utils/liveJob';
+import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength } from '~/utils/liveJob';
 
 const props = defineProps({
     result: { type: Object, required: true },
@@ -503,7 +503,13 @@ const best = computed(() => {
     return fitting.sort((a, b) => (isBetter(a, b) ? -1 : 1))[0];
 });
 
-const bestFitsSheet = computed(() => fitsSheet(best.value));
+const liveStage = computed(() => resolveLiveStage(props.result, best.value?.stage));
+const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, liveStage.value) : null));
+const badgeText = computed(() => ({
+    done: t('live.feasible'),
+    fits: t('live.fitsSheet'),
+    searching: t('live.searching'),
+})[badgeKind.value]);
 
 const sheet = computed(() => {
     const b = best.value;
@@ -678,6 +684,13 @@ const sheetCount = computed(() => {
     const live = best.value || props.result?.liveLayout;
     const n = Number(live?.bins);
     return Number.isFinite(n) && n > 0 ? n : null;
+})
+
+// SPP en recherche : la longueur de tôle utilisée diminue quand le moteur
+// progresse (la densité d'en-tête, elle, reste constante).
+const usedLengthLabel = computed(() => {
+    const mm = liveUsedLength(best.value, liveStage.value);
+    return mm != null ? fmtLength(mm) : null;
 })
 
 const scoreLabel = computed(() => {
