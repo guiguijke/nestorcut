@@ -197,10 +197,9 @@ def _canon(doc):
 
 
 def _cmp_canon(a, b, tol_geo=1e-9, tol_loose=1e-2):
-    # OUT_SHAPE = bbox dérivée via ezdxf.bbox (approximative, dépend des
-    # extrêmes de courbes) : informative, pas soumise à la parité stricte.
-    a = [e for e in a if e[1] != "OUT_SHAPE"]
-    b = [e for e in b if e[1] != "OUT_SHAPE"]
+    # OUT_SHAPE = bbox dérivée via ezdxf.bbox, qui approche les arcs par des Bézier
+    # (jusqu'à 4e-3 mm d'écart avec l'analytique) : comparée à 1e-2, pas ignorée. Ignorée,
+    # elle laissait passer un cadre décalé de dizaines de mm sur une pièce à arcs.
     if len(a) != len(b):
         return f"entity count {len(a)} vs {len(b)}"
     for i, (ea, eb) in enumerate(zip(a, b)):
