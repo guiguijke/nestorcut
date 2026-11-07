@@ -5,6 +5,7 @@ import { LOCALES, translate } from '../utils/i18n'
 import {
     UNLIMITED_FEATURE_KEYS,
     PRO_FEATURE_KEYS,
+    DELINQUENT_STATUSES,
     checkoutTerms,
     signedInPlanCta,
 } from '../utils/planBenefits'
@@ -101,45 +102,52 @@ describe("avantages : une seule source pour /plans et la fenêtre d'abonnement",
     })
 })
 
-describe('signedInPlanCta : /plans connecté', () => {
-    const cta = (tierKey, level, trialEligible, comingSoon = false) =>
-        signedInPlanCta({ tierKey, level, trialEligible, comingSoon })
+describe('signedInPlanCta : /plans connecté, matrice clic / destination', () => {
+    const cta = (tierKey, level, trialEligible, comingSoon = false, subscriptionStatus = undefined) =>
+        signedInPlanCta({ tierKey, level, trialEligible, comingSoon, subscriptionStatus })
 
-    it("« Votre offre » sur la carte de son offre", () => {
-        expect(cta('free', 'free', true)).toMatchObject({ labelKey: 'plans.cta.yourPlan', disabled: true })
-        expect(cta('standard', 'standard', false)).toMatchObject({ labelKey: 'plans.cta.yourPlan', disabled: false })
-        expect(cta('privacy', 'privacy', false)).toMatchObject({ labelKey: 'plans.cta.yourPlan', disabled: false })
+    it("« Votre offre » sur la carte de son offre : inerte pour Free, profil pour un abonné", () => {
+        expect(cta('free', 'free', true)).toEqual({ labelKey: 'plans.cta.yourPlan', disabled: true, action: 'profile' })
+        expect(cta('standard', 'standard', false)).toEqual({ labelKey: 'plans.cta.yourPlan', disabled: false, action: 'profile' })
+        expect(cta('privacy', 'privacy', false)).toEqual({ labelKey: 'plans.cta.yourPlan', disabled: false, action: 'profile' })
     })
 
-    it('un Free éligible : essai sur Unlimited ET sur Pro, avec la durée', () => {
+    it("un Free éligible : l'essai d'Unlimited ET de Pro ouvre la fenêtre, sans changer de page", () => {
         for (const tierKey of ['standard', 'privacy']) {
-            expect(cta(tierKey, 'free', true)).toEqual({ labelKey: 'plans.cta.startTrial', withDays: true, disabled: false })
+            expect(cta(tierKey, 'free', true)).toEqual({ labelKey: 'plans.cta.startTrial', disabled: false, action: 'dialog' })
         }
     })
 
-    it("un Free qui a consommé son essai : jamais de promesse de jours", () => {
+    it("un Free qui a consommé son essai : « S'abonner » ouvre la fenêtre, jamais de jours", () => {
         for (const tierKey of ['standard', 'privacy']) {
-            const result = cta(tierKey, 'free', false)
-            expect(result.labelKey).toBe('sub.subscribe')
-            expect(result.withDays).toBe(false)
+            expect(cta(tierKey, 'free', false)).toEqual({ labelKey: 'sub.subscribe', disabled: false, action: 'dialog' })
         }
     })
 
-    it("éligibilité pas encore connue : rien n'est promis", () => {
+    it("éligibilité pas encore connue : rien n'est promis, le clic va au profil", () => {
         for (const tierKey of ['standard', 'privacy']) {
-            const result = cta(tierKey, 'free', undefined)
-            expect(result.labelKey).toBe('plans.cta.manageInProfile')
-            expect(result.withDays).toBe(false)
+            expect(cta(tierKey, 'free', undefined)).toEqual({ labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' })
         }
     })
 
-    it("un abonné Unlimited vers Pro : le chemin existant (modification en place), pas d'essai", () => {
-        expect(cta('privacy', 'standard', true)).toEqual({ labelKey: 'plans.cta.getPro', withDays: false, disabled: false })
+    it("un abonné Unlimited vers Pro : le profil (modification en place), pas d'essai", () => {
+        expect(cta('privacy', 'standard', true)).toEqual({ labelKey: 'plans.cta.getPro', disabled: false, action: 'profile' })
     })
 
     it('les cartes en dessous de son offre renvoient au profil', () => {
-        expect(cta('free', 'standard', true).labelKey).toBe('plans.cta.manageInProfile')
-        expect(cta('standard', 'privacy', true).labelKey).toBe('plans.cta.manageInProfile')
+        expect(cta('free', 'standard', true)).toEqual({ labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' })
+        expect(cta('standard', 'privacy', true)).toEqual({ labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' })
+    })
+
+    it("paiement échoué (palier « free », abonnement existant) : jamais « Votre offre » ni « S'abonner »", () => {
+        for (const status of DELINQUENT_STATUSES) {
+            expect(cta('free', 'free', true, false, status)).toEqual({ labelKey: 'plans.cta.manageInProfile', disabled: false, action: 'profile' })
+            for (const tierKey of ['standard', 'privacy']) {
+                expect(cta(tierKey, 'free', true, false, status)).toEqual({ labelKey: 'sub.updateCard', disabled: false, action: 'dialog' })
+            }
+        }
+        // Un statut sain ne change rien.
+        expect(cta('standard', 'free', true, false, 'canceled').labelKey).toBe('plans.cta.startTrial')
     })
 
     it('offres payantes fermées : « bientôt » inerte, même pour un Free', () => {
@@ -147,9 +155,12 @@ describe('signedInPlanCta : /plans connecté', () => {
         expect(cta('privacy', 'free', true, true)).toMatchObject({ labelKey: 'plans.cta.comingSoon', disabled: true })
     })
 
-    it("/plans passe par signedInPlanCta et lit l'éligibilité côté client", () => {
+    it("/plans passe par signedInPlanCta, lit l'éligibilité et le statut côté client, et ouvre la fenêtre avec la source « plans »", () => {
         const plans = read('../pages/plans.vue')
         expect(plans).toContain('signedInPlanCta')
+        expect(plans).toContain('subscriptionStatus: info?.subscriptionStatus')
+        expect(plans).toContain("openBuyCredits({ source: 'plans' })")
+        expect(read('../layouts/default.vue')).toContain('<BuyCreditsDialog')
         expect(plans).toContain("'/api/payment/subscription'")
         expect(plans).not.toContain("userIsSet ? t('plans.cta.manageInProfile')")
     })

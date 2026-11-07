@@ -8,11 +8,16 @@
             <slot />
         </main>
         <Footer />
+        <!-- /plans (public, connecté ou non) : le clic d'une carte payante ouvre
+             la fenêtre d'abonnement sans quitter la page. Le contenu n'est
+             rendu qu'à l'ouverture. -->
+        <BuyCreditsDialog v-model:isModalOpen="buyCreditsDialog" />
     </div>
 </template>
 
 <script setup>
 import { themeType } from '~~/constants/theme.constants';
+const buyCreditsDialog = useBuyCreditsDialog();
 </script>
 <style lang="scss" scoped>
 .main {

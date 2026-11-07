@@ -82,8 +82,8 @@
 
 <script setup>
 
-// 3.1.6 (P3) : page publique qui reconnaît la session — un connecté voit
-// « Gérer dans le profil », un anonyme « Commencer ».
+// 3.1.6 (P3) : page publique qui reconnaît la session — un connecté voit son
+// offre, l'essai (fenêtre d'abonnement) ou le profil, un anonyme « Commencer ».
 definePageMeta({
     middleware: 'auth-optional',
 })
@@ -103,6 +103,9 @@ onMounted(() => {
 })
 
 const loginDialog = useLoginDialog()
+// Fenêtre d'abonnement (avantages + conditions) : montée par la mise en page,
+// ouverte ici avec sa source de suivi.
+const openBuyCredits = useBuyCreditsOpener()
 const { getters: authGetters } = authStore
 const { t } = useLocale()
 const userIsSet = computed(() => Boolean(unref(authGetters.userIsSet)))
@@ -179,6 +182,13 @@ watch(userIsSet, (isSet) => {
     if (isSet && import.meta.client) loadSubscriptionInfo()
 })
 
+// Durée d'essai annoncée par le serveur pour l'offre de la carte (repli : la
+// constante partagée tant que le catalogue n'est pas lu).
+function trialDaysOf(tierKey) {
+    const days = Number(unref(plans)?.[tierKey]?.trialDays)
+    return Number.isFinite(days) && days > 0 ? days : TRIAL_DAYS
+}
+
 // Libellé et état du bouton d'une carte : anonyme = libellé de la carte ;
 // connecté = « Votre offre » / essai / profil selon le palier (signedInPlanCta).
 function ctaFor(tier) {
@@ -191,8 +201,9 @@ function ctaFor(tier) {
         level: unref(authGetters.user)?.compute?.level,
         trialEligible: typeof info?.trialEligible === 'boolean' ? info.trialEligible : undefined,
         comingSoon: tier.comingSoon,
+        subscriptionStatus: info?.subscriptionStatus,
     })
-    return { label: t(cta.labelKey, { days: TRIAL_DAYS }), disabled: cta.disabled }
+    return { label: t(cta.labelKey, { days: trialDaysOf(tier.tierKey) }), disabled: cta.disabled, action: cta.action }
 }
 
 const formatPlanPrice = (plan) => {
@@ -246,7 +257,7 @@ const tiers = computed(() => {
             // features) but the CTA shows "Coming soon" and does nothing.
             // Same when the Stripe sync failed (plan unavailable) — never
             // offer a checkout that can only 503.
-            cta: stdAvailable && !paidDisabled.value ? t('plans.cta.startTrial', { days: TRIAL_DAYS }) : t('plans.cta.comingSoon'),
+            cta: stdAvailable && !paidDisabled.value ? t('plans.cta.startTrial', { days: trialDaysOf('standard') }) : t('plans.cta.comingSoon'),
             comingSoon: !stdAvailable || paidDisabled.value,
             trackingTag: 'plans_unlimited',
         },
@@ -295,7 +306,10 @@ function onTierClick(tier) {
     if (tier.comingSoon && !userIsSet.value) return
     trackEvent(`click_${tier.trackingTag}`, { page: 'plans' })
     if (userIsSet.value) {
-        navigateTo('/profile')
+        const cta = ctaFor(tier)
+        if (cta.disabled) return
+        if (cta.action === 'dialog') openBuyCredits({ source: 'plans' })
+        else navigateTo('/profile')
         return
     }
     loginDialog.value = true
