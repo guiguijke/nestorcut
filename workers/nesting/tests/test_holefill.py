@@ -549,3 +549,27 @@ def test_expansion_loss_fails_the_job_instead_of_delivering_n_minus_k(monkeypatc
     # Message DISTINCT des deux autres causes d'échec (« pas tout placé »,
     # « chevauchements mesurés ») : une perte de pièce se nomme.
     assert doc["information"].startswith("Hole-fill expansion lost parts")
+
+
+def test_measured_density_pieces_sur_toles_multi_bins():
+    """Deux tôles utilisées : aire des pièces / (2 tôles), jamais la
+    densité brute du moteur."""
+    from core.holefill import measured_density
+    sq = {"id": 0, "coords": [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+          "holes": [], "count": 3, "rotations": [0]}
+    items = [[0, 0, 0.0, 0.0, 0.0], [0, 0, 0.0, 20.0, 0.0], [0, 1, 0.0, 0.0, 0.0]]
+    d = measured_density(items, [sq], [[100.0, 100.0]])
+    assert abs(d - 300.0 / 20000.0) < 1e-9
+    assert measured_density([], [sq], [[100.0, 100.0]]) is None
+    assert measured_density(items, [sq], None) is None
+
+
+def test_trame_finale_ne_reprend_pas_la_densite_moteur():
+    """La trame de révélation mesure la densité ; elle ne lit plus
+    metrics.density (pièces / bande) du moteur."""
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1].joinpath("core", "main.py").read_text(encoding="utf-8")
+    start = src.index("def _alt_to_live(")
+    body = src[start:start + 3000]
+    assert "measured_density(" in body
+    assert 'get("metrics", {}).get("density")' not in body

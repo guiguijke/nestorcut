@@ -1984,6 +1984,14 @@ def _nesting_process_impl(doc):
                 for li, layout in enumerate(solution.get("layouts", []))
                 for pi in layout.get("placed_items", [])
             ]
+        # Densité MESURÉE (aire des pièces / aire des tôles), comme sur les
+        # frames de recherche et dans la carte résultat : à ce stade les
+        # layouts sont déjà remappés, expansés et remplis. La densité brute
+        # du moteur (pièces / bande) ne sort jamais sur le fil live.
+        from core.holefill import measured_density
+        reveal_density = measured_density(
+            items, input_items,
+            [[float(s.get("width")), float(s.get("height"))] for s in sheets])
         return {
             "stage": "reveal",
             "worker": rank,
@@ -1992,7 +2000,7 @@ def _nesting_process_impl(doc):
             # classe (et remplace toutes les classes côté vue).
             "bias": engine_alt.get("bias"),
             "strip_width": engine_alt.get("metrics", {}).get("strip_width"),
-            "density": engine_alt.get("metrics", {}).get("density"),
+            "density": reveal_density,
             # C12 : bins = NOMBRE de tôles (l'ancien champ portait le
             # coût — fausse « quantité » dès que le coût/tôle ≠ 1).
             "bins": len(solution.get("layouts") or []),
@@ -2271,8 +2279,8 @@ def _nesting_process_impl(doc):
         # AA1 (vérif L1 2026-09-05) : la densité STOCKÉE de l'alternative
         # moteur devient matière / Σ tôles (mesurée, même définition que la
         # grille) — l'accueil et les listes n'ont plus deux échelles selon
-        # l'option. La densité moteur (matière / emprise) reste celle des
-        # frames live.
+        # l'option. Les frames live (recherche et final) portent la même
+        # mesure ; la densité moteur (matière / emprise) ne sort jamais.
         totals = report_totals(sheets_metrics)
         # E4-a : décompte blocs/pièces de l'alternative (« N blocs (M
         # pièces) », §8.1.3) — champ ADDITIF, absent des jobs sans bloc.
