@@ -101,7 +101,9 @@ const isHomePage = computed(() => {
 </script>
 <style lang="scss" scoped>
 .main {
-    overflow: hidden;
+    // `clip` rogne comme `hidden` (panneaux hors champ) sans créer de zone de
+    // défilement : un bloc `position: sticky` à l'intérieur colle à l'écran.
+    overflow: clip;
     background-color: var(--background-primary);
     flex-direction: column;
     display: flex;

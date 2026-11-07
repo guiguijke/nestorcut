@@ -404,8 +404,8 @@ const spacingBelowKerf = computed(() => {
         }
 
         &__section {
-            margin-bottom: 16px;
-            padding-bottom: 12px;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
             border-bottom: 1px solid var(--separator-secondary);
 
             &:last-child {
@@ -416,7 +416,7 @@ const spacingBelowKerf = computed(() => {
         }
 
         &__h {
-            margin: 0 0 8px;
+            margin: 0 0 6px;
             font-size: var(--fs-12);
             font-weight: 700;
             letter-spacing: 0.04em;
@@ -435,13 +435,19 @@ const spacingBelowKerf = computed(() => {
 
     .size {
         & > *:not(:last-child) {
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
 
         &__line {
             display: grid;
             grid-template-columns: 1fr;
-            gap: 8px;
+            gap: 6px;
+        }
+
+        // Champs plus bas : la même saisie, moins de hauteur.
+        :deep(.input) {
+            padding-top: 8px;
+            padding-bottom: 8px;
         }
 
         &__input {
@@ -451,7 +457,7 @@ const spacingBelowKerf = computed(() => {
 
         &__add {
             width: 100%;
-            padding: 11px;
+            padding: 8px;
             border: 1.5px dashed var(--separator-primary);
             border-radius: var(--radius-l);
             background-color: transparent;
@@ -497,14 +503,14 @@ const spacingBelowKerf = computed(() => {
     .sheet {
         border: 1px solid var(--separator-secondary);
         border-radius: var(--radius-l);
-        padding: 12px;
+        padding: 10px;
         background-color: var(--background-primary);
         box-shadow:
             0 1px 2px color-mix(in srgb, var(--label-primary) 4%, transparent),
             0 4px 12px color-mix(in srgb, var(--label-primary) 5%, transparent);
 
         & > *:not(:last-child) {
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
 
         &__header {

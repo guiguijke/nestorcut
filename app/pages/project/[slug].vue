@@ -26,6 +26,37 @@
         <p v-if="preflightLine" class="content__preflight" data-testid="project-preflight">
             {{ preflightLine }}
         </p>
+        <!-- Les pièces d'abord : on dépose, on règle les quantités, puis on
+             règle la tôle. Le bouton Nest, collant, reste à l'écran partout. -->
+        <!-- Lot J8-bis (§9.73 point 22) : l'INFORMATION de bascule « .job
+             détecté → passage en Cet appareil » — une seule fois, jamais
+             un refus : le projet est créé, dans le bon mode. -->
+        <div v-if="jobSwitchedInfo" class="content__notice">
+            {{ t('home.jobSwitched') }}
+        </div>
+        <!-- Lot J10-a (§9.77 point 11) : zone d'exclusion déclarée dans
+             le `.job` et non nulle — non honorée, DITE au dépôt. -->
+        <div v-if="localImportNotice" class="content__notice content__notice--warn">
+            {{ localImportNoticeText }}
+        </div>
+        <p v-if="isLocalProject && filesCount === 0 && !localImportError" class="content__privacy">
+            {{ t('localImport.emptyBrowser') }}
+        </p>
+        <div v-if="localImportError" class="content__error">
+            {{ localImportErrorText }}
+        </div>
+        <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
+             paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
+        <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
+            {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
+        </div>
+        <ProjectFiles
+            :projectFiles="projectFiles"
+            :readonly="isDemo"
+            :local="isLocalProject"
+            @addFiles="addFiles"
+            class="content__files"
+        />
         <section ref="liveSection" class="atelier">
             <div class="atelier__stage stage" :class="{ 'stage--live': stageLive }">
                 <div class="stage__head">
@@ -91,32 +122,6 @@
             </div>
             <aside class="atelier__params">
                 <MainSettings />
-                <div class="atelier__cta">
-                <MainButton
-                    :theme="themeType.primary"
-                    :label="btnLabel"
-                    :isDisable="btnIsDisable"
-                    trackingTag="project_nest_start"
-                    @click="startsNest"
-                    class="atelier__nest"
-                >
-                    <template v-if="runningJob">
-                        <CoresSpinner :cores="runningCores" :size="16" show-count />
-                        {{ t('nest.computing') }}
-                    </template>
-                </MainButton>
-                <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
-                     grisé, avant tout clic (en bas de page il sortait de l'écran). -->
-                <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
-                    {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
-                </p>
-                <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
-                <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
-                     les premières tôles seulement ; le dire avant le calcul. -->
-                <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
-                    {{ ctaFreeNote }}
-                </p>
-                </div>
                 <div v-if="capacityPanel" ref="capacityPanelEl">
                 <CapacityPanel
                     :panel="capacityPanel"
@@ -131,47 +136,44 @@
         <!-- AF1 (L3-bis) : UN SEUL message de refus — quand le panneau de
              capacité est affiché, le bandeau rouge sous la scène se tait
              (la mention de remboursement vit dans le panneau). -->
-        <!-- Lot J8-bis (§9.73 point 22) : l'INFORMATION de bascule « .job
-             détecté → passage en Cet appareil » — une seule fois, jamais
-             un refus : le projet est créé, dans le bon mode. -->
-        <div v-if="jobSwitchedInfo" class="content__notice">
-            {{ t('home.jobSwitched') }}
-        </div>
-        <!-- Lot J10-a (§9.77 point 11) : zone d'exclusion déclarée dans
-             le `.job` et non nulle — non honorée, DITE au dépôt. -->
-        <div v-if="localImportNotice" class="content__notice content__notice--warn">
-            {{ localImportNoticeText }}
-        </div>
         <div v-if="jobErrorText && !capacityPanel" ref="jobErrorEl" class="content__error" data-testid="job-error">
             {{ jobErrorText }}
         </div>
         <div v-if="isDemo && demoQuotaReached && !demoUnlimited" class="content__error">
             {{ t('demo.quotaEmpty') }}
         </div>
-        <p v-if="isLocalProject && filesCount === 0 && !localImportError" class="content__privacy">
-            {{ t('localImport.emptyBrowser') }}
-        </p>
         <div v-if="nestRequestError && !capacityPanel" class="content__error">
             {{ t(nestRequestError) }}
         </div>
         <div v-if="nestSubmitError" ref="nestRefusalEl" class="content__error" data-testid="nest-refusal">
             {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
-        <div v-if="localImportError" class="content__error">
-            {{ localImportErrorText }}
+        <div class="atelier__cta">
+            <MainButton
+                :theme="themeType.primary"
+                :label="btnLabel"
+                :isDisable="btnIsDisable"
+                trackingTag="project_nest_start"
+                @click="startsNest"
+                class="atelier__nest"
+            >
+                <template v-if="runningJob">
+                    <CoresSpinner :cores="runningCores" :size="16" show-count />
+                    {{ t('nest.computing') }}
+                </template>
+            </MainButton>
+            <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
+                 grisé, avant tout clic (en bas de page il sortait de l'écran). -->
+            <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
+                {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+            </p>
+            <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
+            <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
+                 les premières tôles seulement ; le dire avant le calcul. -->
+            <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
+                {{ ctaFreeNote }}
+            </p>
         </div>
-        <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
-             paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
-        <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
-            {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
-        </div>
-        <ProjectFiles
-            :projectFiles="projectFiles"
-            :readonly="isDemo"
-            :local="isLocalProject"
-            @addFiles="addFiles"
-            class="content__files"
-        />
     </div>
 </template>
 
@@ -1039,8 +1041,7 @@ const startsNest = () => {
     }
 
     &__files {
-        margin-top: 28px;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
 
     &__error {
@@ -1142,19 +1143,32 @@ const startsNest = () => {
 
     &__nest {
         width: 100%;
-        margin-top: 4px;
 
         :deep(.button) {
             width: 100%;
         }
     }
 
+    // Bloc collant : dernier enfant de la page, donc collé en bas de l'écran
+    // pendant tout le défilement (pièces, tôle, réglages), au repos en fin de
+    // page. Sur PC il s'aligne sur la colonne des réglages.
     &__cta {
         position: sticky;
         bottom: 0;
-        padding-top: 8px;
-        background: var(--background-primary);
         z-index: 2;
+        padding: 8px 0 10px;
+        background: var(--background-primary);
+        box-shadow: 0 -8px 12px -8px color-mix(in srgb, var(--label-primary) 14%, transparent);
+
+        @media (min-width: 900px) {
+            width: 340px;
+            margin-left: auto;
+        }
+
+        // Entre 480 et 1318 px le bouton « Support » est fixé en bas à droite.
+        @media (min-width: 480px) and (max-width: 1318px) {
+            padding-right: 104px;
+        }
     }
 
     &__cta-hint {

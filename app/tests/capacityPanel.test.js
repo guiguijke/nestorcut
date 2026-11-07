@@ -293,7 +293,8 @@ describe('refus sans contradiction (une source, pas de 0 mm, pas de note Free)',
 
     it('[slug].vue : le refus « pièce trop grande » est dans le bloc du bouton Nest', () => {
         const slugVue = source('app/pages/project/[slug].vue')
-        const cta = slugVue.slice(slugVue.indexOf('class="atelier__cta"'), slugVue.indexOf('<CapacityPanel'))
+        const cta = slugVue.slice(slugVue.indexOf('class="atelier__cta"'), slugVue.indexOf('<script setup>'))
+        expect(cta).not.toContain('<CapacityPanel')
         expect(cta).toContain("t('project.minSheet'")
         expect(cta).toContain('data-testid="min-sheet-error"')
         // plus de second exemplaire en bas de page, hors écran
