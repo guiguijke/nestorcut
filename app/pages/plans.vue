@@ -97,7 +97,7 @@ import {
     PRO_PRICE_LABEL,
 } from '~~/shared/constants/payment.constants'
 import { flagOn } from '~/utils/runtimeFlag'
-import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, signedInPlanCta, offerButtonName } from '~/utils/planBenefits'
+import { UNLIMITED_FEATURE_KEYS, PRO_FEATURE_KEYS, signedInPlanCta, offerButtonName, formatPlanMoney } from '~/utils/planBenefits'
 
 onMounted(() => {
     trackEvent('page_view', { page: 'plans' })
@@ -108,7 +108,7 @@ const loginDialog = useLoginDialog()
 // ouverte ici avec sa source de suivi.
 const openBuyCredits = useBuyCreditsOpener()
 const { getters: authGetters } = authStore
-const { t } = useLocale()
+const { t, locale } = useLocale()
 const userIsSet = computed(() => Boolean(unref(authGetters.userIsSet)))
 
 // Temporarily disable paid-plan CTAs (Unlimited trial + Pro upgrade) until
@@ -208,14 +208,13 @@ function ctaFor(tier) {
     return { label: t(cta.labelKey, { days: trialDaysOf(tier.tierKey) }), disabled: cta.disabled, action: cta.action }
 }
 
+// Même écriture que la fenêtre d'abonnement : langue de l'app, devise du plan.
 const formatPlanPrice = (plan) => {
     if (!plan?.available) return null
-    return new Intl.NumberFormat('en', {
-        style: 'currency',
-        currency: plan.currency || 'eur',
-        maximumFractionDigits: plan.amount % 1 === 0 ? 0 : 2,
-    }).format(plan.amount)
+    return formatPlanMoney(plan.amount, plan.currency || 'eur', locale.value)
 }
+// Plan illisible : le libellé de repli, en euros, au même format.
+const fallbackPrice = (label) => formatPlanMoney(Number(label.replace(/\D/g, '')), 'eur', locale.value)
 
 const tiers = computed(() => {
     const stdPlan = unref(plans)?.standard
@@ -226,7 +225,7 @@ const tiers = computed(() => {
         {
             name: t('plans.tier.free'),
             tierKey: 'free',
-            price: '€0',
+            price: formatPlanMoney(0, stdPlan?.currency || 'eur', locale.value),
             intervalLabel: t('plans.interval.forever'),
             badge: t('plans.badge.discovery'),
             badgeKind: 'neutral',
@@ -246,7 +245,7 @@ const tiers = computed(() => {
             name: t('plans.tier.unlimited'),
             tierKey: 'standard',
             // Live Stripe price when the sync worked, static label as fallback.
-            price: stdAvailable ? formatPlanPrice(stdPlan) : SUBSCRIPTION_PRICE_LABEL,
+            price: stdAvailable ? formatPlanPrice(stdPlan) : fallbackPrice(SUBSCRIPTION_PRICE_LABEL),
             intervalLabel: t('plans.interval.month'),
             badge: t('plans.badge.popular'),
             badgeKind: 'accent',
@@ -266,7 +265,7 @@ const tiers = computed(() => {
         {
             name: t('plans.tier.pro'),
             tierKey: 'privacy',
-            price: proAvailable ? formatPlanPrice(proPlan) : PRO_PRICE_LABEL,
+            price: proAvailable ? formatPlanPrice(proPlan) : fallbackPrice(PRO_PRICE_LABEL),
             intervalLabel: t('plans.interval.month'),
             badge: t('plans.badge.compute'),
             badgeKind: 'pro',

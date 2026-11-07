@@ -340,3 +340,39 @@ describe('carte de la fenêtre : la note, la date, la mise en forme', () => {
         expect(css).toMatch(/\.subscription__features \{[^}]*list-style: disc;/)
     })
 })
+
+describe('/plans et la fenêtre écrivent le montant de la même façon', () => {
+    const free = serverInfo({ subscriptionStatus: null, trialEligible: true, canManageBilling: false, currentPeriodEnd: null })
+    const prices = (view, className) => view.byClass(className).map((node) => view.textOf(node))
+
+    for (const locale of LOCALES) {
+        it(`${locale} : mêmes montants sur les cartes et dans la fenêtre`, async () => {
+            const page = await mountPlans({ info: free, locale })
+            const card = await mountCard(free, { locale, level: 'free' })
+            const [, unlimited, pro] = prices(page.view, 'cards__price')
+            expect([unlimited, pro]).toEqual(prices(card.view, 'subscription__price'))
+        })
+    }
+
+    it('français : le symbole après le montant, Free compris', async () => {
+        const { view } = await mountPlans({ info: free, locale: 'fr' })
+        const month = dict('plans.interval.month', 'fr')
+        expect(prices(view, 'cards__price')).toEqual([`0 € / ${dict('plans.interval.forever', 'fr')}`, `19 € / ${month}`, `39 € / ${month}`])
+    })
+
+    it('anglais : symbole devant, comme avant', async () => {
+        const { view } = await mountPlans({ info: free, locale: 'en' })
+        expect(prices(view, 'cards__price').map((text) => text.split(' ')[0])).toEqual(['€0', '€19', '€39'])
+    })
+
+    it('Free suit la devise de l’offre : jamais €0 à côté de $19', async () => {
+        const catalog = { standard: { available: true, ...PLAN, currency: 'usd' }, privacy: { available: true, ...PRO, currency: 'usd' } }
+        const { view } = await mountPlans({ info: free, locale: 'en', catalog })
+        expect(prices(view, 'cards__price').map((text) => text.split(' ')[0])).toEqual(['$0', '$19', '$39'])
+    })
+
+    it('catalogue sans plan : le prix de repli prend aussi le format de la langue', async () => {
+        const { view } = await mountPlans({ info: free, locale: 'fr', catalog: { standard: { available: false }, privacy: { available: false } } })
+        expect(prices(view, 'cards__price').map((text) => text.slice(0, 4))).toEqual(['0 € ', '19 €', '39 €'])
+    })
+})
