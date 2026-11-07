@@ -100,6 +100,8 @@ pub struct ImportStats {
     pub dangling_paths: usize,
     /// Corps écartés à l'émission (plus petits que 0,1 mm sur un côté).
     pub dropped_parts: usize,
+    /// Entités de dessin écartées parce qu'elles sont en espace papier.
+    pub paper_space_skipped: usize,
     /// Trous rebouchés parce que trop petits pour être découpés (lot E1).
     pub micro_voids: usize,
     /// Sommets retirés des aller-retours de largeur nulle (lot E1).
@@ -145,6 +147,15 @@ impl ImportStats {
                 "import.partsDropped",
                 LEVEL_ATTENTION,
                 self.dropped_parts,
+            ));
+        }
+        // Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte
+        // (règle 2), et une pièce oubliée là ne serait jamais découpée.
+        if self.paper_space_skipped > 0 {
+            out.push(Finding::new(
+                "import.paperSpaceSkipped",
+                LEVEL_ATTENTION,
+                self.paper_space_skipped,
             ));
         }
         if self.unit_unknown {

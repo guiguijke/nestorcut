@@ -48,6 +48,10 @@ class TestParityWithRust:
 
 
 class TestFindings:
+    def test_paper_space_is_attention_with_its_count(self):
+        out = build_findings({**empty_stats(), "paperSpaceSkipped": 7})
+        assert out == [{"code": "import.paperSpaceSkipped", "level": LEVEL_ATTENTION, "count": 7}]
+
     def test_a_clean_file_says_nothing(self):
         assert build_findings(empty_stats()) == []
         assert build_findings(None) == []

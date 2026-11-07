@@ -129,7 +129,7 @@ describe('textes des constats (FR et EN)', () => {
     it('aucune clé de constat ne manque dans les deux langues', () => {
         const codes = [
             'import.entitiesSkipped', 'import.annotationsSkipped', 'import.contoursDropped',
-            'import.partsDropped', 'import.unitConverted', 'import.unitAssumed',
+            'import.partsDropped', 'import.paperSpaceSkipped', 'import.unitConverted', 'import.unitAssumed',
             'import.unitUnknown', 'import.unitImplausible', 'import.splinesSampled',
             'import.blocksFlattened', 'import.andMore', 'import.findingsTitle',
             'import.serverTooSlow',
@@ -141,6 +141,15 @@ describe('textes des constats (FR et EN)', () => {
             expect(fr(code, { n: 1, types: 'X', value: 'Y', seconds: 20, max: 2 }))
                 .not.toMatch(/\{[a-z]+\}/)
         }
+    })
+})
+
+describe('espace papier écarté', () => {
+    it('le constat monte sur la carte, avec son compte', () => {
+        const line = composeCardLine([f('import.paperSpaceSkipped', 'attention', 9)], fr)
+        expect(line.level).toBe('attention')
+        expect(line.line).toContain('9 entités')
+        expect(line.line).toContain('espace papier')
     })
 })
 

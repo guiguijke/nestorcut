@@ -50,6 +50,8 @@ function tooHeavyError(refusal) {
         // Le serveur refuse aussi (assert_insert_depth) : ne JAMAIS renvoyer
         // vers un chemin dont on n'a pas vérifié qu'il réussit.
         key = 'localImport.blockDepth'
+    } else if (refusal?.reason === 'paperSpaceOnly') {
+        key = 'localImport.paperSpaceOnly'
     } else if (refusal?.reason === 'time') {
         key = 'localImport.tooHeavy'
     } else {

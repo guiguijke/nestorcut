@@ -3,7 +3,13 @@ import os
 import secrets
 from worker_common.logger import setup_logger
 from worker_common.mongo import db, get_bucket
-from dxf_utils import read_dxf, scale_drawing, subset_drawing_bytes
+from dxf_utils import (
+    PAPER_SPACE_ONLY,
+    PaperSpaceOnly,
+    read_dxf,
+    scale_drawing,
+    subset_drawing_bytes,
+)
 from ezdxf.document import Drawing
 from core.svg_generator import create_svg_from_doc
 
@@ -109,14 +115,19 @@ def _make_dxf_copy(doc) -> Drawing:
     # source, the canonical copy written to validDxf is ALWAYS a DXF in mm,
     # so polygonization/colors/previews/nesting never see the difference.
     source_format = detect_format(dxf_bytes)
-    if source_format == "svg":
-        logger.info("SVG source detected, converting", extra={"slug": dxf_file_slug})
-        dxf_copy = svg_bytes_to_drawing(dxf_bytes)
-    elif source_format == "dwg":
-        logger.info("DWG source detected, converting", extra={"slug": dxf_file_slug})
-        dxf_copy = _dwg_to_drawing(doc, dxf_bytes)
-    else:
-        dxf_copy = read_dxf(io.BytesIO(dxf_bytes))
+    try:
+        if source_format == "svg":
+            logger.info("SVG source detected, converting", extra={"slug": dxf_file_slug})
+            dxf_copy = svg_bytes_to_drawing(dxf_bytes)
+        elif source_format == "dwg":
+            logger.info("DWG source detected, converting", extra={"slug": dxf_file_slug})
+            dxf_copy = _dwg_to_drawing(doc, dxf_bytes)
+        else:
+            dxf_copy = read_dxf(io.BytesIO(dxf_bytes))
+    except PaperSpaceOnly:
+        logger.warning("Drawing entirely in paper space", extra={"slug": dxf_file_slug})
+        _record_import_error(doc, PAPER_SPACE_ONLY)
+        raise
 
     if dxf_copy is None:
         # read_dxf returns None on IOError/DXFStructureError (recover a
@@ -143,11 +154,15 @@ def _make_dxf_copy(doc) -> Drawing:
         logger.info("Error deleting dxf file", extra={"error": e})
         
     write_gridfs(valid_dxf_bucket, dxf_file_slug, dxf_copy_bytes, user_id, dek)
+    # La copie relue ensuite n'a plus d'espace papier : le constat voyage avec le
+    # document fichier jusqu'à l'assemblage (_close_polygon_from_dxf).
+    paper_space_skipped = (getattr(dxf_copy, "import_stats", None) or {}).get("paperSpaceSkipped", 0)
     
     db["user_dxf_files"].update_one(
         {"_id": doc["_id"]},
         {"$set": {
             "isDxfCopyExist": True,
+            "paperSpaceSkipped": paper_space_skipped,
             # Declared drawing units of the SOURCE file ($INSUNITS code,
             # 0 = unitless). Geometry is normalized to mm at import; this is
             # pure traceability for support/debugging.
@@ -155,6 +170,7 @@ def _make_dxf_copy(doc) -> Drawing:
         }}
     )
     doc["isDxfCopyExist"] = True
+    doc["paperSpaceSkipped"] = paper_space_skipped
     
     logger.info("Dxf copy made", extra={"dxf_file_slug": dxf_file_slug})
 
@@ -381,6 +397,7 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
     # ceux de l'assemblage, remplis ci-dessous.
     stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
     stats.setdefault("skipped", {})
+    stats["paperSpaceSkipped"] = doc.get("paperSpaceSkipped") or 0
     closed_parts = build_geometry(
         drawing,
         tolerance,
@@ -398,6 +415,7 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
         drawing = _getting_drawing(doc)
         stats = dict(getattr(drawing, "import_stats", None) or empty_stats())
         stats.setdefault("skipped", {})
+        stats["paperSpaceSkipped"] = doc.get("paperSpaceSkipped") or 0
         closed_parts = build_geometry(
             drawing,
             tolerance,

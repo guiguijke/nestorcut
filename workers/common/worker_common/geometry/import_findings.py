@@ -62,6 +62,7 @@ def empty_stats() -> dict:
         "splines": 0,           # SPLINE échantillonnées
         "danglingPaths": 0,     # tracés ouverts ne refermant aucune pièce
         "droppedParts": 0,      # corps écartés à l'émission
+        "paperSpaceSkipped": 0, # entités de dessin écartées de l'espace papier
         "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
         "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
         "scaleApplied": 1.0,    # facteur d'échelle appliqué à l'import (E2)
@@ -105,6 +106,10 @@ def build_findings(stats: dict) -> list:
         out.append(_finding("import.contoursDropped", LEVEL_ATTENTION, stats["danglingPaths"]))
     if stats["droppedParts"] > 0:
         out.append(_finding("import.partsDropped", LEVEL_ATTENTION, stats["droppedParts"]))
+    # Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte
+    # (règle 2), et une pièce oubliée là ne serait jamais découpée.
+    if stats["paperSpaceSkipped"] > 0:
+        out.append(_finding("import.paperSpaceSkipped", LEVEL_ATTENTION, stats["paperSpaceSkipped"]))
     if stats["unitUnknown"]:
         out.append(_finding("import.unitUnknown", LEVEL_ATTENTION, 1, value=stats["insunits"]))
     elif stats["unitFactor"] >= IMPLAUSIBLE_FACTOR_MM:

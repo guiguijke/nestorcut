@@ -284,6 +284,7 @@ export default {
     'files.importError.dwgVersion': 'Fichier DWG trop récent (AutoCAD 2013 ou plus) : enregistrez-le en DXF ou en DWG 2010.',
     'files.importError.dwgCorrupt': 'Fichier DWG illisible (fichier corrompu ou version non prise en charge) : enregistrez-le en DXF puis réimportez-le.',
     'files.importError.dwgOutput': 'DWG converti, mais le DXF produit est illisible : enregistrez le fichier en DXF depuis votre logiciel de CAO.',
+    'files.importError.paperSpaceOnly': "Tout le dessin de ce fichier est dans l'espace papier, son espace objet est vide : déplacez-le dans l'espace objet depuis votre CAO, puis réimportez-le.",
     // Régime privacy (création + pastille projet).
     'privacy.choice': "Où vivent les pièces",
     'privacy.device.title': "Cet appareil",
@@ -309,6 +310,7 @@ export default {
     'import.annotationsSkipped': "Textes et cotes ignorés ({n} entités) — seuls les contours sont découpés.",
     'import.contoursDropped': "{n} tracés ouverts ne seront pas découpés — refermez-les dans votre CAO.",
     'import.partsDropped': "{n} pièces trop petites pour être découpées ont été écartées.",
+    'import.paperSpaceSkipped': "{n} entités de l'espace papier ignorées (cadres, cartouches) — seul l'espace objet est découpé. Vérifiez qu'aucune pièce n'y est restée.",
     'import.unitConverted': "Unités {value} détectées — converties en millimètres.",
     'import.unitAssumed': "Aucune unité déclarée dans le fichier — millimètres supposés.",
     'import.unitUnknown': "Unité de dessin inconnue (code $INSUNITS {value}) — millimètres supposés. Vérifiez les dimensions avant de découper.",
@@ -326,6 +328,7 @@ export default {
     'localImport.tooManyEntitiesAtLeast': "Ce fichier contient trop d'entités pour un import navigateur (plus de {n} entités) — essayez « Nos serveurs ».",
     'localImport.tooHeavy': "Fichier trop lourd pour l'import navigateur ({n} entités, plus de {seconds} s) — essayez « Nos serveurs ».",
     'localImport.blockDepth': "Ce fichier imbrique ses blocs trop profondément pour être lu — ré-enregistrez-le avec les blocs éclatés depuis votre CAO.",
+    'localImport.paperSpaceOnly': "Tout le dessin de ce fichier est dans l'espace papier ({n} entités), son espace objet est vide. Déplacez-le dans l'espace objet depuis votre CAO, puis réimportez-le.",
     'localImport.noParts': "Aucune pièce fermée trouvée dans ce fichier.",
     'localImport.emptyBrowser': "Ces fichiers vivent dans ce navigateur. Liste vide : ils ont été importés ailleurs, ou le stockage de ce navigateur a été effacé — déposez-les à nouveau ci-dessous. Rien n'a été envoyé chez nous.",
     // Lot J4 - depot d'un `.job` SheetCam (chemin navigateur). Le format

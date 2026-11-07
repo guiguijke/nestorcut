@@ -156,6 +156,7 @@ pub fn canonical_entities_stats_bounded(
     // l'importeur échantillonne réellement (une spline dans un bloc inséré
     // trois fois est échantillonnée trois fois).
     stats.splines = flat.iter().filter(|e| matches!(e, Entity::Spline(_))).count();
+    stats.paper_space_skipped = doc.paper_space_entities;
     stats.insunits = doc.source_insunits;
     stats.unit_factor = factor;
     stats.unit_unknown = unknown;

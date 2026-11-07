@@ -276,6 +276,38 @@ def main_cut_cases():
         msp.add_blockref("BULGED", (300 * k, 400 * k), dxfattribs=attribs)
     save_new(doc, "block_mirror_bulge.dxf")
 
+    # --- Espace papier : cadre et cartouche à côté de la pièce (R12, R2000, R2010),
+    # ou tout le dessin dedans, l'espace objet vide (à refuser, pas à vider).
+    def sheet_frame(layout):
+        layout.add_line((0, 0), (420, 0))
+        layout.add_line((420, 0), (420, 297))
+        layout.add_line((420, 297), (0, 297))
+        layout.add_line((0, 297), (0, 0))
+        layout.add_circle((400, 20), 5)
+        layout.add_text("CARTOUCHE")
+
+    def plate(layout):
+        layout.add_line((0, 0), (100, 0))
+        layout.add_line((100, 0), (100, 50))
+        layout.add_line((100, 50), (0, 50))
+        layout.add_line((0, 50), (0, 0))
+        layout.add_circle((50, 25), 10)
+
+    for version, tag in (("R12", "r12"), ("R2000", "r2000"), ("R2010", "r2010")):
+        doc = ezdxf.new(version)
+        doc.header["$INSUNITS"] = 4
+        plate(doc.modelspace())
+        sheet_frame(doc.paperspace())
+        if version == "R2010":
+            sheet_frame(doc.layouts.new("Plan"))  # présentation inactive, dans BLOCKS
+        save_new(doc, f"paperspace_{tag}.dxf")
+
+    for version, tag in (("R12", "r12"), ("R2010", "r2010")):
+        doc = ezdxf.new(version)
+        doc.header["$INSUNITS"] = 4
+        plate(doc.paperspace())
+        save_new(doc, f"paperspace_only_{tag}.dxf")
+
     print(f"cas fichier de coupe -> {OUT}")
 
 

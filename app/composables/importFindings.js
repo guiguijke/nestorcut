@@ -31,6 +31,7 @@ const CARD_CODES = new Set([
     'import.entitiesSkipped',
     'import.contoursDropped',
     'import.partsDropped',
+    'import.paperSpaceSkipped',
     'import.unitUnknown',
     'import.unitImplausible',
     'import.unitConverted',

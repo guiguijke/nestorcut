@@ -10,13 +10,40 @@ from ezdxf.explode import explode_entity
 from ezdxf import recover
 from worker_common.logger import setup_logger
 from worker_common.geometry.units import insunits_code, insunits_detail, insunits_to_mm
-from worker_common.geometry.import_findings import empty_stats
+from worker_common.geometry.import_findings import empty_stats, is_material
 from ezdxf.math import Matrix44
 from ezdxf.render.hatching import hatch_entity
 from ezdxf.entities import DXFGraphic
 from worker_common.geometry.dxf_bounds import assert_insert_depth, decompose_bounded
 
 logger = setup_logger("dxf_utils")
+
+# Cause stable, lue par l'interface (`importErrorCode` du document fichier).
+PAPER_SPACE_ONLY = "paper_space_only"
+
+
+class PaperSpaceOnly(ValueError):
+    """Tout le dessin est en espace papier, l'espace objet est vide. À dire plutôt
+    qu'à rendre vide en silence. Miroir Rust : `TooHeavyReason::PaperSpaceOnly`."""
+
+    def __init__(self, entities: int):
+        super().__init__(
+            f"the whole DXF drawing is in paper space ({entities} entities), model space is empty"
+        )
+        self.entities = entities
+
+
+def _paper_space_entities(doc) -> int:
+    """Entités de dessin des présentations, hors annotations : `modelspace()` ne les
+    a jamais vues, et il faut pouvoir dire qu'elles sont écartées."""
+    return sum(
+        1
+        for layout in doc.layouts
+        if not layout.is_modelspace
+        for entity in layout
+        if is_material(entity.dxftype())
+    )
+
 
 def scale_drawing(drawing: Drawing, factor: float) -> int:
     """Mise a l'echelle UNIFORME d'un document DEJA canonique (lot E2).
@@ -146,6 +173,7 @@ def read_dxf_file(dxf_path: str, normalize_units: bool = True) -> Drawing | None
         stats["unitFactor"] = factor
         stats["unitUnknown"] = bool(_warnings) and factor == 1.0 and code not in (0, 4)
     stats["blocksFlattened"] = len(msp.query("INSERT"))
+    stats["paperSpaceSkipped"] = _paper_space_entities(doc)
 
     text_entities = msp.query("TEXT MTEXT IMAGE SOLID")
     if text_entities:
@@ -173,6 +201,12 @@ def read_dxf_file(dxf_path: str, normalize_units: bool = True) -> Drawing | None
             if scale_matrix is not None:
                 new_entity.transform(scale_matrix)
             new_msp.add_entity(new_entity)
+
+    if stats["paperSpaceSkipped"] and not (
+        any(is_material(kind) for kind in stats["skipped"])
+        or any(is_material(entity.dxftype()) for entity in new_msp)
+    ):
+        raise PaperSpaceOnly(stats["paperSpaceSkipped"])
 
     # The cleaned document is canonical mm from here on — say so explicitly
     # (CAM tools that honor the header then read it correctly).
