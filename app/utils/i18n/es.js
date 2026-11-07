@@ -621,7 +621,7 @@ export default {
     "results.cancel": "Cancelar",
     "live.width": "Ancho usado",
     "live.sheets": "Chapas",
-    "live.feasible": "Viable",
+    "live.feasible": "Completado",
     "live.searching": "Buscando…",
     "live.best": "Mejor",
     "live.title": "Nesting en directo",

@@ -712,7 +712,7 @@ export default {
     'results.cancel': 'Cancel',
     'live.width': 'Used width',
     'live.sheets': 'Sheets',
-    'live.feasible': 'Feasible',
+    'live.feasible': 'Done',
     'live.searching': 'Searching…',
     'live.best': 'Best',
     'live.title': 'Live nesting',

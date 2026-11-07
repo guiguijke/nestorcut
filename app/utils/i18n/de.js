@@ -619,7 +619,7 @@ export default {
     "results.cancel": "Abbrechen",
     "live.width": "Belegte Breite",
     "live.sheets": "Bleche",
-    "live.feasible": "Machbar",
+    "live.feasible": "Fertig",
     "live.searching": "Suche…",
     "live.best": "Beste",
     "live.title": "Live-Nesting",

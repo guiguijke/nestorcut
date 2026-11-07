@@ -689,7 +689,7 @@ export default {
     'results.cancel': 'Annuler',
     'live.width': 'Largeur utilisée',
     'live.sheets': 'Tôles',
-    'live.feasible': 'Faisable',
+    'live.feasible': 'Terminé',
     'live.searching': 'Recherche…',
     'live.best': 'Meilleur',
     'live.title': 'Imbrication en direct',

@@ -616,7 +616,7 @@ export default {
     "results.cancel": "Annulla",
     "live.width": "Larghezza usata",
     "live.sheets": "Lamiere",
-    "live.feasible": "Fattibile",
+    "live.feasible": "Completato",
     "live.searching": "Ricerca…",
     "live.best": "Migliore",
     "live.title": "Nesting in diretta",
