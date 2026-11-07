@@ -9,7 +9,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *FR*
 
 - Petits travaux : quelques petites pièces sur une grande tôle (un rectangle de 40 × 100 mm avec les réglages d'usine, par exemple) pouvaient arrêter le calcul. Ils aboutissent maintenant.
-- Pièces qui ne tiennent pas : une pièce tout juste trop grande pour la tôle, ou juste à sa cote, est maintenant refusée en la nommant, au lieu d'un arrêt inexpliqué. Le calcul entier est alors refusé, même si les autres pièces tiennent : retirez cette pièce ou prenez une tôle plus grande, puis relancez.
+- Pièces qui ne tiennent pas : une pièce tout juste trop grande pour la tôle, ou juste à sa cote, est maintenant refusée en la nommant, au lieu d'un arrêt inexpliqué. Le calcul entier est alors refusé, même si les autres pièces tiennent : réduisez l'espacement, prenez une tôle plus grande ou retirez cette pièce, puis relancez.
 - Calcul en échec : quand un calcul échoue, ou que le serveur refuse de le lancer (un autre calcul en cours, par exemple), le message apparaît maintenant à l'écran au lieu de rester plus bas dans la page, et vous pouvez relancer tout de suite.
 - Calcul sur l'appareil : la vue en direct est amenée à l'écran dès le début du calcul, comme c'était déjà le cas sur le serveur.
 - Dernière étape d'optimisation : si elle s'arrête, vos pièces sont quand même livrées, et une note sur la carte prévient que la disposition peut consommer plus de matière que d'habitude.
@@ -18,7 +18,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *EN*
 
 - Small jobs: a few small parts on a large sheet (a 40 × 100 mm rectangle with the factory settings, for example) could stop the nesting. They now complete.
-- Parts that do not fit: a part just too large for the sheet, or right at its exact size, is now refused by name instead of an unexplained stop. The whole nesting is then refused, even if the other parts fit: remove that part or use a larger sheet, then start again.
+- Parts that do not fit: a part just too large for the sheet, or right at its exact size, is now refused by name instead of an unexplained stop. The whole nesting is then refused, even if the other parts fit: reduce the spacing, use a larger sheet or remove that part, then start again.
 - Failed nesting: when a nesting fails, or the server refuses to start it (another nesting already running, for example), the message now appears on screen instead of staying further down the page, and you can start again right away.
 - On-device nesting: the live view is brought on screen as soon as the nesting starts, as it already was on the server.
 - Final optimisation step: if it stops, your parts are still delivered, and a note on the card warns that the layout may use more material than usual.
@@ -27,7 +27,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *PT*
 
 - Trabalhos pequenos: algumas peças pequenas em uma chapa grande (um retângulo de 40 × 100 mm com as configurações de fábrica, por exemplo) podiam interromper o cálculo. Agora eles são concluídos.
-- Peças que não cabem: uma peça um pouco grande demais para a chapa, ou exatamente na medida dela, agora é recusada pelo nome, em vez de uma parada sem explicação. O cálculo inteiro é então recusado, mesmo que as outras peças caibam: remova essa peça ou use uma chapa maior e reinicie.
+- Peças que não cabem: uma peça um pouco grande demais para a chapa, ou exatamente na medida dela, agora é recusada pelo nome, em vez de uma parada sem explicação. O cálculo inteiro é então recusado, mesmo que as outras peças caibam: reduza o espaçamento, use uma chapa maior ou remova essa peça e reinicie.
 - Cálculo com falha: quando um cálculo falha, ou o servidor se recusa a iniciá-lo (outro cálculo em andamento, por exemplo), a mensagem agora aparece na tela em vez de ficar mais abaixo na página, e você pode reiniciar em seguida.
 - Cálculo no dispositivo: a visualização ao vivo é trazida para a tela assim que o cálculo começa, como já acontecia no servidor.
 - Última etapa de otimização: se ela parar, suas peças continuam sendo entregues, e uma nota no cartão avisa que o layout pode usar mais material do que o normal.
@@ -36,7 +36,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *IT*
 
 - Lavori piccoli: pochi pezzi piccoli su una lamiera grande (per esempio un rettangolo di 40 × 100 mm con le impostazioni di fabbrica) potevano fermare il calcolo. Ora vanno a buon fine.
-- Pezzi che non stanno: un pezzo appena troppo grande per la lamiera, o proprio alla sua misura esatta, ora viene rifiutato indicandone il nome, invece di un arresto senza spiegazione. L'intero calcolo viene allora rifiutato, anche se gli altri pezzi ci stanno: rimuovi quel pezzo o usa una lamiera più grande, poi rilancia.
+- Pezzi che non stanno: un pezzo appena troppo grande per la lamiera, o proprio alla sua misura esatta, ora viene rifiutato indicandone il nome, invece di un arresto senza spiegazione. L'intero calcolo viene allora rifiutato, anche se gli altri pezzi ci stanno: riduci la spaziatura, usa una lamiera più grande o rimuovi quel pezzo, poi rilancia.
 - Calcolo non riuscito: quando un calcolo non riesce, o il server rifiuta di avviarlo (per esempio perché un altro calcolo è in corso), il messaggio ora compare sullo schermo invece di restare più in basso nella pagina, e puoi rilanciarlo subito.
 - Calcolo sul dispositivo: la vista in diretta viene portata sullo schermo appena il calcolo parte, come già avveniva sul server.
 - Ultima fase di ottimizzazione: se si ferma, i tuoi pezzi vengono comunque consegnati, e una nota sulla scheda avvisa che la disposizione può usare più materiale del solito.
@@ -45,7 +45,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *DE*
 
 - Kleine Aufträge: Einige kleine Teile auf einem großen Blech (zum Beispiel ein Rechteck von 40 × 100 mm mit den Werkseinstellungen) konnten die Berechnung stoppen. Sie werden jetzt abgeschlossen.
-- Teile, die nicht passen: Ein Teil, das knapp zu groß für das Blech ist oder genau dem Blechmaß entspricht, wird jetzt mit seinem Namen abgelehnt statt mit einem unerklärten Abbruch. Die gesamte Berechnung wird dann abgelehnt, auch wenn die anderen Teile passen: Entfernen Sie dieses Teil oder wählen Sie ein größeres Blech und starten Sie neu.
+- Teile, die nicht passen: Ein Teil, das knapp zu groß für das Blech ist oder genau dem Blechmaß entspricht, wird jetzt mit seinem Namen abgelehnt statt mit einem unerklärten Abbruch. Die gesamte Berechnung wird dann abgelehnt, auch wenn die anderen Teile passen: Verringern Sie den Abstand, wählen Sie ein größeres Blech oder entfernen Sie dieses Teil und starten Sie neu.
 - Fehlgeschlagene Berechnung: Wenn eine Berechnung fehlschlägt oder der Server sie nicht startet (zum Beispiel weil bereits eine andere läuft), erscheint die Meldung jetzt auf dem Bildschirm, statt weiter unten auf der Seite zu bleiben, und Sie können sofort neu starten.
 - Berechnung auf dem Gerät: Die Live-Ansicht wird gleich beim Start der Berechnung auf den Bildschirm geholt, wie schon auf dem Server.
 - Letzter Optimierungsschritt: Wenn er abbricht, werden Ihre Teile trotzdem geliefert, und ein Hinweis auf der Karte warnt, dass die Anordnung mehr Material als üblich verbrauchen kann.
@@ -54,7 +54,7 @@ noms de lots internes. La version affichée dans l'en-tête est le
 *ES*
 
 - Trabajos pequeños: unas pocas piezas pequeñas en una chapa grande (un rectángulo de 40 × 100 mm con los ajustes de fábrica, por ejemplo) podían detener el cálculo. Ahora se completan.
-- Piezas que no caben: una pieza apenas demasiado grande para la chapa, o justo a su medida, ahora se rechaza nombrándola, en lugar de una parada sin explicación. Entonces se rechaza todo el cálculo, aunque las demás piezas quepan: retira esa pieza o usa una chapa más grande y relanza.
+- Piezas que no caben: una pieza apenas demasiado grande para la chapa, o justo a su medida, ahora se rechaza nombrándola, en lugar de una parada sin explicación. Entonces se rechaza todo el cálculo, aunque las demás piezas quepan: reduce el espaciado, usa una chapa más grande o retira esa pieza y relanza.
 - Cálculo fallido: cuando un cálculo falla, o el servidor se niega a iniciarlo (por ejemplo, porque hay otro en curso), el mensaje aparece ahora en pantalla en lugar de quedarse más abajo en la página, y puedes relanzarlo enseguida.
 - Cálculo en el dispositivo: la vista en directo se trae a la pantalla en cuanto empieza el cálculo, como ya ocurría en el servidor.
 - Última etapa de optimización: si se detiene, tus piezas se entregan igualmente, y una nota en la tarjeta avisa de que la disposición puede usar más material de lo habitual.
