@@ -54,8 +54,15 @@ fn entity_extrema(e: &Entity) -> Vec<[f64; 2]> {
             let a_mag = (e.major[0] * e.major[0] + e.major[1] * e.major[1]).sqrt();
             let b_mag = a_mag * e.ratio;
             let base = libm::atan2(e.major[1], e.major[0]);
+            // Balayage vers l'avant : une fin <= début ferme le tour (ellipse partielle qui
+            // franchit 0), sans toucher à l'ellipse pleine 0 -> TAU.
+            let end = if e.end_param <= e.start_param {
+                e.end_param + 2.0 * std::f64::consts::PI
+            } else {
+                e.end_param
+            };
             for i in 0..=CURVE_N {
-                let t = e.start_param + (e.end_param - e.start_param) * i as f64 / CURVE_N as f64;
+                let t = e.start_param + (end - e.start_param) * i as f64 / CURVE_N as f64;
                 let lx = a_mag * libm::cos(t);
                 let ly = b_mag * libm::sin(t);
                 v.push([
@@ -182,6 +189,21 @@ mod tests {
             seqend_handle: String::new(),
         });
         assert_close(bbox_of(classic), [0.0, -25.0, 100.0, 50.0]);
+    }
+
+    #[test]
+    fn a_partial_ellipse_with_start_after_end_sweeps_forward() {
+        // Balayage de 5,5 rad à 0,785 + TAU (arc de 90 degrés), pas l'arc complémentaire.
+        // Référence ezdxf 1.4.4 : x de 7,0739 à 10,0 et y de -3,5277 à 3,5341.
+        let e = Entity::Ellipse(nest_import::dxf::entities::Ellipse {
+            center: [0.0, 0.0],
+            major: [10.0, 0.0],
+            ratio: 0.5,
+            start_param: 5.5,
+            end_param: 0.785,
+            common: Common::default(),
+        });
+        assert_within(bbox_of(e), [7.0739, -3.5277, 10.0, 3.5341], 1e-2);
     }
 
     #[test]
