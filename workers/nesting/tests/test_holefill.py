@@ -497,7 +497,7 @@ def test_expansion_loss_fails_the_job_instead_of_delivering_n_minus_k(monkeypatc
     monkeypatch.setattr(m, "get_dek", lambda db, owner: None)
     monkeypatch.setattr(
         m, "convert_files_to_input_items",
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             {"id": 0, "file_slug": "fill", "coords": _sq(6.5, 6.5, 5), "holes": [],
              "handles": [], "color": None, "count": 1,
              "rotations": [0., 90., 180., 270.]},
