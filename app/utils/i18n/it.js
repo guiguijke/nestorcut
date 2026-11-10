@@ -539,6 +539,7 @@ export default {
     "time.justNow": "proprio ora",
     "time.minAgo": "{n} min fa",
     "time.hoursAgo": "{n} h fa",
+    "time.hourAgo": "1 h fa",
     "time.dayAgo": "1 giorno fa",
     "time.daysAgo": "{n} giorni fa",
     "upload.choose": "Scegli file",

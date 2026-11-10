@@ -596,6 +596,7 @@ export default {
     'time.justNow': "à l'instant",
     'time.minAgo': 'il y a {n} min',
     'time.hoursAgo': 'il y a {n} h',
+    'time.hourAgo': 'il y a 1 h',
     'time.dayAgo': 'il y a 1 jour',
     'time.daysAgo': 'il y a {n} jours',
 

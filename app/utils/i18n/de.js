@@ -542,6 +542,7 @@ export default {
     "time.justNow": "gerade eben",
     "time.minAgo": "vor {n} Min.",
     "time.hoursAgo": "vor {n} Std.",
+    "time.hourAgo": "vor 1 Std.",
     "time.dayAgo": "vor 1 Tag",
     "time.daysAgo": "vor {n} Tagen",
     "upload.choose": "Dateien auswählen",

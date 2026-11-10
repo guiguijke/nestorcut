@@ -113,12 +113,13 @@
 </template>
 
 <script setup>
-import { computed, onBeforeMount, onBeforeUnmount, toRefs, unref } from 'vue';
+import { computed, onBeforeMount, onBeforeUnmount, onMounted, toRefs, unref } from 'vue';
 import { iconType } from '~~/constants/icon.constants';
 import { sizeType } from '~~/constants/size.constants';
 import { themeType } from '~~/constants/theme.constants';
 import { projectPrivacyMode } from '~/utils/privacyMode';
 import { hasActiveJob } from '~/composables/localSolverRegistry';
+import { relativeTimeParts } from '~/utils/relativeTime';
 
 const { project, selecting, selected } = defineProps({
     project: {
@@ -186,24 +187,16 @@ async function confirmDelete() {
     }
     confirmOpen.value = false
 }
+// Hydratation : le texte relatif dépend de l'heure d'affichage, donc il
+// n'est rendu qu'après le montage ; avant, une espace insécable des deux
+// côtés (serveur et navigateur) — même hauteur de ligne, rien à réconcilier.
+const mounted = ref(false);
 const timeAgo = computed(() => {
+    if (!unref(mounted)) return '\u00a0';
     const past = new Date(project.createdAt);
-    const diffMs = unref(now) - past;
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffMinutes / 1440);
-
-    if (diffMinutes < 1) {
-        return t('time.justNow');
-    }
-    if (diffHours >= 1 && diffHours < 24) {
-        return t('time.hoursAgo', { n: diffHours });
-    }
-    if (diffDays >= 1) {
-        return diffDays === 1 ? t('time.dayAgo') : t('time.daysAgo', { n: diffDays });
-    }
-
-    return t('time.minAgo', { n: diffMinutes });
+    const diffMinutes = Math.floor((unref(now) - past) / 60000);
+    const { key, n } = relativeTimeParts(diffMinutes);
+    return t(key, { n });
 })
 const resultsLabel = computed(() => {
     const resultWord = unref(project).results === 1 ? t('project.result') : t('project.results');
@@ -219,6 +212,10 @@ onBeforeMount(() => {
 })
 onBeforeUnmount(() => {
     clearInterval(timer)
+})
+onMounted(() => {
+    now.value = new Date()
+    mounted.value = true
 })
 </script>
 

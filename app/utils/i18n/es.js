@@ -544,6 +544,7 @@ export default {
     "time.justNow": "justo ahora",
     "time.minAgo": "hace {n} min",
     "time.hoursAgo": "hace {n} h",
+    "time.hourAgo": "hace 1 h",
     "time.dayAgo": "hace 1 día",
     "time.daysAgo": "hace {n} días",
     "upload.choose": "Elegir archivos",

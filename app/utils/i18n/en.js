@@ -613,6 +613,7 @@ export default {
     'time.justNow': 'just now',
     'time.minAgo': '{n} min ago',
     'time.hoursAgo': '{n} hours ago',
+    'time.hourAgo': '1 hour ago',
     'time.dayAgo': '1 day ago',
     'time.daysAgo': '{n} days ago',
 
