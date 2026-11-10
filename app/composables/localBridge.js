@@ -1474,6 +1474,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             reportItems.push({ id: String(p.id), coords: p.coords, holes: p.holes || [] })
         }
         const space = Number(payload?.engineConfig?.min_item_separation) || 0
+        const requestedSpace = Number(payload?.requestedSpace ?? space) || 0
 
         const out = []
         // §17.2 : la géométrie des pièces, une fois — les deux états
@@ -1683,10 +1684,11 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 })
                 sheets.push(typeof svg === 'string' ? svg : null)
             }
+            // Le rapport juge contre l'espacement DEMANDÉ, pas l'interne.
             const report = await geoComputeReport({
                 items: reportItems,
                 containers,
-                space,
+                space: requestedSpace,
             })
             applyTrueAreasToReport(report, containers, partsById)
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout
@@ -1887,7 +1889,9 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
  * 1-based du layout (parse_result_containers).
  */
 export async function buildSheetDxf(jobSlug, layoutIndex, container, payload, sources) {
-    const space = Number(payload?.engineConfig?.min_item_separation) || 0
+    // Cadre du DXF livré : espacement DEMANDÉ.
+    const space = Number(payload?.requestedSpace
+        ?? payload?.engineConfig?.min_item_separation) || 0
     const outputUnit = payload?.outputUnit || 'mm'
     const addOutShape = Boolean(payload?.addOutShape)
 

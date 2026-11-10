@@ -395,6 +395,59 @@ export function simplifyPart(coords, holes, tol = SIMPLIFY_MM) {
 }
 
 // ---------------------------------------------------------------------------
+// Marge d'espacement (l'espacement demandé est tenu sur les VRAIES courbes)
+// ---------------------------------------------------------------------------
+
+/** Marge maximale ajoutée à l'espacement demandé (mm). */
+export const SPACING_MARGIN_CAP_MM = 0.12
+/** Réserve d'aplatissement pour un anneau courbe (> 8 sommets), en mm. */
+const FLATTEN_RESERVE_MM = 0.02
+
+const pointSegDist = (p, a, b) => {
+    const dx = b[0] - a[0]
+    const dy = b[1] - a[1]
+    const l2 = dx * dx + dy * dy
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+}
+
+/** Plus grande distance entre un sommet de l'anneau d'origine et l'anneau simplifié. */
+function ringSimplificationGap(orig, simp) {
+    if (orig === simp || orig.length === simp.length) return 0
+    let gap = 0
+    for (const p of orig) {
+        let d = Infinity
+        for (let i = 0; i < simp.length - 1; i++) d = Math.min(d, pointSegDist(p, simp[i], simp[i + 1]))
+        if (d > gap) gap = d
+    }
+    return gap
+}
+
+/**
+ * Marge = 2 × (écart maximal de simplification sur toutes les pièces)
+ * + 0,02 si un anneau d'origine a plus de 8 sommets, plafonnée à 0,12 ;
+ * 0 si l'espacement demandé est 0 (le contact y est permis).
+ */
+export function computeSpacingMargin(files, requested) {
+    if (!(Number(requested) > 0)) return 0
+    let maxGap = 0
+    let curved = false
+    for (const file of files || []) {
+        for (const part of file.parts || []) {
+            const coords = part.coordinates ?? part.coords ?? []
+            const holes = part.holes ?? []
+            const simp = simplifyPart(coords, holes)
+            const rings = [[coords, simp.coords], ...holes.map((h, i) => [h, simp.holes[i]])]
+            for (const [orig, s] of rings) {
+                if ((isClosedRing(orig) ? orig.length - 1 : orig.length) > 8) curved = true
+                maxGap = Math.max(maxGap, ringSimplificationGap(orig, s))
+            }
+        }
+    }
+    return Math.min(SPACING_MARGIN_CAP_MM, 2 * maxGap + (curved ? FLATTEN_RESERVE_MM : 0))
+}
+
+// ---------------------------------------------------------------------------
 // Canaux capillaires (miroir de core/holed_polygons.py)
 // ---------------------------------------------------------------------------
 
@@ -593,7 +646,11 @@ function metaSlots(inputItems, hostId, fillId, capacity) {
  *     main.py part_index_by_id). La vue live mappe ids moteur → fichier/pièce.
  */
 export async function buildLocalPayload({ files, params = {}, profile = {} }, deps = {}) {
-    const space = Number(params.space) || 0
+    // Espacement DEMANDÉ (dit à l'utilisateur, jugé par la vérification) ;
+    // `space` ci-dessous est l'espacement INTERNE = demandé + marge, celui
+    // que le moteur et tout le pipeline interne reçoivent.
+    const requestedSpace = Number(params.space) || 0
+    const space = requestedSpace + computeSpacingMargin(files, requestedSpace)
     // fillHoles : défaut ON (rétro-compat, miroir de params.get("fillHoles", True))
     const fillHoles = params.fillHoles !== false
     const addOutShape = Boolean(params.addOutShape)
@@ -839,7 +896,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         const sheetDesc = sheets.map((s) => `${pyFixed0(s.width)}x${pyFixed0(s.height)}mm`).join(' / ')
         const tooLargeErr = new Error(
             `Part(s) too large for the sheet: ${details} — sheet(s): ${sheetDesc}, `
-            + `spacing: ${pyStrSpace(space)}mm. Use a larger sheet, allow more rotations, or reduce spacing.`,
+            + `spacing: ${pyStrSpace(requestedSpace)}mm. Use a larger sheet, allow more rotations, or reduce spacing.`,
         )
         // Lot A1 (audit P3-4) : marqueur structuré pour un refus ACTIONNABLE
         // à l'écran. Sans lui, le catch de runLocalJobPrivate réduisait ce
@@ -934,7 +991,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             ratio: cap.ratio,
             sheetsNeeded: cap.sheetsNeeded,
             maxPartsAtSpacing: totalMax,
-            maxSpacingForFitMm: cap.maxSpacingForFitMm,
+            // Sortie : l'espacement max est dit en espacement DEMANDÉ.
+            maxSpacingForFitMm: Math.max(0, cap.maxSpacingForFitMm - (space - requestedSpace)),
         }
         throw err
     }
@@ -1158,6 +1216,9 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         instance: solveInstance,
         meta,
         engineConfig,
+        // Espacement demandé par l'utilisateur, HORS engineConfig (qui porte
+        // l'interne) : seuil de la vérification et tout ce qui est affiché.
+        requestedSpace,
         parts,
         // V15 (vérif 2026-09-04) : containerMapBack à la RACINE du payload
         // (dans `instance` il était hashé dans le seed ET envoyé au wasm).
