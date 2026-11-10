@@ -14,6 +14,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Calcul sur l'appareil : la vue en direct est amenée à l'écran dès le début du calcul, comme c'était déjà le cas sur le serveur.
 - Dernière étape d'optimisation : si elle s'arrête, vos pièces sont quand même livrées, et une note sur la carte prévient que la disposition peut consommer plus de matière que d'habitude.
 - Page de connexion par e-mail : elle s'ouvre maintenant sur la connexion, et non plus sur la création de compte.
+- Résultat plus lisible : une seule densité partout (aire des pièces sur aire des tôles), le badge « Terminé » seulement quand le calcul est vraiment fini, la longueur de tôle utilisée pendant la recherche, des options nommées par leur sens, et « Quoi commander » en tête du rapport.
+- Rapport : les deux boutons d'export s'appellent « Copier le rapport » et « Exporter CSV », et le tableau par tôle se lit sur téléphone.
+- Refus et échecs : une pièce trop grande est signalée sous le bouton d'imbrication, avec la raison ; les messages venus du serveur sont traduits et nomment le fichier.
+- Abonnement : la fenêtre dit ce que chaque offre débloque, que la carte est demandée, le montant et la date du premier prélèvement ; sur la page des offres, un compte gratuit peut démarrer directement l'essai d'Unlimited ou de Pro.
+- Fichier de coupe plus fidèle : les arcs des polylignes anciennes restent des arcs (ils sortaient en segments droits) ; les blocs à échelle inégale, en miroir ou répétés (MINSERT) sont importés à la bonne place ; en SVG, les formes cachées dans <defs> ne deviennent plus des pièces, <use> est pris en charge et une largeur en pourcentage garde la bonne échelle.
+- Alertes à l'import : l'application prévient quand des traits ne seront pas découpés (entités hors de toute pièce, espace papier, textes et cotes) et quand des arcs de polyligne sont imbriqués comme des segments droits.
+- Fichiers lourds ou abîmés : l'import est plus rapide, et un fichier corrompu est refusé ou ignoré proprement au lieu de figer l'onglet.
+- Espacement tenu sur les courbes : l'espacement demandé est maintenant respecté sur les vraies courbes du fichier de coupe, grâce à une petite marge (0,12 mm au plus) ajoutée pour les pièces à courbes. Rien ne change pour les pièces à bords droits. Une pièce courbe calée exactement à la cote de la tôle peut être refusée : le message indique la marge.
+- Bouton « Réduire l'espacement à X mm » : il applique bien X, et non plus la moitié.
+- Page projet : les pièces et leurs quantités sont affichées en premier, le bouton d'imbrication reste visible, et après un calcul sur le serveur la vue centrale montre le résultat.
+- Téléphone et thème sombre : l'en-tête et le tableau des offres tiennent sur un petit écran, et les textes illisibles du thème sombre sont corrigés.
+- Nouveautés : cette page s'affiche maintenant dans les six langues.
+- Fichiers par tôle du serveur : ils sont numérotés de 1 à N même quand un format de tôle reste vide.
 
 *EN*
 
@@ -23,6 +36,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - On-device nesting: the live view is brought on screen as soon as the nesting starts, as it already was on the server.
 - Final optimisation step: if it stops, your parts are still delivered, and a note on the card warns that the layout may use more material than usual.
 - Email login page: it now opens on login rather than on account creation.
+- Clearer result: a single density everywhere (area of the parts over area of the sheets), the "Done" badge only when the nesting is really finished, the sheet length used shown during the search, options named by what they mean, and "What to order" at the top of the report.
+- Report: the two export buttons are called "Copy report" and "Export CSV", and the per-sheet table can be read on a phone.
+- Refusals and failures: a part that is too large is flagged under the nesting button, with the reason; messages coming from the server are translated and name the file.
+- Subscription: the window says what each plan unlocks, that a card is required, the amount and the date of the first charge; on the plans page, a free account can start the Unlimited or Pro trial directly.
+- More faithful cutting file: the arcs of old polylines stay arcs (they used to come out as straight segments); blocks with uneven scale, mirrored or repeated (MINSERT) are imported in the right place; in SVG, shapes hidden in <defs> no longer become parts, <use> is supported and a width in percent keeps the right scale.
+- Import warnings: the app warns when some lines will not be cut (entities outside any part, paper space, texts and dimensions) and when polyline arcs are nested as straight segments.
+- Heavy or damaged files: import is faster, and a corrupted file is cleanly refused or ignored instead of freezing the tab.
+- Spacing held on curves: the requested spacing is now respected on the real curves of the cutting file, thanks to a small margin (0.12 mm at most) added for parts with curves. Nothing changes for parts with straight edges. A curved part fitted exactly to the sheet size may be refused: the message states the margin.
+- "Reduce spacing to X mm" button: it now applies X, not half of it.
+- Project page: the parts and their quantities are shown first, the nesting button stays visible, and after a nesting on the server the central view shows the result.
+- Phone and dark theme: the header and the plans table fit on a small screen, and the unreadable texts of the dark theme are fixed.
+- What's new: this page is now shown in all six languages.
+- Server sheet files: they are numbered from 1 to N even when a sheet format stays empty.
 
 *PT*
 
@@ -32,6 +58,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Cálculo no dispositivo: a visualização ao vivo é trazida para a tela assim que o cálculo começa, como já acontecia no servidor.
 - Última etapa de otimização: se ela parar, suas peças continuam sendo entregues, e uma nota no cartão avisa que o layout pode usar mais material do que o normal.
 - Página de login por e-mail: agora ela abre no login, e não mais na criação de conta.
+- Resultado mais legível: uma única densidade em todo lugar (área das peças sobre área das chapas), o selo "Concluído" somente quando o cálculo realmente terminou, o comprimento de chapa usado durante a busca, opções nomeadas pelo seu sentido e "O que encomendar" no topo do relatório.
+- Relatório: os dois botões de exportação se chamam "Copiar relatório" e "Exportar CSV", e a tabela por chapa pode ser lida no celular.
+- Recusas e falhas: uma peça grande demais é sinalizada sob o botão de cálculo, com o motivo; as mensagens vindas do servidor são traduzidas e citam o arquivo.
+- Assinatura: a janela diz o que cada plano libera, que o cartão é solicitado, o valor e a data da primeira cobrança; na página dos planos, uma conta gratuita pode iniciar diretamente o teste do Unlimited ou do Pro.
+- Arquivo de corte mais fiel: os arcos das polilinhas antigas continuam sendo arcos (saíam como segmentos retos); os blocos com escala desigual, espelhados ou repetidos (MINSERT) são importados no lugar certo; em SVG, as formas escondidas em <defs> não viram mais peças, <use> é suportado e uma largura em porcentagem mantém a escala certa.
+- Alertas na importação: o aplicativo avisa quando traços não serão cortados (entidades fora de qualquer peça, espaço papel, textos e cotas) e quando arcos de polilinha são encaixados como segmentos retos.
+- Arquivos pesados ou danificados: a importação é mais rápida, e um arquivo corrompido é recusado ou ignorado corretamente em vez de travar a aba.
+- Espaçamento mantido nas curvas: o espaçamento pedido agora é respeitado nas curvas reais do arquivo de corte, graças a uma pequena margem (0,12 mm no máximo) adicionada para as peças com curvas. Nada muda para as peças de bordas retas. Uma peça curva ajustada exatamente à medida da chapa pode ser recusada: a mensagem indica a margem.
+- Botão "Reduzir o espaçamento para X mm": ele aplica de fato X, e não mais a metade.
+- Página do projeto: as peças e suas quantidades aparecem primeiro, o botão de cálculo continua visível e, depois de um cálculo no servidor, a visualização central mostra o resultado.
+- Celular e tema escuro: o cabeçalho e a tabela dos planos cabem em uma tela pequena, e os textos ilegíveis do tema escuro foram corrigidos.
+- Novidades: esta página agora é exibida nos seis idiomas.
+- Arquivos por chapa do servidor: eles são numerados de 1 a N mesmo quando um formato de chapa fica vazio.
 
 *IT*
 
@@ -41,6 +80,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Calcolo sul dispositivo: la vista in diretta viene portata sullo schermo appena il calcolo parte, come già avveniva sul server.
 - Ultima fase di ottimizzazione: se si ferma, i tuoi pezzi vengono comunque consegnati, e una nota sulla scheda avvisa che la disposizione può usare più materiale del solito.
 - Pagina di accesso via email: ora si apre sull'accesso e non più sulla creazione dell'account.
+- Risultato più leggibile: una sola densità ovunque (area dei pezzi sull'area delle lamiere), il badge "Completato" solo quando il calcolo è davvero finito, la lunghezza di lamiera usata durante la ricerca, opzioni chiamate col loro significato e "Cosa ordinare" in testa al rapporto.
+- Rapporto: i due pulsanti di esportazione si chiamano "Copia il rapporto" ed "Esporta CSV", e la tabella per lamiera si legge su telefono.
+- Rifiuti e errori: un pezzo troppo grande viene segnalato sotto il pulsante di calcolo, con il motivo; i messaggi che arrivano dal server sono tradotti e indicano il file.
+- Abbonamento: la finestra dice cosa sblocca ogni piano, che la carta viene richiesta, l'importo e la data del primo addebito; nella pagina dei piani, un account gratuito può avviare direttamente la prova di Unlimited o di Pro.
+- File di taglio più fedele: gli archi delle polilinee vecchie restano archi (uscivano come segmenti retti); i blocchi con scala disuguale, speculari o ripetuti (MINSERT) vengono importati nel punto giusto; in SVG, le forme nascoste in <defs> non diventano più pezzi, <use> è supportato e una larghezza in percentuale mantiene la scala giusta.
+- Avvisi all'importazione: l'applicazione avvisa quando alcuni tratti non verranno tagliati (entità fuori da ogni pezzo, spazio carta, testi e quote) e quando gli archi di polilinea vengono disposti come segmenti retti.
+- File pesanti o danneggiati: l'importazione è più veloce, e un file corrotto viene rifiutato o ignorato correttamente invece di bloccare la scheda.
+- Spaziatura mantenuta sulle curve: la spaziatura richiesta è ora rispettata sulle vere curve del file di taglio, grazie a un piccolo margine (0,12 mm al massimo) aggiunto per i pezzi con curve. Non cambia nulla per i pezzi con bordi retti. Un pezzo curvo portato esattamente alla misura della lamiera può essere rifiutato: il messaggio indica il margine.
+- Pulsante "Riduci la spaziatura a X mm": applica davvero X, e non più la metà.
+- Pagina del progetto: i pezzi e le loro quantità vengono mostrati per primi, il pulsante di calcolo resta visibile e, dopo un calcolo sul server, la vista centrale mostra il risultato.
+- Telefono e tema scuro: l'intestazione e la tabella dei piani stanno su uno schermo piccolo, e i testi illeggibili del tema scuro sono stati corretti.
+- Novità: questa pagina ora viene mostrata nelle sei lingue.
+- File per lamiera del server: sono numerati da 1 a N anche quando un formato di lamiera resta vuoto.
 
 *DE*
 
@@ -50,6 +102,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Berechnung auf dem Gerät: Die Live-Ansicht wird gleich beim Start der Berechnung auf den Bildschirm geholt, wie schon auf dem Server.
 - Letzter Optimierungsschritt: Wenn er abbricht, werden Ihre Teile trotzdem geliefert, und ein Hinweis auf der Karte warnt, dass die Anordnung mehr Material als üblich verbrauchen kann.
 - Seite für die E-Mail-Anmeldung: Sie öffnet sich jetzt bei der Anmeldung statt bei der Kontoerstellung.
+- Besser lesbares Ergebnis: überall nur eine Dichte (Fläche der Teile im Verhältnis zur Fläche der Bleche), das Kennzeichen „Fertig“ nur, wenn die Berechnung wirklich abgeschlossen ist, die verwendete Blechlänge schon während der Suche, Optionen mit sprechenden Namen und „Was bestellen“ am Anfang des Berichts.
+- Bericht: Die beiden Export-Schaltflächen heißen „Bericht kopieren“ und „CSV-Export“, und die Tabelle pro Blech lässt sich auf dem Smartphone lesen.
+- Ablehnungen und Fehler: Ein zu großes Teil wird unter der Schaltfläche zur Berechnung mit dem Grund angezeigt; Meldungen vom Server werden übersetzt und nennen die Datei.
+- Abo: Das Fenster sagt, was jedes Angebot freischaltet, dass die Karte verlangt wird, den Betrag und das Datum der ersten Abbuchung; auf der Angebotsseite kann ein kostenloses Konto die Testphase von Unlimited oder Pro direkt starten.
+- Genauere Schneiddatei: Die Bögen alter Polylinien bleiben Bögen (sie kamen als gerade Segmente heraus); Blöcke mit ungleichem Maßstab, gespiegelte oder wiederholte Blöcke (MINSERT) werden an der richtigen Stelle importiert; bei SVG werden in <defs> versteckte Formen nicht mehr zu Teilen, <use> wird unterstützt und eine Breite in Prozent behält den richtigen Maßstab.
+- Warnungen beim Import: Die Anwendung warnt, wenn Linien nicht geschnitten werden (Objekte außerhalb jedes Teils, Papierbereich, Texte und Bemaßungen) und wenn Polylinienbögen wie gerade Segmente verschachtelt werden.
+- Große oder beschädigte Dateien: Der Import ist schneller, und eine beschädigte Datei wird sauber abgelehnt oder übergangen, statt den Tab einzufrieren.
+- Abstand auf Kurven eingehalten: Der gewünschte Abstand wird jetzt auf den echten Kurven der Schneiddatei eingehalten, dank einer kleinen Zugabe (höchstens 0,12 mm) für Teile mit Kurven. Bei Teilen mit geraden Kanten ändert sich nichts. Ein gekrümmtes Teil, das genau auf das Blechmaß passt, kann abgelehnt werden: Die Meldung nennt die Zugabe.
+- Schaltfläche „Abstand auf X mm verringern“: Sie wendet jetzt tatsächlich X an, nicht mehr die Hälfte.
+- Projektseite: Die Teile und ihre Mengen werden zuerst angezeigt, die Schaltfläche zur Berechnung bleibt sichtbar, und nach einer Berechnung auf dem Server zeigt die zentrale Ansicht das Ergebnis.
+- Smartphone und dunkles Design: Die Kopfzeile und die Angebotstabelle passen auf einen kleinen Bildschirm, und die unlesbaren Texte im dunklen Design sind korrigiert.
+- Neuigkeiten: Diese Seite wird jetzt in allen sechs Sprachen angezeigt.
+- Serverdateien pro Blech: Sie werden von 1 bis N nummeriert, auch wenn ein Blechformat leer bleibt.
 
 *ES*
 
@@ -59,6 +124,19 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Cálculo en el dispositivo: la vista en directo se trae a la pantalla en cuanto empieza el cálculo, como ya ocurría en el servidor.
 - Última etapa de optimización: si se detiene, tus piezas se entregan igualmente, y una nota en la tarjeta avisa de que la disposición puede usar más material de lo habitual.
 - Página de acceso por correo electrónico: ahora se abre en el acceso y ya no en la creación de cuenta.
+- Resultado más legible: una sola densidad en todas partes (área de las piezas sobre área de las chapas), la insignia «Completado» solo cuando el cálculo ha acabado de verdad, la longitud de chapa usada durante la búsqueda, opciones con nombres que dicen su sentido y «Qué pedir» al principio del informe.
+- Informe: los dos botones de exportación se llaman «Copiar informe» y «Exportar CSV», y la tabla por chapa se lee en el teléfono.
+- Rechazos y fallos: una pieza demasiado grande se señala bajo el botón de cálculo, con el motivo; los mensajes que llegan del servidor se traducen y nombran el archivo.
+- Suscripción: la ventana dice qué desbloquea cada plan, que se pide la tarjeta, el importe y la fecha del primer cobro; en la página de planes, una cuenta gratuita puede iniciar directamente la prueba de Unlimited o de Pro.
+- Archivo de corte más fiel: los arcos de las polilíneas antiguas siguen siendo arcos (salían como segmentos rectos); los bloques con escala desigual, en espejo o repetidos (MINSERT) se importan en su sitio; en SVG, las formas ocultas en <defs> ya no se convierten en piezas, <use> es compatible y un ancho en porcentaje conserva la escala correcta.
+- Avisos al importar: la aplicación avisa cuando algunos trazos no se cortarán (entidades fuera de toda pieza, espacio papel, textos y cotas) y cuando los arcos de polilínea se colocan como segmentos rectos.
+- Archivos pesados o dañados: la importación es más rápida, y un archivo corrupto se rechaza o se ignora con limpieza en lugar de bloquear la pestaña.
+- Espaciado mantenido en las curvas: el espaciado pedido se respeta ahora en las curvas reales del archivo de corte, gracias a un pequeño margen (0,12 mm como máximo) añadido para las piezas con curvas. No cambia nada para las piezas de bordes rectos. Una pieza curva ajustada exactamente a la medida de la chapa puede ser rechazada: el mensaje indica el margen.
+- Botón «Reducir el espaciado a X mm»: aplica de verdad X, y no ya la mitad.
+- Página del proyecto: las piezas y sus cantidades se muestran primero, el botón de cálculo sigue visible y, tras un cálculo en el servidor, la vista central muestra el resultado.
+- Teléfono y tema oscuro: la cabecera y la tabla de planes caben en una pantalla pequeña, y se han corregido los textos ilegibles del tema oscuro.
+- Novedades: esta página se muestra ahora en los seis idiomas.
+- Archivos por chapa del servidor: se numeran de 1 a N incluso cuando un formato de chapa se queda vacío.
 
 ## V0.9.11
 
