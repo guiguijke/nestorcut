@@ -115,12 +115,23 @@ def _note_simplification(stats, orig_rings, new_rings):
         if len(new) == len(orig):
             continue
         d = shapely.distance(shapely.linearrings(new), shapely.points(orig))
-        stats["gap"] = max(stats.get("gap", 0.0), float(d.max()))
+        gap = float(d.max())
+        stats["gap"] = max(stats.get("gap", 0.0), gap)
+        # Un sommet retiré hors de la ligne = courbe aplatie : réserve
+        # d'aplatissement, même sous 8 sommets (arc peu cintré en 3 segments).
+        if gap > 1e-9:
+            stats["curved"] = True
 
 
 def spacing_margin(stats, requested):
-    """Marge mesurée = 2 x écart max + 0,02 (anneau > 8 sommets), plafonnée
-    à 0,12 ; 0 si l'espacement demandé est 0 (contact permis)."""
+    """Marge mesurée = 2 x écart max + 0,02 (anneau > 8 sommets ou sommet
+    retiré par la simplification), plafonnée à 0,12 ; 0 si l'espacement
+    demandé est 0 (contact permis).
+
+    Limite connue : une courbe aplatie en UN SEUL segment n'est pas
+    détectable ici (rien ne la distingue d'un côté droit) ; sa perte est
+    bornée à 0,02 mm (la tolérance d'aplatissement vaut 0,01 mm de chaque
+    côté)."""
     if not (requested and requested > 0):
         return 0.0
     margin = 2 * stats.get("gap", 0.0) + (

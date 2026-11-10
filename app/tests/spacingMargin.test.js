@@ -100,3 +100,26 @@ describe('marge d’espacement', () => {
         expect(arts[0].report.verify.spacingOk).toBe(true)
     })
 })
+
+describe('arc peu cintré aplati en peu de segments', () => {
+    const flatArcRect = () => {
+        const s = 0.056
+        const R = (30 * 30 + s * s) / (2 * s)
+        const sag = (x) => Math.sqrt(R * R - (x - 30) ** 2) - (R - s)
+        return [[0, 0], [60, 0], [60, 30], [40, 30 + sag(40)], [20, 30 + sag(20)], [0, 30], [0, 0]]
+    }
+
+    it('6 sommets mais sommets retirés : la réserve d’aplatissement s’ajoute', () => {
+        const ring = flatArcRect()
+        const { coords } = simplifyPart(ring, [])
+        expect(coords.length).toBeLessThan(ring.length)
+        const gap = measuredGap(ring, coords)
+        expect(gap).toBeGreaterThan(0.04)
+        expect(computeSpacingMargin([fileOf(ring)], 2)).toBeCloseTo(Math.min(0.12, 2 * gap + 0.02), 9)
+    })
+
+    it('rectangle avec un sommet colinéaire : marge 0', () => {
+        const ring = [[0, 0], [20, 0], [40, 0], [40, 20], [0, 20], [0, 0]]
+        expect(computeSpacingMargin([fileOf(ring)], 2)).toBe(0)
+    })
+})

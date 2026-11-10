@@ -115,3 +115,30 @@ class TestSpacingMargin:
         without = worst_original_distance(requested)
         assert with_margin >= requested - 0.02
         assert without < requested - 0.02  # sans la marge, le test échoue
+
+
+def _flat_arc_rect():
+    """Rectangle 60x30 dont le côté haut est un arc de flèche 0,056 mm
+    (R ~ 8 036 mm) aplati en 3 segments : 6 sommets, la simplification
+    retire les 2 sommets intermédiaires."""
+    s = 0.056
+    big_r = (30 ** 2 / 1 + s * s) / (2 * s)
+    sag = lambda x: math.sqrt(big_r ** 2 - (x - 30) ** 2) - (big_r - s)
+    return [[0, 0], [60, 0], [60, 30], [40, 30 + sag(40)], [20, 30 + sag(20)], [0, 30], [0, 0]]
+
+
+class TestFlatArcReserve:
+    def test_flat_arc_gets_flatten_reserve(self, monkeypatch):
+        ring = _flat_arc_rect()
+        assert len(ring) - 1 == 6
+        items, stats = _convert(monkeypatch, ring)
+        assert len(items[0]["coords"]) < len(ring)  # sommets retirés
+        gap = _measured_gap(ring, items[0]["coords"])
+        assert gap > 0.04
+        margin = m.spacing_margin(stats, 2)
+        assert margin == pytest.approx(min(0.12, 2 * gap + 0.02), abs=1e-9)
+
+    def test_rectangle_with_collinear_vertex_keeps_zero(self, monkeypatch):
+        ring = [[0, 0], [20, 0], [40, 0], [40, 20], [0, 20], [0, 0]]
+        _, stats = _convert(monkeypatch, ring)
+        assert m.spacing_margin(stats, 2) == 0

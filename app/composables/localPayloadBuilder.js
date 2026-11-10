@@ -425,8 +425,12 @@ function ringSimplificationGap(orig, simp) {
 
 /**
  * Marge = 2 × (écart maximal de simplification sur toutes les pièces)
- * + 0,02 si un anneau d'origine a plus de 8 sommets, plafonnée à 0,12 ;
+ * + 0,02 si un anneau d'origine a plus de 8 sommets ou si la simplification
+ * a retiré un sommet (écart > 1e-9), plafonnée à 0,12 ;
  * 0 si l'espacement demandé est 0 (le contact y est permis).
+ *
+ * Limite connue : une courbe aplatie en UN SEUL segment n'est pas détectable
+ * ici (rien ne la distingue d'un côté droit) ; sa perte est bornée à 0,02 mm.
  */
 export function computeSpacingMargin(files, requested) {
     if (!(Number(requested) > 0)) return 0
@@ -440,7 +444,11 @@ export function computeSpacingMargin(files, requested) {
             const rings = [[coords, simp.coords], ...holes.map((h, i) => [h, simp.holes[i]])]
             for (const [orig, s] of rings) {
                 if ((isClosedRing(orig) ? orig.length - 1 : orig.length) > 8) curved = true
-                maxGap = Math.max(maxGap, ringSimplificationGap(orig, s))
+                const gap = ringSimplificationGap(orig, s)
+                // Un sommet retiré hors de la ligne = courbe aplatie : réserve
+                // d'aplatissement, même sous 8 sommets.
+                if (gap > 1e-9) curved = true
+                maxGap = Math.max(maxGap, gap)
             }
         }
     }
