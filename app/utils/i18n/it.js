@@ -196,7 +196,7 @@ export default {
     "settings.kerf": "Kerf (larghezza di taglio)",
     "settings.safety": "Margine di sicurezza (per pezzo)",
     "settings.spacingRule": "Distanza tra i pezzi = 2 × kerf + margine = {v} {unit}",
-    "settings.spacingHolesDisabled": "Oltre 2,4 mm di distanza, l'annidamento nei fori è disattivato (limite del motore).",
+    "settings.spacingHolesDisabled": "Da 2,38 mm di distanza, l'annidamento nei fori può essere disattivato (limite del motore, margine per le curve incluso).",
     "settings.sheetPreset.hint": "Formato standard di lamiera",
     "units.label": "Unità di misura",
     "units.mm": "Millimetri (mm)",

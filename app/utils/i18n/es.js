@@ -201,7 +201,7 @@ export default {
     "settings.kerf": "Kerf (sangría de corte)",
     "settings.safety": "Margen de seguridad (por pieza)",
     "settings.spacingRule": "Separación entre piezas = 2 × kerf + margen = {v} {unit}",
-    "settings.spacingHolesDisabled": "Por encima de 2,4 mm de separación, el anidado en agujeros se desactiva (límite del motor).",
+    "settings.spacingHolesDisabled": "A partir de 2,38 mm de separación, el anidado en agujeros puede desactivarse (límite del motor, margen de curvas incluido).",
     "settings.sheetPreset.hint": "Formato estándar de chapa",
     "units.label": "Unidades de medida",
     "units.mm": "Milímetros (mm)",

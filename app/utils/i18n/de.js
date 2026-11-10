@@ -199,7 +199,7 @@ export default {
     "settings.kerf": "Kerf (Schnittspalt)",
     "settings.safety": "Sicherheitszugabe (pro Teil)",
     "settings.spacingRule": "Teileabstand = 2 × Kerf + Sicherheitszugabe = {v} {unit}",
-    "settings.spacingHolesDisabled": "Ab einem Abstand von 2,4 mm wird das Verschachteln in Löcher deaktiviert (Engine-Grenze).",
+    "settings.spacingHolesDisabled": "Ab einem Abstand von 2,38 mm kann das Verschachteln in Löcher deaktiviert werden (Engine-Grenze, Kurvenzuschlag eingerechnet).",
     "settings.sheetPreset.hint": "Standard-Blechformat",
     "units.label": "Maßeinheiten",
     "units.mm": "Millimeter (mm)",

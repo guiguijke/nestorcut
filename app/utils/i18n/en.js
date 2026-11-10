@@ -213,7 +213,7 @@ export default {
     'settings.kerf': 'Kerf (cut width)',
     'settings.safety': 'Safety (margin per part)',
     'settings.spacingRule': 'Part-to-part spacing = 2 × kerf + safety = {v} {unit}',
-    'settings.spacingHolesDisabled': 'Above 2.4 mm spacing, nesting inside cutouts is disabled (engine limit).',
+    'settings.spacingHolesDisabled': 'From 2.38 mm spacing, nesting inside cutouts may be disabled (engine limit, curve margin included).',
     'settings.sheetPreset.hint': 'Standard sheet size',
     'units.label': 'Measurement units',
     'units.mm': 'Millimeters (mm)',

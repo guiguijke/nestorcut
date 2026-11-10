@@ -212,7 +212,7 @@ export default {
     'settings.kerf': 'Kerf (largeur de coupe)',
     'settings.safety': 'Sécurité (marge par pièce)',
     'settings.spacingRule': 'Espacement entre pièces = 2 × kerf + sécurité = {v} {unit}',
-    'settings.spacingHolesDisabled': 'Au-delà de 2,4 mm d’espacement, l’imbrication dans les trous est désactivée (limite moteur).',
+    'settings.spacingHolesDisabled': 'À partir de 2,38 mm d’espacement, l’imbrication dans les trous peut être désactivée (limite moteur, marge de courbes comprise).',
     'settings.sheetPreset.hint': 'Format de tôle standard',
     'units.label': 'Unités de mesure',
     'units.mm': 'Millimètres (mm)',

@@ -193,7 +193,7 @@ export default {
     "settings.kerf": "Kerf (largura de corte)",
     "settings.safety": "Folga de segurança (por peça)",
     "settings.spacingRule": "Espaçamento entre peças = 2 × kerf + folga = {v} {unit}",
-    "settings.spacingHolesDisabled": "Acima de 2,4 mm de espaçamento, o aninhamento nos furos é desativado (limite do motor).",
+    "settings.spacingHolesDisabled": "A partir de 2,38 mm de espaçamento, o aninhamento nos furos pode ser desativado (limite do motor, margem de curvas incluída).",
     "settings.sheetPreset.hint": "Formato padrão de chapa",
     "units.label": "Unidades de medida",
     "units.mm": "Milímetros (mm)",
