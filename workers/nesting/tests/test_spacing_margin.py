@@ -53,6 +53,20 @@ def _measured_gap(orig, simp):
     return max(poly.distance(Point(p)) for p in orig)
 
 
+def _contact_offset(simp, ux, uy, internal):
+    """Décalage le long de (ux, uy) pour lequel deux copies du contour
+    simplifié sont exactement à `internal` l'une de l'autre."""
+    base = Polygon(simp)
+    lo, hi = 90.0, 110.0
+    for _ in range(50):
+        mid = (lo + hi) / 2
+        if base.distance(translate(base, xoff=mid * ux, yoff=mid * uy)) < internal:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
 class TestSpacingMargin:
     def test_rectangles_margin_zero_engine_config_keeps_2(self, monkeypatch):
         _, stats = _convert(monkeypatch, RECT)
@@ -113,36 +127,29 @@ class TestSpacingMargin:
         assert rep["smallestGapMm"] == pytest.approx(2.05, abs=1e-9)
         assert rep["spacingOk"] is True
 
-    def test_original_contours_keep_requested_spacing(self, monkeypatch):
+    def test_true_circle_keeps_requested_spacing(self, monkeypatch):
+        """Deux disques r=50 dont les contours SIMPLIFIES sont posés à
+        l'espacement interne ; la distance est mesurée sur le cercle VRAI
+        (4 000 segments), dans 36 directions."""
         ring = _disc(50)
         items, stats = _convert(monkeypatch, ring)
         simp = items[0]["coords"]
         requested = 2.0
+        true_circle = Polygon(_disc(50, 4000))
 
-        def worst_original_distance(internal):
-            # Contours SIMPLIFIES poses exactement a l'espacement interne,
-            # dans 36 directions ; on garde la pire distance des contours
-            # D'ORIGINE.
+        def worst_true_distance(internal):
             worst = float("inf")
             for k in range(36):
                 ux, uy = math.cos(math.radians(k * 10 + 3)), math.sin(math.radians(k * 10 + 3))
-                lo, hi = 90.0, 110.0
-                for _ in range(50):
-                    mid = (lo + hi) / 2
-                    moved = translate(Polygon(simp), xoff=mid * ux, yoff=mid * uy)
-                    if Polygon(simp).distance(moved) < internal:
-                        lo = mid
-                    else:
-                        hi = mid
-                dx = (lo + hi) / 2
-                moved = translate(Polygon(ring), xoff=dx * ux, yoff=dx * uy)
-                worst = min(worst, Polygon(ring).distance(moved))
+                dx = _contact_offset(simp, ux, uy, internal)
+                moved = translate(true_circle, xoff=dx * ux, yoff=dx * uy)
+                worst = min(worst, true_circle.distance(moved))
             return worst
 
-        with_margin = worst_original_distance(requested + m.spacing_margin(stats, requested))
-        without = worst_original_distance(requested)
-        assert with_margin >= requested - 0.02
-        assert without < requested - 0.02  # sans la marge, le test échoue
+        with_margin = worst_true_distance(requested + m.spacing_margin(stats, requested))
+        without = worst_true_distance(requested)
+        assert with_margin >= requested - 0.01
+        assert without < requested - 0.01  # sans la marge, le test échoue
 
 
 def _flat_arc_rect():
@@ -155,7 +162,39 @@ def _flat_arc_rect():
     return [[0, 0], [60, 0], [60, 30], [40, 30 + sag(40)], [20, 30 + sag(20)], [0, 30], [0, 0]]
 
 
+def _true_flat_arc_rect(n=2000):
+    """Le même rectangle avec son VRAI arc (dense) sur le côté haut."""
+    sag = 0.056
+    big_r = (30 ** 2 + sag * sag) / (2 * sag)
+    arc = [[60 - 60 * i / n, 30 + math.sqrt(big_r ** 2 - (60 - 60 * i / n - 30) ** 2) - (big_r - sag)]
+           for i in range(n + 1)]
+    return [[0, 0], [60, 0]] + arc + [[0, 0]]
+
+
 class TestFlatArcReserve:
+    def test_two_copies_arc_against_arc_keep_requested_spacing(self, monkeypatch):
+        """Deux exemplaires posés arc contre arc : les contours simplifiés
+        (côté haut droit) sont à l'espacement interne, la distance se mesure
+        sur l'arc VRAI. Sans la réserve d'aplatissement : 1,9876 mm."""
+        ring = _flat_arc_rect()
+        items, stats = _convert(monkeypatch, ring)
+        simp = items[0]["coords"]
+        requested = 2.0
+        true_shape = Polygon(_true_flat_arc_rect())
+
+        def true_distance(internal):
+            top = max(y for _, y in simp)
+            # copie symétrique (miroir en y) posée au-dessus, simplifiés à `internal`
+            mirror = lambda poly: Polygon([(x, 2 * top + internal - y) for x, y in poly.exterior.coords])
+            assert Polygon(simp).distance(mirror(Polygon(simp))) == pytest.approx(internal, abs=1e-9)
+            return true_shape.distance(mirror(true_shape))
+
+        assert true_distance(requested + m.spacing_margin(stats, requested)) >= requested - 0.01
+        # Marge de l'ancien seuil (8 sommets) : 2 x écart seul, sans réserve.
+        gap = _measured_gap(ring, simp)
+        assert true_distance(requested + 2 * gap) < requested - 0.01
+
+
     def test_flat_arc_gets_flatten_reserve(self, monkeypatch):
         ring = _flat_arc_rect()
         assert len(ring) - 1 == 6
