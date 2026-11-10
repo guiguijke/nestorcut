@@ -205,6 +205,11 @@ impl Matrix {
                 }
                 i += 1;
             }
+            // Parenthèse jamais fermée : la commande est illisible, on l'ignore
+            // (sinon le découpage ci-dessous sortirait de la chaîne).
+            if depth > 0 {
+                break;
+            }
             let params_str = &s[pstart..i - 1];
             let params = split_params(params_str);
             apply_command(&mut m, name, &params);
@@ -356,5 +361,17 @@ mod tests {
         let m = Matrix::parse("rotate(90 10 10)");
         let p = m.apply([20.0, 10.0]);
         assert!((p[0] - 10.0).abs() < 1e-9 && (p[1] - 20.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn unclosed_parenthesis_does_not_panic() {
+        // transform="translate(" : la parenthèse n'est jamais fermée. Avant le
+        // garde-fou, le découpage des paramètres sortait de la chaîne et
+        // paniquait. Attendu : la commande illisible est ignorée.
+        assert_eq!(Matrix::parse("translate("), Matrix::identity());
+        assert_eq!(Matrix::parse("("), Matrix::identity());
+        // Les commandes complètes qui précèdent restent appliquées.
+        let m = Matrix::parse("translate(10, 20) scale(2");
+        assert_eq!(m.apply([1.0, 1.0]), [11.0, 21.0]);
     }
 }
