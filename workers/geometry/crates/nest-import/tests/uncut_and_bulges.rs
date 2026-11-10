@@ -59,9 +59,10 @@ fn lwpolyline_bulges_report_the_largest_sagitta() {
     let r = nest_import::import_file(BULGE_LW, 0.01).expect("import");
     let f = finding(&r, "import.bulgesChorded").expect("constat bulgesChorded");
     assert_eq!(f.level, LEVEL_ATTENTION);
-    // 0,30 mm compte ; 0,08 mm (0,0016 sur 100 mm) est sous le seuil de 0,1 mm.
-    assert_eq!(f.count, 1);
-    assert_eq!(f.value.as_deref(), Some("0.30"));
+    // 0,30 mm compte ; 0,08 mm (0,0016 sur 100 mm) : 2 x 0,08 = 0,16 >= 0,1, il compte aussi.
+    // Valeur annoncée : 2 x la plus grande flèche (deux arcs face à face).
+    assert_eq!(f.count, 2);
+    assert_eq!(f.value.as_deref(), Some("0.60"));
     // L'imbrication reste sur les cordes : la plaque est 100 x 50.
     assert_eq!((r.parts[0].width, r.parts[0].height), (100.0, 50.0));
 }
@@ -70,15 +71,19 @@ fn lwpolyline_bulges_report_the_largest_sagitta() {
 fn classic_polyline_bulges_and_the_closing_segment_are_measured() {
     let r = nest_import::import_file(BULGE_POLY, 0.01).expect("import");
     let f = finding(&r, "import.bulgesChorded").expect("constat bulgesChorded");
-    // 0,01 sur 100 mm, et -0,02 sur le segment de fermeture de 50 mm : 0,50 mm chacun.
+    // 0,01 sur 100 mm, et -0,02 sur le segment de fermeture de 50 mm : 0,50 mm chacun,
+    // annoncés en 2 x 0,50 = 1,00 mm.
     assert_eq!(f.count, 2);
-    assert_eq!(f.value.as_deref(), Some("0.50"));
+    assert_eq!(f.value.as_deref(), Some("1.00"));
 }
 
 #[test]
-fn a_sagitta_below_the_threshold_says_nothing() {
+fn a_sagitta_of_0_08_mm_is_announced_at_twice_its_value() {
+    // Le fichier « négligeable » porte 0,0016 sur 100 mm : flèche 0,08 mm. Deux arcs face à
+    // face perdent 0,16 mm au total, au-dessus du seuil de 0,1 mm : le constat le dit.
     let r = nest_import::import_file(BULGE_SMALL, 0.01).expect("import");
-    assert!(finding(&r, "import.bulgesChorded").is_none());
+    let f = finding(&r, "import.bulgesChorded").expect("constat bulgesChorded");
+    assert_eq!(f.value.as_deref(), Some("0.16"));
 }
 
 #[test]
@@ -91,5 +96,5 @@ fn the_sagitta_is_measured_in_mm_after_unit_conversion() {
         0\nENDSEC\n0\nEOF\n";
     let r = nest_import::import_file(dxf.as_bytes(), 0.01).expect("import");
     let f = finding(&r, "import.bulgesChorded").expect("constat bulgesChorded");
-    assert_eq!(f.value.as_deref(), Some("0.30"));
+    assert_eq!(f.value.as_deref(), Some("0.60"));
 }

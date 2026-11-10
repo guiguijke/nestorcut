@@ -314,7 +314,7 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
         if stats is not None:
             for sagitta in polyline_sagittas(entity):
                 stats["bulgeMaxSagitta"] = max(stats.get("bulgeMaxSagitta", 0.0), sagitta)
-                if sagitta >= NOTABLE_SAGITTA_MM:
+                if 2 * sagitta >= NOTABLE_SAGITTA_MM:
                     stats["bulgeSegments"] = stats.get("bulgeSegments", 0) + 1
         try:
             dxf_geometry = convert_entity_to_shapely(entity, tolerance)

@@ -43,18 +43,20 @@ def test_entities_attached_to_no_part_are_counted_by_type():
 
 def test_lwpolyline_bulges_report_the_largest_sagitta():
     f = _findings("bulge_notable_lwpolyline.dxf")["import.bulgesChorded"]
-    assert f["count"] == 1  # 0,08 mm est sous le seuil
-    assert f["value"] == f"{_sagitta((0, 0), (100, 0), 0.006):.2f}" == "0.30"
+    assert f["count"] == 2  # 0,08 mm : 2 x 0,08 = 0,16 >= 0,1, il compte aussi
+    assert f["value"] == f"{2 * _sagitta((0, 0), (100, 0), 0.006):.2f}" == "0.60"
 
 
 def test_classic_polyline_bulges_and_the_closing_segment_are_measured():
     f = _findings("bulge_notable_polyline.dxf")["import.bulgesChorded"]
     assert f["count"] == 2
-    assert f["value"] == f"{_sagitta((0, 50), (0, 0), -0.02):.2f}" == "0.50"
+    assert f["value"] == f"{2 * _sagitta((0, 50), (0, 0), -0.02):.2f}" == "1.00"
 
 
-def test_a_sagitta_below_the_threshold_says_nothing():
-    assert "import.bulgesChorded" not in _findings("bulge_negligible.dxf")
+def test_a_small_sagitta_is_announced_at_twice_its_value():
+    # bulge_negligible.dxf : flèche 0,08 mm, 2 x 0,08 = 0,16 mm >= 0,1 mm.
+    f = _findings("bulge_negligible.dxf")["import.bulgesChorded"]
+    assert f["value"] == "0.16"
 
 
 def test_every_segment_sagitta_matches_ezdxf():

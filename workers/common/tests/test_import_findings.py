@@ -42,8 +42,10 @@ class TestUncutAndBulges:
     def test_chorded_bulges_carry_the_largest_sagitta_with_two_decimals(self):
         stats = {**empty_stats(), "bulgeSegments": 3, "bulgeMaxSagitta": 0.5858}
         assert build_findings(stats) == [
-            {"code": "import.bulgesChorded", "level": LEVEL_ATTENTION, "count": 3, "value": "0.59"}]
-        assert build_findings({**empty_stats(), "bulgeMaxSagitta": 0.05}) == []
+            {"code": "import.bulgesChorded", "level": LEVEL_ATTENTION, "count": 3, "value": "1.17"}]
+        big = {**empty_stats(), "bulgeSegments": 1, "bulgeMaxSagitta": 0.09}
+        assert build_findings(big)[0]["value"] == "0.18"
+        assert build_findings({**empty_stats(), "bulgeSegments": 1, "bulgeMaxSagitta": 0.04}) == []
 
     def test_the_threshold_is_the_same_on_both_sides(self):
         from worker_common.geometry.import_findings import NOTABLE_SAGITTA_MM

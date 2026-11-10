@@ -33,9 +33,9 @@ NOISE_ENTITIES = (
     "ACAD_TABLESTYLE", "LAYOUT", "VERTEX",
 )
 
-# Flèche (mm) à partir de laquelle un bulge de polyligne est dit : l'imbrication
-# lit la corde (D-IMP-8), le fichier de coupe garde l'arc. Miroir de
-# `NOTABLE_SAGITTA_MM` côté Rust.
+# Écart (mm) à partir duquel un bulge de polyligne est dit : l'imbrication lit la corde
+# (D-IMP-8), le fichier de coupe garde l'arc. Deux arcs face à face perdent chacun leur
+# flèche : on compare 2 x la flèche à ce seuil. Miroir de `NOTABLE_SAGITTA_MM` côté Rust.
 NOTABLE_SAGITTA_MM = 0.1
 
 LEVEL_INFO = "info"
@@ -71,7 +71,7 @@ def empty_stats() -> dict:
         "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
         "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
         "uncut": {},            # type d'entité rattachée à aucune pièce -> occurrences
-        "bulgeSegments": 0,     # segments de polyligne à bulge, flèche >= seuil
+        "bulgeSegments": 0,     # segments de polyligne à bulge, 2 x flèche >= seuil
         "bulgeMaxSagitta": 0.0, # plus grande flèche (mm), tous segments à bulge
         "scaleApplied": 1.0,    # facteur d'échelle appliqué à l'import (E2)
     }
@@ -119,9 +119,9 @@ def build_findings(stats: dict) -> list:
             "import.entitiesUncut", LEVEL_ATTENTION,
             sum(n for _, n in uncut), [k for k, _ in uncut],
         ))
-    if stats["bulgeSegments"] > 0:
+    if stats["bulgeSegments"] > 0 and 2 * float(stats["bulgeMaxSagitta"]) >= NOTABLE_SAGITTA_MM:
         out.append(_finding("import.bulgesChorded", LEVEL_ATTENTION, stats["bulgeSegments"],
-                            value=f"{float(stats['bulgeMaxSagitta']):.2f}"))
+                            value=f"{2 * float(stats['bulgeMaxSagitta']):.2f}"))
     if stats["droppedParts"] > 0:
         out.append(_finding("import.partsDropped", LEVEL_ATTENTION, stats["droppedParts"]))
     # Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte

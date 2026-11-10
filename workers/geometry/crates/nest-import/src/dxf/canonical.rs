@@ -132,7 +132,7 @@ fn measure_bulges(flat: &[Entity], stats: &mut crate::findings::ImportStats) {
             if s > stats.bulge_max_sagitta {
                 stats.bulge_max_sagitta = s;
             }
-            if s >= crate::findings::NOTABLE_SAGITTA_MM {
+            if 2.0 * s >= crate::findings::NOTABLE_SAGITTA_MM {
                 stats.bulge_segments += 1;
             }
         }
