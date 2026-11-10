@@ -391,81 +391,57 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                 // soustrait pas les trous ; ici on traite le cas explicitement).
                 //
                 // « i dans un trou de j » se décide par CONTENANCE de l'anneau entier
-                // (ring_inside_ring), pas par le centroïde : celui d'un L fin tombe dans
-                // son encoche, donc dans la matière de l'hôte, et la pièce parfaitement
-                // posée dans un trou en L passait pour un chevauchement (B11). Le centroïde
-                // reste le second critère, pour qu'une pièce qui mord la paroi d'un trou
-                // ne soit jamais lue comme libre : elle tombe alors dans le contrôle ci-dessous.
-                let cc_i = centroids[i];
-                let cc_j = centroids[j];
-                let hole_of_j = placed_polys[j]
+                // (ring_within_hole), pas par le centroïde : celui d'un L fin tombe dans
+                // son encoche, donc dans la matière de l'hôte (B11). La contenance admet le
+                // contact (paroi touchée, sommets sur la paroi) mais refuse tout bord qui
+                // sort du trou ou toute matière qui y entre.
+                // Quand l'un des côtés est établi par contenance, l'autre n'est pas cherché
+                // au centroïde : deux cadres concentriques ne se chevauchent pas.
+                let in_hole_of_j = placed_polys[j]
                     .1
                     .iter()
-                    .find(|h| ring_inside_ring(&placed_polys[i].0, h))
-                    .or_else(|| placed_polys[j].1.iter().find(|h| geom::point_in_ring(cc_i, h)));
-                let hole_of_i = placed_polys[i]
-                    .1
-                    .iter()
-                    .find(|h| ring_inside_ring(&placed_polys[j].0, h))
-                    .or_else(|| placed_polys[i].1.iter().find(|h| geom::point_in_ring(cc_j, h)));
-                match (hole_of_i, hole_of_j) {
-                    (None, None) => {
-                        let d = geom::ring_distance(&placed_polys[i].0, &placed_polys[j].0);
-                        if d < smallest_gap {
-                            smallest_gap = d;
-                        }
-                        if d <= 0.0 {
-                            let inter = overlap_area(&placed_polys[i], &placed_polys[j]);
-                            if inter > OVERLAP_EPS_MM2 {
-                                overlap_free = false;
-                            }
-                            if inter > DUPLICATE_AREA_FRACTION * areas[i].min(areas[j]) {
-                                duplicate_poses += 1;
-                            }
-                        }
+                    .find(|h| ring_within_hole(&placed_polys[i].0, h));
+                let in_hole_of_i = if in_hole_of_j.is_some() {
+                    None
+                } else {
+                    placed_polys[i]
+                        .1
+                        .iter()
+                        .find(|h| ring_within_hole(&placed_polys[j].0, h))
+                };
+                let (nested, hole) = match (in_hole_of_j, in_hole_of_i) {
+                    (Some(h), _) => (Some(i), Some(h)),
+                    (None, Some(h)) => (Some(j), Some(h)),
+                    _ => (None, None),
+                };
+                if let (Some(n), Some(h)) = (nested, hole) {
+                    // Pièce nichée : l'écart se mesure à la paroi du trou.
+                    let g = geom::ring_gap(&placed_polys[n].0, h);
+                    if g < smallest_gap {
+                        smallest_gap = g;
                     }
-                    (Some(h), None) => {
-                        // j nichée dans un trou de i.
-                        if ring_inside_ring(&placed_polys[j].0, h) {
-                            let g = geom::ring_gap(&placed_polys[j].0, h);
-                            if g < smallest_gap {
-                                smallest_gap = g;
-                            }
-                        } else {
-                            // Elle mord la paroi : écart nul, comme shapely.
-                            smallest_gap = 0.0;
-                            overlap_free = false;
-                        }
+                    continue;
+                }
+                // Non contenue : si un centroïde tombe tout de même dans un trou de
+                // l'autre, la pièce mord la paroi (écart nul, comme shapely).
+                let bites = placed_polys[j].1.iter().any(|h| geom::point_in_ring(centroids[i], h))
+                    || placed_polys[i].1.iter().any(|h| geom::point_in_ring(centroids[j], h));
+                if bites {
+                    smallest_gap = 0.0;
+                    overlap_free = false;
+                    continue;
+                }
+                let d = geom::ring_distance(&placed_polys[i].0, &placed_polys[j].0);
+                if d < smallest_gap {
+                    smallest_gap = d;
+                }
+                if d <= 0.0 {
+                    let inter = overlap_area(&placed_polys[i], &placed_polys[j]);
+                    if inter > OVERLAP_EPS_MM2 {
+                        overlap_free = false;
                     }
-                    (None, Some(h)) => {
-                        // i nichée dans un trou de j.
-                        if ring_inside_ring(&placed_polys[i].0, h) {
-                            let g = geom::ring_gap(&placed_polys[i].0, h);
-                            if g < smallest_gap {
-                                smallest_gap = g;
-                            }
-                        } else {
-                            // Elle mord la paroi : écart nul, comme shapely.
-                            smallest_gap = 0.0;
-                            overlap_free = false;
-                        }
-                    }
-                    (Some(_), Some(_)) => {
-                        // Double imbrication impossible pour des anneaux
-                        // simples disjoints — garde générique.
-                        let d = geom::ring_distance(&placed_polys[i].0, &placed_polys[j].0);
-                        if d < smallest_gap {
-                            smallest_gap = d;
-                        }
-                        if d <= 0.0 {
-                            let inter = overlap_area(&placed_polys[i], &placed_polys[j]);
-                            if inter > OVERLAP_EPS_MM2 {
-                                overlap_free = false;
-                            }
-                            if inter > DUPLICATE_AREA_FRACTION * areas[i].min(areas[j]) {
-                                duplicate_poses += 1;
-                            }
-                        }
+                    if inter > DUPLICATE_AREA_FRACTION * areas[i].min(areas[j]) {
+                        duplicate_poses += 1;
                     }
                 }
             }
@@ -513,27 +489,73 @@ fn ring_to_sheet_edge_dist(ring: &[Pt], sw: f64, sh: f64) -> f64 {
     b[0].min(b[1]).min(sw - b[2]).min(sh - b[3])
 }
 
-/// Croisement d'arêtes seulement (sans le test de containment de
-/// rings_overlap) : deux anneaux dont les bords ne se coupent pas.
-fn rings_cross(a: &[Pt], b: &[Pt]) -> bool {
-    for i in 0..a.len() - 1 {
-        for j in 0..b.len() - 1 {
-            if geom::seg_seg_intersects(a[i], a[i + 1], b[j], b[j + 1]) {
-                return true;
+const WITHIN_EPS: f64 = 1e-7;
+
+/// Point dans le trou, bord compris (tolérance WITHIN_EPS).
+fn point_in_closed_ring(p: Pt, ring: &[Pt]) -> bool {
+    for w in ring.windows(2) {
+        if geom::point_seg_dist(p, w[0], w[1]) <= WITHIN_EPS {
+            return true;
+        }
+    }
+    geom::point_in_ring(p, ring)
+}
+
+/// Paramètres t (0..1) où l'arête a-b est coupée par l'anneau `ring` :
+/// sommets de l'anneau posés sur l'arête et croisements d'arêtes.
+fn edge_split_params(a: Pt, b: Pt, ring: &[Pt]) -> Vec<f64> {
+    let mut ts = vec![0.0, 1.0];
+    let ab = [b[0] - a[0], b[1] - a[1]];
+    let l2 = ab[0] * ab[0] + ab[1] * ab[1];
+    if l2 == 0.0 {
+        return ts;
+    }
+    for p in ring {
+        if geom::point_seg_dist(*p, a, b) <= WITHIN_EPS {
+            let t = ((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2;
+            ts.push(t.clamp(0.0, 1.0));
+        }
+    }
+    for w in ring.windows(2) {
+        let cd = [w[1][0] - w[0][0], w[1][1] - w[0][1]];
+        let den = ab[0] * cd[1] - ab[1] * cd[0];
+        if den == 0.0 {
+            continue;
+        }
+        let ac = [w[0][0] - a[0], w[0][1] - a[1]];
+        let t = (ac[0] * cd[1] - ac[1] * cd[0]) / den;
+        let u = (ac[0] * ab[1] - ac[1] * ab[0]) / den;
+        if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+            ts.push(t);
+        }
+    }
+    ts.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    ts
+}
+
+/// `inner` entièrement contenu dans `hole`, contact admis : le bord de `inner`,
+/// découpé à chaque sommet ou croisement du trou, reste partout dans le trou
+/// fermé (milieu de chaque tronçon). Le trou étant un anneau simple, le bord
+/// dedans suffit pour que l'intérieur y soit : la pièce ne recouvre aucune
+/// matière de l'hôte (AGENTS #4). Un contact (sommet sur arête, arêtes
+/// colinéaires) ne la fait pas sortir ; une pointe de matière qui entre ou un
+/// bord qui sort, si.
+fn ring_within_hole(inner: &[Pt], hole: &[Pt]) -> bool {
+    for w in inner.windows(2) {
+        let ts = edge_split_params(w[0], w[1], hole);
+        for k in 0..ts.len() - 1 {
+            let (t0, t1) = (ts[k], ts[k + 1]);
+            if t1 - t0 <= 1e-12 {
+                continue;
+            }
+            let tm = 0.5 * (t0 + t1);
+            let m = [w[0][0] + tm * (w[1][0] - w[0][0]), w[0][1] + tm * (w[1][1] - w[0][1])];
+            if !point_in_closed_ring(m, hole) {
+                return false;
             }
         }
     }
-    false
-}
-
-/// `inner` entièrement contenu dans `hole` (tous les sommets à l'intérieur
-/// et aucun croisement de bord) — la condition pour qu'une pièce nichée dans
-/// un trou ne chevauche PAS le matériau de l'hôte (AGENTS #4).
-fn ring_inside_ring(inner: &[Pt], hole: &[Pt]) -> bool {
-    if rings_cross(inner, hole) {
-        return false;
-    }
-    inner.iter().all(|p| geom::point_in_ring(*p, hole))
+    true
 }
 
 /// Sommets de l'espace libre (sheet − placed) via l'arrangement partagé
@@ -884,5 +906,111 @@ mod tests {
         let r = verify_layout(&[c], &[l_hole_host(), other], 2.0);
         assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
         assert_eq!(r["smallestGapMm"], serde_json::json!(2.0), "{r}");
+    }
+
+    // ---- Contacts et cadres concentriques. Valeurs de référence : shapely
+    // (Polygon(ext, trous).intersection / .distance) sur les mêmes anneaux fermés,
+    // tôle 300 x 300, pose commune en (50 ; 50) pour que le bord de tôle (50 mm)
+    // ne masque pas l'écart mesuré.
+
+    fn square(id: &str, x0: f64, y0: f64, x1: f64, y1: f64) -> Item {
+        Item {
+            id: id.into(),
+            coords: closed(vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]]),
+            holes: vec![],
+        }
+    }
+
+    fn frame100() -> Item {
+        Item {
+            id: "host".into(),
+            coords: closed(vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]),
+            holes: vec![closed(vec![[10.0, 10.0], [90.0, 10.0], [90.0, 90.0], [10.0, 90.0]])],
+        }
+    }
+
+    fn same_pose_report(a: Item, b: Item, space: f64) -> serde_json::Value {
+        let c = Container {
+            bin_width: 300.0,
+            bin_height: 300.0,
+            transforms: vec![
+                Transform { item_id: a.id.clone(), angle: 0.0, x: 50.0, y: 50.0 },
+                Transform { item_id: b.id.clone(), angle: 0.0, x: 50.0, y: 50.0 },
+            ],
+        };
+        verify_layout(&[c], &[a, b], space)
+    }
+
+    #[test]
+    fn a_part_touching_the_hole_through_its_vertices_still_covers_host_material() {
+        // Trou à pointe de matière (45;10)-(50;60)-(55;10) ; pièce (20;10)-(80;80).
+        // shapely : intersection 250.0 mm2, distance 0.0 -> chevauchement réel.
+        let host = Item {
+            id: "host".into(),
+            coords: closed(vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0]]),
+            holes: vec![closed(vec![
+                [10.0, 10.0], [45.0, 10.0], [50.0, 60.0], [55.0, 10.0],
+                [90.0, 10.0], [90.0, 90.0], [10.0, 90.0],
+            ])],
+        };
+        let r = same_pose_report(host, square("in", 20.0, 10.0, 80.0, 80.0), 0.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+    }
+
+    #[test]
+    fn concentric_frames_do_not_overlap() {
+        // shapely : intersection 0.0 mm2, distance 10.0 (grand cadre / petit cadre).
+        let small = Item {
+            id: "small".into(),
+            coords: closed(vec![[20.0, 20.0], [80.0, 20.0], [80.0, 80.0], [20.0, 80.0]]),
+            holes: vec![closed(vec![[30.0, 30.0], [70.0, 30.0], [70.0, 70.0], [30.0, 70.0]])],
+        };
+        let r = same_pose_report(frame100(), small, 2.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(10.0), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+    }
+
+    #[test]
+    fn a_part_straddling_the_hole_edge_is_an_overlap() {
+        // Pièce (70;40)-(110;60) : moitié dans le trou (x < 90), moitié sur la matière.
+        // shapely : intersection 200.0 mm2, distance 0.0.
+        let r = same_pose_report(frame100(), square("in", 70.0, 40.0, 110.0, 60.0), 0.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+    }
+
+    #[test]
+    fn a_part_strictly_inside_a_convex_hole_measures_the_wall_gap() {
+        // Pièce (15;15)-(85;85) dans le trou (10;10)-(90;90). shapely : distance 5.0, inter 0.
+        let r = same_pose_report(frame100(), square("in", 15.0, 15.0, 85.0, 85.0), 2.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(5.0), "{r}");
+        assert_eq!(r["spacingOk"], serde_json::json!(true), "{r}");
+    }
+
+    #[test]
+    fn a_part_touching_the_hole_wall_is_allowed_only_at_spacing_zero() {
+        // Pièce (10;20)-(50;50) collée à la paroi x = 10. shapely : intersection 0.0, distance 0.0.
+        let r0 = same_pose_report(frame100(), square("in", 10.0, 20.0, 50.0, 50.0), 0.0);
+        assert_eq!(r0["overlapFree"], serde_json::json!(true), "{r0}");
+        assert_eq!(r0["smallestGapMm"], serde_json::json!(0.0), "{r0}");
+        assert_eq!(r0["spacingOk"], serde_json::json!(true), "{r0}");
+        let r2 = same_pose_report(frame100(), square("in", 10.0, 20.0, 50.0, 50.0), 2.0);
+        assert_eq!(r2["overlapFree"], serde_json::json!(true), "{r2}");
+        assert_eq!(r2["spacingOk"], serde_json::json!(false), "{r2}");
+    }
+
+    #[test]
+    fn two_identical_parts_at_the_same_pose_are_a_duplicate() {
+        // Deux carrés 60 x 60 identiques. shapely : intersection 3600.0 mm2 = 100 % de l'aire.
+        let r = same_pose_report(
+            square("a", 0.0, 0.0, 60.0, 60.0),
+            square("b", 0.0, 0.0, 60.0, 60.0),
+            2.0,
+        );
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(1), "{r}");
     }
 }
