@@ -736,7 +736,8 @@ def _nesting_process_impl(doc):
                         {"slug": p["slug"]}, {"name": 1}) or {}).get("name")
                 except Exception:
                     p["name"] = None
-        message = too_large_message(unplaceable, sheets, requested_space)
+        message = too_large_message(
+            unplaceable, sheets, requested_space, space - requested_space)
         logger.warning("Unplaceable parts detected", extra={
             "unplaceable": [{k: v for k, v in p.items() if k != "name"}
                             for p in unplaceable]})

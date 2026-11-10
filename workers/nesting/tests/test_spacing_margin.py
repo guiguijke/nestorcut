@@ -185,3 +185,20 @@ class TestUserMaxSpacing:
     def test_internal_max_zero_nothing_fits(self):
         assert m.user_max_spacing(0, 0.12) == (0.0, False)
         assert m.user_max_spacing(0, 0) == (0.0, False)
+
+
+class TestTooLargeMessageMargin:
+    UNPLACEABLE = [{"name": "disque.dxf", "width": 196.0, "height": 196.0, "count": 1}]
+    SHEETS = [{"width": 200, "height": 200}]
+
+    def test_margin_zero_message_unchanged(self):
+        from core.engine import too_large_message
+        msg = too_large_message(self.UNPLACEABLE, self.SHEETS, 2.0)
+        assert "spacing: 2.0mm. Use a larger sheet" in msg
+        assert "margin" not in msg
+
+    def test_margin_is_told_when_positive(self):
+        from core.engine import too_large_message
+        msg = too_large_message(self.UNPLACEABLE, self.SHEETS, 2.0, 0.1)
+        assert "spacing: 2.0mm (plus 0.10mm margin for curves). Use a larger sheet" in msg
+        assert msg.startswith("Part(s) too large for the sheet:")

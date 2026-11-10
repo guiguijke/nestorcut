@@ -403,6 +403,7 @@ export default {
     "localMode.allInvalidLocal": "Ogni opzione di disposizione è stata scartata dalla validazione fisica (sovrapposizioni misurate). Il nesting è stato rimborsato — riprova; se si ripete, cambia la spaziatura o le rotazioni consentite, oppure contatta il supporto.",
     "localMode.capacityExceeded": "Questi pezzi non entrano nelle lamiere dichiarate a questa distanza — aggiungi una lamiera, riduci la distanza o togli dei pezzi. Il nesting è stato rimborsato.",
     "localMode.partTooLarge": "Il pezzo \"{file}\" ({w} × {h} mm) non entra in nessuna lamiera dichiarata a questa distanza — usa una lamiera più grande, consenti più rotazioni, oppure riduci la distanza. Il nesting è stato rimborsato.",
+    "localMode.partTooLargeMargin": "Il pezzo \"{file}\" ({w} × {h} mm) non entra in nessuna lamiera dichiarata a questa distanza ({space} mm, più {margin} mm di margine per le curve) — usa una lamiera più grande, consenti più rotazioni, oppure riduci la distanza. Il nesting è stato rimborsato.",
     "localMode.partTooLargePlain": "Un pezzo non entra in nessuna lamiera dichiarata a questa distanza — usa una lamiera più grande, consenti più rotazioni, oppure riduci la distanza. Il nesting è stato rimborsato.",
     "localMode.spacingTooLarge": "La distanza è troppo grande per questo lavoro (la striscia iniziale risulterebbe vuota) — riduci la distanza oppure aggiungi più pezzi/lamiere. Il nesting è stato rimborsato.",
     "files.scaleAction": "Scala",

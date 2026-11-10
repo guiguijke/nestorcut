@@ -374,6 +374,8 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
                 file: localTooLarge.value.name,
                 w: localTooLarge.value.width,
                 h: localTooLarge.value.height,
+                ...(localTooLarge.value.margin != null
+                    ? { space: localTooLarge.value.space, margin: localTooLarge.value.margin } : {}),
             }
         : null,
 }));

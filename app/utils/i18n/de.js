@@ -406,6 +406,7 @@ export default {
     "localMode.allInvalidLocal": "Jede Layout-Option wurde von der physikalischen Validierung abgelehnt (gemessene Überlappungen). Das Nesting wurde erstattet — bitte erneut versuchen; tritt es weiter auf, ändern Sie den Abstand oder die erlaubten Drehungen oder wenden Sie sich an den Support.",
     "localMode.capacityExceeded": "Diese Teile passen bei diesem Abstand nicht auf die angegebenen Bleche — Blech hinzufügen, Abstand verringern oder Teile entfernen. Das Nesting wurde erstattet.",
     "localMode.partTooLarge": "Teil \"{file}\" ({w} × {h} mm) passt bei diesem Abstand auf kein angegebenes Blech — größeres Blech verwenden, mehr Drehungen erlauben oder Abstand verringern. Das Nesting wurde erstattet.",
+    "localMode.partTooLargeMargin": "Teil \"{file}\" ({w} × {h} mm) passt bei diesem Abstand ({space} mm, plus {margin} mm Sicherheitszuschlag für Kurven) auf kein angegebenes Blech — größeres Blech verwenden, mehr Drehungen erlauben oder Abstand verringern. Das Nesting wurde erstattet.",
     "localMode.partTooLargePlain": "Ein Teil passt bei diesem Abstand auf kein angegebenes Blech — größeres Blech verwenden, mehr Drehungen erlauben oder Abstand verringern. Das Nesting wurde erstattet.",
     "localMode.spacingTooLarge": "Der Abstand ist zu groß für diesen Auftrag (der anfängliche Streifen wäre leer) — Abstand verringern oder mehr Teile/Bleche hinzufügen. Das Nesting wurde erstattet.",
     "files.scaleAction": "Skalieren",

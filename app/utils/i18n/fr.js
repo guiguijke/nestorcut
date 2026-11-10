@@ -444,6 +444,7 @@ export default {
     'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+    'localMode.partTooLargeMargin': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement ({space} mm, plus {margin} mm de marge pour les courbes) — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.partTooLargePlain': "Une pièce ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.spacingTooLarge': "L'espacement est trop grand pour cette tâche (la bande initiale serait vide) — réduisez l'espacement ou ajoutez des pièces/tôles. L'imbrication a été remboursée.",
     // Lot E4-b/E4-c : l'échelle et l'éclatement sont des actions SUR LA

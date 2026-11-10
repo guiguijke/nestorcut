@@ -10,7 +10,7 @@ import { isLocalComputeEnabled } from './localCompute'
 import { useLocale } from './useLocale'
 
 export function useLocalMode(projectSlug) {
-    const { t } = useLocale()
+    const { t, fmtNumber, locale } = useLocale()
     const state = useState(`localmode-${projectSlug}`, () => ({
         mode: 'server',
         canToggle: false,
@@ -71,6 +71,15 @@ export function useLocalMode(projectSlug) {
         // étendue mesurée, comme item_geometry nomme sa pièce. Jamais le
         // générique « arrêté de façon inattendue ».
         if (err === 'part_too_large') {
+            // Marge de courbes > 0 : la phrase la dit (« 2 mm, plus 0,10 mm »),
+            // la décision de la garde se prend avec demandé + marge.
+            if (params?.margin != null) {
+                const m = Number(params.margin)
+                const margin = locale.value === 'en' ? m.toFixed(2) : m.toFixed(2).replace('.', ',')
+                return t('localMode.partTooLargeMargin', {
+                    ...params, space: fmtNumber(params.space, 2), margin,
+                })
+            }
             return params
                 ? t('localMode.partTooLarge', params)
                 : t('localMode.partTooLargePlain')

@@ -456,6 +456,7 @@ export default {
     'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+    'localMode.partTooLargeMargin': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing ({space} mm, plus {margin} mm margin for curves) — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.partTooLargePlain': 'A part does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.spacingTooLarge': 'Spacing is too large for this job (the initial strip would be empty) — reduce the spacing or add more parts/sheets. The nesting was refunded.',
     // Lot E0 : the engine refused ONE part's geometry at import. Naming

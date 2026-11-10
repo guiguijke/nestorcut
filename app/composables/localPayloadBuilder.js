@@ -919,9 +919,13 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             .map((p) => `'${p.name}' (${pyFixed0(p.width)}x${pyFixed0(p.height)}mm, x${p.count})`)
             .join(', ')
         const sheetDesc = sheets.map((s) => `${pyFixed0(s.width)}x${pyFixed0(s.height)}mm`).join(' / ')
+        // Marge de courbes dite quand elle est > 0 : la garde décide avec
+        // demandé + marge, les chiffres seuls diraient que la pièce tient.
+        const curveMargin = space - requestedSpace
+        const marginNote = curveMargin > 0 ? ` (plus ${curveMargin.toFixed(2)}mm margin for curves)` : ''
         const tooLargeErr = new Error(
             `Part(s) too large for the sheet: ${details} — sheet(s): ${sheetDesc}, `
-            + `spacing: ${pyStrSpace(requestedSpace)}mm. Use a larger sheet, allow more rotations, or reduce spacing.`,
+            + `spacing: ${pyStrSpace(requestedSpace)}mm${marginNote}. Use a larger sheet, allow more rotations, or reduce spacing.`,
         )
         // Lot A1 (audit P3-4) : marqueur structuré pour un refus ACTIONNABLE
         // à l'écran. Sans lui, le catch de runLocalJobPrivate réduisait ce
@@ -935,6 +939,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             name: (files || []).find((f) => f.slug === firstOffender.name)?.name || firstOffender.name,
             width: pyFixed0(firstOffender.width),
             height: pyFixed0(firstOffender.height),
+            ...(curveMargin > 0 ? { space: requestedSpace, margin: curveMargin.toFixed(2) } : {}),
         }
         throw tooLargeErr
     }

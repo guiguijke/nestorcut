@@ -147,6 +147,42 @@ describe('feasibility pre-check (message exact main.py)', () => {
     })
 })
 
+describe('pièce à la cote : le message dit la marge de courbes', () => {
+    const disc196 = () => {
+        const pts = []
+        for (let i = 0; i < 160; i++) {
+            const a = (2 * Math.PI * i) / 160
+            pts.push([98 * Math.cos(a), 98 * Math.sin(a)])
+        }
+        pts.push([...pts[0]])
+        return pts
+    }
+    const run = async () => {
+        const file = {
+            slug: 'disque.dxf', name: 'disque.dxf', count: 1, rotations: [0],
+            parts: [{ coordinates: disc196(), holes: [], handles: ['A'], color: null }],
+        }
+        try {
+            await buildLocalPayload({
+                files: [file],
+                params: { sheets: [{ width: 200, height: 200, count: 1 }], space: 2, alternativesCount: 1 },
+                profile: { timeBudgetSec: 13 },
+            }, {})
+        } catch (e) { return e }
+        return null
+    }
+
+    it('disque Ø196 sur 200×200, demandé 2 : refusé, le message cite la marge', async () => {
+        const err = await run()
+        expect(err).not.toBeNull()
+        expect(err.message).toMatch(/spacing: 2\.0mm \(plus 0\.\d\dmm margin for curves\)\. Use a larger sheet/)
+        const m = Number(err.__tooLarge.margin)
+        expect(m).toBeGreaterThan(0)
+        expect(m).toBeLessThanOrEqual(0.12)
+        expect(err.__tooLarge.space).toBe(2)
+    })
+})
+
 describe('A1 — les refus du builder portent leurs paramètres (audit P3-4/P3-6d)', () => {
     const baseParams = {
         sheets: [{ width: 1500, height: 1000, count: 1 }],

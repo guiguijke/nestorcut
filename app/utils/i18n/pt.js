@@ -400,6 +400,7 @@ export default {
     "localMode.allInvalidLocal": "Toda opção de arranjo foi rejeitada pela validação física (sobreposições medidas). O nesting foi reembolsado — tente novamente; se continuar acontecendo, altere o espaçamento ou as rotações permitidas, ou fale com o suporte.",
     "localMode.capacityExceeded": "Estas peças não cabem nas chapas declaradas neste espaçamento — adicione uma chapa, reduza o espaçamento ou remova peças. O nesting foi reembolsado.",
     "localMode.partTooLarge": "A peça \"{file}\" ({w} × {h} mm) não cabe em nenhuma chapa declarada neste espaçamento — use uma chapa maior, permita mais rotações, ou reduza o espaçamento. O nesting foi reembolsado.",
+    "localMode.partTooLargeMargin": "A peça \"{file}\" ({w} × {h} mm) não cabe em nenhuma chapa declarada neste espaçamento ({space} mm, mais {margin} mm de margem para as curvas) — use uma chapa maior, permita mais rotações, ou reduza o espaçamento. O nesting foi reembolsado.",
     "localMode.partTooLargePlain": "Uma peça não cabe em nenhuma chapa declarada neste espaçamento — use uma chapa maior, permita mais rotações, ou reduza o espaçamento. O nesting foi reembolsado.",
     "localMode.spacingTooLarge": "O espaçamento é grande demais para este trabalho (a faixa inicial ficaria vazia) — reduza o espaçamento ou adicione mais peças/chapas. O nesting foi reembolsado.",
     "files.scaleAction": "Escala",

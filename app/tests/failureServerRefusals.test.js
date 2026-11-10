@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
     ENGINE_TRACE, failureBannerText, failureDetailText, failureItemParams, failureReasonKey,
-    isEngineTrace, serverRefusalCode,
+    isEngineTrace, serverRefusalCode, tooLargeParams,
 } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
@@ -178,5 +178,33 @@ describe('refus de pré-vol : pièce trop grande pour la tôle', () => {
     it('le worker écrit bien ce texte', () => {
         const py = read('../../workers/nesting/core/engine.py')
         expect(py).toContain('Part(s) too large for the sheet:')
+        expect(py).toContain('margin for curves')
+    })
+
+    const WITH_MARGIN = 'Part(s) too large for the sheet: "disque.dxf" (196x196mm, x1) — sheet(s): 200x200mm, spacing: 2.0mm (plus 0.10mm margin for curves). Use a larger sheet, allow more rotations, or reduce spacing.'
+
+    it('avec marge de courbes : reconnu, paramètres espacement et marge extraits', () => {
+        expect(serverRefusalCode(WITH_MARGIN)).toBe('part_too_large')
+        expect(failureReasonKey(WITH_MARGIN)).toBe('localMode.partTooLargePlain')
+        expect(tooLargeParams(WITH_MARGIN)).toEqual({ file: 'disque.dxf', w: '196', h: '196', space: '2.0', margin: '0.10' })
+    })
+
+    it('sans marge : paramètres inchangés (ni espacement ni marge)', () => {
+        expect(tooLargeParams(TOO_LARGE)).toEqual({ file: 'support.dxf', w: '2000', h: '50' })
+    })
+
+    it('un nom de fichier qui imite la marge ne la fait pas lire', () => {
+        const info = TOO_LARGE.replace('support.dxf', 'a (plus 9.99mm margin for curves).dxf')
+        expect(tooLargeParams(info)).toEqual({ file: 'a (plus 9.99mm margin for curves).dxf', w: '2000', h: '50' })
+    })
+
+    it('les six langues disent la marge (espaces insécables en français)', () => {
+        for (const d of [en, fr, de, es, it_, pt]) {
+            const text = d['localMode.partTooLargeMargin']
+            expect(text, 'clé manquante').toBeTruthy()
+            for (const k of ['{file}', '{w}', '{h}', '{space}', '{margin}']) expect(text).toContain(k)
+        }
+        expect(fr['localMode.partTooLargeMargin']).toContain('({space} mm, plus {margin} mm de marge pour les courbes)')
+        expect(fr['localMode.partTooLargeMargin']).toContain('« {file} »')
     })
 })
