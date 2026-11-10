@@ -397,6 +397,14 @@ fn flatten_spline(
     if control.is_empty() || knots.len() < 2 {
         return Vec::new();
     }
+    // Valeurs non finies (NaN, ±inf) : rejet à l'entrée, sinon la subdivision
+    // ci-dessous ne se termine pas.
+    if !control.iter().all(|p| p[0].is_finite() && p[1].is_finite())
+        || !knots.iter().all(|k| k.is_finite())
+        || !weights.iter().all(|w| w.is_finite())
+    {
+        return Vec::new();
+    }
     let order = (degree + 1) as usize;
     let basis = Basis {
         knots: knots.to_vec(),
@@ -462,15 +470,19 @@ fn flatten_spline(
         start_t: f64,
         end_t: f64,
         distance: f64,
+        depth: u32,
     ) {
+        // Profondeur bornée : sans borne, des coordonnées énormes (la distance
+        // ne passe jamais sous la tolérance) bouclent sans fin.
+        const MAX_DEPTH: u32 = 16;
         let mid_t = (start_t + end_t) * 0.5;
         let m = point(mid_t);
         let dist = distance_point_line(m, s, e).unwrap_or(0.0);
-        if dist < distance {
+        if depth >= MAX_DEPTH || dist < distance {
             out.push(e);
         } else {
-            subdiv(out, point, s, m, start_t, mid_t, distance);
-            subdiv(out, point, m, e, mid_t, end_t, distance);
+            subdiv(out, point, s, m, start_t, mid_t, distance, depth + 1);
+            subdiv(out, point, m, e, mid_t, end_t, distance, depth + 1);
         }
     }
 
@@ -486,7 +498,7 @@ fn flatten_spline(
                 next_t = t1;
             }
             let end_point = point(next_t);
-            subdiv(&mut out, &point, start_point, end_point, t, next_t, distance);
+            subdiv(&mut out, &point, start_point, end_point, t, next_t, distance, 0);
             t = next_t;
             start_point = end_point;
         }
@@ -637,6 +649,32 @@ mod tests {
             let pts = flatten_spline(degree, &knots, &control, &[], 0.01);
             assert!(pts.is_empty(), "degré {degree} doit être rejeté");
         }
+    }
+
+    #[test]
+    fn spline_non_finite_coordinates_are_rejected() {
+        // NaN dans un point de contrôle : la distance vaut NaN, la comparaison
+        // « d < tolérance » est fausse, et l'aplatissement récursif ne s'arrête
+        // jamais (pile saturée). Attendu : rejet à l'entrée.
+        let knots = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let nan = [[0.0, 0.0], [f64::NAN, 20.0], [30.0, -5.0], [40.0, 10.0]];
+        assert!(flatten_spline(3, &knots, &nan, &[], 0.01).is_empty());
+        let inf = [[0.0, 0.0], [f64::INFINITY, 20.0], [30.0, -5.0], [40.0, 10.0]];
+        assert!(flatten_spline(3, &knots, &inf, &[], 0.01).is_empty());
+        let bad_knot = [0.0, 0.0, 0.0, f64::NAN, 1.0, 1.0, 1.0, 1.0];
+        let ctrl = [[0.0, 0.0], [10.0, 20.0], [30.0, -5.0], [40.0, 10.0]];
+        assert!(flatten_spline(3, &bad_knot, &ctrl, &[], 0.01).is_empty());
+    }
+
+    #[test]
+    fn spline_huge_coordinates_recursion_is_bounded() {
+        // Coordonnées de l'ordre de 1e300 : les carrés débordent, la distance
+        // reste hors tolérance et la subdivision ne convergeait pas. Attendu :
+        // profondeur bornée, donc un nombre de points borné.
+        let knots = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let huge = [[0.0, 0.0], [1e300, -1e300], [-1e300, 1e300], [1e300, 1e300]];
+        let pts = flatten_spline(3, &knots, &huge, &[], 0.01);
+        assert!(pts.len() <= 1 << 20, "sortie trop grande : {}", pts.len());
     }
 
     #[test]
