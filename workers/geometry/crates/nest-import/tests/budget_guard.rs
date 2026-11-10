@@ -187,3 +187,93 @@ fn the_expansion_ceiling_says_more_than() {
     assert_eq!(t.entities, 10_000, "plafond dur = 10 × le plafond d'entités");
     assert!(format!("{}", ImportError::TooHeavy(t)).contains("more than"));
 }
+
+/// Un bloc de `vertices` sommets (polyligne fermée en cercle), inséré `inserts`
+/// fois à des positions disjointes : `inserts` entités déclarées, mais
+/// `vertices × inserts` sommets après expansion.
+fn dxf_with_vertex_bomb(vertices: usize, inserts: usize) -> String {
+    let mut s = String::from(
+        "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nA\n10\n0.0\n20\n0.0\n0\nLWPOLYLINE\n",
+    );
+    s.push_str(&format!("90\n{vertices}\n70\n1\n"));
+    for i in 0..vertices {
+        let t = std::f64::consts::TAU * i as f64 / vertices as f64;
+        s.push_str(&format!("10\n{}\n20\n{}\n", 40.0 * t.cos(), 40.0 * t.sin()));
+    }
+    s.push_str("0\nENDBLK\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n");
+    for j in 0..inserts {
+        s.push_str(&format!(
+            "0\nINSERT\n2\nA\n10\n{}\n20\n{}\n",
+            (j % 100) as f64 * 100.0,
+            (j / 100) as f64 * 100.0
+        ));
+    }
+    s.push_str("0\nENDSEC\n0\nEOF\n");
+    s
+}
+
+#[test]
+fn the_vertex_count_is_capped_at_the_expansion() {
+    // 600 entités seulement (plafond 1 000), mais 600 × 200 = 120 000 sommets
+    // pour un plafond de sommets de 100 × 1 000 : refus immédiat, cause
+    // « entités », annoncé comme un plancher.
+    let dxf = dxf_with_vertex_bomb(200, 600);
+    let limits = Limits { max_entities: 1_000, time_budget_ms: TIME_BUDGET_MS_BROWSER };
+    let start = std::time::Instant::now();
+    let t = too_heavy(import_file_limited(dxf.as_bytes(), 0.01, &limits).unwrap_err());
+    assert_eq!(t.reason, TooHeavyReason::Entities);
+    assert!(t.entities_at_least);
+    assert!(start.elapsed().as_secs() < 5, "{:?}", start.elapsed());
+}
+
+#[test]
+fn two_thousand_vertices_times_a_thousand_inserts_is_refused_fast() {
+    let dxf = dxf_with_vertex_bomb(2_000, 1_000);
+    let start = std::time::Instant::now();
+    let t = too_heavy(import_file_limited(dxf.as_bytes(), 0.01, &Limits::browser()).unwrap_err());
+    assert_eq!(t.reason, TooHeavyReason::Entities);
+    assert!(start.elapsed().as_secs() < 5, "{:?}", start.elapsed());
+}
+
+#[test]
+fn a_normal_vertex_count_is_still_read() {
+    let dxf = dxf_with_vertex_bomb(200, 20);
+    let r = import_file_limited(dxf.as_bytes(), 0.01, &Limits::browser()).expect("fichier léger");
+    assert_eq!(r.parts.len(), 20);
+}
+
+/// `depth` blocs imbriqués dont chacun insère DEUX fois le précédent, le
+/// premier est vide : 2^depth occurrences en quelques ko.
+fn dxf_with_doubled_inserts(depth: usize) -> String {
+    let mut dxf = String::from("0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB0\n10\n0.0\n20\n0.0\n0\nENDBLK\n");
+    for k in 1..=depth {
+        dxf += &format!("0\nBLOCK\n2\nB{k}\n10\n0.0\n20\n0.0\n");
+        for _ in 0..2 {
+            dxf += &format!("0\nINSERT\n2\nB{}\n10\n0.0\n20\n0.0\n", k - 1);
+        }
+        dxf += "0\nENDBLK\n";
+    }
+    dxf += &format!(
+        "0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\nB{depth}\n10\n0.0\n20\n0.0\n0\nENDSEC\n0\nEOF\n"
+    );
+    dxf
+}
+
+#[test]
+fn doubled_insert_graphs_of_24_to_34_levels_are_refused_fast() {
+    for depth in [24, 28, 32, 34] {
+        let dxf = dxf_with_doubled_inserts(depth);
+        assert!(dxf.len() < 4_000, "fichier de {} o", dxf.len());
+        {
+            let limits = Limits::browser();
+            let start = std::time::Instant::now();
+            let t = too_heavy(import_file_limited(dxf.as_bytes(), 0.01, &limits).unwrap_err());
+            assert!(
+                matches!(t.reason, TooHeavyReason::Entities | TooHeavyReason::BlockDepth),
+                "profondeur {depth} : {:?}",
+                t.reason
+            );
+            assert!(start.elapsed().as_secs() < 5, "profondeur {depth} : {:?}", start.elapsed());
+        }
+    }
+}

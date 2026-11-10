@@ -253,18 +253,56 @@ pub fn decompose_to_entities_bounded(
 ) -> Result<Vec<Entity>, Overflow> {
     let mut out = Vec::new();
     let mut copies = 0usize;
+    let mut budget = Expansion {
+        copies: &mut copies,
+        vertices: 0,
+        vertex_ceiling: ceiling.saturating_mul(VERTICES_PER_ENTITY_CEILING),
+        vertex_overflow: false,
+    };
     match decompose_entities_bounded_into(
         entities,
         blocks,
         Affine::identity(),
         &mut out,
-        &mut copies,
+        &mut budget,
         ceiling,
         max_depth,
         0,
     ) {
         Ok(()) => Ok(out),
-        Err(depth_exceeded) => Err(Overflow { entities: out.len().max(copies), depth_exceeded }),
+        Err(depth_exceeded) => {
+            let floor = if budget.vertex_overflow {
+                // Sommets en excès, pas entités : on annonce le plafond
+                // d'entités du fichier lui-même dépassé (« plus de N »).
+                ceiling / crate::budget::EXPANSION_CEILING_FACTOR + 1
+            } else {
+                0
+            };
+            let copies = *budget.copies;
+            Err(Overflow { entities: out.len().max(copies).max(floor), depth_exceeded })
+        }
+    }
+}
+
+/// Sommets cumulés admis par entité du plafond dur : 2 000 sommets × 1 000
+/// INSERT tiennent en 1 000 entités mais saturent la mémoire de l'onglet.
+const VERTICES_PER_ENTITY_CEILING: usize = 10;
+
+/// Compteurs de l'expansion : occurrences résolues, sommets cumulés émis.
+struct Expansion<'a> {
+    copies: &'a mut usize,
+    vertices: usize,
+    vertex_ceiling: usize,
+    vertex_overflow: bool,
+}
+
+fn vertex_count(e: &Entity) -> usize {
+    match e {
+        Entity::LwPolyline(p) => p.points.len(),
+        Entity::Polyline(p) => p.points.len(),
+        Entity::Spline(sp) => sp.control.len(),
+        Entity::Line(_) => 2,
+        _ => 1,
     }
 }
 
@@ -277,7 +315,7 @@ fn decompose_entities_bounded_into(
     blocks: &[Block],
     m: Affine,
     out: &mut Vec<Entity>,
-    copies: &mut usize,
+    budget: &mut Expansion,
     ceiling: usize,
     max_depth: usize,
     depth: usize,
@@ -292,8 +330,8 @@ fn decompose_entities_bounded_into(
                     let (rows, columns) = insert_grid(ins);
                     for row in 0..rows {
                         for column in 0..columns {
-                            *copies += 1;
-                            if *copies > ceiling {
+                            *budget.copies += 1;
+                            if *budget.copies > ceiling {
                                 return Err(false);
                             }
                             let local = insert_affine(block, ins, grid_position(ins, row, column));
@@ -302,7 +340,7 @@ fn decompose_entities_bounded_into(
                                 blocks,
                                 m.then(&local),
                                 out,
-                                copies,
+                                budget,
                                 ceiling,
                                 max_depth,
                                 depth + 1,
@@ -316,7 +354,13 @@ fn decompose_entities_bounded_into(
                 if out.len() >= ceiling {
                     return Err(false);
                 }
+                let before = out.len();
                 transform_into(e, &m, out);
+                budget.vertices += out[before..].iter().map(vertex_count).sum::<usize>();
+                if budget.vertices > budget.vertex_ceiling {
+                    budget.vertex_overflow = true;
+                    return Err(false);
+                }
             }
         }
     }
