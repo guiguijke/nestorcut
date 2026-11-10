@@ -71,6 +71,7 @@ export default defineEventHandler(async (event) => {
             sheetsNeeded: Number.isFinite(Number(body.unfit.sheetsNeeded)) ? Number(body.unfit.sheetsNeeded) : undefined,
             maxPartsAtSpacing: Number.isFinite(Number(body.unfit.maxPartsAtSpacing)) ? Number(body.unfit.maxPartsAtSpacing) : undefined,
             maxSpacingForFitMm: Number.isFinite(Number(body.unfit.maxSpacingForFitMm)) ? Number(body.unfit.maxSpacingForFitMm) : undefined,
+            maxSpacingZeroFits: body.unfit.maxSpacingZeroFits === true ? true : undefined,
             bestStripWidthMm: Number.isFinite(Number(body.unfit.bestStripWidthMm)) ? Number(body.unfit.bestStripWidthMm) : undefined,
         }
         : undefined

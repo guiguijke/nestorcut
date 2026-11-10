@@ -455,6 +455,23 @@ export function computeSpacingMargin(files, requested) {
     return Math.min(SPACING_MARGIN_CAP_MM, 2 * maxGap + (curved ? FLATTEN_RESERVE_MM : 0))
 }
 
+/**
+ * Espacement maximal qui tient, converti de l'INTERNE vers le DEMANDÉ pour
+ * l'utilisateur : (interne − marge), arrondi au centième PAR DÉFAUT (jamais
+ * au-dessus de ce qui tient). Quand 0 < maximum interne <= marge, la
+ * conversion tombe à 0 mais le job passe à espacement 0 (marge nulle) :
+ * `maxSpacingZeroFits` le dit, pour que le panneau propose 0 mm au lieu de
+ * « même sans espacement, ça ne tient pas » (réservé au maximum interne 0).
+ */
+export function userMaxSpacing(internalMax, margin) {
+    const internal = Number(internalMax)
+    if (!Number.isFinite(internal) || internal <= 0) return { maxSpacingForFitMm: 0 }
+    const requested = Math.max(0, Math.floor((internal - (Number(margin) || 0)) * 100 + 1e-9) / 100)
+    return requested > 0
+        ? { maxSpacingForFitMm: requested }
+        : { maxSpacingForFitMm: 0, maxSpacingZeroFits: true }
+}
+
 // ---------------------------------------------------------------------------
 // Canaux capillaires (miroir de core/holed_polygons.py)
 // ---------------------------------------------------------------------------
@@ -1000,7 +1017,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             sheetsNeeded: cap.sheetsNeeded,
             maxPartsAtSpacing: totalMax,
             // Sortie : l'espacement max est dit en espacement DEMANDÉ.
-            maxSpacingForFitMm: Math.max(0, cap.maxSpacingForFitMm - (space - requestedSpace)),
+            ...userMaxSpacing(cap.maxSpacingForFitMm, space - requestedSpace),
         }
         throw err
     }

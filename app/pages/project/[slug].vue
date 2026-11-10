@@ -928,7 +928,8 @@ const applyReduceSpacing = (mm) => {
     // si la cible ne permet même pas le kerf, le levier est masqué en
     // amont (capacityPanel), on ne fait rien ici.
     const kerfMm = displayToMm(Number(String(p.kerf ?? '0').replace(',', '.')) || 0);
-    if (mm <= kerfMm) return false;
+    // Cible 0 avec kerf 0 : sécurité 0, espacement effectif 0 — valide.
+    if (mm < kerfMm || (mm > 0 && mm === kerfMm)) return false;
     const disp = mmToDisplay((mm - kerfMm) / 2, unit.value);
     actions.updateKerfSafety({
         safety: unit.value === 'inch' ? String(Math.round(disp * 10000) / 10000) : String(disp),

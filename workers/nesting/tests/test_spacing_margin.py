@@ -170,3 +170,18 @@ class TestFlatArcReserve:
         ring = [[0, 0], [20, 0], [40, 0], [40, 20], [0, 20], [0, 0]]
         _, stats = _convert(monkeypatch, ring)
         assert m.spacing_margin(stats, 2) == 0
+
+
+class TestUserMaxSpacing:
+    def test_rounded_down_to_hundredth(self):
+        assert m.user_max_spacing(0.04093972273017499, 0) == (0.04, False)
+        assert m.user_max_spacing(2.1396, 0.0996) == (2.04, False)
+        assert m.user_max_spacing(2.1, 0.1) == (2.0, False)
+
+    def test_internal_max_below_margin_zero_is_a_real_lever(self):
+        assert m.user_max_spacing(0.1, 0.12) == (0.0, True)
+        assert m.user_max_spacing(0.12, 0.12) == (0.0, True)
+
+    def test_internal_max_zero_nothing_fits(self):
+        assert m.user_max_spacing(0, 0.12) == (0.0, False)
+        assert m.user_max_spacing(0, 0) == (0.0, False)

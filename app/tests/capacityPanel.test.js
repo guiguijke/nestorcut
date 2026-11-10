@@ -314,3 +314,52 @@ describe('espacement maximum du panneau de capacité', () => {
         expect(panel).not.toContain('{ v: panel.levers.maxSpacingMm }')
     })
 })
+
+describe('levier 0 mm quand le maximum interne ne dépasse pas la marge', () => {
+    const base = { reason: 'capacity', sheetsNeeded: 2, maxPartsAtSpacing: 10 }
+    const ctx = { sheets: [{ width: '1000', height: '1000', count: '1' }], spaceMm: 2 }
+
+    it('zéro tient : le bouton propose 0 mm et le message « même sans espacement » est absent', () => {
+        const m = capacityPanelModel({ ...base, maxSpacingForFitMm: 0, maxSpacingZeroFits: true }, ctx)
+        expect(m.reduceSpacingToMm).toBe(0)
+        expect(m.noSpacingGain).toBe(false)
+        expect(m.levers.maxSpacingMm).toBe(0)
+    })
+
+    it('zéro tient même quand l’espacement courant est sous le plancher de 0,5 mm', () => {
+        const m = capacityPanelModel({ ...base, maxSpacingForFitMm: 0, maxSpacingZeroFits: true }, { ...ctx, spaceMm: 0.3 })
+        expect(m.reduceSpacingToMm).toBe(0)
+        expect(m.noSpacingGain).toBe(false)
+    })
+
+    it('le maximum interne vaut 0 : le message « même sans espacement » reste', () => {
+        const m = capacityPanelModel({ ...base, maxSpacingForFitMm: 0 }, ctx)
+        expect(m.reduceSpacingToMm).toBeNull()
+        expect(m.noSpacingGain).toBe(true)
+    })
+
+    it('espacement courant déjà 0 : rien à réduire', () => {
+        const m = capacityPanelModel({ ...base, maxSpacingForFitMm: 0, maxSpacingZeroFits: true }, { ...ctx, spaceMm: 0 })
+        expect(m.reduceSpacingToMm).toBeNull()
+    })
+})
+
+describe('levier 0 mm et kerf', () => {
+    const base = { reason: 'capacity', sheetsNeeded: 2, maxSpacingForFitMm: 0, maxSpacingZeroFits: true }
+    const sheets = [{ width: '1000', height: '1000', count: '1' }]
+
+    it('kerf 0 : le bouton 0 mm reste proposé', () => {
+        expect(capacityPanelModel(base, { sheets, spaceMm: 2, kerfMm: 0 }).reduceSpacingToMm).toBe(0)
+    })
+
+    it('kerf déclaré > 0 : levier bloqué, mais jamais le message « même sans espacement »', () => {
+        const m = capacityPanelModel(base, { sheets, spaceMm: 2, kerfMm: 1 })
+        expect(m.reduceSpacingToMm).toBeNull()
+        expect(m.noSpacingGain).toBe(false)
+    })
+
+    it('la page accepte la cible 0 avec kerf 0', () => {
+        const slugVue = fs.readFileSync(fileURLToPath(new URL('../pages/project/[slug].vue', import.meta.url)), 'utf8')
+        expect(slugVue).toContain('if (mm < kerfMm || (mm > 0 && mm === kerfMm)) return false;')
+    })
+})

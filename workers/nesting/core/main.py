@@ -139,6 +139,19 @@ def spacing_margin(stats, requested):
     return min(SPACING_MARGIN_CAP_MM, margin)
 
 
+def user_max_spacing(internal_max, margin):
+    """Espacement maximal qui tient, dit à l'utilisateur : (interne - marge)
+    arrondi au centième PAR DÉFAUT. Retourne (valeur, zero_tient). Quand
+    0 < maximum interne <= marge, la valeur tombe à 0 mais le job passe à
+    espacement 0 (marge nulle) : zero_tient = True, 0 mm est un vrai levier.
+    Maximum interne 0 : rien ne tient même sans espacement (False)."""
+    internal = float(internal_max or 0)
+    if internal <= 0:
+        return 0.0, False
+    requested = max(0.0, math.floor((internal - float(margin or 0)) * 100 + 1e-9) / 100)
+    return (requested, False) if requested > 0 else (0.0, True)
+
+
 def _convex_hull_ring(points):
     """E4-a (§8.1) : enveloppe convexe — miroir EXACT de convexHullRing
     (localPayloadBuilder.js) : chaîne monotone d'Andrew, anneau FERMÉ,
@@ -991,8 +1004,10 @@ def _nesting_process_impl(doc):
     _cap = _capacity_report(cap_parts, cap_sheets, space)
     if _cap:
         # Sortie : l'espacement max suggéré se dit en espacement DEMANDÉ.
-        _cap["maxSpacingForFitMm"] = max(
-            0.0, _cap["maxSpacingForFitMm"] - (space - requested_space))
+        _cap["maxSpacingForFitMm"], _zero_fits = user_max_spacing(
+            _cap["maxSpacingForFitMm"], space - requested_space)
+        if _zero_fits:
+            _cap["maxSpacingZeroFits"] = True
     # Z2 (vérif 2026-09-05) : défense en profondeur — le 422 de l'API a pu
     # être contourné (job semé directement, une autre route que nest.post).
     # Un job refusé par le pré-contrôle ne part JAMAIS au moteur : statut
@@ -1008,6 +1023,8 @@ def _nesting_process_impl(doc):
             "maxPartsAtSpacing": sum(
                 (v or 0) for v in (_cap.get("maxPartsAtSpacing") or {}).values()),
             "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+            **({"maxSpacingZeroFits": True}
+               if _cap.get("maxSpacingZeroFits") else {}),
         }
         information = ("This job does not fit the declared sheets at this "
                        "spacing — try adding a sheet, reducing the spacing "
@@ -1515,6 +1532,8 @@ def _nesting_process_impl(doc):
                         (v or 0) for v in (_cap.get("maxPartsAtSpacing")
                                            or {}).values()),
                     "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+                    **({"maxSpacingZeroFits": True}
+                       if _cap.get("maxSpacingZeroFits") else {}),
                 })
             information = ("This job does not fit the declared sheets at this "
                            "spacing — try adding a sheet, reducing the spacing "
@@ -2580,6 +2599,8 @@ def _nesting_process_impl(doc):
                 "maxPartsAtSpacing": sum(
                     (v or 0) for v in (_cap.get("maxPartsAtSpacing") or {}).values()),
                 "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+                **({"maxSpacingZeroFits": True}
+                   if _cap.get("maxSpacingZeroFits") else {}),
             })
         final_set["unfit"] = _partial
     db["nesting_jobs"].update_one(

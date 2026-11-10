@@ -720,6 +720,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     if (placed < requested) {
         try {
             const { capacityReport } = await import('./capacityClient')
+            const { userMaxSpacing } = await import('./localPayloadBuilder')
             const inst = payload?.instance || {}
             const sheets = Array.isArray(inst.bins)
                 ? inst.bins.map((b) => {
@@ -743,7 +744,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                     maxPartsAtSpacing: Object.values(cap.maxPartsAtSpacing || {})
                         .reduce((n, v) => n + Number(v || 0), 0),
                     // Sortie : espacement DEMANDÉ (interne - marge).
-                    maxSpacingForFitMm: Math.max(0, cap.maxSpacingForFitMm - (spaceMm - requestedMm)),
+                    ...userMaxSpacing(cap.maxSpacingForFitMm, spaceMm - requestedMm),
                 } : {}),
             }
         } catch { /* leviers best-effort : le badge unplaced reste */ }

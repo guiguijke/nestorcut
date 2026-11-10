@@ -149,3 +149,35 @@ describe('arc peu cintré aplati en peu de segments', () => {
         expect(computeSpacingMargin([fileOf(ring)], 2)).toBe(0)
     })
 })
+
+describe('espacement maximal dit à l’utilisateur (panneau de capacité)', () => {
+    it('arrondi au centième par défaut, plus de 0.04093972273017499', async () => {
+        const { userMaxSpacing } = await import('../composables/localPayloadBuilder')
+        expect(userMaxSpacing(0.04093972273017499, 0)).toEqual({ maxSpacingForFitMm: 0.04 })
+        expect(userMaxSpacing(2.1396, 0.0996)).toEqual({ maxSpacingForFitMm: 2.04 })
+        expect(userMaxSpacing(2.1, 0.1)).toEqual({ maxSpacingForFitMm: 2 })
+    })
+
+    it('0 < maximum interne <= marge : 0 mm est un vrai levier (0 passe, marge nulle)', async () => {
+        const { userMaxSpacing } = await import('../composables/localPayloadBuilder')
+        expect(userMaxSpacing(0.1, 0.12)).toEqual({ maxSpacingForFitMm: 0, maxSpacingZeroFits: true })
+        expect(userMaxSpacing(0.12, 0.12)).toEqual({ maxSpacingForFitMm: 0, maxSpacingZeroFits: true })
+    })
+
+    it('maximum interne 0 : rien ne tient même sans espacement, pas de levier', async () => {
+        const { userMaxSpacing } = await import('../composables/localPayloadBuilder')
+        expect(userMaxSpacing(0, 0.12)).toEqual({ maxSpacingForFitMm: 0 })
+        expect(userMaxSpacing(0, 0)).toEqual({ maxSpacingForFitMm: 0 })
+    })
+
+    it('le refus de capacité d’un disque annonce un maximum arrondi au centième', async () => {
+        const files = [{ ...fileOf(disc(50)), count: 400 }]
+        let err = null
+        try {
+            await buildLocalPayload({ files, params: { sheets: [{ width: 1000, height: 1000, count: 1 }], space: 2, alternativesCount: 1 } })
+        } catch (e) { err = e }
+        expect(err?.message).toBe('capacity_exceeded')
+        const v = err.__unfit.maxSpacingForFitMm
+        expect(Math.round(v * 100) / 100).toBe(v)
+    })
+})
