@@ -105,10 +105,23 @@ impl<'a, 'input> Walker<'a, 'input> {
                 if display_none {
                     return Ok(());
                 }
+                // x/y du `<use>` : translation ajoutée APRÈS son transform,
+                // AVANT celui de la cible et de ses propres enfants. width/height ne servent pas.
+                let px = |name: &str| {
+                    attr(node, name).map(|v| Length::parse(&v).value_px(None)).unwrap_or(0.0)
+                };
+                let (x, y) = (px("x"), px("y"));
+                let mut use_ctx = Ctx { transform: ctx.transform.clone(), display_none: ctx.display_none };
+                if x != 0.0 || y != 0.0 {
+                    if !use_ctx.transform.is_empty() {
+                        use_ctx.transform.push(' ');
+                    }
+                    use_ctx.transform.push_str(&format!("translate({x}, {y})"));
+                }
                 // Les enfants propres du `<use>` d'abord, puis la cible
-                // (ordre de `_use_structure_parse`).
+                // (ordre de `_use_structure_parse`). Le contexte du `<use>` vaut pour les deux.
                 for child in node.children().filter(|c| c.is_element()) {
-                    self.walk(&child, &ctx)?;
+                    self.walk(&child, &use_ctx)?;
                 }
                 let target = use_target_id(node).and_then(|id| self.ids.get(id).map(|n| (id, *n)));
                 let Some((id, target)) = target else {
@@ -125,19 +138,6 @@ impl<'a, 'input> Walker<'a, 'input> {
                     return Err(ImportError::Corrupt(
                         "Unreadable SVG file: too many <use> instances".into(),
                     ));
-                }
-                // x/y du `<use>` : translation ajoutée APRÈS son transform,
-                // AVANT celui de la cible. width/height ne servent pas.
-                let px = |name: &str| {
-                    attr(node, name).map(|v| Length::parse(&v).value_px(None)).unwrap_or(0.0)
-                };
-                let (x, y) = (px("x"), px("y"));
-                let mut use_ctx = ctx;
-                if x != 0.0 || y != 0.0 {
-                    if !use_ctx.transform.is_empty() {
-                        use_ctx.transform.push(' ');
-                    }
-                    use_ctx.transform.push_str(&format!("translate({x}, {y})"));
                 }
                 self.use_stack.push(id);
                 let r = self.walk(&target, &use_ctx);

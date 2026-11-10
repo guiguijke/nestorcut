@@ -92,3 +92,19 @@ fn a_use_that_contains_itself_is_refused() {
     let err = nest_import::import_svg(USE_CYCLE, 0.01).unwrap_err();
     assert!(err.to_string().contains("Unreadable SVG file"), "{err}");
 }
+
+#[test]
+fn use_translation_applies_to_its_own_children_too() {
+    // <use x="50"> : la cible (rect 10 × 10 en 0,0) sort en x de 50 à 60, et l'enfant
+    // propre du <use> (rect x=0 de largeur 5) doit aussi sortir décalé, en x de 50 à 55.
+    // En unités du viewBox ; le facteur mm est 25,4 / 96 (viewBox = largeur en px).
+    let src = br##"<svg viewBox="0 0 200 200" width="200" height="200" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><rect id="a" width="10" height="10"/></defs><use x="50" xlink:href="#a"><rect id="child" x="0" y="100" width="5" height="5"/></use></svg>"##;
+    let k = 25.4 / 96.0;
+    let mut xs: Vec<(f64, f64)> = parts(src).iter().map(|(b, _)| (b[0], b[2])).collect();
+    xs.sort_by(|a, b| a.0.total_cmp(&b.0));
+    assert_eq!(xs.len(), 2, "cible et enfant : {xs:?}");
+    let want = [(50.0 * k, 55.0 * k), (50.0 * k, 60.0 * k)];
+    for (g, w) in xs.iter().zip(want.iter()) {
+        assert!((g.0 - w.0).abs() < 0.01 && (g.1 - w.1).abs() < 0.01, "{xs:?} au lieu de {want:?}");
+    }
+}
