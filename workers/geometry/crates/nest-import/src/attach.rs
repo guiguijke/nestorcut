@@ -141,25 +141,41 @@ fn cycle_edges(ring: &[Pt]) -> Vec<(Pt, Pt)> {
         .collect()
 }
 
-fn edges_of<'a>(body: &Body<'a>) -> impl Iterator<Item = (Pt, Pt)> + 'a {
-    cycle_edges(body.outer)
-        .into_iter()
-        .chain(body.holes.iter().flat_map(|h| cycle_edges(h).into_iter()))
+/// Arêtes d'un corps, calculées UNE fois : `cycle_edges` allouait un vecteur
+/// de n arêtes à chaque test point-dans-corps, soit n² allocations sur une
+/// très longue polyligne.
+struct PreparedBody<'a> {
+    body: &'a Body<'a>,
+    outer: Vec<(Pt, Pt)>,
+    holes: Vec<Vec<(Pt, Pt)>>,
+    /// externe puis trous (ordre de l'ancien `edges_of`).
+    all: Vec<(Pt, Pt)>,
+}
+
+impl<'a> PreparedBody<'a> {
+    fn new(body: &'a Body<'a>) -> Self {
+        let outer = cycle_edges(body.outer);
+        let holes: Vec<Vec<(Pt, Pt)>> = body.holes.iter().map(|h| cycle_edges(h)).collect();
+        let mut all = outer.clone();
+        for h in &holes {
+            all.extend_from_slice(h);
+        }
+        Self { body, outer, holes, all }
+    }
 }
 
 /// p dans la matière du corps (bord INCLUS — GEOS ensembles fermés) :
 /// dans/sur l'externe ET pas strictement dans un trou (le bord d'un trou
 /// fait partie du corps : l'encre du trou « touche » la pièce hôte).
-fn point_in_body(p: Pt, body: &Body) -> bool {
+fn point_in_body(p: Pt, pb: &PreparedBody) -> bool {
+    let body = pb.body;
     let in_outer = ga::point_in_ring(p, body.outer)
-        || cycle_edges(body.outer)
-            .into_iter()
-            .any(|(a, b)| on_edge_band(p, a, b));
+        || pb.outer.iter().any(|&(a, b)| on_edge_band(p, a, b));
     if !in_outer {
         return false;
     }
-    for h in body.holes {
-        let on_hole_edge = cycle_edges(h).into_iter().any(|(a, b)| on_edge_band(p, a, b));
+    for (h, h_edges) in body.holes.iter().zip(&pb.holes) {
+        let on_hole_edge = h_edges.iter().any(|&(a, b)| on_edge_band(p, a, b));
         if !on_hole_edge && ga::point_in_ring(p, h) {
             return false; // strictement dans le vide
         }
@@ -167,40 +183,48 @@ fn point_in_body(p: Pt, body: &Body) -> bool {
     true
 }
 
-/// distance(encre, corps) — 0 dès qu'un point d'encre est dans le corps ou
-/// qu'une arête croise/touche le bord du corps ; sinon min des distances
-/// arête↔arête (couvre « encre dans un trou » : distance à la paroi).
-fn ink_body_dist(ink: &[(Pt, Pt)], body: &Body) -> f64 {
+/// Distance encre ↔ corps, 0 dès qu'elle touche. Échéance consultée à chaque
+/// arête d'encre (chacune coûte O(arêtes du corps)).
+fn ink_body_dist(
+    ink: &[(Pt, Pt)],
+    pb: &PreparedBody,
+    dl: &crate::budget::Deadline,
+) -> Result<f64, crate::budget::Expired> {
     let mut best = f64::INFINITY;
-    for &(a, b) in ink {
-        if point_in_body(a, body) || point_in_body(b, body) {
-            return 0.0;
+    for (i, &(a, b)) in ink.iter().enumerate() {
+        dl.check_at(i)?;
+        if point_in_body(a, pb) || point_in_body(b, pb) {
+            return Ok(0.0);
         }
-        for (c, d) in edges_of(body) {
+        for &(c, d) in &pb.all {
             let dd = seg_seg_dist(a, b, c, d);
             if dd == 0.0 {
-                return 0.0;
+                return Ok(0.0);
             }
             best = best.min(dd);
         }
     }
     // Encre ponctuelle gérée par l'appelant (len==1).
-    best
+    Ok(best)
 }
 
 /// Longueur d'encre ∩ corps (mesure GEOS `intersection.length`) : chaque
 /// segment d'encre est découpé aux croisements avec le bord du corps, puis
 /// le midpoint de chaque tronçon est classé (bord du corps = compté).
-fn clip_length_in_body(ink: &[(Pt, Pt)], body: &Body) -> f64 {
-    let bedges: Vec<(Pt, Pt)> = edges_of(body).collect();
+fn clip_length_in_body(
+    ink: &[(Pt, Pt)],
+    pb: &PreparedBody,
+    dl: &crate::budget::Deadline,
+) -> Result<f64, crate::budget::Expired> {
     let mut total = 0.0;
-    for &(a, b) in ink {
+    for (i, &(a, b)) in ink.iter().enumerate() {
+        dl.check_at(i)?;
         let len = norm(sub(b, a));
         if len == 0.0 {
             continue;
         }
         let mut ts: Vec<f64> = vec![0.0, 1.0];
-        for &(c, d) in &bedges {
+        for &(c, d) in &pb.all {
             if let Some(p) = ga::seg_intersection(a, b, c, d) {
                 ts.push(dot(sub(p, a), sub(b, a)) / (len * len));
             }
@@ -221,12 +245,12 @@ fn clip_length_in_body(ink: &[(Pt, Pt)], body: &Body) -> f64 {
             }
             let tm = (t0 + t1) / 2.0;
             let mid = [a[0] + tm * (b[0] - a[0]), a[1] + tm * (b[1] - a[1])];
-            if point_in_body(mid, body) {
+            if point_in_body(mid, pb) {
                 total += (t1 - t0) * len;
             }
         }
     }
-    total
+    Ok(total)
 }
 
 // ------------------------------------------------------------ centroïdes
@@ -320,6 +344,7 @@ pub fn attach_handles_until(
     dl: &crate::budget::Deadline,
 ) -> Result<Vec<Vec<String>>, crate::budget::Expired> {
     let body_bboxes: Vec<[f64; 4]> = bodies.iter().map(|b| bbox_of(b.outer)).collect();
+    let prepared: Vec<PreparedBody> = bodies.iter().map(PreparedBody::new).collect();
     let mut assigned: Vec<Vec<String>> = vec![Vec::new(); bodies.len()];
 
     for (fp_idx, fp) in footprints.iter().enumerate() {
@@ -341,7 +366,7 @@ pub fn attach_handles_until(
         // 1+2) mesure d'encre par corps (avec rejet bbox — le buffer
         // probe_tol ne peut pas franchir un gap bbox > probe_tol).
         let mut best: Option<(usize, f64)> = None;
-        for (idx, body) in bodies.iter().enumerate() {
+        for (idx, body) in prepared.iter().enumerate() {
             let mut bb = body_bboxes[idx];
             bb[0] -= probe_tol;
             bb[1] -= probe_tol;
@@ -353,12 +378,14 @@ pub fn attach_handles_until(
             let near = if ink_edges.is_empty() {
                 // footprint ponctuel : intersects ⟺ dist ≤ probe_tol
                 point_in_body(fp.ink[0], body)
-                    || edges_of(body)
-                        .map(|(c, d)| point_seg_dist(fp.ink[0], c, d))
+                    || body
+                        .all
+                        .iter()
+                        .map(|&(c, d)| point_seg_dist(fp.ink[0], c, d))
                         .fold(f64::INFINITY, f64::min)
                         <= probe_tol
             } else {
-                ink_body_dist(&ink_edges, body) <= probe_tol
+                ink_body_dist(&ink_edges, body, dl)? <= probe_tol
             };
             if !near {
                 continue;
@@ -366,7 +393,7 @@ pub fn attach_handles_until(
             if ink_edges.is_empty() {
                 continue; // mesure d'un point = 0 → jamais un hit (GEOS)
             }
-            let measure = clip_length_in_body(&ink_edges, body);
+            let measure = clip_length_in_body(&ink_edges, body, dl)?;
             if std::env::var("NI_DEBUG").is_ok() {
                 eprintln!("[attach] fp={} body={} measure={}", fp.handle, idx, measure);
             }
@@ -385,8 +412,9 @@ pub fn attach_handles_until(
         // 3) fallback : plus petite silhouette contenant le centroïde.
         let centre = footprint_centre(fp);
         let mut best_idx: Option<(usize, f64)> = None;
-        for (idx, body) in bodies.iter().enumerate() {
-            let outer_edges = cycle_edges(body.outer);
+        for (idx, pb) in prepared.iter().enumerate() {
+            let body = pb.body;
+            let outer_edges = &pb.outer;
             let silhouette_hit = ga::point_in_ring(centre, body.outer)
                 || outer_edges
                     .iter()
@@ -417,6 +445,34 @@ pub fn attach_handles_until(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Anneau de `n` sommets sur un cercle : le même sert d'encre et de corps,
+    /// la mesure d'encre est alors en n × n.
+    fn circle(n: usize) -> Vec<Pt> {
+        (0..n)
+            .map(|i| {
+                let t = std::f64::consts::TAU * i as f64 / n as f64;
+                [1000.0 * t.cos(), 1000.0 * t.sin()]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_very_long_polyline_is_refused_by_the_deadline_not_measured_to_the_end() {
+        let ring = circle(15_000);
+        let holes: Vec<Vec<Pt>> = Vec::new();
+        let bodies = [Body { outer: &ring, holes: &holes }];
+        let footprints = [fp("A", ring.clone(), true)];
+        let dl = crate::budget::Deadline::new(300);
+        let t = std::time::Instant::now();
+        let r = attach_handles_until(&footprints, &bodies, 0.01, &dl);
+        assert!(r.is_err(), "le budget de 300 ms doit être dépassé");
+        assert!(
+            t.elapsed().as_secs_f64() < 3.0,
+            "la mesure doit s'arrêter à l'échéance : {:?}",
+            t.elapsed()
+        );
+    }
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<Pt> {
         vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
