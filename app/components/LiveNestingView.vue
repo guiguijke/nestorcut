@@ -18,7 +18,7 @@
             <div class="live__stats" data-testid="live-stats">
                 <UiStat
                     v-if="elapsedSec != null"
-                    :value="formatElapsed(elapsedSec)"
+                    :value="formatElapsed(elapsedSec, locale)"
                     :label="t('live.elapsed')"
                     :title="t('live.elapsedTitle')"
                     data-testid="live-stat-elapsed"
@@ -217,6 +217,7 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
 import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity } from '~/utils/liveJob';
+import { formatElapsed } from '~/utils/elapsedFormat';
 
 const props = defineProps({
     result: { type: Object, required: true },
@@ -226,7 +227,7 @@ const props = defineProps({
     jobDone: { type: Boolean, default: false },
 });
 
-const { t, fmtPercent } = useLocale();
+const { t, fmtPercent, locale } = useLocale();
 // strip_width arrives in canonical mm — fmtLength converts at display.
 const { fmtLength } = useUnit();
 // NOTE: bare $fetch (Nuxt auto-import) — nuxtApp.$fetch is not reliable
@@ -730,14 +731,6 @@ const stageLabel = computed(() => {
     return translated === key ? stage : translated;
 });
 
-const formatElapsed = (sec) => {
-    const n = Number(sec);
-    if (!Number.isFinite(n) || n < 0) return '0.0s';
-    if (n < 60) return `${n.toFixed(1)}s`;
-    const min = Math.floor(n / 60);
-    const rem = n - min * 60;
-    return `${min}m${rem.toFixed(1).padStart(4, '0')}`;
-};
 </script>
 
 <style lang="scss" scoped>
