@@ -28,7 +28,7 @@
 </template>
 
 <script setup>
-import { useAppChangelog } from '~/utils/changelogParser';
+import { pickBullets, useAppChangelog } from '~/utils/changelogParser';
 
 definePageMeta({
     layout: "doc",
@@ -37,13 +37,9 @@ definePageMeta({
 });
 
 const versions = useAppChangelog();
-const { t } = useLocale();
+const { t, locale } = useLocale();
 const fullVersion = String(useRuntimeConfig().public.appVersion || '');
-const bulletsOf = (post) => {
-    const { locale } = useLocale();
-    const lang = unref(locale) === 'fr' ? 'fr' : 'en';
-    return post[lang]?.length ? post[lang] : post.en;
-};
+const bulletsOf = (post) => pickBullets(post, unref(locale));
 
 
 onMounted(() => {

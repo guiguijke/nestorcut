@@ -9,7 +9,7 @@
  */
 import raw from '~~/CHANGELOG.md?raw'
 
-function parseChangelog(md) {
+export function parseChangelog(md) {
     const versions = []
     // Les entrées : « ## V0.9 » etc., au format le plus simple possible.
     const chunks = String(md || '').split(/^## /m).slice(1)
@@ -21,7 +21,17 @@ function parseChangelog(md) {
         const en = extractBlock(body, 'EN')
         const pt = extractBlock(body, 'PT')
         const it = extractBlock(body, 'IT')
-        versions.push({ title, fr, en, pt: pt.length ? pt : en, it: it.length ? it : en })
+        const de = extractBlock(body, 'DE')
+        const es = extractBlock(body, 'ES')
+        versions.push({
+            title,
+            fr,
+            en,
+            pt: pt.length ? pt : en,
+            it: it.length ? it : en,
+            de: de.length ? de : en,
+            es: es.length ? es : en,
+        })
     }
     return versions
 }
@@ -58,6 +68,15 @@ export function renderSimpleMd(text) {
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
         .replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
+/**
+ * Le bloc d'une version dans la langue demandée (fr, en, pt, it, de, es).
+ * Repli sur l'anglais quand le bloc de cette langue est vide ou inconnu.
+ */
+export function pickBullets(post, lang) {
+    const list = post[lang]
+    return list && list.length ? list : post.en
 }
 
 export function useAppChangelog() {
