@@ -759,6 +759,14 @@ pub struct AssemblyStats {
 /// sur 153 perdent du linework en silence. On ne peut pas afficher un compte
 /// qu'on ne mesure pas.
 pub fn dangling_paths(edges: &[(Pt, Pt)]) -> usize {
+    dangling_paths_until(edges, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `dangling_paths` sous ÉCHÉANCE : l'union-find compresse ses chemins (un
+/// tracé ouvert de 50 000 arêtes formait une liste de 50 000 maillons parcourue
+/// à chaque recherche, quadratique) et l'horloge est lue dans chaque boucle.
+pub fn dangling_paths_until(edges: &[(Pt, Pt)], dl: &Deadline) -> Result<usize, Expired> {
     type Key = (u64, u64);
     let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
     let mut inc: HashMap<Key, Vec<usize>> = HashMap::new();
@@ -774,7 +782,10 @@ pub fn dangling_paths(edges: &[(Pt, Pt)]) -> usize {
     // File des sommets de degré 1 — ordre déterministe (tri des clés).
     let mut queue: Vec<Key> = degree.iter().filter(|(_, d)| **d == 1).map(|(k, _)| *k).collect();
     queue.sort();
+    let mut steps = 0usize;
     while let Some(v) = queue.pop() {
+        steps += 1;
+        dl.check_at(steps)?;
         if degree.get(&v).copied().unwrap_or(0) != 1 {
             continue;
         }
@@ -801,9 +812,17 @@ pub fn dangling_paths(edges: &[(Pt, Pt)]) -> usize {
             }
             r = p;
         }
+        // compression de chemin : chaque maillon traversé pointe sur la racine.
+        let mut c = x;
+        while c != r {
+            let next = parent[&c];
+            parent.insert(c, r);
+            c = next;
+        }
         r
     }
     for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
         if !peeled[i] {
             continue;
         }
@@ -817,11 +836,12 @@ pub fn dangling_paths(edges: &[(Pt, Pt)]) -> usize {
     }
     let mut roots: std::collections::HashSet<Key> = std::collections::HashSet::new();
     let keys: Vec<Key> = parent.keys().copied().collect();
-    for k in keys {
+    for (i, k) in keys.into_iter().enumerate() {
+        dl.check_at(i)?;
         let r = find(&mut parent, k);
         roots.insert(r);
     }
-    roots.len()
+    Ok(roots.len())
 }
 
 /// Full assembly: linework → parts. Mirrors build_geometry + to_mongo_dict.
@@ -864,7 +884,7 @@ pub fn build_parts_stats_until(
         .collect();
     // Constat lot 2c : le linework qui ne referme rien (mesuré sur le jeu
     // d'arêtes SNAPPÉ, celui que la polygonisation voit).
-    asm.dangling_paths = dangling_paths(&edges);
+    asm.dangling_paths = dangling_paths_until(&edges, dl)?;
     // A second union pass in GEOS re-nodes snap-induced crossings — the
     // polygonizer below sees a clean edge set either way.
     let _ = &mut edges;
@@ -1080,6 +1100,32 @@ pub fn build_parts_stats_until(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Chaîne ouverte de `n` arêtes, dans l'ordre : l'union-find sans
+    /// compression de chemin y forme une liste de n maillons.
+    fn long_open_chain(n: usize) -> Vec<(Pt, Pt)> {
+        (0..n).map(|i| ([i as f64, 0.0], [i as f64 + 1.0, 0.0])).collect()
+    }
+
+    #[test]
+    fn a_very_long_open_path_is_counted_in_near_linear_time() {
+        let edges = long_open_chain(52_000);
+        let t = std::time::Instant::now();
+        assert_eq!(dangling_paths(&edges), 1);
+        assert!(
+            t.elapsed().as_secs_f64() < 3.0,
+            "tracé ouvert de 52 000 arêtes : {:?}",
+            t.elapsed()
+        );
+    }
+
+    #[test]
+    fn dangling_paths_obeys_the_deadline() {
+        let edges = long_open_chain(52_000);
+        let dl = Deadline::new(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(dangling_paths_until(&edges, &dl).is_err());
+    }
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Primitive {
         Primitive::Polyline {
