@@ -126,12 +126,8 @@
                 </div>
                 </section>
                 <section class="settings__section" data-testid="settings-directions">
-                    <h3 class="settings__h">{{ t('settings.section.directions') }}</h3>
+                    <h3 class="settings__h">{{ t('settings.section.directions') }}<HelpDot topic="directions" :hint="t('settings.directions.help')" /></h3>
                 <div class="size__compute compute">
-                    <span class="compute__label">
-                        {{ t('settings.directions') }}
-                        <HelpDot topic="directions" :hint="t('settings.directions.help')" />
-                    </span>
                     <div class="compute__options">
                         <button
                             v-for="option in directionOptions"

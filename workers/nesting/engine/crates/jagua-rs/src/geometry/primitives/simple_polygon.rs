@@ -73,6 +73,17 @@ impl SPolygon {
         })
     }
 
+    /// Le rectangle `r` en polygone, sans paniquer sur un rectangle si mince
+    /// qu'il n'a plus de pôle (l'implémentation de `From<Rect>` y panique).
+    pub fn try_from_rect(r: &Rect) -> Result<Self> {
+        SPolygon::new(vec![
+            (r.x_min, r.y_min).into(),
+            (r.x_max, r.y_min).into(),
+            (r.x_max, r.y_max).into(),
+            (r.x_min, r.y_max).into(),
+        ])
+    }
+
     pub fn generate_surrogate(&mut self, config: SPSurrogateConfig) -> Result<()> {
         //regenerate the surrogate if it is not present or if the config has changed
         match &self.surrogate {
@@ -131,6 +142,15 @@ impl SPolygon {
             y_min = y_min.min(point.1);
             x_max = x_max.max(point.0);
             y_max = y_max.max(point.1);
+        }
+        // Une pièce plus fine que la résolution des f32 à l'endroit où elle est
+        // posée (sans espacement, côté sous l'ulp de la coordonnée) s'effondre
+        // sur une ligne : sa boîte garde un ulp, au lieu de paniquer.
+        if x_max == x_min {
+            x_max = x_min.next_up();
+        }
+        if y_max == y_min {
+            y_max = y_min.next_up();
         }
         Rect::try_new(x_min, y_min, x_max, y_max).unwrap()
     }
@@ -348,13 +368,6 @@ where
     T: Borrow<Rect>,
 {
     fn from(r: T) -> Self {
-        let r = r.borrow();
-        SPolygon::new(vec![
-            (r.x_min, r.y_min).into(),
-            (r.x_max, r.y_min).into(),
-            (r.x_max, r.y_max).into(),
-            (r.x_min, r.y_max).into(),
-        ])
-        .unwrap()
+        SPolygon::try_from_rect(r.borrow()).unwrap()
     }
 }

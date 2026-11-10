@@ -452,7 +452,9 @@ try {
     // de dessins, plus AUCUNE source 'job'. C'est le défaut mesuré par le
     // vérificateur (4 fiches au lieu de 2, quantités doublées).
     if (TWO_DROPS) {
-        const slugsBefore = await page.evaluate(async () => {
+        // Les sondes s'arrêtent au projet : le préambule J8-bis laisse sa fiche
+        // j8bis-carre.dxf dans un autre projet du même navigateur.
+        const slugsBefore = await page.evaluate(async (projectSlug) => {
             const db = await new Promise((res, rej) => {
                 const r = indexedDB.open('nestorcut-local')
                 r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
@@ -461,14 +463,14 @@ try {
                 const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
                 tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
             })
-            return recs.map((r) => r.slug).sort()
-        })
+            return recs.filter((r) => r.projectSlug === projectSlug).map((r) => r.slug).sort()
+        }, slug)
         await page.setInputFiles('input[name="dxf"]', [JOB, ...drawings])
         // La dépose repasse par addSheetCamJobDrop : les fiches se sont
         // réécrites en place, la liste se recharge. On attend le même compte
         // de fiches — PAS le double.
         await page.waitForTimeout(4000)
-        const after = await page.evaluate(async () => {
+        const after = await page.evaluate(async (projectSlug) => {
             const db = await new Promise((res, rej) => {
                 const r = indexedDB.open('nestorcut-local')
                 r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
@@ -477,11 +479,11 @@ try {
                 const tx = db.transaction('files', 'readonly').objectStore('files').getAll()
                 tx.onsuccess = () => res(tx.result || []); tx.onerror = () => rej(tx.error)
             })
-            return recs.map((r) => ({
+            return recs.filter((r) => r.projectSlug === projectSlug).map((r) => ({
                 slug: r.slug, name: r.name, source: r.source ?? null,
                 hasCut: Boolean(r.sheetcam), addedAt: r.addedAt,
             }))
-        })
+        }, slug)
         log('après second dépôt :', JSON.stringify(after))
         check('J6bis-1 toujours une fiche par dessin après .job + DXF',
             after.length === wanted.size,

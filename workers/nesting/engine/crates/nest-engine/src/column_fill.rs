@@ -2076,10 +2076,14 @@ fn rebalance_balanced(prob: &mut SPProblem, max_strip_width: Option<f32>) {
     let free_top0 = strip_h - used_height(&boxes0);
     let free_right0 = sheet_w - used_width(&boxes0);
 
-    if free_right0 > free_top0 && w_cap > entry_used_w + 1.0 {
+    // La largeur de tôle peut ne pas avoir de conteneur sur une bande à peine
+    // plus haute que l'espacement : rien n'a encore bougé, on passe.
+    if free_right0 > free_top0
+        && w_cap > entry_used_w + 1.0
+        && prob.try_change_strip_width(w_cap).is_ok() // ouvre le couloir droit à la CDE
+    {
         // Trop étroit/haut : déplacer les pièces du haut vers la bande
         // libre de droite (élargir, raccourcir).
-        prob.change_strip_width(w_cap); // ouvre le couloir droit à la CDE
         'outer: loop {
             let boxes = placed_boxes(prob);
             let protected = protected_fingerprints(&boxes);

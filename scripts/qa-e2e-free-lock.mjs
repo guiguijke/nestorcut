@@ -74,14 +74,18 @@
 //   nesting local pour le scénario « serveur ».
 //   Fenêtre d'abonnement : sans clé Stripe, le plugin
 //   `server/plugins/6_subscription_plan_sync.ts` ne synchronise rien et
-//   `Subscription.vue:102` (`v-if="data?.plan"`) affiche « plan unavailable ».
-//   Semer en base QA le document minimal lu par
-//   `server/api/payment/subscription.get.js:14` :
+//   la fenêtre affiche « plan unavailable » (ou n'affiche pas l'offre Pro).
+//   Semer en base QA les DEUX documents lus par
+//   `server/api/payment/subscription.get.js` (Unlimited ET Pro) :
 //     subscription_plan.updateOne({ id: 'subscription' }, { $set: { id:
-//       'subscription', tier: 'standard', title: 'NestorCut Standard',
+//       'subscription', tier: 'standard', title: 'NestorCut Unlimited',
 //       interval: 'month', prices: { eur: 1900 }, priceId: '…', productId: '…' } },
 //       { upsert: true })
-//   Le harnais le lit par l'API et échoue en le disant s'il manque.
+//     subscription_plan.updateOne({ id: 'subscription:privacy' }, { $set: { id:
+//       'subscription:privacy', tier: 'privacy', title: 'NestorCut Pro',
+//       interval: 'month', prices: { eur: 3900 }, priceId: '…', productId: '…' } },
+//       { upsert: true })
+//   Le harnais les lit par l'API et échoue en le disant s'ils manquent.
 //
 // Usage :
 //   QA_OUT=<dossier hors OneDrive> node scripts/qa-e2e-free-lock.mjs
@@ -95,7 +99,7 @@ import { MongoClient } from 'mongodb'
 import { unzipSync } from 'fflate'
 import fs from 'node:fs'
 import path from 'node:path'
-import { translate, pluralSelect } from '../app/utils/i18n/index.js'
+import { translate, pluralSelect, intlTag } from '../app/utils/i18n/index.js'
 import { FREE_DOWNLOAD_SHEET_CAP } from '../shared/constants/payment.constants.js'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
@@ -639,31 +643,63 @@ async function subscriptionChecks(page, loc, total) {
         return r.ok ? r.json() : { httpStatus: r.status }
     })
     const plan = api?.plan || null
-    check(`abonnement ${L} : /api/payment/subscription rend une offre (document subscription_plan semé)`, Boolean(plan),
-        JSON.stringify({ plan, trialEligible: api?.trialEligible, httpStatus: api?.httpStatus }))
+    const proPlan = api?.privacyPlan || null
+    check(`abonnement ${L} : /api/payment/subscription rend les offres Unlimited et Pro (documents subscription_plan semés)`,
+        Boolean(plan) && Boolean(proPlan),
+        JSON.stringify({ plan, privacyPlan: proPlan, trialEligible: api?.trialEligible, httpStatus: api?.httpStatus }))
     const sub = page.locator('.subscription').last()
-    await sub.locator('.subscription__price').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {})
+    // Deux offres dans la fenêtre : Unlimited (bloc sans modificateur) puis Pro.
+    const unl = sub.locator('.subscription__plan:not(.subscription__plan--pro)')
+    const pro = sub.locator('[data-testid="subscription-pro-offer"]')
+    await unl.locator('.subscription__price').waitFor({ state: 'visible', timeout: 10000 }).catch(() => {})
     const ctxText = (await sub.locator('[data-testid="subscription-context"]').innerText().catch(() => '')).trim()
     check(`abonnement ${L} : phrase de contexte traduite (N tôles, les 2 premières)`,
         ctxText === T('sub.ctx.lockedSheets', { n: total, cap: CAP }, loc), ctxText)
-    const priceTxt = (await sub.locator('.subscription__price').innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
-    // Même formatage que Subscription.vue (formatPrice : Intl 'en-US').
-    const wantPrice = plan ? new Intl.NumberFormat('en-US', {
-        style: 'currency', currency: plan.currency, minimumFractionDigits: 0, maximumFractionDigits: 2,
-    }).format(plan.amount) : null
-    check(`abonnement ${L} : prix affiché (§6.4)`,
-        Boolean(plan) && priceTxt.includes(wantPrice) && priceTxt.includes(`/ ${plan.interval}`),
-        `« ${priceTxt} » (attendu ${wantPrice} / ${plan?.interval})`)
-    const btn = sub.locator('.subscription__card .subscription__btn')
+    // Même formatage que Subscription.vue (formatPlanMoney : Intl de la langue).
+    const fmt = (p) => new Intl.NumberFormat(intlTag(loc), {
+        style: 'currency', currency: p.currency, minimumFractionDigits: 0, maximumFractionDigits: 2,
+    }).format(p.amount)
+    const monthTxt = T('plans.interval.month', {}, loc)
+    const priceTxt = (await unl.locator('.subscription__price').innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    const wantPrice = plan ? fmt(plan).replace(/\s+/g, ' ') : null
+    check(`abonnement ${L} : prix Unlimited affiché (§6.4)`,
+        Boolean(plan) && priceTxt.includes(wantPrice) && priceTxt.includes(`/ ${monthTxt}`),
+        `« ${priceTxt} » (attendu ${wantPrice} / ${monthTxt})`)
+    const proPriceTxt = (await pro.locator('.subscription__price').innerText().catch(() => '')).replace(/\s+/g, ' ').trim()
+    const wantProPrice = proPlan ? fmt(proPlan).replace(/\s+/g, ' ') : null
+    check(`abonnement ${L} : prix Pro affiché`,
+        Boolean(proPlan) && proPriceTxt.includes(wantProPrice) && proPriceTxt.includes(`/ ${monthTxt}`),
+        `« ${proPriceTxt} » (attendu ${wantProPrice} / ${monthTxt})`)
+    const btn = unl.locator('.subscription__btn')
     const btnCount = await btn.count()
     const btnLabel = btnCount ? (await btn.first().innerText().catch(() => '')).trim() : ''
     const btnEnabled = btnCount ? await btn.first().isEnabled().catch(() => false) : false
     const wantBtn = !plan ? null : api.trialEligible !== false
         ? T('sub.startTrial', { days: plan.trialDays }, loc)
         : T('sub.subscribe', {}, loc)
-    check(`abonnement ${L} : bouton d’essai (ou « S’abonner ») présent et actif (§6.4, non cliqué)`,
+    check(`abonnement ${L} : bouton Unlimited (essai ou « S’abonner ») présent et actif (§6.4, non cliqué)`,
         btnCount === 1 && btnEnabled && btnLabel === wantBtn,
         `${btnCount} bouton(s), « ${btnLabel} », actif=${btnEnabled}, attendu « ${wantBtn} » (trialEligible=${api?.trialEligible})`)
+    const proBtn = pro.locator('.subscription__btn')
+    const proBtnCount = await proBtn.count()
+    const proBtnLabel = proBtnCount ? (await proBtn.first().innerText().catch(() => '')).trim() : ''
+    const proBtnEnabled = proBtnCount ? await proBtn.first().isEnabled().catch(() => false) : false
+    const wantProBtn = !proPlan ? null : api.trialEligible !== false
+        ? T('sub.startTrial', { days: proPlan.trialDays }, loc)
+        : T('sub.subscribe', {}, loc)
+    check(`abonnement ${L} : bouton Pro présent et actif (non cliqué)`,
+        proBtnCount === 1 && proBtnEnabled && proBtnLabel === wantProBtn,
+        `${proBtnCount} bouton(s), « ${proBtnLabel} », actif=${proBtnEnabled}, attendu « ${wantProBtn} »`)
+    // Conditions du Checkout dites AVANT le clic, sous chaque offre ; le coffre
+    // (ouvert à toutes les offres) n'est pas listé comme un avantage payant.
+    const unlTerms = (await unl.locator('[data-testid="subscription-terms"]').innerText().catch(() => '')).replace(/\s+/g, ' ')
+    const proTermsTxt = (await pro.locator('[data-testid="subscription-terms-pro"]').innerText().catch(() => '')).replace(/\s+/g, ' ')
+    check(`abonnement ${L} : conditions affichées sous les deux offres, avec leur prix`,
+        Boolean(plan) && Boolean(proPlan) && unlTerms.includes(wantPrice) && proTermsTxt.includes(wantProPrice),
+        `Unlimited « ${unlTerms} » ; Pro « ${proTermsTxt} »`)
+    const featTxt = (await sub.locator('[data-testid="subscription-features"]').innerText().catch(() => '')).replace(/\s+/g, ' ')
+    check(`abonnement ${L} : le coffre zero-knowledge n'est pas listé comme avantage d'Unlimited`,
+        featTxt.length > 0 && !featTxt.includes(T('plans.unlimited.f5', {}, loc)), `« ${featTxt} »`)
     const txt = (await sub.innerText().catch(() => '')).replace(/\s+/g, ' ')
     const longest = (s) => s.split(/\{[a-z]+\}/).map((x) => x.trim()).sort((a, b) => b.length - a.length)[0]
     const freeLeftTxt = longest(T('sub.freeLeft', {}, loc))

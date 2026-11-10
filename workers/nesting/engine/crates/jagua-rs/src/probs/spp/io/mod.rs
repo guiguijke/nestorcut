@@ -12,3 +12,6 @@ pub use import::import_instance;
 
 #[doc(inline)]
 pub use import::import_solution;
+
+#[doc(inline)]
+pub use import::StripHeightBelowSeparation;

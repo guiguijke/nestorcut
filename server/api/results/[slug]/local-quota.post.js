@@ -1,6 +1,9 @@
 import { defineEventHandler } from 'h3'
 import { connectDB } from '~~/server/db/mongo'
 
+// Raisons de livraison dégradée émises par localPool (bestWalkDelivery).
+const DEGRADED_CODES = new Set(['merge_failed', 'merge_unavailable'])
+
 /**
  * PR5 (Mode Local productisé) : le navigateur rapporte la FIN d'un nesting
  * local RÉUSSI en ne transmettant que de la COMPTABILITÉ (scalaires) —
@@ -59,6 +62,9 @@ export default defineEventHandler(async (event) => {
             }))
             .filter((e) => e.slug)
         : []
+    // Livraison dégradée (la fusion a échoué, meilleur walk livré sans
+    // finition) : code CONNU seulement, jamais de texte libre.
+    const degraded = DEGRADED_CODES.has(body?.degraded) ? body.degraded : null
     const layoutCount = num(body?.layoutCount, 0, 10_000)
     const density = num(body?.density, 0, 1)
     // Z3 (vérif 2026-09-05) : leviers d'une solution partielle locale —
@@ -93,6 +99,7 @@ export default defineEventHandler(async (event) => {
                 placed: placed ?? job.requested ?? 0,
                 ...(requested != null ? { requested } : {}),
                 ...(thinParts.length ? { thinParts } : {}),
+                ...(degraded ? { degraded } : {}),
                 layoutCount: layoutCount ?? 0,
                 density: density ?? null,
                 localOnly: true,

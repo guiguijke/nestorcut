@@ -6,7 +6,11 @@ import {
     pickRunningJob,
     frameFitsSheet,
     frameIsBetter,
+    liveBadgeKind,
+    liveJobDone,
+    liveUsedLength,
     resolveLiveStage,
+    serverJobState,
 } from '../utils/liveJob'
 
 const aLive = { slug: 'jA', projectSlug: 'pA', status: 'awaiting_local', isInProgress: true, liveLayout: { stage: 'x' } }
@@ -29,6 +33,49 @@ describe('liveJob — isolation by projectSlug', () => {
         expect(pickAwaitingLocal(list, 'pA')).toBe(aLive)
         expect(pickLiveJob(list, 'pA')).toBe(aLive)
         expect(pickRunningJob(list, 'pA')).toBe(aLive)
+    })
+})
+
+// Le dernier job du projet vu par le flux serveur : la liste SSE arrive du plus
+// récent au plus ancien, un job plus ancien ne parle plus pour le projet.
+describe('serverJobState', () => {
+    const job = (slug, status, extra = {}) => ({
+        slug, projectSlug: 'pA', status,
+        isInProgress: ['processing', 'pending', 'awaiting_local'].includes(status), ...extra,
+    })
+    const phase = (j) => serverJobState([j], 'pA')?.phase
+
+    it('en attente ou en cours sur le worker : running', () => {
+        expect(phase(job('j', 'pending'))).toBe('running')
+        expect(phase(job('j', 'processing'))).toBe('running')
+    })
+
+    it('calculé dans le navigateur : local, le registre le suit déjà', () => {
+        expect(phase(job('j', 'awaiting_local'))).toBe('local')
+    })
+
+    it('échec : error, et le job est rendu pour dire sa cause', () => {
+        const failed = job('j', 'failed', { information: 'boom' })
+        expect(serverJobState([failed], 'pA')).toEqual({ slug: 'j', phase: 'error', job: failed })
+    })
+
+    it('annulation et fin normale ne sont pas des échecs', () => {
+        expect(phase(job('j', 'failed', { wasCancelled: true }))).toBe('done')
+        expect(phase(job('j', 'done'))).toBe('done')
+    })
+
+    it('seul le plus récent compte : un échec ancien se tait quand un nouveau job part', () => {
+        const old = job('old', 'failed', { information: 'boom' })
+        expect(serverJobState([job('new', 'processing'), old], 'pA').slug).toBe('new')
+        expect(serverJobState([job('new', 'done'), old], 'pA').phase).toBe('done')
+    })
+
+    it('piège 47 : jamais le job d’un autre projet, ni un job sans projet', () => {
+        const other = { ...job('j', 'failed'), projectSlug: 'pB' }
+        expect(serverJobState([other], 'pA')).toBe(null)
+        expect(serverJobState([{ ...job('j', 'failed'), projectSlug: undefined }], 'pA')).toBe(null)
+        expect(serverJobState([], 'pA')).toBe(null)
+        expect(serverJobState(null, 'pA')).toBe(null)
     })
 })
 
@@ -119,5 +166,59 @@ describe('resolveLiveStage — P4 Finalisation visible malgré le champion', () 
         expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, 'final')).toBe('final')
         expect(resolveLiveStage({}, 'compress')).toBe('compress')
         expect(resolveLiveStage({ liveLayout: { stage: 'explore' } }, null)).toBe('explore')
+    })
+})
+
+describe('liveJob : badge et longueur utilisée', () => {
+    const fit = { feasible: true, strip_width: 800, sheets: [[1000, 500]], isSpp: true }
+
+    it('« Terminé » seulement quand le job entier est fini, jamais sur une étape', () => {
+        for (const stage of ['final', 'reveal', 'exploration', 'finalizing', null]) {
+            // le badge ne lit plus l'étape : la frame `final` d'une direction
+            // ou d'une recherche qui se termine pendant que d'autres tournent
+            expect(liveBadgeKind({ ...fit, stage })).toBe('fits')
+            expect(liveBadgeKind({ ...fit, stage }, false)).toBe('fits')
+            expect(liveBadgeKind({ ...fit, stage }, true)).toBe('done')
+        }
+    })
+    it('multi-sens : une direction finie (final) ne dit pas Terminé tant que le job tourne', () => {
+        const left = { ...fit, stage: 'final', bias: 'left' }
+        const right = { ...fit, stage: 'exploration', bias: 'right' }
+        expect(liveBadgeKind(left, false)).toBe('fits')
+        expect(liveBadgeKind(right, false)).toBe('fits')
+        expect(liveBadgeKind(left, true)).toBe('done')
+    })
+    it('une fois le job fini, une frame moins bonne ne défait pas « Terminé »', () => {
+        expect(liveBadgeKind(fit, true)).toBe('done')
+        expect(liveBadgeKind({ ...fit, stage: 'exploration' }, true)).toBe('done')
+    })
+    it('recherche tant que rien ne tient', () => {
+        expect(liveBadgeKind({ ...fit, feasible: false }, false)).toBe('searching')
+        expect(liveBadgeKind({ ...fit, strip_width: 1200 }, true)).toBe('searching')
+        expect(liveBadgeKind(null, true)).toBe(null)
+    })
+    it('signal de la page : fini seulement sans calcul en cours et résultat affiché', () => {
+        const reveal = { slug: 'a' }
+        const frame = { slug: 'a' }
+        expect(liveJobDone({ computeRunning: true, stage: frame, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: true, stage: reveal, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: frame, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: reveal, reveal })).toBe(true)
+        // Bouton encore sur « Calcul en cours » : pas encore « Terminé ».
+        expect(liveJobDone({ computeRunning: false, jobPending: true, stage: reveal, reveal })).toBe(false)
+        // serveur : pas de résultat local, jamais fini
+        expect(liveJobDone({ computeRunning: false, stage: frame, reveal: null })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: null, reveal: null })).toBe(false)
+    })
+    it('longueur utilisée : SPP en recherche, valeur saine seulement', () => {
+        expect(liveUsedLength(fit, 'exploration')).toBe(800)
+        expect(liveUsedLength(fit, 'final')).toBe(null)
+        expect(liveUsedLength({ ...fit, isSpp: false }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: 1200 }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, feasible: false }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: null }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: 0 }, 'exploration')).toBe(null)
+        expect(liveUsedLength({ ...fit, strip_width: NaN }, 'exploration')).toBe(null)
+        expect(liveUsedLength(null, 'exploration')).toBe(null)
     })
 })

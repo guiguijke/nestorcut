@@ -3,11 +3,25 @@ through the native nest-engine binary and through the browser-target wasm
 artifact (in Node/V8) must produce BIT-IDENTICAL alternatives — SHA-256 of
 the canonical form, tolerance 0.
 
-Deux fixtures, toutes deux verrouillées :
-  - `b_demo`    (BPP) : le job de démo, pièces convexes.
-  - `e0_volute` (SPP) : trois volutes synthétiques dont le gonflement passe
+Quatre fixtures, toutes verrouillées :
+  - `b_demo`      (BPP) : le job de démo, pièces convexes.
+  - `e0_volute`   (SPP) : trois volutes synthétiques dont le gonflement passe
     par le REPLI robuste de `offset_shape` (lot E0) — le repli tourne aussi
     en navigateur, il doit rendre les mêmes octets que le natif.
+  - `j7a_defaut`  (MERGE) : le CHEMIN PAR DÉFAUT d'un petit job — réglages
+    d'usine (tôle 1000×2000, espacement 2, direction left), 2 pièces de
+    40×40 mm. Le payload sort du vrai `buildLocalPayload` (bascule J7-a en
+    BPP), deux walks wasm bornés en travail, puis `merge_alternatives` avec
+    finition de la tôle partielle : natif (`nest-engine --merge`) et wasm.
+    Avant le lot A ce chemin paniquait (strip.rs, « Offset resulted in an
+    empty polygon ») ; l'entrée est `fixtures/j7a_defaut/merge_input.json`,
+    produite par `make_j7a_fixture.mjs`.
+  - `j7a_limite`  (SPP) : le job À LA LIMITE de cette bascule — mêmes réglages,
+    un rectangle de 40×100 mm dont l'aire dépasse 4000 d'un epsilon : la largeur
+    initiale tombe dans la fenêtre sans conteneur, le moteur élargit la bande.
+    Natif et wasm doivent construire, ou refuser, les mêmes largeurs. Payload du
+    vrai import et du vrai `buildLocalPayload`, produit par
+    `make_limit_fixture.mjs`. Avant : panique (strip.rs).
 
 The fixture config is work-bounded (sa_max_iterations), so both targets do
 exactly the same work regardless of machine speed (AGENTS.md moteur — libm).
@@ -27,7 +41,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ENGINE = os.path.abspath(os.path.join(HERE, "..", "engine"))
-FIXTURES = [("b_demo", "bpp"), ("e0_volute", "spp")]
+FIXTURES = [("b_demo", "bpp"), ("e0_volute", "spp"), ("j7a_defaut", "merge"), ("j7a_limite", "spp")]
 
 
 def jsnum(x):
@@ -69,6 +83,17 @@ def canon(alternatives):
 
 def native_hash(bin_path, fixture, problem):
     d = os.path.join(HERE, "fixtures", fixture)
+    if problem == "merge":
+        # Entrée de `merge_alternatives` (pool de walks navigateur) : même
+        # fonction que l'export wasm, appelée par le mode `--merge` du CLI.
+        with tempfile.TemporaryDirectory(prefix="nest_det_lock_") as tmp:
+            subprocess.run(
+                [bin_path, "--merge", os.path.join(d, "merge_input.json"), "-s", tmp],
+                check=True, capture_output=True,
+            )
+            merged = json.load(open(os.path.join(tmp, "merged.json")))
+        alternatives = merged["alternatives"]
+        return hashlib.sha256(canon(alternatives).encode()).hexdigest(), alternatives
     with tempfile.TemporaryDirectory(prefix="nest_det_lock_") as tmp:
         subprocess.run(
             [bin_path, "-i", os.path.join(d, "instance.json"),

@@ -8,7 +8,9 @@ ORDINAIRE n'est PAS transforme en message de geometrie.
 """
 import pytest
 
-from core.engine import EngineError, item_geometry_message, parse_item_geometry
+from core.engine import (EngineError, item_geometry_message,
+                         item_unplaceable_message, original_item_id, parse_item_geometry,
+                         parse_item_unplaceable)
 
 # Message reellement rendu par le moteur (nest-engine/src/import_error.rs),
 # mesure sur une instance a trois items dont le second est degenere.
@@ -97,3 +99,83 @@ def test_thin_parts_ignore_les_entrees_absurdes_et_borne_la_liste():
     from core.engine import MAX_THIN_PARTS, thin_parts
     assert thin_parts(["x", None], {}) == []
     assert len(thin_parts(list(range(200)), {})) == MAX_THIN_PARTS
+
+
+# --- Lot A : piece sans aucune place possible (cote exacte de la tole) -----
+# Message reellement rendu par le moteur (nest-engine/import_error.rs,
+# `item_unplaceable_error`), mesure sur 996x1996 dans 1000x2000, espacement 2.
+UNPLACEABLE_DETAIL = "item_unplaceable:0: item 0 does not fit in any empty sheet"
+
+
+def test_lit_l_identifiant_d_une_piece_sans_place():
+    assert parse_item_unplaceable(UNPLACEABLE_DETAIL) == 0
+    assert parse_item_unplaceable("item_unplaceable:12: item 12 does not seem to fit") == 12
+
+
+@pytest.mark.parametrize("detail", [
+    "",
+    None,
+    ENGINE_DETAIL,  # un refus de GEOMETRIE n'est pas un refus de PLACE
+    "engine failed (rc=101, reason=unknown): thread panicked",
+    "no feasible solution: narrowest strip 3200.0 exceeds limit 3000.0",
+])
+def test_les_autres_echecs_ne_sont_pas_un_refus_de_place(detail):
+    assert parse_item_unplaceable(detail) is None
+
+
+def test_un_refus_de_place_n_est_pas_lu_comme_geometrie():
+    assert parse_item_geometry(UNPLACEABLE_DETAIL) is None
+
+
+def test_refus_de_place_nomme_le_fichier_et_le_rang_sans_inventer_la_cause():
+    info, field = item_unplaceable_message(
+        0, {"slug": "grande-piece", "part": 4}, "grande.dxf")
+    assert '"grande.dxf"' in info
+    assert "part 5" in info  # index 4 => cinquieme piece
+    assert "larger sheet" in info and "reduce the spacing" in info
+    # ni « crash », ni « smaller job » : on ne pretend pas connaitre une cause.
+    assert "smaller" not in info and "unexpected" not in info
+    assert field == {"item": 0, "slug": "grande-piece", "part": 4}
+
+
+def test_refus_de_place_sans_nom_de_fichier():
+    info, field = item_unplaceable_message(2, {"slug": "opaque", "part": 0})
+    assert "one of the files" in info and "part 1" in info
+    assert field["slug"] == "opaque"
+
+
+# --- Lot A : ids REDUITS par la reduction J-085 (meta.idMap) ---------------
+# Le moteur nomme l'id de l'instance resolue ; part_index_by_id porte les ids
+# d'origine. Trois fichiers : plaque (0), rondelle absorbee dans son trou (1,
+# retiree de l'instance), latte (2) -> le moteur voit [plaque, latte].
+def test_id_reduit_redevient_l_id_d_origine():
+    meta = {"idMap": [0, 2]}
+    assert original_item_id(1, meta) == 2
+    assert original_item_id(0, meta) == 0
+
+
+def test_sans_reduction_l_id_est_inchange():
+    assert original_item_id(1, None) == 1
+    assert original_item_id(1, {}) == 1
+    assert original_item_id(1, {"idMap": None}) == 1
+
+
+def test_id_hors_de_l_idmap_n_est_pas_devine():
+    assert original_item_id(5, {"idMap": [0, 2]}) is None
+    assert original_item_id(-1, {"idMap": [0, 2]}) is None
+
+
+def test_too_large_message_cite_le_nom_jamais_lidentifiant():
+    from core.engine import too_large_message
+    sheets = [{"width": 1500, "height": 1000}]
+    nommee = too_large_message(
+        [{"name": "support.dxf", "slug": "f-a1b2c3", "width": 2000, "height": 50, "count": 1}],
+        sheets, 2.0)
+    assert '"support.dxf" (2000x50mm, x1)' in nommee
+    assert "f-a1b2c3" not in nommee
+    inconnue = too_large_message(
+        [{"name": None, "slug": "f-a1b2c3", "width": 2000, "height": 50, "count": 1}],
+        sheets, 2.0)
+    assert "f-a1b2c3" not in inconnue
+    assert "one of the files (2000x50mm, x1)" in inconnue
+    assert inconnue.startswith("Part(s) too large for the sheet:")

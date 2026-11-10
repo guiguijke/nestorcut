@@ -155,10 +155,18 @@ onUnmounted(() => {
 .modal-body {
     overflow: auto;
 
+    // Croix collante : la boîte défile (overflow: auto), une croix en
+    // position absolue partait avec le contenu et sortait de l'écran dès
+    // que la fenêtre s'ouvrait défilée (téléphone, offre Pro). Collée en
+    // haut de la zone visible, à droite, sans prendre de place dans le flux
+    // (marge basse négative = 8,5 px de haut + 30 px du bouton), elle reste
+    // exactement où l'ancienne croix se trouvait en haut de boîte.
     &__close {
-        position: absolute;
+        position: sticky;
         top: 8.5px;
-        right: 8.5px;
+        z-index: 2;
+        flex-shrink: 0;
+        margin: 8.5px 8.5px -38.5px auto;
     }
 }
 </style>

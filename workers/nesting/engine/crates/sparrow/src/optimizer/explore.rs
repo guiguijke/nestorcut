@@ -55,7 +55,10 @@ pub fn exploration_phase(instance: &SPInstance, sep: &mut Separator, sol_listene
             // Shrink the strip width and clear the infeasible solution pool
             let next_width = current_width * (1.0 - config.shrink_step);
             info!("[EXPL] shrinking strip by {}%: {:.3} -> {:.3}", config.shrink_step * 100.0, current_width, next_width);
-            sep.change_strip_width(next_width, None);
+            if sep.change_strip_width(next_width, None).is_err() {
+                info!("[EXPL] no container at width {:.3}, terminating", next_width);
+                break;
+            }
             current_width = next_width;
             infeas_sol_pool.clear();
         } else {

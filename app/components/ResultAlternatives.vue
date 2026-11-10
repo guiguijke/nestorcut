@@ -64,9 +64,7 @@ const selectAlt = (altId) => emit('select', altId)
         background-color: color-mix(in srgb, var(--accent-primary) 14%, transparent);
         color: var(--accent-primary);
         font-size: var(--fs-12);
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
+        font-weight: 700;
     }
 
     &__tab {
@@ -93,6 +91,13 @@ const selectAlt = (altId) => emit('select', altId)
             color: var(--background-primary);
             background-color: var(--accent-primary);
             border-color: var(--accent-primary);
+
+            /* La pastille du sens garde un fond propre sur l'onglet actif :
+               bleu sur bleu la rendait illisible. */
+            .alts__strategy {
+                background-color: var(--background-primary);
+                color: var(--accent-primary);
+            }
         }
     }
 

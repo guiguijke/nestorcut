@@ -57,4 +57,103 @@
    verrou de déterminisme reste bit-identique.
    Lot E2 de `docs/archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md`.
 
+5. **Largeur de la bande : seule la construction du conteneur dit si elle
+   existe** (piège AGENTS #2b). Le conteneur d'une bande est DÉFLATÉ de
+   `séparation / 2` par côté. Juste au-dessus de la séparation il reste un
+   rectangle de quelques ulp : `geo_buffer` le rend vide, ou `SPolygon::new`
+   le refuse (« Offset resulted in an empty polygon », « Simple polygon must
+   have at least 3 points », « no pole found »), et `Strip -> Container`
+   paniquait. Avec `panic = "abort"`, c'était `unreachable` en navigateur et
+   l'abort rc 3221226505 sur le worker. La fenêtre grandit avec la hauteur
+   (mesuré à espacement 2 : piège jusqu'à +1e-5 mm pour H = 1000, +3e-5 pour
+   H = 2000, +1e-4 pour H = 6000) : aucun seuil en mm ne la décrit.
+   - `src/probs/spp/entities/strip.rs` : `Strip::try_container` construit par le
+     chemin faillible. Pur : ni tirage, ni écriture dans `FALLBACK_ITEMS` (le
+     repli du point 3 ne sert qu'au gonflement). `From<Strip>` reste, pour les
+     largeurs dont le conteneur a déjà été construit : ce n'est pas vrai de
+     `import_solution` (ci-dessous, « Panique restante »).
+   - `src/probs/spp/io/import.rs` (+ réexport dans `src/probs/spp/io/mod.rs`) :
+     la largeur reste EXACTEMENT `total / H` si elle dépasse la séparation et que
+     son conteneur se construit. Sinon `séparation + terme`, le terme partant de
+     `total / (H - séparation)` et doublant, plancher `EPSILON × max(H,
+     séparation)`, 32 essais au plus, arrêt dès qu'une bande plus large que haute
+     échoue (elle ne ferait que s'amincir). Rien ne se construit, ou `H ≤
+     séparation` : erreur TYPÉE `StripHeightBelowSeparation` (message préfixé
+     `strip_height_below_separation:`).
+   - `src/probs/spp/entities/problem.rs` : `try_change_strip_width` et
+     `apply_strip` ; `fit_strip` garde la bande actuelle si la largeur ajustée n'a
+     pas de conteneur. Côté sparrow et nest-engine, qui réduit ou élargit la bande
+     en cours de recherche traite le refus : `lbf.rs` rend `ItemDoesNotFit`,
+     `explore.rs` et `compress.rs` s'arrêtent à la dernière largeur construite,
+     `separator.rs` sonde AVANT de déplacer une pièce, `column_fill.rs` passe.
+   - `src/geometry/primitives/simple_polygon.rs` : `SPolygon::try_from_rect`,
+     car `From<Rect>` panique sur un rectangle sans pôle AVANT l'offset (largeur
+     minuscule sans espacement). `src/geometry/fail_fast/pole.rs` +
+     `primitives/rect.rs` : `try_quadrants`, une cellule trop petite pour être
+     coupée arrête la descente. `src/entities/container.rs` + `rect.rs` :
+     `can_split`, un conteneur que le quadtree ne pourrait pas couper
+     `quadtree_depth` fois est refusé au lieu de paniquer dans `Rect::quadrants`.
+   Bit-identique sur tout job dont le conteneur existait : mêmes flottants, seuls
+   des chemins qui paniquaient changent (verrou `bench/determinism_lock.py`,
+   fixture `j7a_limite` pour la fenêtre elle-même, natif = wasm ; tests
+   `nest-engine/tests/small_job_default_path.rs` et `strip_container_window.rs`).
+   Les gardes amont (`main.py`, `localPayloadBuilder.js`) restent en défense.
+   **Panique restante, connue, non corrigée** : `import_solution` (`import.rs`)
+   fait `change_strip_width(ext_solution.strip_width)`, c'est-à-dire
+   `try_change_strip_width(..).unwrap()`. `nest-engine/src/spp.rs::map_back_solution`
+   l'appelle pour les directions left, balanced et bottom et pour le mode sans `biases`,
+   avec un couloir jamais construit à la hauteur d'origine (le moteur a travaillé
+   transposé) : sur une tôle absurde, haute ou plate (balanced, W = 1000, H = 1e-5), le
+   conteneur n'existe pas, `problem.rs:35` panique. `merge.rs:547` l'appelle aussi, dans
+   le repli sans `used_height`, que le pool n'atteint pas. Mesuré en left, sans
+   espacement, une pièce carrée qui tient dans la tôle : livre à W = 2 pour H = 6e7,
+   panique pour H = 7e7 ; livre à W = 0,2 pour H = 8e6, panique pour H = 1e7 ; livre à
+   W = 20 pour H = 1e9, panique pour H = 2e9 ; soit H / (W - espacement) de 3e7 livré
+   à 1e8 en panique, sans seuil net. En bottom le retour de repère est un repli : des
+   pièces de 1 x 1 en deux phases n'ont pas paniqué (8 graines), 20 pièces de
+   1,9 x 0,7 à W = 2, H = 1e8 paniquent pour 7 graines sur 8. Avec espacement 2, chemin
+   BPP : refus propre, pas de panique. À corriger dans `import_solution` (version faillible, comme
+   `try_change_strip_width`), pas par une borne en mm. Ce que voit le navigateur :
+   AGENTS.md, piège 2b.
+
+6. **Copie sparrow** (`crates/sparrow`, pas jagua mais documenté ici avec ses
+   voisins) — pièce À LA COTE EXACTE, lot A :
+   - `src/sample/uniform_sampler.rs` : **inchangé**. Un premier essai du lot
+     retenait les rotations à plage de largeur nulle quand toutes les autres
+     étaient vides ; il a été retiré : il faisait tirer et évaluer là où
+     l'échantillonneur rendait `None`, donc changeait la trajectoire (layout,
+     évaluations) de jobs qui aboutissaient déjà (bande 1000 + pièce 100x996
+     en rotations 0/90, BPP 996x1996 sur deux tôles), sans faire poser une
+     seule pièce de plus. Verrou : `tests/exact_fit_refusal.rs`,
+     `bpp_deux_toles_dont_une_trop_juste_garde_la_trajectoire_de_la_baseline`.
+     Le refus typé ci-dessous n'en dépend pas.
+   - `src/optimizer/lbf.rs` + `src/optimizer/mod.rs` : l'assertion « strip-width
+     is running away … item N does not seem to fit » (`panic = "abort"` :
+     `unreachable` en navigateur) devient l'erreur TYPÉE `ItemDoesNotFit
+     { item_id, strip_width }`. `LBFBuilder::construct` et `optimize` rendent
+     un `Result`. `nest-engine` la traduit en `item_unplaceable:<id>:` (même
+     modèle que `item_geometry`, `import_error.rs`). Une PHASE 2 qui échoue
+     (cadre transposé, bande = largeur de phase 1 + 1 mm) retombe sur le
+     résultat de la phase 1 au lieu de tuer la classe : c'était la panique de
+     la volute du constat (une orientation, bande de 66,5 mm) sur le wasm, qui
+     disparaît avec `two_phase: false` — mesuré sur le wasm d'origine, graines
+     100 et 101 du pool.
+
+7. `src/probs/bpp/entities/solution.rs` : `BPSolution::density` rend 0 pour une
+   solution sans tôle (aucune pièce posée) au lieu de 0/0 = NaN. Le NaN était
+   sérialisé en `null`, et `merge_alternatives` échouait à relire son propre
+   export (« invalid type: null, expected f32 »). Sans autre effet : seul le
+   cas vide change de valeur.
+
+8. **Pièce sous la résolution des f32** (sans espacement, côté sous l'ulp de la
+   coordonnée où elle est posée : elle s'effondre sur une ligne). Seuls des
+   chemins qui paniquaient changent ; verrou
+   `nest-engine/tests/sub_resolution_items.rs`.
+   - `src/geometry/primitives/simple_polygon.rs` : `generate_bounding_box` garde
+     une boîte d'un ulp sur l'axe effondré.
+   - `src/collision_detection/hazards/collector.rs` : `remove_by_entity` ne panique
+     plus si la forme effondrée ne s'est pas vue elle-même.
+   - `src/geometry/shape_modification.rs` + `original_shape.rs` : `simplify_shape`
+     rend un `Result` ; une pièce sans pôle une fois centrée sort en `item_geometry`.
+
 Upstream inchangé sinon. Licence : MPL-2.0 (voir LICENSE).

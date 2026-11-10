@@ -147,6 +147,7 @@ const standardPlanTitle = computed(
 const canUpgradeToPrivacy = computed(
     () => hasActiveSubscription.value
         && currentTier.value === 'standard'
+        && !unref(data)?.cancelAtPeriodEnd
         && Boolean(unref(data)?.privacyPlan)
         && !paidDisabled.value
 )

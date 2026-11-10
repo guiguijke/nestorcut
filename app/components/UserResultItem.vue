@@ -74,6 +74,9 @@
             <p v-if="isLocal" class="result__local" :title="t('localMode.done')">
                 {{ t('localMode.done') }}
             </p>
+            <p v-if="degradedKey" class="result__degraded" data-testid="result-degraded">
+                {{ t(degradedKey) }}
+            </p>
             <!-- D-PRV-10 : blobs résultats purgés à 24 h — téléchargements
                  masqués, le rapport (scalaires) reste consultable. -->
             <p v-if="result.purgedAt" class="result__expired">
@@ -156,7 +159,7 @@ import { themeType } from '~~/constants/theme.constants';
 import { statusType } from "~~/constants/status.constants";
 import { trackEvent } from '~/utils/track';
 import { altDensityPctOf } from '~/utils/resultQuality';
-import { failureReasonKey } from '~/utils/failureReason';
+import { degradedNoteKey, failureReasonKey } from '~/utils/failureReason';
 import { computed, ref } from "vue";
 import { iconType } from '~~/constants/icon.constants'
 import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
@@ -403,9 +406,11 @@ const isPartial = computed(() => {
     const requested = props.result?.requested || 0
     return placed > 0 && requested > 0 && placed < requested
 })
+const degradedKey = computed(() =>
+    isResultCompleted.value ? degradedNoteKey(props.result?.degraded) : null)
 const stateTone = computed(() => {
     if (isResultFailed.value) return 'danger'
-    if (isPartial.value) return 'warn'
+    if (isPartial.value || degradedKey.value) return 'warn'
     return 'ok'
 })
 const stateLabel = computed(() => {
@@ -531,15 +536,17 @@ const onDownload = () => {
         background: var(--danger-bg);
     }
 
+    /* Miniature lisible : une tôle seule occupe la largeur de la carte
+       (plus 64 × 36 px), plusieurs tôles se rangent sur deux colonnes. */
     &__svg-row {
-        max-width: 160px;
+        max-width: 220px;
         display: grid;
         grid-template-columns: 1fr;
-        gap: 4px;
+        gap: 6px;
         margin-bottom: 8px;
 
         &--multi {
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
         }
     }
 
@@ -550,6 +557,19 @@ const onDownload = () => {
         height: 36px;
         min-height: 36px;
         overflow: hidden;
+    }
+
+    &__svg-row &__display {
+        width: 100%;
+        height: 96px;
+        min-height: 96px;
+        border: 1px solid var(--separator-secondary);
+        border-radius: var(--radius);
+    }
+
+    &__svg-row--multi &__display {
+        height: 60px;
+        min-height: 60px;
     }
 
     &__placeholder {
@@ -618,6 +638,13 @@ const onDownload = () => {
         margin-top: 4px;
         font-size: var(--fs-12);
         color: var(--label-secondary);
+    }
+
+    // Livraison dégradée : toutes les pièces sont posées, sans la dernière étape.
+    &__degraded {
+        margin-top: 4px;
+        font-size: var(--fs-12);
+        color: var(--label-primary);
     }
 
     // D-PRV-10 : mention « expiré » des résultats purgés (24 h).

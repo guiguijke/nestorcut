@@ -142,7 +142,7 @@
     --fill-tertiary: rgba(248, 251, 255, 0.05);
     --label-primary: var(--text);
     --label-secondary: #b9c2d0;
-    --label-tertiary: #767e9a;
+    --label-tertiary: var(--text-3); /* #8b93ad : 5,06:1 sur --bg, 4,53:1 sur --surface */
     --accent-primary: var(--accent);
     --accent-secondary: var(--accent-hover);
     --background-primary: var(--bg);

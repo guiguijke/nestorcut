@@ -71,6 +71,9 @@ const fullJob = (i, extra = {}) => ({
     requested: 12,
     discardedAlternatives: [{ why: 'overlap' }],
     information: 'info',
+    degraded: 'merge_unavailable',
+    errorCode: 'engine_error',
+    itemGeometry: { slug: 'f', part: 2 },
     unfit: { reason: 'partial' },
     progress: { stage: 's', done: 1, total: 2 },
     liveLayout: { sheets: [[1, 2]] },
@@ -107,6 +110,17 @@ describe('getResults — projection, borne et index', () => {
         const done = projected.items.find((i) => i.slug === 'job-1')
         expect(done.alternatives[0]).toMatchObject({ altId: 'a', strategy: 'compact', svgs: ['/api/files/result/svg/a.svg'] })
         expect(done.zipDownloadUrl).toBe('/api/files/result/zip/job-1')
+        expect(done.degraded).toBe('merge_unavailable')
+        expect(done.errorCode).toBe('engine_error')
+        // Pièce nommée par un refus : exposée, sinon le bandeau perd son nom après un rechargement.
+        expect(done.itemGeometry).toEqual({ slug: 'f', part: 2 })
+    })
+
+    it('un job sans livraison dégradée n’en annonce aucune', async () => {
+        const { degraded, ...legacy } = fullJob(1)
+        state.db = dbOver([legacy], { honorOptions: true })
+        const { items } = await getResults('u1')
+        expect(items[0].degraded).toBeNull()
     })
 
     it('ne rapatrie ni localPayload ni params/files/charge ni la géométrie des alternatives', async () => {

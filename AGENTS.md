@@ -98,11 +98,52 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    polygon ») — ce n'est PAS une dégradation sûre automatique. Toujours
    passer par `channels_usable(space)` : si scellé, laisser les trous
    fermés (outer plein) — trous inutilisés mais job vivant.
-2b. **Strip initial jagua = aire totale / hauteur, DEFLATÉ de space/2** :
-   si `total_part_area / strip_height ≤ space`, l'offset du strip sort vide
-   et le moteur panique dans un thread rayon (« Offset resulted in an empty
-   polygon », opaque). Garde côté Python avant `run_engine` (exception
-   explicite : réduire l'espacement ou ajouter pièces/stock).
+2b. **Une largeur de bande n'existe que si son conteneur se construit** : le
+   conteneur est DEFLATÉ de space/2, et juste au-dessus de `space` il n'a plus
+   de pôle sur une fenêtre qui grandit avec la hauteur, donc jamais de seuil :
+   `Strip::try_container` décide (`panic = "abort"`, VENDORED.patch.md point 5).
+   `From<Strip>` et `change_strip_width` (qui fait `try_change_strip_width(..)
+   .unwrap()`) ne valent que pour une largeur dont le conteneur a DÉJÀ été
+   construit. **Deux chemins ne tiennent pas cette promesse, panique restante, connue
+   et non corrigée**. Le premier : `nest-engine/src/spp.rs::map_back_solution` (retour de repère
+   des directions left, balanced et bottom : les trois font travailler le moteur
+   transposé) appelle `import_solution` (jagua-rs `import.rs`), qui fait
+   `change_strip_width(corridor)` avec un couloir jamais construit à la hauteur
+   d'origine. Sans conteneur : `problem.rs:35` (« no pole found »), abort. Elle ne
+   touche que des tôles absurdes. Mesures (natif, direction left, sans espacement,
+   une pièce carrée qui tient dans la tôle, réglages du banc), avec le rapport
+   H / (W - espacement) : W = 2, H = 6e7 livre (3e7), H = 7e7 panique (3,5e7) ;
+   W = 0,2, H = 8e6 livre (4e7), H = 1e7 panique (5e7) ; W = 20, H = 1e9 livre (5e7),
+   H = 2e9 panique (1e8) ; W = 2, H = 1e8 panique (5e7). Le rapport ne fait pas un
+   seuil : il ne dépend pas que de lui, et aucune valeur n'est à coder. En bottom, le
+   retour de repère est un repli (`DirBias::BottomFirst`) : il est pris en une phase
+   (`two_phase = false` : W = 2, H = 6e7 livre, H = 7e7 panique) et, en deux phases,
+   seulement si la phase 2 échoue ou dépasse la tôle. Des pièces de 1 x 1 n'ont pas
+   paniqué (W = 2, H jusqu'à 1e9, jusqu'à 40 exemplaires, 8 graines), 20 pièces de
+   1,9 x 0,7 si : W = 2, H = 1e8, payload de `buildLocalPayload`, 7 graines sur 8. Avec
+   espacement 2 (W = 10) le job passe par le chemin BPP : refus propre « no pole
+   found » à H = 1e9, pas de panique. Elle touche aussi le mode sans `biases`
+   (`spp.rs:914` : W = 2, H = 6e7 livre, H = 1e8 panique) et des tôles plates en balanced
+   (W = 1000 ou 3000, H = 1e-5, deux phases). Le second chemin : `merge.rs:547` appelle
+   aussi `import_solution`, dans le repli sans `used_height`, avec la même panique ; le
+   pool ne l'atteint pas, ses runs portent `used_height` (lu dans le code). Le formulaire
+   ne bloque pas ces tôles (`isValidNumber`, `files.js` : chiffres seulement ; le
+   serveur : > 0 et fini) : 2 x 1e8 mm part au calcul navigateur, et l'issue y est une
+   COURSE, pas une affaire de nombre de directions (`localPool.js`, mesuré dans le
+   navigateur à W = 2, H = 1e8, sans espacement) :
+   - **Le chrono champion part d'abord** (`settleFromChampion`, une direction seulement ;
+     `championIdleMs` se réarme à chaque progrès) : le meilleur frame live est livré et
+     les workers coupés. Left ou balanced, pièce de 1 x 1 : aucun walk ne répond ni ne
+     panique, job livré (1 walk en Free, 8 en payant). Bottom, 20 pièces de 1,9 x 0,7, en
+     Free, où les walks tournent un par un : un walk panique (`unreachable`,
+     `problem.rs:35` en console), job livré 20/20 quand même.
+   - **Tous les walks meurent d'abord** (`checkAllSettled` clôt quand chacun a une issue) :
+     rien n'est livré, `engine_error`, 0 pièce posée. Les mêmes 20 pièces en bottom seule,
+     Standard ou Pro : 8 walks en parallèle, 8 paniques en 4 s environ, avant le chrono.
+     Left + balanced, pièce de 1 x 1 (`multiBias`, pas de chrono, piège 7b : un seul
+     survivant aurait suffi à la fusion) : 8 paniques. Message `localMode.crashLocal`
+     (`crashError` hors projet local). Rien n'est consommé sur un compte payant
+     (`charge.refunded`) ; une charge Free est remboursée (vu sur un crash simulé).
 2c. **`geo_buffer` s'effondre sur un canal plus étroit que le gonflement.**
    L'inflation d'import (`space/2`) décale les deux bords d'un canal étroit
    l'un à travers l'autre : le contour rendu se recoupe, `SPolygon::new` le
@@ -1006,6 +1047,22 @@ téléchargerait les navigateurs à chaque build. Installation hors verrou,
 une fois par poste : `npm i --no-save playwright && npx playwright install
 chromium`. Un `npm i` ultérieur l'élague : le refaire alors. Seul
 `@axe-core/playwright` (léger, aucun navigateur) est en devDependencies.
+
+**`scripts/qa-preload-auth-local.mjs` (poids du JS préchargé par `/auth/local`)** :
+harnais MANUEL, sans CI et sans test vitest. À lancer à la main après
+`npx nuxt build`, serveur du build démarré (`node scripts/qa-preload-auth-local.mjs
+--base http://127.0.0.1:3000`) ; rien ne le fait à votre place. Codes de
+sortie : 0 OK, 1 seuil dépassé ou three dans un chunk préchargé, 2 fichier
+préchargé absent du disque. Il n'appelle pas `process.exit` (assertion libuv
+sous Windows quand `fetch` garde une connexion ouverte).
+
+**`scripts/qa-e2e-failure-scroll.mjs` (bandeau et défilement de la page projet quand
+un job échoue, local ou serveur ; note de la carte quand la fusion meurt)** : harnais MANUEL, sans CI. Le comportement est verrouillé en vitest
+(`app/tests/useJobScroll.test.js`, vrai composable sur le vrai registre) ; ce harnais
+est le seul à exécuter le fil entre la page et `useJobScroll`, donc à relancer quand
+ce fil ou le gabarit de l'atelier change. Build servi plus base Mongo JETABLE
+(`QA_BASE_URL`, `QA_MONGO_URI` obligatoires, serveur local exigé, `nest2d` refusé).
+Codes de sortie : 0 OK, 1 scénario rouge.
 
 Benchmarks ESICUP (lents) : `pytest benchmarks/test_benchmarks.py -m slow`.
 Harnais A/B warm-start : `cargo test --release warm_start_160_ab -- --ignored --nocapture`.

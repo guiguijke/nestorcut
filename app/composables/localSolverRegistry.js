@@ -18,7 +18,7 @@
  * Le runner est injectable pour les tests (défaut : runLocalJobPrivate).
  */
 import { reactive, readonly } from 'vue'
-import { frameIsBetter } from '../utils/liveJob'
+import { frameIsBetter, isActiveLocalPhase } from '../utils/liveJob'
 
 const state = reactive({
     /** slug -> { slug, projectSlug, phase, frame, evals, zone, walks,
@@ -242,19 +242,17 @@ export function progressFor(projectSlug) {
     return readonly(jobs[0])
 }
 
-const ACTIVE_PHASES = new Set(['queued', 'running', 'finalizing'])
-
 /** True while this project has a local solve queued or running. */
 export function hasActiveJob(projectSlug) {
     if (!projectSlug) return false
     return Object.values(state.jobs).some(
-        (j) => j.projectSlug === projectSlug && ACTIVE_PHASES.has(j.phase),
+        (j) => j.projectSlug === projectSlug && isActiveLocalPhase(j.phase),
     )
 }
 
 /** Active local solves (for the project-list badge). */
 export function activeJobs() {
     return Object.values(state.jobs)
-        .filter((j) => ACTIVE_PHASES.has(j.phase))
+        .filter((j) => isActiveLocalPhase(j.phase))
         .map((j) => readonly(j))
 }

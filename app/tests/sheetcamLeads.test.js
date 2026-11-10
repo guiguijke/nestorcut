@@ -274,11 +274,11 @@ describe('J8-e — légendes et messages : textes figés, EN et FR', () => {
         expect(line(enBlock, 'upload.limitDevice'))
             .toBe("'upload.limitDevice': 'DXF, SVG or SheetCam .job — max 5 MB per file',")
         expect(line(frBlock, 'upload.limitDevice'))
-            .toBe("'upload.limitDevice': \"DXF, SVG ou .job SheetCam — 5 Mo max par fichier\",")
+            .toBe("'upload.limitDevice': \"DXF, SVG ou .job SheetCam — 5 Mo max par fichier\",")
         expect(line(enBlock, 'upload.limit'))
             .toBe("'upload.limit': 'DXF, SVG or DWG — max 5 MB per file',")
         expect(line(frBlock, 'upload.limit'))
-            .toBe("'upload.limit': \"DXF, SVG ou DWG — 5 Mo max par fichier\",")
+            .toBe("'upload.limit': \"DXF, SVG ou DWG — 5 Mo max par fichier\",")
     })
 
     it('les erreurs d\'envoi s\'affichent (plus jamais muettes) : la clé existe EN/FR', () => {

@@ -360,6 +360,16 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
                 flex-wrap: wrap;
             }
 
+            /* Même filet sur téléphone pour la barre des pages publiques :
+               connecté, « Ouvrir mon espace » et le menu n'y tiennent pas sur
+               une ligne, et la page débordait. Une barre qui tient ne change
+               pas ; la barre primaire (espace de travail, profil) non plus. */
+            @media (max-width: 566.98px) {
+                &:not(.header__wrapper--is-primary) {
+                    flex-wrap: wrap;
+                }
+            }
+
             & > *:not(:first-child) {
                 margin: 4px;
 

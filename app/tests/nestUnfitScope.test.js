@@ -218,6 +218,58 @@ describe("files.js — le refus de capacité ne suit pas l'utilisateur sur un au
         },
     )
 
+    it.each([
+        ['409 concurrent_limit', { data: { statusMessage: 'concurrent_limit' }, response: { status: 409 } }],
+        ['400 too_many_sheets', { data: { statusMessage: 'too_many_sheets' }, response: { status: 400 } }],
+        ['5xx', { data: { statusMessage: 'boom' }, response: { status: 500 } }],
+    ])(
+        "chaque refus %s compte pour la page, même texte identique, et Nest reste utilisable",
+        async (_label, failure) => {
+            const store = await loadStore(() => {
+                throw failure
+            })
+            await store.actions.getProject(API_ROUTES.PROJECT('a'))
+            expect(store.getters.nestRefusals).toBe(0)
+
+            await store.actions.nest('a')
+            const text = store.getters.nestError
+            expect(store.getters.nestRefusals).toBe(1)
+            // Nest garde le droit de rester actif après un refus.
+            expect(store.getters.isNewParams).toBe(true)
+            expect(store.getters.nestBusy).toBe(false)
+
+            // Deuxième refus, même texte : le message disparaît au clic puis revient.
+            await store.actions.nest('a')
+            expect(store.getters.nestError).toBe(text)
+            expect(store.getters.nestRefusals).toBe(2)
+        },
+    )
+
+    it("un refus de A qui arrive après le chargement de B ne compte pas", async () => {
+        let failNest
+        const store = await loadStore(
+            () =>
+                new Promise((_resolve, reject) => {
+                    failNest = reject
+                }),
+        )
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        const submission = store.actions.nest('a')
+        await store.actions.getProject(API_ROUTES.PROJECT('b'))
+        failNest({ data: { statusMessage: 'concurrent_limit' }, response: { status: 409 } })
+        await submission
+        expect(store.getters.nestRefusals).toBe(0)
+    })
+
+    it("un succès, un refus de capacité ou de quota ne comptent pas comme un refus de soumission", async () => {
+        const store = await loadStore(() => {
+            throw capacityRefusal()
+        })
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        await store.actions.nest('a')
+        expect(store.getters.nestRefusals).toBe(0)
+    })
+
     it('course : le succès de A qui arrive après le chargement de B ne grise pas Nest sur B', async () => {
         let finishNest
         const store = await loadStore(
@@ -239,6 +291,38 @@ describe("files.js — le refus de capacité ne suit pas l'utilisateur sur un au
         // …et la fenêtre de résultat de A ne s'ouvre pas sur B.
         expect(setModalNestData).not.toHaveBeenCalled()
         expect(store.getters.nestBusy).toBe(false)
+    })
+
+    it('course : le job échoue pendant que nest() attend ses réponses, Nest reste actif', async () => {
+        let finishNest
+        const store = await loadStore(
+            () =>
+                new Promise((resolve) => {
+                    finishNest = resolve
+                }),
+        )
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        const submission = store.actions.nest('a')
+
+        // Le flux a vu le job échouer : la page appelle resetLastParams.
+        store.actions.resetLastParams()
+        finishNest({ jobId: 'job-a' })
+        await submission
+
+        expect(store.getters.isNewParams).toBe(true)
+        expect(store.getters.nestBusy).toBe(false)
+    })
+
+    it('un échec pendant la requête ne compte que pour elle : le Nest suivant qui réussit grise le bouton', async () => {
+        const store = await loadStore(async () => ({ jobId: 'job-a' }))
+        await store.actions.getProject(API_ROUTES.PROJECT('a'))
+        const first = store.actions.nest('a')
+        store.actions.resetLastParams()
+        await first
+        expect(store.getters.isNewParams).toBe(true)
+
+        await store.actions.nest('a')
+        expect(store.getters.isNewParams).toBe(false)
     })
 
     it('course, témoin : le succès de A, resté sur A, grise Nest et ouvre la fenêtre de résultat', async () => {

@@ -14,7 +14,10 @@ from core.nesting_input_builder import (
     deterministic_seed,
 )
 from core.engine import (EngineCancelled, EngineError,
-                         item_geometry_message, parse_item_geometry,
+                         item_geometry_message, item_unplaceable_message,
+                         too_large_message,
+                         original_item_id, parse_item_geometry,
+                         parse_item_unplaceable,
                          run_engine, thin_parts)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
@@ -50,6 +53,14 @@ dxf_result_bucket = get_bucket("nestDxf")
 svg_result_bucket = get_bucket("nestSvg")
 
 logger = setup_logger("core_nesting")
+
+
+class UserFacingError(Exception):
+    """Refus dont le message est écrit pour l'utilisateur et peut citer le nom
+    de son fichier. Le gestionnaire générique du worker ne journalise que
+    `log_message`, jamais ce texte."""
+
+    log_message = "Job refused (message withheld from logs: may name a user file)"
 
 
 class JobCancelled(Exception):
@@ -641,25 +652,26 @@ def _nesting_process_impl(doc):
         if not fits_anywhere:
             bx = poly.bounds
             unplaceable.append({
-                "name": item.get("file_slug"),
+                "slug": item.get("file_slug"),
                 "width": bx[2] - bx[0],
                 "height": bx[3] - bx[1],
                 "count": item.get("count"),
             })
 
     if unplaceable:
-        details = ", ".join(
-            f"'{p['name']}' ({p['width']:.0f}x{p['height']:.0f}mm, x{p['count']})"
-            for p in unplaceable[:5]
-        )
-        sheet_desc = " / ".join(
-            f"{float(s.get('width')):.0f}x{float(s.get('height')):.0f}mm" for s in sheets
-        )
-        message = (
-            f"Part(s) too large for the sheet: {details} — sheet(s): {sheet_desc}, "
-            f"spacing: {space}mm. Use a larger sheet, allow more rotations, or reduce spacing."
-        )
-        logger.warning("Unplaceable parts detected", extra={"unplaceable": unplaceable})
+        # Nom du fichier de l'utilisateur, jamais le slug interne.
+        for p in unplaceable:
+            p["name"] = None
+            if p.get("slug"):
+                try:
+                    p["name"] = (db["user_dxf_files"].find_one(
+                        {"slug": p["slug"]}, {"name": 1}) or {}).get("name")
+                except Exception:
+                    p["name"] = None
+        message = too_large_message(unplaceable, sheets, space)
+        logger.warning("Unplaceable parts detected", extra={
+            "unplaceable": [{k: v for k, v in p.items() if k != "name"}
+                            for p in unplaceable]})
         db["nesting_jobs"].update_one(
             { "slug": slug },
             {
@@ -673,7 +685,7 @@ def _nesting_process_impl(doc):
                 "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""}
             },
         )
-        raise Exception(message)
+        raise UserFacingError(message)
 
     jaguar_items = []
 
@@ -1241,9 +1253,19 @@ def _nesting_process_impl(doc):
                     for i in items
                 ]
             sheet_pairs = [[float(s.get("width")), float(s.get("height"))] for s in sheets]
+            # Densité : seuls les formats réellement en stock comptent (les
+            # formats à 0 tôle sont filtrés du moteur).
+            density_pairs = [
+                p for s, p in zip(sheets, sheet_pairs)
+                if int(s.get("count") or 0) > 0
+            ] or sheet_pairs
             holes_filled = 0
-            density = event.get("density")
-            if items and (meta or has_holes):
+            # Même sans meta ni trous, on repasse par decorate_live_items :
+            # il ne fait alors que mesurer la densité (aire des pièces /
+            # aire des tôles), le chiffre que montre aussi le résultat. La
+            # densité brute du moteur (pièces / bande) ne sort jamais.
+            density = None
+            if items:
                 from core.holefill import decorate_live_items
                 # AA4 (vérif L1 2026-09-05) : PAS d'apply_hole_fill en live —
                 # chaque frame refaisait tout le remplissage (100 hôtes) pour
@@ -1255,7 +1277,7 @@ def _nesting_process_impl(doc):
                     items, input_items, space,
                     meta=meta,
                     apply_fill=False,
-                    sheets=sheet_pairs,
+                    sheets=density_pairs,
                 )
                 holes_filled = live_stats.get("holesFilled") or 0
                 if live_stats.get("density") is not None:
@@ -1272,6 +1294,10 @@ def _nesting_process_impl(doc):
                 # reste invisible de la vue.
                 "used_height": event.get("used_height"),
                 "density": density,
+                # Marque la densité comme MESURÉE (pièces / tôles) : un
+                # client récent n'affiche pas une frame d'un ancien worker,
+                # dont la densité est celle du moteur (pièces / bande).
+                "densityMeasured": True,
                 "bins": event.get("bins"),
                 "unplaced": event.get("unplaced"),
                 "remnant": event.get("remnant"),
@@ -1388,15 +1414,24 @@ def _nesting_process_impl(doc):
         # fichier et le rang de la piece — « Nesting failed: item_geometry:7:
         # Simple polygon contains intersecting edges » n'aide personne.
         _item_id = parse_item_geometry(detail)
-        if _item_id is not None:
-            _target = part_index_by_id.get(_item_id) or {}
+        # Lot A : meme nommage quand le moteur ne trouve de place pour une
+        # piece nulle part (piece a la cote exacte de la tole).
+        _unplaceable_id = (parse_item_unplaceable(detail)
+                           if _item_id is None else None)
+        if _item_id is not None or _unplaceable_id is not None:
+            _named_id = _item_id if _item_id is not None else _unplaceable_id
+            # Le moteur nomme l'id de l'instance RESOLUE : id reduit si la
+            # reduction J-085 a reindexe (meta.idMap), a remettre en id d'origine.
+            _named_id = original_item_id(_named_id, meta)
+            _target = part_index_by_id.get(_named_id) or {}
             _fname = None
             if _target.get("slug"):
                 _fdoc = db["user_dxf_files"].find_one(
                     {"slug": _target["slug"]}, {"name": 1}) or {}
                 _fname = _fdoc.get("name")
-            information, item_geometry = item_geometry_message(
-                _item_id, _target, _fname)
+            _message = (item_geometry_message if _item_id is not None
+                        else item_unplaceable_message)
+            information, item_geometry = _message(_named_id, _target, _fname)
         elif "no feasible solution" in detail:
             # Plan 2026-09-05 §1.2b : infaisabilité moteur → information
             # ACTIONNABLE + champ structuré `unfit` (les trois leviers).
@@ -1443,7 +1478,7 @@ def _nesting_process_impl(doc):
                 "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""}
             },
         )
-        raise Exception(information) from e
+        raise UserFacingError(information) from e
     finally:
         # P2 : flush de la dernière frame live puis arrêt du décorateur,
         # sur tous les chemins (succès, annulation, erreur).
@@ -1969,6 +2004,27 @@ def _nesting_process_impl(doc):
                 for li, layout in enumerate(solution.get("layouts", []))
                 for pi in layout.get("placed_items", [])
             ]
+        # Densité MESURÉE (aire des pièces / aire des tôles), comme sur les
+        # frames de recherche et dans la carte résultat : à ce stade les
+        # layouts sont déjà remappés, expansés et remplis. La densité brute
+        # du moteur (pièces / bande) ne sort jamais sur le fil live.
+        from core.holefill import measured_density
+        # Le format de chaque tôle se lit sur la vraie mise en page
+        # (container_id moteur -> dimensions du format d'origine).
+        _layouts = solution.get("layouts") or []
+        _reveal_bin_dims = {}
+        for li, layout in enumerate(_layouts):
+            dims = bin_dims_engine.get(layout.get("container_id", 0))
+            if dims is None:
+                _reveal_bin_dims = None
+                break
+            _reveal_bin_dims[li] = dims
+        reveal_density = measured_density(
+            items, input_items,
+            [[float(s.get("width")), float(s.get("height"))] for s in sheets
+             if int(s.get("count") or 0) > 0] or
+            [[float(s.get("width")), float(s.get("height"))] for s in sheets],
+            bin_dims=None if is_spp else _reveal_bin_dims)
         return {
             "stage": "reveal",
             "worker": rank,
@@ -1977,7 +2033,8 @@ def _nesting_process_impl(doc):
             # classe (et remplace toutes les classes côté vue).
             "bias": engine_alt.get("bias"),
             "strip_width": engine_alt.get("metrics", {}).get("strip_width"),
-            "density": engine_alt.get("metrics", {}).get("density"),
+            "density": reveal_density,
+            "densityMeasured": True,
             # C12 : bins = NOMBRE de tôles (l'ancien champ portait le
             # coût — fausse « quantité » dès que le coût/tôle ≠ 1).
             "bins": len(solution.get("layouts") or []),
@@ -2256,8 +2313,8 @@ def _nesting_process_impl(doc):
         # AA1 (vérif L1 2026-09-05) : la densité STOCKÉE de l'alternative
         # moteur devient matière / Σ tôles (mesurée, même définition que la
         # grille) — l'accueil et les listes n'ont plus deux échelles selon
-        # l'option. La densité moteur (matière / emprise) reste celle des
-        # frames live.
+        # l'option. Les frames live (recherche et final) portent la même
+        # mesure ; la densité moteur (matière / emprise) ne sort jamais.
         totals = report_totals(sheets_metrics)
         # E4-a : décompte blocs/pièces de l'alternative (« N blocs (M
         # pièces) », §8.1.3) — champ ADDITIF, absent des jobs sans bloc.

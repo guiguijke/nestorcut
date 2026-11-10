@@ -1,3 +1,10 @@
+/** Phases d'un job du registre local qui n'est pas encore terminé. */
+const ACTIVE_LOCAL_PHASES = new Set(['queued', 'running', 'finalizing'])
+
+export function isActiveLocalPhase(phase) {
+    return ACTIVE_LOCAL_PHASES.has(phase)
+}
+
 /**
  * Bind a results-list item to the project page currently on screen.
  * SSE reconnects on navigation (UserResults lives in the layout) so the
@@ -26,6 +33,24 @@ export function pickRunningJob(list, projectSlug) {
     return (list || []).find(
         (r) => r.isInProgress && belongsToProject(r, projectSlug),
     ) || null
+}
+
+/**
+ * Dernier job du projet vu par le flux serveur (la liste SSE arrive du plus
+ * récent au plus ancien) : c'est lui qui parle pour le projet, un échec plus
+ * ancien se tait dès qu'un nouveau job part.
+ * Phases : `running` sur le worker, `local` calculé dans ce navigateur (le
+ * registre local le suit, y compris son échec), `error`, `done` (une annulation
+ * n'est pas un échec).
+ */
+export function serverJobState(list, projectSlug) {
+    const job = (list || []).find((r) => belongsToProject(r, projectSlug))
+    if (!job) return null
+    let phase = 'done'
+    if (job.status === 'awaiting_local') phase = 'local'
+    else if (job.isInProgress) phase = 'running'
+    else if (job.status === 'failed' && !job.wasCancelled) phase = 'error'
+    return { slug: job.slug, phase, job }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,4 +139,68 @@ export function resolveLiveStage(result, championStage) {
     const incoming = result?.progress?.stage || result?.liveLayout?.stage
     if (incoming === 'finalizing') return 'finalizing'
     return championStage || incoming || null
+}
+
+// ---- badge de l'en-tête live ---------------------------------------------------
+/** Étape finale : le calcul est terminé, la frame est le résultat. */
+export function isFinalStage(stage) {
+    return stage === 'final' || stage === 'reveal'
+}
+
+/**
+ * Ce que dit le badge de l'en-tête live :
+ *  - 'done'      : SEULEMENT quand la page signale que le job entier est fini
+ *                  (`jobDone`). Aucune frame ni aucune étape ne suffit : la
+ *                  frame championne passe à `final` dès qu'une direction ou
+ *                  une recherche se termine, alors que d'autres tournent ;
+ *  - 'fits'      : la meilleure disposition tient sur la tôle (ce n'est PAS
+ *                  « terminé » : le calcul peut continuer) ;
+ *  - 'searching' : rien de présentable pour l'instant ;
+ *  - null        : pas de frame, pas de badge.
+ */
+export function liveBadgeKind(frame, jobDone = false) {
+    if (!frame) return null
+    if (!frameFitsSheet(frame)) return 'searching'
+    return jobDone === true ? 'done' : 'fits'
+}
+
+/**
+ * Le job ENTIER est fini, vu de la page : sur l'appareil, plus aucun calcul
+ * en cours ET la scène affiche le résultat reçu (pas une frame de recherche).
+ * Sur le serveur, la vue se retire à la fin : ce signal reste faux.
+ */
+export function liveJobDone({ computeRunning, jobPending = false, stage, reveal }) {
+    return !computeRunning && !jobPending && !!reveal && stage === reveal
+}
+
+/**
+ * Longueur de tôle utilisée (mm canoniques) d'une frame SPP en cours de
+ * recherche, ou null. Elle diminue quand le moteur progresse. Une valeur
+ * absente, non finie, nulle, ou plus grande que la tôle (frame qui ne tient
+ * pas) n'est pas affichée. Hors SPP ou à l'étape finale : null.
+ */
+export function liveUsedLength(frame, stage) {
+    if (!frame || !frame.isSpp || isFinalStage(stage)) return null
+    if (!frameFitsSheet(frame)) return null
+    const n = Number(frame.strip_width)
+    if (frame.strip_width == null || !Number.isFinite(n) || n <= 0) return null
+    const w = Number(frame.sheets?.[0]?.[0])
+    if (Number.isFinite(w) && w > 0 && n > w + 0.5) return null
+    return n
+}
+
+/**
+ * Densité affichable d'une frame live, ou null.
+ * Une frame d'un job serveur (le document porte un `status`) n'est affichée
+ * que si le worker l'a marquée `densityMeasured` : pièces / tôles, le chiffre
+ * du résultat. Un ancien worker envoie la densité brute du moteur (pièces /
+ * bande) : mieux vaut aucun chiffre qu'un chiffre qui ne sera pas celui de
+ * la carte. Les frames du calcul sur l'appareil n'ont pas de `status` et
+ * mesurent déjà pièces / tôles.
+ */
+export function liveDensity(frame, result) {
+    if (!frame || frame.density == null) return null
+    const fromServerJob = typeof result?.status === 'string'
+    if (fromServerJob && frame.densityMeasured !== true) return null
+    return frame.density
 }

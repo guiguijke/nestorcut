@@ -18,7 +18,7 @@
                 {{ t('report.unfit.maxParts', { n: panel.levers.maxParts }) }}
             </li>
             <li v-if="panel.levers.maxSpacingMm != null">
-                {{ t('report.unfit.maxSpacing', { v: panel.levers.maxSpacingMm }) }}
+                {{ t('report.unfit.maxSpacing', { v: fmtNumber(panel.levers.maxSpacingMm, 2) }) }}
             </li>
         </ul>
         <p v-if="panel.noSpacingGain" class="capacity-panel__floor">
@@ -93,7 +93,7 @@ defineProps({
     freeNote: { type: String, default: '' },
 })
 defineEmits(['add-sheet', 'reduce-spacing', 'retry', 'open-project'])
-const { t, tp } = useLocale()
+const { t, tp, fmtNumber } = useLocale()
 </script>
 
 <style lang="scss" scoped>

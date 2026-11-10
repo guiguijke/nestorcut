@@ -12,6 +12,12 @@
             <p v-else class="subscription__desc">
                 {{ t('sub.activeDesc') }}
             </p>
+            <p v-if="trialEndLabel" class="subscription__desc" data-testid="subscription-trial-end">
+                {{ t('sub.trialEndsOn', { date: trialEndLabel }) }}
+            </p>
+            <p v-if="showProAfterEnd" class="subscription__desc" data-testid="subscription-pro-after-end">
+                {{ t('sub.proAfterEnd') }}
+            </p>
             <MainButton
                 v-if="!data?.cancelAtPeriodEnd"
                 :label="t('sub.cancelBtn')"
@@ -61,27 +67,34 @@
             <p class="subscription__desc">{{ t('sub.grantDesc') }}</p>
         </div>
 
-        <div v-if="isActive && data?.isPrivacyTier" class="subscription__card">
+        <div v-if="isActive && alreadyPro" class="subscription__card">
             <div class="subscription__status">
                 <UiBadge tone="ok" dot>{{ t('sub.proPrivacy') }}</UiBadge>
             </div>
             <p class="subscription__desc">{{ t('sub.proActiveDesc') }}</p>
         </div>
 
-        <div v-else-if="isActive && data?.privacyPlan" class="subscription__card">
+        <div v-else-if="isActive && !isPastDue && !subscriptionEnding && data?.privacyPlan" class="subscription__card">
             <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
             <div class="subscription__price">
                 {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
-                <span class="subscription__interval">/ {{ data.privacyPlan.interval }}</span>
+                <span class="subscription__interval">/ {{ intervalLabel(data.privacyPlan.interval) }}</span>
             </div>
             <p class="subscription__desc">{{ t('sub.proDesc') }}</p>
+            <p v-if="!isStripeActive && !paidDisabled" class="subscription__terms" data-testid="subscription-terms-pro">
+                {{ t(proTerms.key, proTerms.params) }}
+            </p>
+            <!-- Abonné Stripe : modification en place, sans page Stripe
+                 récapitulative — la phrase dit ce que le changement fait. -->
+            <p v-else-if="isStripeActive && !paidDisabled" class="subscription__terms" data-testid="subscription-terms-upgrade">
+                {{ t(upgradeTermsText.key, upgradeTermsText.params) }}
+            </p>
             <MainButton
                 v-if="!paidDisabled"
                 :label="t('sub.upgradePro')"
                 :theme="themeType.primary"
                 :size="sizeType.m"
                 :isDisable="isLoading"
-                trackingTag="subscription_upgrade_pro"
                 class="subscription__btn"
                 @click="subscribePro"
             />
@@ -95,15 +108,15 @@
             />
         </div>
 
-        <div v-else-if="!isGranted && !isPastDue" class="subscription__card">
+        <div v-else-if="!isActive && !isPastDue" class="subscription__card">
             <p v-if="ctxMessage" class="subscription__context" data-testid="subscription-context">
                 {{ t(ctxMessage.key, ctxMessage.params) }}
             </p>
-            <div v-if="data?.plan" class="subscription__plan">
+            <div v-if="data?.plan" ref="unlimitedOfferEl" class="subscription__plan" tabindex="-1" data-testid="subscription-unlimited-offer">
                 <div class="subscription__plan-title">{{ data.plan.title || t('sub.monthlyPlan') }}</div>
                 <div class="subscription__price">
                     {{ formatPrice(data.plan.amount, data.plan.currency) }}
-                    <span class="subscription__interval">/ {{ data.plan.interval }}</span>
+                    <span class="subscription__interval">/ {{ intervalLabel(data.plan.interval) }}</span>
                 </div>
                 <div v-if="!ctxMessage" class="subscription__free">
                     {{ t('sub.freeLeft', { n: data.freeRemaining }) }}
@@ -111,9 +124,16 @@
                 <div v-if="!ctxMessage" class="subscription__reset">
                     {{ t('sub.resetsAt', { date: quotaResetLabel }) }}
                 </div>
+                <ul class="subscription__features" data-testid="subscription-features">
+                    <li v-for="key in UNLIMITED_DIALOG_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
+                </ul>
+                <p v-if="!paidDisabled" class="subscription__terms" data-testid="subscription-terms">
+                    {{ t(unlimitedTerms.key, unlimitedTerms.params) }}
+                </p>
                 <MainButton
                     v-if="!paidDisabled"
-                    :label="trialEligible ? t('sub.startTrial', { days: data.plan.trialDays }) : t('sub.subscribe')"
+                    :label="unlimitedCta"
+                    :aria-label="offerButtonName(unlimitedCta, data.plan.title || t('sub.monthlyPlan'))"
                     :theme="themeType.primary"
                     :size="sizeType.m"
                     :isDisable="isLoading"
@@ -129,11 +149,43 @@
                     :isDisable="true"
                     class="subscription__btn"
                 />
-                <p v-if="trialEligible" class="subscription__note">
+                <p v-if="trialEligible && !paidDisabled" class="subscription__note">
                     {{ t('sub.cancelTrialNote') }}
                 </p>
             </div>
-            <div v-else class="subscription__desc">
+            <div v-if="data?.plan && data?.privacyPlan" ref="proOfferEl" class="subscription__plan subscription__plan--pro" tabindex="-1" data-testid="subscription-pro-offer">
+                <div class="subscription__plan-title">{{ data.privacyPlan.title || t('sub.proPrivacy') }}</div>
+                <div class="subscription__price">
+                    {{ formatPrice(data.privacyPlan.amount, data.privacyPlan.currency) }}
+                    <span class="subscription__interval">/ {{ intervalLabel(data.privacyPlan.interval) }}</span>
+                </div>
+                <ul class="subscription__features">
+                    <li v-for="key in PRO_FEATURE_KEYS" :key="key">{{ t(key) }}</li>
+                </ul>
+                <p v-if="!paidDisabled" class="subscription__terms" data-testid="subscription-terms-pro">
+                    {{ t(proTerms.key, proTerms.params) }}
+                </p>
+                <MainButton
+                    v-if="!paidDisabled"
+                    :label="proCta"
+                    :aria-label="offerButtonName(proCta, data.privacyPlan.title || t('sub.proPrivacy'))"
+                    :theme="themeType.secondary"
+                    :size="sizeType.m"
+                    :isDisable="isLoading"
+                    trackingTag="subscription_start_trial_pro"
+                    class="subscription__btn"
+                    @click="subscribePro"
+                />
+                <MainButton
+                    v-else
+                    :label="t('sub.comingSoon')"
+                    :theme="themeType.secondary"
+                    :size="sizeType.m"
+                    :isDisable="true"
+                    class="subscription__btn"
+                />
+            </div>
+            <div v-if="!data?.plan" class="subscription__desc">
                 {{ t('sub.unavailable') }}
             </div>
         </div>
@@ -151,12 +203,13 @@ import { formatQuotaReset } from '~/utils/quotaReset'
 import { hasPaidAccess } from '~/utils/entitlementUi'
 import { flagOn } from '~/utils/runtimeFlag'
 import { trackEvent } from '~/utils/track'
+import { UNLIMITED_DIALOG_FEATURE_KEYS, PRO_FEATURE_KEYS, checkoutTerms, upgradeTerms, formatPlanMoney, isEndingSubscription, offerButtonName } from '~/utils/planBenefits'
 import { writeCheckoutIntent } from '~/utils/checkoutReturn'
 import { contextMessage, checkoutSourceOf, checkoutReturnPath, checkoutErrorCode } from '~/utils/buyCreditsContext'
 
 // D13 : pourquoi la fenêtre s'ouvre (useBuyCreditsContext, posé par
 // BuyCreditsDialog) — null sur la carte du profil et pour les ouvreurs sans
-// contexte : la carte est alors identique à celle d'avant le lot.
+// contexte : pas de phrase de contexte.
 const props = defineProps({
     context: { type: Object, default: null },
 })
@@ -203,6 +256,23 @@ const isGranted = computed(() => {
     return level === 'standard' || level === 'privacy'
 })
 const isActive = computed(() => isStripeActive.value || isGranted.value)
+// Pro déjà acquis : prix Pro côté Stripe, ou accès Pro offert par l'admin
+// (sans prix Stripe) — jamais une offre de « passer à Pro » à 0 € puis 39 €.
+const alreadyPro = computed(
+    () => Boolean(unref(data)?.isPrivacyTier) || (isGranted.value && unref(userMe)?.compute?.level === 'privacy'),
+)
+// Résilié en fin de période : l'abonnement s'arrête à la date annoncée, aucune
+// montée n'est offerte. Pro reste possible APRÈS cette date, par un nouveau
+// Checkout (le serveur le refuse tant que l'abonnement vit), sans essai.
+const subscriptionEnding = computed(() => isEndingSubscription(unref(data)))
+const showProAfterEnd = computed(
+    () => subscriptionEnding.value && !alreadyPro.value && Boolean(unref(data)?.privacyPlan) && !paidDisabled.value,
+)
+// Essai en cours : sa date de fin. Une résiliation annonce déjà la sienne.
+const trialEndLabel = computed(() => {
+    const info = unref(data)
+    return info?.subscriptionStatus === 'trialing' && !info.cancelAtPeriodEnd ? formatDate(info.currentPeriodEnd) : ''
+})
 // past_due / unpaid / incomplete : le paiement a échoué, l'accès est coupé tant
 // que la carte n'est pas mise à jour (via le portail Stripe). `unpaid` =
 // relances épuisées mais l'abonnement existe encore : jamais la carte
@@ -216,6 +286,22 @@ const isPastDue = computed(() => {
 // doit pas promettre d'essai gratuit.
 const trialEligible = computed(() => unref(data)?.trialEligible !== false)
 const canManageBilling = computed(() => Boolean(unref(data)?.canManageBilling))
+const ctaLabelFor = (plan) => (trialEligible.value ? t('sub.startTrial', { days: plan?.trialDays }) : t('sub.subscribe'))
+const unlimitedCta = computed(() => ctaLabelFor(unref(data)?.plan))
+const proCta = computed(() => ctaLabelFor(unref(data)?.privacyPlan))
+
+// Clic sur une carte de /plans : la fenêtre montre l'offre choisie, pas seulement
+// la première, et le focus s'y pose pour que Tab mène à son bouton. Le focus
+// initial de DialogWrapper est déjà passé : ce composant se monte après sa lecture.
+const unlimitedOfferEl = ref(null)
+const proOfferEl = ref(null)
+onMounted(() => {
+    const offer = props.context?.offer
+    const el = offer === 'privacy' ? proOfferEl.value : offer === 'standard' ? unlimitedOfferEl.value : null
+    if (!el) return
+    el.focus({ preventScroll: true })
+    el.scrollIntoView({ block: 'nearest' })
+})
 
 const statusLabel = computed(() => {
     const status = unref(data)?.subscriptionStatus
@@ -224,14 +310,32 @@ const statusLabel = computed(() => {
     return status || ''
 })
 
-const formatPrice = (amount, currency) => {
-    return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-    }).format(amount)
-}
+const formatPrice = (amount, currency) => formatPlanMoney(amount, currency, locale.value)
+// Le serveur rend l'intervalle brut (« month ») : traduit comme sur /plans.
+const intervalLabel = (interval) => (interval === 'month' ? t('plans.interval.month') : interval)
+
+// Ce que fait le Checkout, dit AVANT le clic. Prix et devise viennent
+// du plan lu côté serveur ; la date = aujourd'hui + durée d'essai connue.
+const termsFor = (plan) =>
+    checkoutTerms({
+        trialEligible: trialEligible.value,
+        trialDays: plan?.trialDays,
+        amount: plan?.amount,
+        currency: plan?.currency,
+        now: new Date(),
+        locale: locale.value,
+    })
+const unlimitedTerms = computed(() => termsFor(unref(data)?.plan))
+const proTerms = computed(() => termsFor(unref(data)?.privacyPlan))
+// Montée en Pro d'un abonné Stripe (en place, sans Checkout).
+const upgradeTermsText = computed(() =>
+    upgradeTerms({
+        status: unref(data)?.subscriptionStatus,
+        amount: unref(data)?.privacyPlan?.amount,
+        currency: unref(data)?.privacyPlan?.currency,
+        locale: locale.value,
+    }),
+)
 
 // O3 « sans recharger » : le palier de l'interface (useNuxtData('user')) se
 // rafraîchit dès que l'abonnement est actif côté Stripe alors que l'interface
@@ -319,6 +423,14 @@ const subscribe = async () => {
 // Sans abonnement Stripe (accès offert par l'admin), le Checkout reste la voie.
 const subscribePro = async () => {
     if (isLoading.value) return
+    // Aucune page Stripe ne récapitule ce changement : on le confirme ici.
+    if (isStripeActive.value) {
+        const terms = upgradeTermsText.value
+        if (!window.confirm(`${t('sub.upgradePro')}\n\n${t(terms.key, terms.params)}`)) return
+    }
+    // Compté ici et pas sur le bouton : une confirmation refusée n'est pas une
+    // montée. La carte d'achat a son propre compteur, porté par son bouton.
+    if (isActive.value) trackEvent('click_subscription_upgrade_pro')
     error.value = ''
     isLoading.value = true
     if (!isStripeActive.value) {
@@ -441,6 +553,7 @@ const cancelSubscription = async () => {
     &__card &__btn {
         width: 100%;
         max-width: 280px;
+        margin-top: 16px;
     }
 
     &__btn--cancel {
@@ -459,6 +572,33 @@ const cancelSubscription = async () => {
         font-size: var(--fs-14);
         line-height: 1.45;
         color: var(--label-primary);
+    }
+
+    &__features {
+        margin: 14px 0 0;
+        padding-left: 18px;
+        list-style: disc;
+        font-size: var(--fs-13);
+        color: var(--label-secondary);
+        line-height: 1.5;
+    }
+
+    &__terms {
+        margin-top: 12px;
+        font-size: var(--fs-13);
+        color: var(--label-primary);
+        line-height: 1.4;
+    }
+
+    // Focus posé par le code (offre choisie sur /plans), jamais atteint à la tabulation.
+    &__plan:focus {
+        outline: none;
+    }
+
+    &__plan--pro {
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid var(--separator-secondary);
     }
 
     &__note {

@@ -33,13 +33,13 @@ impl OriginalShape {
         if let Some(tolerance) = self.modify_config.simplify_tolerance {
             let pre_simplified = internal.clone();
             // Simplify the shape
-            internal = simplify_shape(&internal, self.modify_mode, tolerance);
+            internal = simplify_shape(&internal, self.modify_mode, tolerance)?;
             if let Some(narrow_concavity_cutoff) = self.modify_config.narrow_concavity_cutoff {
                 // Close narrow concavities
                 internal =
                     close_narrow_concavities(&internal, self.modify_mode, narrow_concavity_cutoff);
                 // Do another simplification after closing concavities
-                internal = simplify_shape(&internal, self.modify_mode, tolerance / 10.0);
+                internal = simplify_shape(&internal, self.modify_mode, tolerance / 10.0)?;
             }
             debug_assert!(shape_modification_valid(
                 &pre_simplified,

@@ -1,9 +1,10 @@
 use crate::Instant;
-use crate::entities::{Instance, Layout, PItemKey};
+use crate::entities::{Container, Instance, Layout, PItemKey};
 use crate::geometry::DTransformation;
 use crate::probs::spp::entities::strip::Strip;
 use crate::probs::spp::entities::{SPInstance, SPSolution};
 use crate::probs::spp::util::assertions::problem_matches_solution;
+use anyhow::Result;
 use itertools::Itertools;
 
 /// Modifiable counterpart of [`SPInstance`]: items can be placed and removed, strip can be extended or fitted.
@@ -31,8 +32,25 @@ impl SPProblem {
 
     /// Modifies the width of the strip in the back, keeping the front fixed.
     pub fn change_strip_width(&mut self, new_width: f32) {
-        self.strip.set_width(new_width);
-        self.layout.swap_container(self.strip.into());
+        self.try_change_strip_width(new_width).unwrap();
+    }
+
+    /// Comme [`Self::change_strip_width`], mais une largeur dont le conteneur
+    /// n'existe pas laisse le problème intact et rend l'erreur.
+    pub fn try_change_strip_width(&mut self, new_width: f32) -> Result<()> {
+        let mut strip = self.strip;
+        strip.set_width(new_width);
+        let container = strip.try_container()?;
+        self.apply_strip(strip, container);
+        Ok(())
+    }
+
+    /// Installe une bande et son conteneur déjà construits (voir
+    /// [`Strip::try_container`]) : pour qui doit savoir que la largeur existe
+    /// AVANT de déplacer des pièces.
+    pub fn apply_strip(&mut self, strip: Strip, container: Container) {
+        self.strip = strip;
+        self.layout.swap_container(container);
     }
 
     /// Shrinks the strip to the minimum width that fits all items.
@@ -52,7 +70,9 @@ impl SPProblem {
         // add the shape offset if any, the strip needs to be at least `offset` wider than the items
         let fitted_width = item_x_max + self.strip.shape_modify_config.offset.unwrap_or(0.0);
 
-        self.change_strip_width(fitted_width);
+        // Une largeur ajustée sans conteneur (pièce de quelques centièmes de µm)
+        // garde la bande actuelle : plus large, les pièces y sont déjà posées.
+        let _ = self.try_change_strip_width(fitted_width);
         debug_assert!(feasible_before == self.layout.is_feasible());
     }
 

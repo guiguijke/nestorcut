@@ -121,6 +121,7 @@
 import { themeType } from '~~/constants/theme.constants'
 import { trackEvent } from '~/utils/track'
 import { mapAuthServerError } from '~/utils/authServerError'
+import { isRegisterMode } from '~/utils/authMode'
 
 const { t } = useLocale()
 
@@ -129,9 +130,12 @@ definePageMeta({
 })
 
 const router = useRouter()
+const route = useRoute()
 const config = useRuntimeConfig()
 
-const isRegister = ref(true)
+// Mode lu dans `?mode=` avant le premier rendu (serveur et client identiques) :
+// « Login » ouvre la connexion, `?mode=register` l'inscription.
+const isRegister = ref(isRegisterMode(route.query.mode))
 const name = ref('')
 const email = ref('')
 const password = ref('')
@@ -153,6 +157,11 @@ const toggleMode = () => {
     passwordError.value = ''
     emailTakenByGoogle.value = false
 }
+
+// Même composant réutilisé si on arrive d'un lien à l'autre : le mode suit l'URL.
+watch(() => route.query.mode, (mode) => {
+    if (isRegisterMode(mode) !== isRegister.value) toggleMode()
+})
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

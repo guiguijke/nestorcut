@@ -1,5 +1,5 @@
 <template>
-    <div class="stats">
+    <div v-if="visible" class="stats">
         <MainTitle :label="t('stats.title')" class="stats__title" />
         <div class="stats__grid grid">
             <div class="grid__item">
@@ -26,6 +26,8 @@
 <script setup>
 const { t } = useLocale()
 
+import { hasActivity } from '~/utils/homeFresh'
+
 const stats = ref({
     projects: 0,
     nestings: 0,
@@ -37,12 +39,18 @@ const stats = ref({
     dxfProcessed: 0,
 })
 
+// Compte neuf : pas de cinq tuiles à zéro. Rien tant que le chargement n'est
+// pas fini, rien tant que le compte n'a ni projet ni calcul.
+const loaded = ref(false)
+const visible = computed(() => loaded.value && hasActivity(stats.value))
+
 const $apiFetch = useApiFetch()
 
 onMounted(async () => {
     try {
         const data = await $apiFetch('/api/user/stats')
         stats.value = data
+        loaded.value = true
     } catch (err) {
         console.error('Failed to load user stats:', err)
     }

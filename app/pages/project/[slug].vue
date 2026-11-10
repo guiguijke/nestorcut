@@ -54,7 +54,7 @@
                         </span>
                     </p>
                 </div>
-                <LiveNestingView v-if="stageLive" :result="stageLive" />
+                <LiveNestingView v-if="stageLive" :result="stageLive" :job-done="stageJobDone" />
                 <div v-else class="stage__idle">
                     <svg
                         :viewBox="idleViewBox"
@@ -105,17 +105,21 @@
                         {{ t('nest.computing') }}
                     </template>
                 </MainButton>
-                <p v-if="ctaHint" class="atelier__cta-hint">{{ ctaHint }}</p>
+                <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
+                     grisé, avant tout clic (en bas de page il sortait de l'écran). -->
+                <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
+                    {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+                </p>
+                <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
                 <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
                      les premières tôles seulement ; le dire avant le calcul. -->
-                <p v-if="ctaFreeNote" class="atelier__cta-hint" data-testid="free-download-note">
+                <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
                     {{ ctaFreeNote }}
                 </p>
                 </div>
                 <div v-if="capacityPanel" ref="capacityPanelEl">
                 <CapacityPanel
                     :panel="capacityPanel"
-                    :free-note="capacityFreeNote"
                     @add-sheet="onCapacityAddSheet"
                     @reduce-spacing="onCapacityReduceSpacing"
                     @retry="startsNest"
@@ -138,8 +142,8 @@
         <div v-if="localImportNotice" class="content__notice content__notice--warn">
             {{ localImportNoticeText }}
         </div>
-        <div v-if="localComputeError && !capacityPanel" class="content__error">
-            {{ localErrorText }}
+        <div v-if="jobErrorText && !capacityPanel" ref="jobErrorEl" class="content__error" data-testid="job-error">
+            {{ jobErrorText }}
         </div>
         <div v-if="isDemo && demoQuotaReached && !demoUnlimited" class="content__error">
             {{ t('demo.quotaEmpty') }}
@@ -150,7 +154,7 @@
         <div v-if="nestRequestError && !capacityPanel" class="content__error">
             {{ t(nestRequestError) }}
         </div>
-        <div v-if="nestSubmitError" class="content__error">
+        <div v-if="nestSubmitError" ref="nestRefusalEl" class="content__error" data-testid="nest-refusal">
             {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
         <div v-if="localImportError" class="content__error">
@@ -160,9 +164,6 @@
              paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
         <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
             {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
-        </div>
-        <div v-if="!sizesIsAvailable && !nestRequestError" class="content__error">
-            {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
         </div>
         <ProjectFiles
             :projectFiles="projectFiles"
@@ -188,7 +189,9 @@ import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
-import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob } from "~/utils/liveJob";
+import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { jobErrorBannerText } from "~/utils/failureReason";
+import { useJobScroll } from "~/composables/useJobScroll";
 import {
     DEMO_NESTING_LIMIT,
     DEMO_PROJECT_SLUG,
@@ -281,21 +284,6 @@ const runningCores = computed(() => {
     return Math.min(8, Math.max(1, Number(n) || 1));
 });
 
-// The live section sits at the TOP of the page (above the files grid, which
-// is 8 screens tall on the demo): when a new job starts streaming, bring it
-// into view once so the animation is never missed below the fold.
-const liveSection = ref(null);
-const lastLiveSlug = ref(null);
-watch(
-    () => unref(liveResult)?.slug,
-    async (slug) => {
-        if (!slug || slug === lastLiveSlug.value) return;
-        lastLiveSlug.value = slug;
-        await nextTick();
-        liveSection.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-);
-
 // Mode Local productisé (J-077/J-082) : quand le worker Python a PRÉPARÉ un
 // job local (status awaiting_local), on le résout dans le navigateur et les
 // RÉSULTATS restent 100 % navigateur (IndexedDB) — le serveur ne reçoit que
@@ -339,6 +327,30 @@ const localLive = computed(() => {
         },
     };
 });
+// The live section sits at the TOP of the page (above the files grid, which
+// is 8 screens tall on the demo) and the failure banner sits right under it:
+// useJobScroll brings each of them into view, once per job.
+const liveSection = ref(null);
+const jobErrorEl = ref(null);
+const nestRefusalEl = ref(null);
+const serverJob = computed(() => serverJobState(unref(resultsList), unref(pageSlug)));
+const jobScroll = useJobScroll({
+    projectSlug: () => unref(pageSlug),
+    progress: () => progressFor(unref(pageSlug)),
+    serverSlug: () => unref(liveResult)?.slug,
+    serverJob: () => unref(serverJob),
+    liveEl: liveSection,
+    failureEl: jobErrorEl,
+    // Refus de la demande de Nest (409, 5xx) : message sous l'atelier, sans job
+    // à suivre — le composable l'amène à l'écran après un clic de cette page.
+    refusal: () => filesStore.getters.nestRefusals,
+    refusalEl: nestRefusalEl,
+    target: import.meta.client ? window : null,
+    // Le job échoué n'a rien produit et le message propose de réessayer : Nest
+    // redevient actif avec les MÊMES réglages (comme après une annulation, AA2).
+    onFailed: () => resetLastParams(),
+});
+
 // AF6 : un projet « cet appareil » ne peut PAS réessayer en mode serveur —
 // les messages d'erreur locaux prennent leurs variantes dédiées.
 // Lot E0 : géométrie d'une pièce refusée par le moteur — { slug, part } du
@@ -355,7 +367,8 @@ const localTooLarge = ref(null);
 const localSpacingTooLarge = ref(null);
 const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
     localOnly: unref(isLocalProject),
-    params: localComputeError.value === 'item_geometry' ? localGeomParams.value
+    params: localComputeError.value === 'item_geometry' || localComputeError.value === 'item_unplaceable'
+        ? localGeomParams.value
         : localComputeError.value === 'part_too_large' && localTooLarge.value
             ? {
                 file: localTooLarge.value.name,
@@ -364,6 +377,17 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
             }
         : null,
 }));
+// Bandeau d'échec : le registre local quand il connaît le job (il nomme la
+// pièce), sinon le flux serveur : job du worker, ou job local après rechargement.
+const jobErrorText = computed(() => {
+    return jobErrorBannerText({
+        localErrorText: localComputeError.value ? localErrorText.value : '',
+        serverJob: unref(serverJob),
+        t,
+        mapLocalError: (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject), params: params || null }),
+        files: projectFiles.value,
+    });
+});
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
 // leviers du pré-contrôle) — le registre le porte sur la phase error.
 const localUnfit = ref(null);
@@ -419,8 +443,10 @@ watch(
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
               : p.error === 'item_geometry' ? 'item_geometry'
+              : p.error === 'item_unplaceable' ? 'item_unplaceable'
               : p.error === 'part_too_large' ? 'part_too_large'
               : p.error === 'spacing_too_large' ? 'spacing_too_large'
+              : p.error === 'strip_height' ? 'strip_height'
               : p.error === 'cancelled' ? null
               : 'crash')
             : null;
@@ -555,6 +581,9 @@ const nestRequestError = computed(() => filesGetters.nestRequestError);
 // 5xx…) autrement muette + verrou de double soumission pendant le POST.
 const nestSubmitError = computed(() => filesGetters.nestError);
 const nestBusy = computed(() => filesGetters.nestBusy);
+watch(nestBusy, (busy) => {
+    if (busy) jobScroll.expectJob();
+});
 const localImportError = computed(() => filesGetters.localImportError);
 
 // Lot J10-a : information de dépôt (zone d'exclusion Work/keepout).
@@ -677,6 +706,17 @@ const stageLive = computed(() => {
     return unref(liveResult) || unref(localReveal) || null
 });
 
+// Le job entier est fini : sur l'appareil, plus aucun calcul en cours, le bouton
+// est libéré (job du serveur reçu) ET le résultat reçu est ce que la scène
+// affiche. Sur le serveur la vue se retire à la fin : ce signal peut ne jamais
+// être vrai.
+const stageJobDone = computed(() => liveJobDone({
+    computeRunning: unref(localComputeRunning),
+    jobPending: !!unref(runningJob) || !!unref(awaitingLocalJob),
+    stage: unref(stageLive),
+    reveal: unref(localReveal),
+}));
+
 const stageHeading = computed(() => {
     if (unref(localComputeRunning)) return t('localCompute.title')
     if (unref(stageLive)) return t('live.title')
@@ -778,7 +818,6 @@ watch(pageSlug, async (s, prev) => {
         localZonePhase.value = null
         localLiveFrame.value = null
         localReveal.value = null
-        lastLiveSlug.value = null
     }
     await getProject(
         API_ROUTES.PROJECT(s),
@@ -827,6 +866,7 @@ const capacityPanel = computed(() => {
         sheets: unref(currentSheets),
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
+        preflightSheets: unref(preflightReport)?.sheetsNeeded ?? null,
     });
 });
 // C04 : le panneau est ancré sous le bouton Nest — sur un petit viewport il
@@ -855,10 +895,8 @@ const freeDownloadNoteText = computed(() =>
 const ctaFreeNote = computed(() =>
     freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
         ? unref(freeDownloadNoteText) : '');
-// Dans le panneau de capacité : levier « environ N tôles nécessaires ».
-const capacityFreeNote = computed(() =>
-    freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
-        ? unref(freeDownloadNoteText) : '');
+// Pas de note Free dans le panneau de refus : rien n'est calculé ni livré, la
+// limite de téléchargement ne concerne pas ce refus.
 // D11 : « Ajouter environ k tôles et relancer » — ajoute k au premier format
 // actif (le plan est calculé par capacityPanelModel), ferme le panneau, trace
 // le clic, puis RELANCE : le bouton Nest respecte ses gardes (btnIsDisable).
@@ -1124,6 +1162,15 @@ const startsNest = () => {
         font-size: var(--fs-12);
         color: var(--label-secondary);
         text-align: center;
+
+        &--refusal {
+            padding: 8px 10px;
+            background-color: var(--error-background);
+            border: solid 1px var(--error-border);
+            border-radius: var(--radius-l);
+            font-size: var(--fs-13);
+            text-align: left;
+        }
     }
 }
 

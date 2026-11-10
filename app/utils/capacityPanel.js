@@ -69,12 +69,20 @@ export function addSheetsPlan(unfit, sheets = [], max = MAX_SHEETS_PER_JOB) {
  *   kerfMm?: number|null}
  * @returns {object|null} null quand il n'y a rien à afficher.
  */
-export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm = null } = {}) {
+export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm = null, preflightSheets = null } = {}) {
     if (!unfit || !unfit.reason) return null
     const num = finiteOrNull
-    const sheetsNeeded = num(unfit.sheetsNeeded)
+    // Une seule source pour « environ N tôles » : le pré-vol du bouton Nest
+    // (`preflightSheets`, mêmes réglages) l'emporte sur le chiffre du refus,
+    // sinon bouton et panneau pouvaient annoncer 6 et 5 pour le même refus.
+    const preflight = num(preflightSheets)
+    const sheetsNeeded = preflight != null && preflight > 0 ? preflight : num(unfit.sheetsNeeded)
     const maxParts = num(unfit.maxPartsAtSpacing)
-    const maxSpacingMm = num(unfit.maxSpacingForFitMm)
+    // Un espacement maximal de 0 mm (ou moins) veut dire « rien ne tient, même
+    // sans espacement » : ce n'est pas un levier à chiffrer (« environ 0 mm »).
+    const rawMaxSpacing = num(unfit.maxSpacingForFitMm)
+    const maxSpacingMm = rawMaxSpacing != null && rawMaxSpacing > 0 ? rawMaxSpacing : null
+    const noFitEvenAtZero = rawMaxSpacing != null && rawMaxSpacing <= 0
     if (sheetsNeeded == null && maxParts == null && maxSpacingMm == null
         && num(unfit.unplaced) == null) {
         return null
@@ -82,7 +90,7 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
     // « Ajouter environ k tôles et relancer » (d7) : k tôles d'un coup sur le
     // premier format actif — les leviers disent « environ N tôles », le
     // bouton ajoute l'écart estimé (au moins une) et l'utilisateur relance.
-    const plan = addSheetsPlan(unfit, sheets)
+    const plan = addSheetsPlan({ ...unfit, sheetsNeeded }, sheets)
     // « Réduire l'espacement » (C04) : utile seulement si le levier existe
     // ET abaisse réellement l'espacement courant (un maxSpacing ≥ space
     // n'est pas une action) ET qu'il reste quelque chose à gagner —
@@ -106,6 +114,6 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
         // C04 : espacement courant déjà au plancher (≤ 0,5 mm) ou kerf
         // bloquant — la page affiche « même sans espacement, ça ne tient
         // pas » au lieu d'un bouton inutile.
-        noSpacingGain: spacingAtFloor || kerfBlocks,
+        noSpacingGain: spacingAtFloor || kerfBlocks || noFitEvenAtZero,
     }
 }

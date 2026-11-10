@@ -234,7 +234,7 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
 
     it('files.js : 400 too_many_sheets, miroir de la borne, 402 string-safe avec contexte', () => {
         expect(filesJs).toMatch(/statusMessage === 'too_many_sheets'/)
-        expect(filesJs).toContain("state.nestError = 'nest.error.maxSheets'")
+        expect(filesJs).toContain("refuseSubmission('nest.error.maxSheets')")
         expect(filesJs).toContain('sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params)))')
         // AGENTS #29 : jamais `=== true` sur le flag runtime (il arrive en chaîne).
         expect(filesJs).toContain('flagOn(useRuntimeConfig().public.paidPlansDisabled)')
@@ -246,7 +246,10 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
         expect(slugVue).toContain('data-testid="max-sheets-error"')
         expect(slugVue).toContain('unref(sheetCountTooHigh)')
         expect(slugVue).toContain('data-testid="free-download-note"')
-        expect(slugVue).toContain(':free-note="capacityFreeNote"')
+        // Le refus n'affiche pas la note Free (rien n'est livré) : ni le panneau
+        // de la page, ni la note sous le bouton pendant le refus.
+        expect(slugVue).not.toContain('capacityFreeNote')
+        expect(slugVue).toContain('v-if="ctaFreeNote && !capacityPanel"')
         // k du panneau, trace, puis relance après nextTick (D11).
         expect(slugVue).toMatch(/const onCapacityAddSheet = async \(\) =>/)
         expect(slugVue).toContain("trackEvent('capacity_add_sheets_click'")
@@ -262,5 +265,52 @@ describe('câblage statique du lot V1 (capacité, borne technique, information F
         // K et démo transmis explicitement au calcul de l'état (D3).
         expect(slugVue).toContain('paidPlansDisabled: config.public.paidPlansDisabled')
         expect(slugVue).toContain('projectSlug: unref(pageSlug)')
+    })
+})
+
+describe('refus sans contradiction (une source, pas de 0 mm, pas de note Free)', () => {
+    const unfit = { reason: 'capacity', sheetsNeeded: 5, maxPartsAtSpacing: 3, maxSpacingForFitMm: 0 }
+
+    it('le chiffre du pré-vol du bouton remplace celui du refus, partout dans le modèle', () => {
+        const m = capacityPanelModel(unfit, {
+            sheets: [{ width: '1000', height: '1000', count: '1' }], spaceMm: 3, preflightSheets: 6,
+        })
+        expect(m.levers.sheetsNeeded).toBe(6)
+        expect(m.addSheets).toBe(5)
+    })
+
+    it('sans pré-vol, le chiffre du refus reste', () => {
+        const m = capacityPanelModel(unfit, { sheets: [{ width: '1000', height: '1000', count: '1' }], spaceMm: 3 })
+        expect(m.levers.sheetsNeeded).toBe(5)
+    })
+
+    it('un espacement maximal de 0 mm ne se chiffre ni ne se propose : « même sans espacement »', () => {
+        const m = capacityPanelModel(unfit, { sheets: [], spaceMm: 3, kerfMm: null })
+        expect(m.levers.maxSpacingMm).toBeNull()
+        expect(m.reduceSpacingToMm).toBeNull()
+        expect(m.noSpacingGain).toBe(true)
+    })
+
+    it('[slug].vue : le refus « pièce trop grande » est dans le bloc du bouton Nest', () => {
+        const slugVue = source('app/pages/project/[slug].vue')
+        const cta = slugVue.slice(slugVue.indexOf('class="atelier__cta"'), slugVue.indexOf('<CapacityPanel'))
+        expect(cta).toContain("t('project.minSheet'")
+        expect(cta).toContain('data-testid="min-sheet-error"')
+        // plus de second exemplaire en bas de page, hors écran
+        expect(slugVue.match(/t\('project\.minSheet'/g)).toHaveLength(1)
+    })
+})
+
+describe('espacement maximum du panneau de capacité', () => {
+    it('le nombre passe par la locale : virgule en français, jamais « 2.56 »', async () => {
+        const { formatNumber } = await import('../utils/i18n')
+        expect(formatNumber(2.56, 'fr', 2)).toBe('2,56')
+        expect(formatNumber(2.56, 'en', 2)).toBe('2.56')
+    })
+
+    it('le gabarit formate la valeur au lieu de la passer brute', () => {
+        const panel = source('app/components/CapacityPanel.vue')
+        expect(panel).toContain('v: fmtNumber(panel.levers.maxSpacingMm, 2)')
+        expect(panel).not.toContain('{ v: panel.levers.maxSpacingMm }')
     })
 })

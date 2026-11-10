@@ -27,6 +27,7 @@ import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 // dans le chemin d'annulation hors transform Nuxt). Le reste du pass
 // structurel reste en import dynamique (lazy).
 import { ZONE_CANCELLED } from './structureClient'
+import { serverRefusalCode } from '~/utils/failureReason'
 
 /**
  * Pass structurel navigateur (miroir de core/structure.py + intégration
@@ -549,20 +550,28 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         // Lot E0 : le moteur refuse la géométrie d'UN item — on nomme le
         // fichier et la pièce au lieu de « arrêté de façon inattendue ».
         const { itemGeometryTarget } = await import('./localGeomError')
-        const geom = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap)
+        const geomHit = itemGeometryTarget(outcome.error, itemMap || payload?.itemMap, payload?.meta?.idMap)
+        // Lot A : le moteur n'a trouvé de place pour UNE pièce nulle part
+        // (pièce à la cote exacte) — même nommage fichier + rang, autre code.
+        const { itemUnplaceableTarget } = await import('./localGeomError')
+        const unplaceable = geomHit ? null : itemUnplaceableTarget(outcome.error, itemMap || payload?.itemMap, payload?.meta?.idMap)
+        const geom = geomHit || unplaceable
+        // Moteur : la bande n'a pas de place pour le conteneur (tôle trop petite pour
+        // les pièces et l'espacement) — son message anglais ne part pas à l'écran.
+        const stripTooSmall = !geomHit && !unplaceable && serverRefusalCode(outcome.error) === 'strip_height'
+        const code = geomHit ? 'item_geometry' : unplaceable ? 'item_unplaceable' : stripTooSmall ? 'strip_height' : null
         await $fetch(`/api/results/${jobSlug}/local-fail`, {
             method: 'POST',
             body: {
                 error: outcome.error === 'memory_cap' ? 'memory_cap'
-                    : geom ? 'item_geometry'
-                    : String(outcome.error),
+                    : code || String(outcome.error),
                 ...(unfit ? { unfit } : {}),
                 ...(geom ? { geom } : {}),
             },
         })
         return {
             ok: false,
-            error: geom ? 'item_geometry' : outcome.error,
+            error: code || outcome.error,
             memory: outcome.memory,
             unfit,
             geom,
@@ -874,6 +883,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             // Lot E2 : pièces plus fines que l'espacement (le gonflement
             // d'import a pris le repli). Même champ que le chemin serveur.
             ...(thinParts.length ? { thinParts } : {}),
+            // Livraison dégradée (fusion en échec : meilleur walk sans
+            // finition) : le code seul, pour que la base et l'admin la voient.
+            ...(result?.degraded?.reason ? { degraded: String(result.degraded.reason) } : {}),
             layoutCount: best.layoutCount ?? 0,
             density: best.density ?? null,
             ...(partialUnfit ? { unfit: partialUnfit } : {}),

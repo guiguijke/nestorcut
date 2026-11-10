@@ -200,6 +200,12 @@ def run_engine(instance, config, problem_type, on_event=None, should_cancel=None
                 item = error_event.get("item")
                 raise EngineError(
                     f"item_geometry:{item}: {reason}", kind=kind, item=item)
+            if kind == "item_unplaceable":
+                # Lot A : le moteur ne trouve de place pour UNE piece nulle
+                # part (piece a la cote exacte de la tole) — meme nommage.
+                item = error_event.get("item")
+                raise EngineError(
+                    f"item_unplaceable:{item}: {reason}", kind=kind, item=item)
             raise EngineError(f"engine failed (rc={returncode}, reason={reason}): {stderr_tail}")
 
         alternatives_path = os.path.join(out_dir, "alternatives.json")
@@ -269,6 +275,28 @@ def parse_item_geometry(detail):
     return int(m.group(1)) if m else None
 
 
+def parse_item_unplaceable(detail):
+    """Lot A : id de l'item sans aucune place possible, sinon None."""
+    m = re.search(r"item_unplaceable:(\d+)", str(detail or ""))
+    return int(m.group(1)) if m else None
+
+def original_item_id(item_id, meta):
+    """Lot A : id d'ORIGINE d'un id cite par le moteur.
+
+    Quand la reduction J-085 a reindexe l'instance (`meta["idMap"]` : id
+    reduit -> id d'origine), le moteur nomme un id REDUIT alors que
+    `part_index_by_id` porte les ids d'origine : sans cette conversion on
+    nommerait une autre piece. Sans reduction, l'id est inchange. Un id hors
+    de l'idMap rend None (jamais devine).
+    """
+    id_map = (meta or {}).get("idMap") if isinstance(meta, dict) else None
+    if not isinstance(id_map, list):
+        return item_id
+    if not isinstance(item_id, int) or item_id < 0 or item_id >= len(id_map):
+        return None
+    return id_map[item_id]
+
+
 def thin_parts(items, part_index_by_id, names_by_slug=None):
     """Lot E2 : items « plus fins que l'espacement » -> fichier + rang.
 
@@ -314,6 +342,49 @@ def item_geometry_message(item_id, target, file_name=None):
         f"Nesting failed: part {part + 1} of {label} has an outline the "
         "engine cannot use (not a usable closed contour) — fix that part in "
         "your CAD, or set its quantity to 0."
+    )
+    return information, {
+        "item": item_id,
+        "slug": target.get("slug"),
+        "part": part,
+    }
+
+
+def too_large_message(unplaceable, sheets, space):
+    """Refus de pré-vol : pièces plus grandes que toute tôle. Cite le NOM du
+    fichier de l'utilisateur entre guillemets doubles (comme les autres refus
+    du worker), jamais l'identifiant interne ; inconnu → « one of the files ».
+    `unplaceable` : [{name, width, height, count}] avec name = nom du fichier
+    ou None."""
+    details = ", ".join(
+        (f'"{p["name"]}"' if p.get("name") else "one of the files")
+        + f' ({p["width"]:.0f}x{p["height"]:.0f}mm, x{p["count"]})'
+        for p in unplaceable[:5]
+    )
+    sheet_desc = " / ".join(
+        f"{float(s.get('width')):.0f}x{float(s.get('height')):.0f}mm" for s in sheets
+    )
+    return (
+        f"Part(s) too large for the sheet: {details} — sheet(s): {sheet_desc}, "
+        f"spacing: {space}mm. Use a larger sheet, allow more rotations, or reduce spacing."
+    )
+
+
+def item_unplaceable_message(item_id, target, file_name=None):
+    """Lot A : message utilisateur + champ structure pour une piece que le
+    moteur n'arrive a poser nulle part (cote exacte de la tole, espacement
+    compris). Meme forme que `item_geometry_message` ; ne pretend pas
+    connaitre la cause exacte : il dit ce qui s'est passe et ce qui peut
+    changer.
+    """
+    target = target or {}
+    part = target.get("part") or 0
+    label = f'"{file_name}"' if file_name else "one of the files"
+    information = (
+        f"Nesting failed: the engine found no valid position for part "
+        f"{part + 1} of {label} on the declared sheets at this spacing (it "
+        "may be as large as the sheet once the spacing is added) — use a "
+        "larger sheet, reduce the spacing, or allow more rotations."
     )
     return information, {
         "item": item_id,

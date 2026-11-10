@@ -86,6 +86,7 @@ export const TRACK_ACTIONS = [
     'click_result_try_again',
     'click_subscription',
     'click_subscription_start_trial',
+    'click_subscription_start_trial_pro',
     'click_subscription_upgrade_pro',
     'click_support_chat_close',
     'click_support_chat_send',
@@ -165,4 +166,6 @@ export const TRACK_ACTIONS = [
     'checkout_return',
     'capacity_add_sheets_click',
     'capacity_open_project_click',
+    // Bouton « Ouvrir la démo » de l'accueil (compte sans projet).
+    'click_home_demo_open',
 ]

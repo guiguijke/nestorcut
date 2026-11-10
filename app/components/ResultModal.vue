@@ -54,7 +54,7 @@ import { themeType } from '~~/constants/theme.constants'
 import { statusType } from '~~/constants/status.constants'
 import { trackEvent } from '~/utils/track'
 import { SQMM_PER_SQIN, fmtLengthValue as fmtLengthValueRaw } from '~/utils/units'
-import { displayDirectionArrow } from '~/utils/sheetView'
+import { directionWordKey, displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
 import { capacityPanelModel } from '~/utils/capacityPanel'
@@ -68,6 +68,8 @@ import {
     sheetGateModel,
 } from '~/utils/sheetDownloadGate'
 import { isOnJobProject } from '~/utils/resultNav'
+import { failureDetailText } from '~/utils/failureReason'
+import { useLocalMode } from '~/composables/useLocalMode'
 import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
 
 // Z1/Z3 (vérif 2026-09-05) : actions correctives des bandeaux unfit /
@@ -79,7 +81,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing', 'unfit-open
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
 const { t, tp, fmtPercent, fmtNumber } = useLocale()
-const { unit, fmtArea, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
+const { unit, fmtArea: fmtAreaUnit, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
 // passent par les contenus persistés (localDownloads), jamais par une URL
@@ -363,6 +365,17 @@ const previewSheet = computed(() => {
     return { w: 0, h: 0 }
 })
 const reportTotals = computed(() => unref(activeReport)?.totals || null)
+// Une seule unité de surface dans tout le rapport : mm² ou m² se décide sur
+// la plus grande aire en jeu (les tôles), pas valeur par valeur — sinon la
+// même ligne dit « 221 598 mm² de pièces · 1,78 m² libres ».
+const areaScaleMm2 = computed(() => {
+    const r = unref(activeReport)
+    if (!r) return 0
+    const sheetsArea = (Array.isArray(r.sheets) ? r.sheets : [])
+        .reduce((sum, s) => sum + (Number(s?.widthMm) || 0) * (Number(s?.heightMm) || 0), 0)
+    return Math.max(Number(r.sheetAreaMm2) || 0, Number(r.totals?.partsAreaMm2) || 0, sheetsArea)
+})
+const fmtArea = (mm2) => fmtAreaUnit(mm2, unref(areaScaleMm2))
 // Enriched offcut ({widthMm, heightMm, areaMm2, reusable}) — the legacy
 // alternative.offcut {width, height, area} stays the fallback.
 const activeReportOffcut = computed(() => {
@@ -641,7 +654,10 @@ const strategyLabel = (strategy) => {
     // Directional alternatives are tagged by the engine (left/bottom/
     // balanced); legacy names (max offcut, compact) pass through translated
     // when known, raw otherwise.
-    const key = `alts.strategy.${strategy}`
+    // Sens pur (–X / –Y) : dit en mots vers quel côté les pièces sont
+    // poussées, pas par un jargon d'axes.
+    const dirKey = directionWordKey(strategy, previewSheet.value.w, previewSheet.value.h)
+    const key = dirKey || `alts.strategy.${strategy}`
     const translated = t(key)
     const name = translated === key ? strategy : translated
     const arrow = displayDirectionArrow(strategy, previewSheet.value.w, previewSheet.value.h)
@@ -701,9 +717,7 @@ const headlineTitle = computed(() => {
     const quality = []
     const density = altDensityPct(alt)
     if (density != null) quality.push(`${t('result.densityFull')} ${fmtPercent(density)}`)
-    if (alt?.offcut && alt.offcut.area > 1) {
-        quality.push(t('result.cleanOffcut', { w: fmtLength(alt.offcut.width), h: fmtLength(alt.offcut.height) }))
-    }
+    // La chute n'est plus répétée ici : le bloc « Material to plan » la porte.
     const score = quality.join(' · ')
     return score ? `${strategy} · ${score}` : strategy
 })
@@ -790,6 +804,15 @@ const onJobProject = computed(() => isOnJobProject(
 // lieu des lignes brutes (« capacity_exceeded »).
 const capacityErrorPanel = computed(() =>
     unref(isHaveError) && Boolean(unref(capacityPanel)) && unref(unfitData)?.reason === 'capacity')
+// Cause de l'échec : la règle du bandeau de la page projet (message traduit, pièce
+// nommée si son fichier est connu, jamais la trace brute du moteur natif).
+const localModeCtl = useLocalMode()
+const failureDetail = computed(() => failureDetailText(
+    unref(resultModalData),
+    t,
+    (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocal), params: params || null }),
+    unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
+))
 // D26 : information Free avant de relancer un calcul de plus de 2 tôles.
 const freeDownloadNote = computed(() =>
     (freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
@@ -895,6 +918,7 @@ const bundle = computed(() => ({
     onJobProject: unref(onJobProject),
     capacityErrorPanel: unref(capacityErrorPanel),
     freeDownloadNote: unref(freeDownloadNote),
+    failureDetail: unref(failureDetail),
     currentSvgs: unref(currentSvgs),
     currentDxfs: unref(currentDxfs),
     previewSheet: unref(previewSheet),

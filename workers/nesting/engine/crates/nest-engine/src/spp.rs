@@ -9,8 +9,10 @@ use jagua_rs::probs::spp::entities::{SPInstance, SPSolution};
 use jagua_rs::probs::spp::io::ext_repr::ExtSPInstance;
 use rand::SeedableRng;
 use rand::rngs::Xoshiro256PlusPlus;
+use sparrow::optimizer::lbf::ItemDoesNotFit;
 use sparrow::optimizer::optimize;
 use jagua_rs::Instant;
+use std::sync::Mutex;
 use std::time::Duration;
 
 /// One finished multi-start worker run.
@@ -73,7 +75,7 @@ fn optimize_one(
     sink: &EventSink,
     column_fill: bool,
     max_strip_width: Option<f32>,
-) -> (SPSolution, usize) {
+) -> Result<(SPSolution, usize), ItemDoesNotFit> {
     let mut cfg = *sparrow_cfg;
     cfg.expl_cfg.time_limit = budget.mul_f32(explore_ratio);
     cfg.cmpr_cfg.time_limit = budget.mul_f32(1.0 - explore_ratio);
@@ -92,7 +94,7 @@ fn optimize_one(
         &cfg.expl_cfg,
         &cfg.cmpr_cfg,
         None,
-    );
+    )?;
     // Gravity post-pass: the search minimizes strip width only, so
     // under-constrained layouts can come out vertically scattered.
     let solution = if gravity_enabled {
@@ -116,7 +118,7 @@ fn optimize_one(
     } else {
         solution
     };
-    (solution, evals)
+    Ok((solution, evals))
 }
 
 /// Runs the explore+compress pipeline on `n_workers` parallel multi-starts,
@@ -138,7 +140,7 @@ fn optimize_multi(
     sink: &EventSink,
     column_fill: bool,
     max_strip_width: Option<f32>,
-) -> Vec<WorkerRun> {
+) -> Result<Vec<WorkerRun>, ItemDoesNotFit> {
     map_workers(n_workers, |w| {
         let seed = derive_seed(master_seed, seed_offset + w);
         let (solution, evals) = optimize_one(
@@ -157,9 +159,11 @@ fn optimize_multi(
             sink,
             column_fill,
             max_strip_width,
-        );
-        WorkerRun { seed, solution, evals }
+        )?;
+        Ok(WorkerRun { seed, solution, evals })
     })
+    .into_iter()
+    .collect()
 }
 
 /// Rotates an external instance -90° (x, y) -> (y, -x) and sets the strip
@@ -453,6 +457,20 @@ pub fn run_spp_mem(
             mapped
         };
 
+        // Échec du constructif (pièce posable dans aucune largeur) : la classe
+        // est perdue, comme une classe qui ne tient pas dans la tôle, mais on
+        // retient la pièce fautive (id le plus bas, déterministe) pour la
+        // NOMMER si aucune classe n'aboutit.
+        let lbf_failure: Mutex<Option<ItemDoesNotFit>> = Mutex::new(None);
+        let note = |e: ItemDoesNotFit| {
+            if let Ok(mut slot) = lbf_failure.lock() {
+                match *slot {
+                    Some(old) if old.item_id <= e.item_id => {}
+                    _ => *slot = Some(e),
+                }
+            }
+        };
+
         let runs: Vec<ClassRun> = map_workers(n_workers, |w| {
             let bias = biases[w % biases.len()];
                 let seed = derive_seed(config.prng_seed, w);
@@ -469,7 +487,7 @@ pub fn run_spp_mem(
 sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ).map_err(&note).ok()?;
                         if !two_phase {
                             return Some(ClassRun { seed, bias, solution: s1, evals: s1_evals });
                         }
@@ -486,7 +504,7 @@ sink,
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
                         phase_evt(2);
-                        let (s2, s2_evals) = optimize_one(
+                        let Ok((s2, s2_evals)) = optimize_one(
                             &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             Some(MapBack::new(corridor, ext_instance.strip_height)), plateau,
@@ -494,7 +512,15 @@ sink,
                             sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ) else {
+                            // Phase 2 impossible (le constructif ne trouve pas de
+                            // place dans le cadre transposé) : la phase 1 reste
+                            // livrable si elle tient dans la tôle.
+                            if max_width.is_some_and(|mw| s1.strip_width() > mw + 1e-4) {
+                                return None;
+                            }
+                            return Some(ClassRun { seed, bias, solution: s1, evals: s1_evals });
+                        };
                         if s2.strip_width() > ext_instance.strip_height + 1e-4 {
                             // Phase 2 overshot the sheet height: fall back to
                             // the phase-1 width-min layout when IT fits —
@@ -524,7 +550,7 @@ sink,
 sink,
                             column_fill_on,
                             max_width,
-                            );
+                            ).map_err(&note).ok()?;
                             return Some(ClassRun { seed, bias, solution: s, evals });
                         };
                         let t_ext = transpose_instance(&ext_instance, mw);
@@ -540,7 +566,7 @@ sink,
                             sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ).map_err(&note).ok()?;
                         if s1.strip_width() > ext_instance.strip_height + 1e-4 {
                             return None; // taller than the sheet: unusable
                         }
@@ -558,7 +584,7 @@ sink,
                         let inst2 =
                             jagua_rs::probs::spp::io::import_instance(&importer, &ext2).ok()?;
                         phase_evt(2);
-                        let (s2, s2_evals) = optimize_one(
+                        let Ok((s2, s2_evals)) = optimize_one(
                             &inst2, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             None, plateau,
@@ -566,7 +592,12 @@ sink,
 sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ) else {
+                            // Phase 2 impossible : on garde le résultat de la phase 1
+                            // transposée, remis dans le repère d'origine.
+                            let mapped = map_back_solution(&t_instance, &s1, mw, &instance);
+                            return Some(ClassRun { seed, bias, solution: gravity_after(&instance, mapped, Some(bias.as_str())), evals: s1_evals });
+                        };
                         if s2.strip_width() > mw + 1e-4 {
                             // Width overshot the sheet: keep the phase-1
                             // transposed result (mapped back) instead.
@@ -592,7 +623,7 @@ sink,
 sink,
                             column_fill_on,
                             max_width,
-                            );
+                            ).map_err(&note).ok()?;
                             return Some(ClassRun { seed, bias, solution: s, evals });
                         };
                         phase_evt(1);
@@ -604,7 +635,7 @@ sink,
 sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ).map_err(&note).ok()?;
                         if !two_phase {
                             return Some(ClassRun { seed, bias, solution: s1, evals: s1_evals });
                         }
@@ -632,7 +663,7 @@ sink,
                         let t_instance =
                             jagua_rs::probs::spp::io::import_instance(&importer, &t_ext).ok()?;
                         phase_evt(2);
-                        let (s2, s2_evals) = optimize_one(
+                        let Ok((s2, s2_evals)) = optimize_one(
                             &t_instance, &sparrow_config, phase2_budget(), explore,
                             seed ^ 0x5EED_5EED, w, started, gravity_on, live,
                             Some(MapBack::new(corridor, ext_instance.strip_height)), plateau,
@@ -640,7 +671,14 @@ sink,
                             sink,
                             column_fill_on,
                             max_width,
-                        );
+                        ) else {
+                            // Phase 2 impossible : la phase 1 reste livrable si elle
+                            // tient dans la tôle (piège #6), comme au repli ci-dessous.
+                            if s1.strip_width() > mw + 1e-4 {
+                                return None;
+                            }
+                            return Some(ClassRun { seed, bias, solution: s1, evals: s1_evals });
+                        };
                         if s2.strip_width() > ext_instance.strip_height + 1e-4 {
                             // J-092 suite : retry borné au lieu du fallback
                             // dur (spec J-092 ③ — bisection du corridor) :
@@ -666,7 +704,7 @@ sink,
                                 if let Ok(t_instance2) =
                                     jagua_rs::probs::spp::io::import_instance(&importer, &t_ext2)
                                 {
-                                    let (s3, s3_evals) = optimize_one(
+                                    if let Ok((s3, s3_evals)) = optimize_one(
                                         &t_instance2, &sparrow_config, retry_budget,
                                         explore, seed ^ 0x5EED_5EED, w, started,
                                         gravity_on, live,
@@ -676,7 +714,7 @@ sink,
                                         sink,
                                         column_fill_on,
                                         max_width,
-                                    );
+                                    ) {
                                     if s3.strip_width() <= ext_instance.strip_height + 1e-4 {
                                         let mapped = map_back_solution(
                                             &t_instance2, &s3, corridor2, &instance,
@@ -692,6 +730,7 @@ sink,
                                             evals: s1_evals + s2_evals + s3_evals,
                                         });
                                     }
+                                }
                                 }
                             }
                             // Fallback : la phase 1, seulement si ELLE tient
@@ -717,6 +756,10 @@ sink,
             .collect();
 
         if runs.is_empty() {
+            let failed = lbf_failure.lock().ok().and_then(|slot| *slot);
+            if let Some(e) = failed {
+                return Err(crate::import_error::item_unplaceable_error(sink, e.item_id, &e.to_string()));
+            }
             sink(&format!(
                 "{{\"type\":\"error\",\"reason\":\"infeasible\",\"elapsed_sec\":{}}}",
                 started.elapsed().as_secs()
@@ -786,7 +829,8 @@ sink,
         sink,
         config.column_fill(),
         max_width,
-    );
+    )
+    .map_err(|e| crate::import_error::item_unplaceable_error(sink, e.item_id, &e.to_string()))?;
     let feasible1: Vec<&WorkerRun> = runs1
         .iter()
         .filter(|r| max_width.is_none_or(|mw| r.solution.strip_width() <= mw + 1e-4))
@@ -836,7 +880,10 @@ sink,
                     ..config.clone()
                 };
                 let _ = &t_config; // documented intent; feasibility filter below uses it
-                let runs2 = optimize_multi(
+                // Phase 2 impossible (le constructif ne place une pièce dans
+                // aucune largeur du cadre transposé) : comme un import raté,
+                // on garde les résultats de la phase 1.
+                let runs2 = match optimize_multi(
                     &t_instance,
                     &sparrow_config,
                     phase2_budget(),
@@ -852,7 +899,13 @@ sink,
                     sink,
                     config.column_fill(),
                     max_width,
-                );
+                ) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::warn!("[SPP] phase 2 impossible ({e}), keeping phase 1 results");
+                        Vec::new()
+                    }
+                };
                 let max_length = ext_instance.strip_height;
                 for run in runs2 {
                     if run.solution.strip_width() > max_length + 1e-4 {

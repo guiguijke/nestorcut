@@ -11,6 +11,8 @@ import {
     parseItemGeometryError,
     itemGeometryTarget,
     itemGeometryParams,
+    parseItemUnplaceableError,
+    itemUnplaceableTarget,
 } from '../composables/localGeomError'
 import { translate } from '../utils/i18n'
 
@@ -96,5 +98,77 @@ describe('E0 — erreur de géométrie d’item', () => {
             expect(msg).not.toBe('localMode.itemGeometryUnknown')
             expect(msg.length).toBeGreaterThan(30)
         }
+    })
+})
+
+// Lot A : le moteur ne trouve de place pour UNE pièce nulle part (pièce à la
+// cote exacte de la tôle). Message mesuré sur 996×1996 dans 1000×2000,
+// espacement 2 (nest-engine/tests/exact_fit_refusal.rs).
+const UNPLACEABLE_MSG = 'item_unplaceable:7: item 7 does not fit in any empty sheet'
+
+describe('Lot A — pièce sans place possible', () => {
+    it('lit l’id d’item, sans le confondre avec un refus de géométrie', () => {
+        expect(parseItemUnplaceableError(UNPLACEABLE_MSG)).toBe(7)
+        expect(parseItemUnplaceableError('item_unplaceable:0: x')).toBe(0)
+        expect(parseItemGeometryError(UNPLACEABLE_MSG)).toBeNull()
+        expect(parseItemUnplaceableError(ENGINE_MSG)).toBeNull()
+        expect(parseItemUnplaceableError('unreachable')).toBeNull()
+        expect(parseItemUnplaceableError('')).toBeNull()
+        expect(parseItemUnplaceableError(undefined)).toBeNull()
+    })
+
+    it('résout le fichier et la pièce par l’itemMap, ou reste silencieux', () => {
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, ITEM_MAP)).toEqual({ slug: 'ecrin-volute', part: 11 })
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, null)).toBeNull()
+        expect(itemUnplaceableTarget(UNPLACEABLE_MSG, [{ id: 3, slug: 'x', part: 0 }])).toBeNull()
+        // Un refus de géométrie n'est pas un refus de place.
+        expect(itemUnplaceableTarget(ENGINE_MSG, ITEM_MAP)).toBeNull()
+    })
+
+    it('la phrase nomme le fichier et la pièce dans les 6 langues, sans promettre de cause', () => {
+        const params = itemGeometryParams(itemUnplaceableTarget(UNPLACEABLE_MSG, ITEM_MAP), FILES)
+        for (const locale of ['fr', 'en', 'de', 'es', 'it', 'pt']) {
+            const msg = translate('localMode.itemUnplaceable', locale, params)
+            expect(msg, locale).toContain('ecrin.dxf')
+            expect(msg, locale).toContain('12')
+            expect(msg, locale).not.toContain('{file}')
+            expect(msg, locale).not.toContain('{part}')
+            const unknown = translate('localMode.itemUnplaceableUnknown', locale)
+            expect(unknown, locale).not.toBe('localMode.itemUnplaceableUnknown')
+            expect(unknown.length, locale).toBeGreaterThan(30)
+        }
+        expect(translate('localMode.itemUnplaceable', 'fr', params)).toMatch(/rembours/i)
+        expect(translate('localMode.itemUnplaceable', 'en', params)).toMatch(/refund/i)
+    })
+})
+
+describe('Lot A — ids réduits par la réduction J-085 (meta.idMap)', () => {
+    // Trois fichiers : plaque (id 0), rondelle absorbée dans le trou de la
+    // plaque (id 1, retirée de l'instance), latte (id 2). Le moteur voit
+    // [plaque, latte] avec les ids 0 et 1 ; idMap : id réduit -> id d'origine.
+    const MAP = [
+        { id: 0, slug: 'plaque', part: 0 },
+        { id: 1, slug: 'rondelle', part: 0 },
+        { id: 2, slug: 'latte', part: 0 },
+    ]
+    const ID_MAP = [0, 2]
+
+    it('un refus de place sur l’id réduit nomme la pièce d’origine', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:1: item 1 does not seem to fit', MAP, ID_MAP))
+            .toEqual({ slug: 'latte', part: 0 })
+    })
+
+    it('un refus de géométrie sur l’id réduit nomme la pièce d’origine', () => {
+        expect(itemGeometryTarget('item_geometry:1: Simple polygon contains intersecting edges', MAP, ID_MAP))
+            .toEqual({ slug: 'latte', part: 0 })
+    })
+
+    it('sans idMap (instance non réduite) l’id est pris tel quel', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:1: x', MAP)).toEqual({ slug: 'rondelle', part: 0 })
+        expect(itemUnplaceableTarget('item_unplaceable:1: x', MAP, null)).toEqual({ slug: 'rondelle', part: 0 })
+    })
+
+    it('un id hors de l’idMap reste silencieux plutôt que de nommer une autre pièce', () => {
+        expect(itemUnplaceableTarget('item_unplaceable:5: x', MAP, ID_MAP)).toBeNull()
     })
 })

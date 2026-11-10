@@ -142,3 +142,15 @@ export function displayDirectionArrow(dir, width, height) {
     if (dir === 'balanced') return portrait ? '↖' : '↙'
     return ''
 }
+
+/**
+ * Clé de dictionnaire qui dit EN MOTS vers quel côté de l'écran les pièces
+ * sont poussées (même repère que la flèche : tôle affichée en paysage).
+ * null pour un agencement sans direction (mixte, grille…).
+ */
+export function directionWordKey(dir, width, height) {
+    const portrait = isSheetPortrait(width, height)
+    if (dir === 'left') return portrait ? 'alts.dir.up' : 'alts.dir.left'
+    if (dir === 'bottom') return portrait ? 'alts.dir.left' : 'alts.dir.down'
+    return null
+}

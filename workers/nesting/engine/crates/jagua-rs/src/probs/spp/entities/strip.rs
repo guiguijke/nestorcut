@@ -35,22 +35,29 @@ impl Strip {
         assert!(width > 0.0, "strip width must be positive");
         self.width = width;
     }
+
+    /// Construit le conteneur de cette bande, ou dit pourquoi il n'existe pas.
+    /// Aucune panique, aucune trace : ni tirage aléatoire, ni écriture dans le
+    /// canal `thin_items` (le repli d'`offset_shape` ne sert qu'au gonflement).
+    pub fn try_container(&self) -> Result<Container> {
+        ensure!(self.width.is_finite(), "strip width must be finite");
+        let rect = Rect::try_new(0.0, 0.0, self.width, self.fixed_height)?;
+        Container::new(
+            self.width.to_bits() as usize,
+            OriginalShape {
+                shape: SPolygon::try_from_rect(&rect)?,
+                pre_transform: DTransformation::empty(),
+                modify_mode: ShapeModifyMode::Deflate,
+                modify_config: self.shape_modify_config,
+            },
+            vec![],
+            self.cde_config,
+        )
+    }
 }
 
 impl From<Strip> for Container {
     fn from(s: Strip) -> Container {
-        let id = s.width.to_bits() as usize;
-        Container::new(
-            id,
-            OriginalShape {
-                shape: SPolygon::from(Rect::try_new(0.0, 0.0, s.width, s.fixed_height).unwrap()),
-                pre_transform: DTransformation::empty(),
-                modify_mode: ShapeModifyMode::Deflate,
-                modify_config: s.shape_modify_config,
-            },
-            vec![],
-            s.cde_config,
-        )
-        .unwrap()
+        s.try_container().unwrap()
     }
 }

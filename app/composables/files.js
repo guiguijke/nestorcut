@@ -148,6 +148,9 @@ function createFilesState() {
         // soumission non gérée ailleurs (409 concurrent_limit, 5xx…) — avant,
         // l'erreur était avalée ET lastParams marqué → bouton grisé muet.
         nestError: '',
+        // Nombre de refus de soumission posés (nestError) : le texte peut être le
+        // même d'un refus au suivant, la page a besoin d'un événement, pas d'un texte.
+        nestRefusals: 0,
         // Z1 (vérif 2026-09-05) : payload structuré du refus 422 capacité
         // (aire gonflée > seuil) — {reason, ratio, sheetsNeeded,
         // maxPartsAtSpacing, maxSpacingForFitMm} pour le bandeau à leviers.
@@ -155,6 +158,9 @@ function createFilesState() {
         // Soumission en vol : bloque le double-clic pendant la latence du POST
         // (2 requêtes = 2 charges possibles chez un Free, cf. R-1 serveur).
         nestBusy: false,
+        // Le job a échoué ou a été annulé avant que nest() ait fini d'attendre ses
+        // réponses : Nest ne doit pas redevenir grisé à la fin de nest().
+        nestRearmed: false,
         params: factoryParams(),
         // The unit state.params is CURRENTLY expressed in. Starts at mm (factory
         // defaults); tracked so a unit sync is idempotent — re-applying the same
@@ -1188,6 +1194,7 @@ async function nest(slug) {
     // et pouvait doubler la charge de quota.
     if (state.nestBusy) return
     state.nestBusy = true
+    state.nestRearmed = false
     // Course (constat 5 + reliquats de la revue adverse) : tout ce que nest()
     // écrit dans le store MODULE après un await (nestError, nestUnfit,
     // lastParams, fenêtre de résultat) ne vaut que si l'utilisateur est
@@ -1196,6 +1203,10 @@ async function nest(slug) {
     // A abîmerait B : erreur rouge, bouton Nest grisé (lastParams prend le
     // corps de B), fenêtre de résultat de A.
     const stillOnSubmittedProject = () => state.projectSlug === API_ROUTES.PROJECT(slug)
+    const refuseSubmission = (key) => {
+        state.nestError = key
+        state.nestRefusals += 1
+    }
     try {
         try {
             state.nestError = ''
@@ -1228,7 +1239,7 @@ async function nest(slug) {
                 // d6 (02/11) : borne technique serveur (400, avant toute
                 // charge) — le miroir client (sheetCountTooHigh) grise Nest
                 // d'ordinaire avant ; ici le client a été contourné.
-                if (stillOnSubmittedProject()) state.nestError = 'nest.error.maxSheets'
+                if (stillOnSubmittedProject()) refuseSubmission('nest.error.maxSheets')
                 return
             }
             if (error?.response?.status === 402) {
@@ -1268,9 +1279,9 @@ async function nest(slug) {
             // réglages à la main. Message visible + sortie propre :
             // isNewParams reste vrai, le bouton reste utilisable.
             if (!stillOnSubmittedProject()) return
-            state.nestError = error?.data?.statusMessage === 'concurrent_limit'
+            refuseSubmission(error?.data?.statusMessage === 'concurrent_limit'
                 ? 'nest.error.concurrent'
-                : 'nest.error.generic'
+                : 'nest.error.generic')
             return
         }
 
@@ -1278,7 +1289,7 @@ async function nest(slug) {
 
         // Succès tardif de A alors que B est chargé : state.requestBody est
         // celui de B — le ranger dans lastParams grisait le bouton Nest de B.
-        if (stillOnSubmittedProject()) state.lastParams = state.requestBody
+        if (stillOnSubmittedProject() && !state.nestRearmed) state.lastParams = state.requestBody
     } catch (err) {
         console.error('Nest operation failed:', err)
     } finally {
@@ -1291,11 +1302,13 @@ function dismissNestUnfit() {
     filesState().nestUnfit = null
 }
 
-/** AA2 (vérif L1 2026-09-05) : appelé sur toute annulation — le bouton
- * Nest redevient actif avec les MÊMES paramètres (isNewParams repasse à
- * vrai ; sans ce reset, il fallait modifier un réglage ou recharger). */
+/** AA2 (vérif L1 2026-09-05) : appelé sur toute annulation et tout échec de job —
+ * le bouton Nest redevient actif avec les MÊMES paramètres (isNewParams repasse
+ * à vrai ; sans ce reset, il fallait modifier un réglage ou recharger). */
 function resetLastParams() {
-    filesState().lastParams = ''
+    const state = filesState()
+    state.lastParams = ''
+    if (state.nestBusy) state.nestRearmed = true
 }
 
 // Client: plain computeds over the tab's singleton, as before. Server: a ref
@@ -1324,6 +1337,7 @@ export const filesStore = readonly({
         // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
         sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),
         nestError: getter((state) => state.nestError),
+        nestRefusals: getter((state) => state.nestRefusals),
         nestUnfit: getter((state) => state.nestUnfit),
         nestBusy: getter((state) => state.nestBusy),
         params: getter((state) => state.params),

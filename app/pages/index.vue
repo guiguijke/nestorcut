@@ -34,7 +34,7 @@
                     :theme="themeType.primary"
                     trackingTag="login_email"
                     tag="a"
-                    href="/auth/local"
+                    href="/auth/local?mode=login"
                     :label="t('auth.loginEmail')"
                 />
             </template>

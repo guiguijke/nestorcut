@@ -678,6 +678,8 @@ fn merge_bp_json(
     // pour le chemin navigateur (le pool fusionne, la finition a déjà
     // réécrit les poses de la tôle partielle).
     let mouth = crate::mouth_guard::guard_bp_runs(&ext_instance, config, &mut bp_runs);
+    let silent: crate::progress::EventSink = std::sync::Arc::new(|_: &str| {});
+    crate::bpp::refuse_if_nothing_placed(&ext_instance, config, &bp_runs, &silent)?;
     let merged = merge_bp_runs(&ext_instance, &bp_runs, &biases, config.n_alternatives)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(serde_json::json!({

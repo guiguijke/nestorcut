@@ -13,6 +13,7 @@
             @oversize="onOversize"
         />
         <p v-if="rejectError" class="files__error">{{ t(rejectError, rejectParams) }}</p>
+        <p v-if="showQuantityHint" class="files__hint" data-testid="files-quantity-hint">{{ t('files.quantityHint') }}</p>
         <div class="files__grid">
             <!-- Lot J11-a (A2) : les fiches d'un même dessin issues du MÊME
                  `.job` se rendent sous UNE carte groupée dépliable — le
@@ -98,6 +99,8 @@
 import { processingType } from "~~/constants/files.constants";
 import { themeType } from '~~/constants/theme.constants'
 import FileError from "./FileError.vue";
+import { allQuantitiesAtOne } from '~/utils/quantityHint'
+
 
 const props = defineProps({
     projectFiles: {
@@ -167,6 +170,10 @@ const groupedFiles = computed(() => {
     return out
 })
 
+const showQuantityHint = computed(
+    () => !props.readonly && allQuantitiesAtOne(props.projectFiles, processingType.done)
+)
+
 const addFiles = (files) => {
     rejectError.value = ''
     emit("addFiles", files)
@@ -225,6 +232,13 @@ const openModal = (file) => {
 
     &__upload {
         width: 100%;
+    }
+
+    &__hint {
+        margin: 0;
+        font-size: var(--fs-13);
+        line-height: 1.4;
+        color: var(--label-secondary);
     }
 
     &__error {

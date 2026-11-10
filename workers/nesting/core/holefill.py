@@ -881,6 +881,50 @@ def _part_area(item):
     return _ring_area(coords) - sum(_ring_area(h) for h in holes)
 
 
+def _same_dims(sheets):
+    first = (float(sheets[0][0]), float(sheets[0][1]))
+    return all((float(s[0]), float(s[1])) == first for s in sheets)
+
+
+def measured_density(items, input_items, sheets, bin_dims=None):
+    """Densité MESURÉE d'une liste d'items live : aire des pièces posées /
+    aire des tôles utilisées (le chiffre que montre aussi le résultat).
+    Jamais la densité brute du moteur (pièces / bande). None sans tôle.
+
+    Une frame ne dit pas quel FORMAT porte chaque tôle utilisée : son indice
+    de tôle est un rang de mise en page, pas un format. Avec plusieurs formats
+    différents déclarés, l'aire des tôles n'est donc connue que si l'appelant
+    donne `bin_dims` ({indice de tôle: (largeur, hauteur)}, lu sur les vraies
+    mises en page) ; sinon aucun chiffre plutôt qu'un chiffre faux."""
+    if not items or not input_items or not sheets:
+        return None
+    is_bpp = any(isinstance(raw, (list, tuple)) and len(raw) >= 5 for raw in items)
+    by_id = {i["id"]: i for i in input_items}
+    parts_area = 0.0
+    bins = set()
+    for raw in items:
+        it = by_id.get(raw[0])
+        if it:
+            parts_area += _part_area(it)
+        if is_bpp and len(raw) >= 2:
+            bins.add(raw[1])
+    if not is_bpp:
+        # SPP : la bande est l'unique tôle.
+        sheet_area = float(sheets[0][0]) * float(sheets[0][1])
+    elif bin_dims is not None:
+        sheet_area = 0.0
+        for b in (bins or {0}):
+            dims = bin_dims.get(b)
+            if not dims:
+                return None
+            sheet_area += float(dims[0]) * float(dims[1])
+    elif _same_dims(sheets):
+        sheet_area = float(sheets[0][0]) * float(sheets[0][1]) * max(1, len(bins))
+    else:
+        return None
+    return parts_area / sheet_area if sheet_area > 0 else None
+
+
 def decorate_live_items(items, input_items, space, meta=None, apply_fill=True, sheets=None):
     """Clone a live item list, attach J-085 fillers, then optional post-pass.
 
@@ -942,20 +986,5 @@ def decorate_live_items(items, input_items, space, meta=None, apply_fill=True, s
                 out.append([pi.get("item_id"), bin_i, rot, tr[0], tr[1]])
             else:
                 out.append([pi.get("item_id"), rot, tr[0], tr[1]])
-    density = None
-    if sheets:
-        by_id = {i["id"]: i for i in input_items}
-        parts_area = 0.0
-        bins = set()
-        for raw in out:
-            it = by_id.get(raw[0])
-            if it:
-                parts_area += _part_area(it)
-            if is_bpp and len(raw) >= 2:
-                bins.add(raw[1])
-        w, h = float(sheets[0][0]), float(sheets[0][1])
-        n_sheets = max(1, len(bins) or 1)
-        sheet_area = w * h * n_sheets
-        if sheet_area > 0:
-            density = parts_area / sheet_area
+    density = measured_density(out, input_items, sheets)
     return out, {"holesFilled": added + recovered, "density": density}

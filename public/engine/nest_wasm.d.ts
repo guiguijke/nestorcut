@@ -65,10 +65,10 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly merge_alternatives: (a: number, b: number) => [number, number, number, number];
-    readonly run_nesting: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
-    readonly run_nesting_live: (a: number, b: number, c: number, d: number, e: bigint, f: any) => [number, number, number, number];
     readonly wasm_memory_pages: () => number;
+    readonly run_nesting: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
+    readonly merge_alternatives: (a: number, b: number) => [number, number, number, number];
+    readonly run_nesting_live: (a: number, b: number, c: number, d: number, e: bigint, f: any) => [number, number, number, number];
     readonly __wbindgen_exn_store: (a: number) => void;
     readonly __externref_table_alloc: () => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;

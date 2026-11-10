@@ -43,6 +43,7 @@ describe('checkoutSourceOf', () => {
         expect(checkoutSourceOf({ source: 'quota' })).toBe('quota')
         expect(checkoutSourceOf({ source: 'export' })).toBe('export')
         expect(checkoutSourceOf({ source: 'turbo' })).toBe('turbo')
+        expect(checkoutSourceOf({ source: 'plans' })).toBe('plans')
     })
 
     it('sans contexte : « profile » (carte du profil)', () => {

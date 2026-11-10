@@ -107,9 +107,13 @@ function _blockExpandedTransforms(transforms, partsById) {
  * reste au niveau enveloppe — conservative par construction, elle ne peut
  * pas lire les gaps INTERNES d'un dessin rigide comme des violations. */
 export function applyTrueAreasToReport(report, containers, partsById) {
-    if (!report || report.error || !Array.isArray(report.sheets)) return report
+    // Le rapport wasm range ses lignes sous `per_sheet` (compute_report) ;
+    // `sheets` est l'ancienne forme. Lire seulement `sheets` laissait l'aire
+    // de l'ENVELOPPE du bloc dans la carte et la fenêtre (31,7 % au lieu de 3,5 %).
+    const rows = Array.isArray(report?.per_sheet) ? report.per_sheet : report?.sheets
+    if (!report || report.error || !Array.isArray(rows)) return report
     let trueTotal = 0
-    report.sheets.forEach((s, i) => {
+    rows.forEach((s, i) => {
         const c = containers[i]
         if (!c || !s) return
         let area = 0
@@ -1415,21 +1419,23 @@ export function decorateLiveLayout(evt, payload) {
             if (isBpp) usedBins.add(raw[1])
         }
         const sheets = evt.sheets || []
-        const w = Number(sheets[0]?.[0]) || 0
-        const h = Number(sheets[0]?.[1]) || 0
-        const nSheets = Math.max(1, usedBins.size || 1)
-        const sheetArea = w * h * nSheets
-        // SPP : quand la frame porte une bande qui TIENT dans la tôle, la
-        // densité affichée est celle du moteur sur la bande utilisée — même
-        // échelle que le modal (pièces/bande). La densité pièces/tôle-entière
-        // est constante pour un job donné (55,4 % sur le cas 100+800 quel
-        // que soit le packing) : elle reste le repli des frames hors-tôle
-        // et des bundles wasm antérieurs au champ used_height.
-        const bandW = Number(evt.strip_width)
-        const bandOk = !isBpp && Number.isFinite(bandW) && bandW > 0 && w > 0 && bandW <= w + 0.5
-        const density = bandOk
-            ? (evt.density ?? (sheetArea > 0 ? partsArea / sheetArea : null))
-            : (sheetArea > 0 ? partsArea / sheetArea : (evt.density ?? null))
+        // Une frame ne dit pas quel format porte chaque tôle utilisée : avec
+        // plusieurs formats différents, l'aire des tôles est inconnue — aucun
+        // chiffre plutôt qu'un chiffre faux (première tôle × nombre de tôles).
+        const dims = sheets.map((s) => [Number(s?.[0]) || 0, Number(s?.[1]) || 0])
+        const w = dims[0]?.[0] || 0
+        const h = dims[0]?.[1] || 0
+        const sameFormat = dims.every(([a, b]) => a === w && b === h)
+        const nSheets = isBpp ? Math.max(1, usedBins.size || 1) : 1
+        const sheetArea = (!isBpp || sameFormat) ? w * h * nSheets : 0
+        // Une seule définition partout : aire des pièces / aire des tôles,
+        // celle du résultat. Pas de repli sur la densité du moteur (pièces
+        // sur bande utilisée, autre échelle) : sans tôle connue, pas de chiffre.
+        // La frame finale porte déjà la densité du résultat : ne pas la recalculer
+        // ici, ses `sheets` ne citent qu'un format.
+        const density = evt.densityMeasured
+            ? (evt.density ?? null)
+            : (sheetArea > 0 ? partsArea / sheetArea : null)
         return { ...evt, items, holesFilled, density }
     } catch {
         return evt

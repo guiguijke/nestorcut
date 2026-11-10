@@ -18,7 +18,17 @@ export function usePlans() {
         // Client-side: return the cached payload if fresh enough, otherwise
         // refetch. nuxt payload (SSR) seeds cachedPlans on first hydration.
         getCachedData(key, nuxtApp) {
+            // Serveur : ce module vit entre les requêtes et le prix dépend du
+            // pays du visiteur. Rien de partagé d'un visiteur à l'autre.
+            if (import.meta.server) return undefined
             const fromPayload = nuxtApp.payload.data[key]
+            // Hydratation : le premier rendu client reprend ce que le serveur a
+            // rendu pour ce visiteur, sinon les boutons changent à l'hydratation.
+            if (fromPayload && nuxtApp.isHydrating) {
+                cachedPlans = fromPayload
+                lastFetch.value = Date.now()
+                return fromPayload
+            }
             if (fromPayload) {
                 cachedPlans = fromPayload
             }

@@ -22,18 +22,53 @@ export function parseItemGeometryError(message) {
 }
 
 /**
- * id moteur → { slug, part } via l'itemMap du job ([{ id, slug, part }]).
- * `part` est l'index de la pièce DANS son fichier (0-based, comme l'itemMap).
- * Rend `null` si l'id est inconnu : on préfère un message générique à un
- * numéro inventé.
+ * Lot A : le moteur ne trouve de place pour UNE pièce nulle part (pièce à la
+ * cote exacte de la tôle, constructif sans position valide) — message
+ * `item_unplaceable:<id>: <raison>` (nest-engine/src/import_error.rs,
+ * `item_unplaceable_error`). Même forme que `item_geometry`, autre cause :
+ * ce n'est pas le contour qui est faux, c'est qu'il ne reste aucune place.
  */
-export function itemGeometryTarget(message, itemMap) {
-    const id = parseItemGeometryError(message)
+export function parseItemUnplaceableError(message) {
+    const m = /(?:^|[^a-z_])item_unplaceable:(\d+)/.exec(String(message || ''))
+    if (!m) return null
+    return Number(m[1])
+}
+
+/**
+ * id moteur → { slug, part } via l'itemMap ; null si l'id est inconnu.
+ *
+ * Quand la réduction J-085 a réindexé l'instance (`payload.meta.idMap` :
+ * id réduit → id d'origine), l'id du message est un id RÉDUIT, alors que
+ * l'itemMap porte les ids d'origine : sans `idMap` on nommerait une autre
+ * pièce. Un id hors de l'idMap reste inconnu (null), jamais deviné.
+ */
+function targetOfId(id, itemMap, idMap) {
     if (id === null || !Array.isArray(itemMap)) return null
-    const hit = itemMap.find((e) => Number(e?.id) === id)
+    let original = id
+    if (Array.isArray(idMap)) {
+        if (!Number.isInteger(id) || id < 0 || id >= idMap.length) return null
+        original = Number(idMap[id])
+    }
+    const hit = itemMap.find((e) => Number(e?.id) === original)
     if (!hit || !hit.slug) return null
     const part = Number(hit.part)
     return { slug: String(hit.slug), part: Number.isFinite(part) ? part : 0 }
+}
+
+/**
+ * id moteur → { slug, part } via l'itemMap du job ([{ id, slug, part }]).
+ * `part` est l'index de la pièce DANS son fichier (0-based, comme l'itemMap).
+ * `idMap` (optionnel) : `meta.idMap` de l'instance réduite.
+ * Rend `null` si l'id est inconnu : on préfère un message générique à un
+ * numéro inventé.
+ */
+export function itemGeometryTarget(message, itemMap, idMap) {
+    return targetOfId(parseItemGeometryError(message), itemMap, idMap)
+}
+
+/** Idem pour le refus `item_unplaceable` (lot A). */
+export function itemUnplaceableTarget(message, itemMap, idMap) {
+    return targetOfId(parseItemUnplaceableError(message), itemMap, idMap)
 }
 
 /**

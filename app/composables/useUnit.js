@@ -118,7 +118,7 @@ export function useUnit() {
         fmtLengthValue: (mm, decimals) => fmtLengthValue(mm, unit.value, decimals, localeState().value),
         // Jalon A (réserve) : la balise de la langue de l'APP traverse —
         // fmtArea formate selon la locale choisie, pas celle du système.
-        fmtArea: (mm2) => fmtArea(mm2, unit.value, localeState().value),
+        fmtArea: (mm2, scaleMm2) => fmtArea(mm2, unit.value, localeState().value, scaleMm2),
         mmToDisplay: (mm) => mmToDisplay(mm, unit.value),
         displayToMm: (v) => displayToMm(v, unit.value),
         convertInputValue: (str, from, to) => convertInputValue(str, from, to),

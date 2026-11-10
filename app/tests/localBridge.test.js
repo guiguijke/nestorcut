@@ -288,12 +288,10 @@ describe('decorateLiveLayout (vue live = modal après J-085)', () => {
         expect(decorateLiveLayout({ items: [[0, 0, 0, 0]] }, { parts: [] }).items).toHaveLength(1)
     })
 
-    // Densité SPP : pièces/tôle-entière est CONSTANT pour un job donné (ne
-    // dit rien du packing — 55,4 % du cas 100+800 de la panne 2026-08-28).
-    // Sur une bande qui tient dans la tôle, la densité moteur (pièces/bande,
-    // même échelle que le modal) est reprise telle quelle ; le repli
-    // pièces/tôle reste pour les frames hors-tôle et bundles antérieurs.
-    it('densité : bande faisable → densité moteur ; hors-tôle → pièces/tôle', () => {
+    // Une seule définition de la densité : aire des pièces / aire des tôles,
+    // celle du résultat. La densité du moteur (pièces / bande utilisée) n'est
+    // jamais reprise, même quand la bande tient dans la tôle.
+    it('densité : pièces / tôle, jamais la densité du moteur sur la bande', () => {
         const base = {
             feasible: true,
             isSpp: true,
@@ -308,16 +306,43 @@ describe('decorateLiveLayout (vue live = modal après J-085)', () => {
             { ...base, strip_width: 663, density: 0.94 },
             payload,
         )
-        expect(fits.density).toBeCloseTo(0.94, 6)
+        // host = 100 x 100 moins l'anneau octogonal, sur 1000 x 2000
+        const expected = (10000 - 0.5 * 8 * 35 * 35 * Math.sin(Math.PI / 4)) / 2000000
+        expect(fits.density).toBeCloseTo(expected, 6)
+        expect(fits.density).toBeLessThan(0.01)
         const over = decorateLiveLayout(
             { ...base, strip_width: 1400, density: 0.44 },
             payload,
         )
-        // repli pièces/tôle-entière : indépendant de la bande annoncée
-        expect(over.density).toBeGreaterThan(0)
-        expect(over.density).toBeLessThan(0.94)
+        expect(over.density).toBeCloseTo(fits.density, 9)
         const noWidth = decorateLiveLayout({ ...base, density: 0.44 }, payload)
-        expect(noWidth.density).toBeCloseTo(over.density, 9)
+        expect(noWidth.density).toBeCloseTo(fits.density, 9)
+    })
+
+    it('densité : deux formats différents, jamais la première tôle multipliée', () => {
+        const base = {
+            feasible: true,
+            isSpp: false,
+            sheets: [[500, 500], [1000, 1000]],
+            items: [[1, 0, 0, 100, 100], [1, 1, 0, 100, 100]],
+        }
+        const payload = { parts: [fill, host], engineConfig: { min_item_separation: 0 } }
+        expect(decorateLiveLayout(base, payload).density).toBeNull()
+        // deux types de tôle de même taille : le chiffre est sûr
+        const same = decorateLiveLayout({ ...base, sheets: [[500, 500], [500, 500]] }, payload)
+        const area = 10000 - 0.5 * 8 * 35 * 35 * Math.sin(Math.PI / 4)
+        expect(same.density).toBeCloseTo((2 * area) / (2 * 250000), 6)
+        // un seul type, deux tôles utilisées
+        const one = decorateLiveLayout({ ...base, sheets: [[500, 500]] }, payload)
+        expect(one.density).toBeCloseTo((2 * area) / (2 * 250000), 6)
+    })
+
+    it('densité : sans tôle connue, pas de chiffre', () => {
+        const out = decorateLiveLayout(
+            { feasible: true, isSpp: true, sheets: [], items: [[1, 0, 100, 100]], density: 0.9 },
+            { parts: [fill, host], engineConfig: { min_item_separation: 0 } },
+        )
+        expect(out.density).toBeNull()
     })
 })
 
@@ -1032,6 +1057,19 @@ describe('E4-a — blocs (§8.1)', () => {
         // 312,5 (bloc, aire vraie) + 100 (UNE pose de la pièce simple) = 412,5
         expect(report.sheets[0].partsAreaMm2).toBe(412.5)
         expect(report.sheets[0].densityPct).toBe(41.3)
+        expect(report.totals.partsAreaMm2).toBe(412.5)
+        expect(report.totals.densityPct).toBe(41.3)
+    })
+
+    it('applyTrueAreasToReport : le rapport wasm range ses tôles sous per_sheet', () => {
+        const report = {
+            per_sheet: [{ sheetAreaMm2: 1000, partsAreaMm2: 850, freeAreaMm2: 150, densityPct: 85 }],
+            totals: { sheetAreaMm2: 1000, partsAreaMm2: 850, freeAreaMm2: 150, densityPct: 85 },
+        }
+        const containers = [{ bin_width: 100, bin_height: 10, transforms: [{ item_id: '7' }, { item_id: '8' }] }]
+        applyTrueAreasToReport(report, containers, partsById)
+        expect(report.per_sheet[0].partsAreaMm2).toBe(412.5)
+        expect(report.per_sheet[0].densityPct).toBe(41.3)
         expect(report.totals.partsAreaMm2).toBe(412.5)
         expect(report.totals.densityPct).toBe(41.3)
     })

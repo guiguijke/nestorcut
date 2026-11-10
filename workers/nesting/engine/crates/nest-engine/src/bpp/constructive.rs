@@ -261,6 +261,40 @@ fn search_layout(
     })
 }
 
+/// Graine du sondage de [`first_item_fitting_no_empty_bin`] : un flux à part,
+/// sans rapport avec les graines des walks.
+const PROBE_SEED: u64 = 0x1AB0_7A01;
+
+/// Première pièce (id) parmi celles que `candidate` retient et qui ne se place
+/// dans AUCUNE tôle VIDE en stock, `None` si toutes se placent quelque part
+/// (lot A, pièce à la cote exacte).
+///
+/// N'est appelé qu'APRÈS COUP, quand des pièces restent sans place : aucun
+/// coût ni effet sur le chemin normal, et son RNG est le sien. `candidate`
+/// écarte les pièces qu'un walk a déjà posées au moins une fois : elles
+/// tiennent, le sondage aléatoire ne doit pas pouvoir les accuser.
+pub fn first_item_fitting_no_empty_bin(
+    instance: &BPInstance,
+    bias: DirBias,
+    candidate: impl Fn(usize) -> bool,
+) -> Option<usize> {
+    use rand::SeedableRng;
+    let mut rng = rand::rngs::Xoshiro256PlusPlus::seed_from_u64(PROBE_SEED);
+    for (item_id, (item, qty)) in instance.items.iter().enumerate() {
+        if *qty == 0 || !candidate(item_id) {
+            continue;
+        }
+        let fits = instance.bins.iter().filter(|b| b.stock > 0).any(|b| {
+            let layout = Layout::new(b.container.clone());
+            search_layout(&layout, item, bias, &mut rng).is_some()
+        });
+        if !fits {
+            return Some(item_id);
+        }
+    }
+    None
+}
+
 /// Places every item of `sequence` (item ids, expanded by demand) with a
 /// best-fit strategy: every open layout is searched and the lowest-loss
 /// placement wins; a fresh bin is opened only when no open layout admits

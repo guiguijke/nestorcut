@@ -1,14 +1,33 @@
 #!/usr/bin/env node
 /**
  * Crée (ou met à jour) les fiches d'abonnement NestorCut sur le compte Stripe
- * LIVE : un produit « Standard » et un produit « Confidentialité+ », chacun
- * avec un prix mensuel par défaut en EUR + option USD.
+ * LIVE : un produit « NestorCut Unlimited » et un produit « NestorCut Pro »,
+ * chacun avec un prix mensuel par défaut en EUR + option USD.
+ *
+ * ATTENTION — NE PAS RELANCER SUR LE COMPTE LIVE SANS AVOIR LU LES PRODUITS
+ * LIVE D'ABORD (GET seulement, ou `--dry-run` : il n'écrit rien chez Stripe).
+ * Ce script ne se contente pas de renommer, il réécrit aussi :
+ *   - la DESCRIPTION visible du client : si celle du produit live diffère du
+ *     texte ci-dessous, le prochain lancement l'écrase (nom ET description) ;
+ *   - le PRIX : si le prix par défaut live ne correspond pas exactement aux
+ *     montants ci-dessous, un NOUVEAU prix est créé et l'ancien archivé. Le
+ *     serveur ne relit les prix qu'au démarrage (plugin de synchro) : jusqu'au
+ *     redémarrage il ouvre le Checkout sur un priceId archivé, et ensuite les
+ *     abonnés Pro restés sur l'ancien prix ne sont plus reconnus comme Pro
+ *     (palier lu d'après le priceId) alors qu'ils paient toujours 39 € ;
+ *   - un produit live SANS `metadata.tier` n'est pas retrouvé (la synchro
+ *     serveur, elle, l'accepte) : le script en crée un second.
+ * Avant tout lancement réel : comparer noms, descriptions, prix et métadonnées
+ * live avec ce fichier, et ne jamais archiver un prix sans garder la
+ * correspondance ancien priceId → palier.
  *
  * Le serveur synchronise ensuite ces produits au boot
  * (server/plugins/6_subscription_plan_sync.ts) — aucun changement de code
  * nécessaire après création.
  *
  * Usage :
+ *   # Lecture seule, rien n'est écrit chez Stripe (à faire AVANT un vrai lancement) :
+ *   STRIPE_SECRET_KEY=sk_live_xxx node scripts/create-live-products.mjs --dry-run
  *   # Git Bash / Linux / macOS :
  *   STRIPE_SECRET_KEY=sk_live_xxx node scripts/create-live-products.mjs
  *   # PowerShell :
@@ -33,6 +52,8 @@
 const STRIPE_BASE = 'https://api.stripe.com/v1'
 
 const ALLOW_TEST = process.argv.includes('--allow-test')
+// --dry-run : lit les produits live (GET) mais n'écrit rien chez Stripe.
+const DRY_RUN = process.argv.includes('--dry-run')
 
 /**
  * Catalogue des abonnements. Montants en centimes.
@@ -42,7 +63,7 @@ const PLANS = [
     {
         key: 'standard',
         product: {
-            name: 'NestorCut Standard',
+            name: 'NestorCut Unlimited',
             description:
                 'Nesting illimité : multi-tôles, pièces hétérogènes, 3 layouts alternatifs, 4 vCores de calcul.',
             metadata: { type: 'subscription', tier: 'standard' },
@@ -57,9 +78,9 @@ const PLANS = [
     {
         key: 'privacy',
         product: {
-            name: 'NestorCut Confidentialité+',
+            name: 'NestorCut Pro',
             description:
-                'Tout Standard, plus le coffre zéro-connaissance (fichiers chiffrés côté client) et 8 vCores prioritaires.',
+                'Tout Unlimited, plus 8 vCores de calcul et la file de calcul prioritaire.',
             metadata: { type: 'subscription', tier: 'privacy' },
         },
         price: {
@@ -91,6 +112,10 @@ function requireKey() {
 }
 
 async function stripe(method, path, params, key) {
+    if (DRY_RUN && method !== 'GET') {
+        console.log(`[dry-run] ${method} ${path} — non envoyé`)
+        return { id: '(dry-run)' }
+    }
     const init = { method, headers: { Authorization: `Bearer ${key}` } }
     if (params) {
         init.headers['Content-Type'] = 'application/x-www-form-urlencoded'
@@ -224,7 +249,7 @@ async function main() {
     console.log(`
 Prochaines étapes :
   1. Vérifier dans le Dashboard (mode live) que les 2 produits et leurs prix sont corrects.
-  2. Créer l'endpoint webhook live (voir specs/infra/stripe-go-live.md (private)) et coller son
+  2. Créer l'endpoint webhook live (voir la documentation de mise en production) et coller son
      whsec_... dans NUXT_STRIPE_WEBHOOK_SECRET.
   3. Mettre la clé live dans NUXT_STRIPE_SECRET_KEY (.env du serveur), puis
      redémarrer l'app : les logs doivent afficher

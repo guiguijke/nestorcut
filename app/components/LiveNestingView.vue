@@ -4,8 +4,8 @@
              high-contrast text on the panel background. -->
         <div class="live__header">
             <span class="live__stage">{{ stageLabel }}</span>
-            <span v-if="best" class="live__badge" :class="{ 'live__badge--ok': bestFitsSheet }">
-                {{ bestFitsSheet ? t('live.feasible') : t('live.searching') }}
+            <span v-if="badgeKind" class="live__badge" :class="{ 'live__badge--ok': badgeKind !== 'searching' }">
+                {{ badgeText }}
             </span>
             <span class="live__spacer" />
             <!-- U3 passe 3 (plan U2 reporté deux fois) : les statistiques de
@@ -30,6 +30,13 @@
                     :label="t('live.score')"
                     :title="t('live.scoreTitle')"
                     data-testid="live-stat-density"
+                />
+                <UiStat
+                    v-if="usedLengthLabel"
+                    :value="usedLengthLabel"
+                    :label="t('live.width')"
+                    :title="t('live.widthTitle')"
+                    data-testid="live-stat-length"
                 />
                 <UiStat
                     v-if="sheetCount"
@@ -175,7 +182,7 @@
                         </g>
                     </svg>
                     <span v-if="card.champ" class="live__card-metric">
-                        <template v-if="card.champ.density != null">{{ formatScore(card.champ.density) }}</template>
+                        <template v-if="frameDensity(card.champ) != null">{{ formatScore(frameDensity(card.champ)) }}</template>
                         <template v-else-if="card.champ.strip_width != null">{{ fmtLength(card.champ.strip_width) }}</template>
                         <template v-else-if="card.champ.bins != null">{{ t('live.sheets') }} {{ card.champ.bins }}</template>
                     </span>
@@ -209,11 +216,14 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
-import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage } from '~/utils/liveJob';
+import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity } from '~/utils/liveJob';
 
 const props = defineProps({
     result: { type: Object, required: true },
     compact: { type: Boolean, default: false },
+    // Le job ENTIER est fini (posé par la page d'après l'état réel du calcul).
+    // Seul ce signal autorise « Terminé » ; une frame `final` ne suffit pas.
+    jobDone: { type: Boolean, default: false },
 });
 
 const { t, fmtPercent } = useLocale();
@@ -503,7 +513,13 @@ const best = computed(() => {
     return fitting.sort((a, b) => (isBetter(a, b) ? -1 : 1))[0];
 });
 
-const bestFitsSheet = computed(() => fitsSheet(best.value));
+const liveStage = computed(() => resolveLiveStage(props.result, best.value?.stage));
+const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, props.jobDone) : null));
+const badgeText = computed(() => ({
+    done: t('live.feasible'),
+    fits: t('live.fitsSheet'),
+    searching: t('live.searching'),
+})[badgeKind.value]);
 
 const sheet = computed(() => {
     const b = best.value;
@@ -666,6 +682,12 @@ const elapsedSec = computed(() => {
     return n != null ? Number(n) : null;
 });
 
+// Densité d'une frame, ou null quand elle ne peut pas être celle du résultat
+// (frame d'un ancien worker serveur : densité brute du moteur).
+function frameDensity(frame) {
+    return liveDensity(frame, props.result);
+}
+
 function formatScore(density) {
     const n = Number(density);
     if (!Number.isFinite(n)) return null;
@@ -680,9 +702,17 @@ const sheetCount = computed(() => {
     return Number.isFinite(n) && n > 0 ? n : null;
 })
 
+// SPP en recherche : la longueur de tôle utilisée diminue quand le moteur
+// progresse (la densité d'en-tête, elle, reste constante).
+const usedLengthLabel = computed(() => {
+    const mm = liveUsedLength(best.value, liveStage.value);
+    return mm != null ? fmtLength(mm) : null;
+})
+
 const scoreLabel = computed(() => {
     const live = best.value || props.result?.liveLayout;
-    return live?.density != null ? formatScore(live.density) : null;
+    const d = frameDensity(live);
+    return d != null ? formatScore(d) : null;
 })
 
 // C12 (audit UX 2026-09-05) : les compteurs « combinaisons » (itérations
@@ -722,8 +752,10 @@ const formatElapsed = (sec) => {
 
     &__header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
+        min-width: 0;
         font-size: var(--fs-13);
         color: var(--label-primary);
     }
@@ -753,8 +785,19 @@ const formatElapsed = (sec) => {
     /* U3 passe 3 : rangée de UiStat alignée à droite de l'en-tête. */
     &__stats {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
-        gap: var(--sp-4);
+        gap: var(--sp-2) var(--sp-4);
+        min-width: 0;
+        max-width: 100%;
+
+        // Téléphone : les statistiques passent sous le titre et à la ligne,
+        // libellés entiers (compteur de cœurs compris), au lieu d'une rangée
+        // unique coupée par le bord de l'écran.
+        @media (max-width: 640px) {
+            flex: 1 1 100%;
+            gap: var(--sp-2) var(--sp-3);
+        }
     }
 
     &__stat--accent :deep(.ui-stat__value) {
