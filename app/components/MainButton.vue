@@ -248,9 +248,20 @@ const buttonClasses = computed(() => ({
         }
     }
     
+    // Grisé, un bouton reste lisible dans les deux thèmes : l'opacité fondait le
+    // libellé dans le fond (1,2:1 pour Nest, 2,6:1 pour « Votre offre » en sombre).
     &--disabled {
         pointer-events: none;
-        opacity: 0.3;
+        opacity: 1;
+        #{$self}__label {
+            color: var(--text-2);
+        }
+        #{$self}__icon {
+            background-color: var(--text-2);
+        }
+    }
+    &--theme-primary#{$self}--disabled {
+        background-color: var(--fill-secondary);
     }
     &--not-clickable {
         pointer-events: none;

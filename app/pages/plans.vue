@@ -418,7 +418,7 @@ function onTierClick(tier) {
     }
 
     &__name {
-        color: var(--accent-primary);
+        color: var(--text);
         font-weight: 700;
         font-size: var(--fs-18);
         text-align: center;
@@ -518,7 +518,7 @@ function onTierClick(tier) {
         }
 
         thead th {
-            color: var(--accent-primary);
+            color: var(--text);
             font-weight: 700;
             font-size: var(--fs-14);
             border-bottom: 1px solid var(--separator-primary);

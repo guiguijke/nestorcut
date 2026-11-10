@@ -763,11 +763,11 @@ const stageLabel = computed(() => {
         font-size: var(--fs-12);
         font-weight: 700;
         border-radius: var(--radius-l);
-        background: var(--system-orange, rgb(178, 106, 0));
+        background: var(--warn);
         color: var(--surface);
 
         &--ok {
-            background: var(--system-green, rgb(46, 125, 50));
+            background: var(--ok);
         }
     }
 

@@ -142,7 +142,7 @@ onMounted(() => {
     align-items: center;
     gap: 14px;
     padding: 40px 32px;
-    background: var(--main-white);
+    background: var(--surface);
     border: 1px solid var(--separator-secondary);
     border-radius: var(--radius-l);
 
