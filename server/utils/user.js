@@ -85,9 +85,7 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
             // verification step needed (unlike local signups).
             emailVerified: true,
         },
-        $push: {
-            sessions: pushSessionUpdate(session),
-        },
+        $push: pushSessionUpdate(session),
     }
 
     // S-4 : purge des sessions expirées avant d'ajouter la nouvelle.

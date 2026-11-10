@@ -975,6 +975,17 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     chunk paresseux. Verrous : `app/tests/bootChunkRetry.test.js`, harnais
     `scripts/qa-e2e-chunk-failure.mjs` (`QA_FAIL_DELAY_MS=15000` pour la forme réelle).
 
+65. **Un helper qui rend un opérateur Mongo s'emploie tel quel :
+    `$push: pushSessionUpdate(s)`, jamais dans un second `sessions:` (constat prod
+    07/11).** Écrit `$push: { sessions: pushSessionUpdate(s) }` au lot M4, Mongo ne
+    voit pas de `$each` de premier niveau et stocke l'objet tel quel. La session ne
+    se relit jamais, la route répond 200, le cookie est posé, l'utilisateur reste
+    anonyme et aucun journal ne le dit ; les sessions plus anciennes masquaient la
+    panne des connexions Google. Les faux Mongo des tests ignoraient `$push` : un
+    test de connexion doit RELIRE la session (`getUserBySessionId`) sur un faux qui
+    garde la sémantique réelle de `$push`. Verrou :
+    `server/tests/googleLoginSession.test.js`.
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :
