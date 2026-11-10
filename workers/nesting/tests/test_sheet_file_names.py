@@ -96,7 +96,7 @@ def test_empty_format_keeps_sheet_files_numbered_1_to_n(monkeypatch, sheets):
     monkeypatch.setattr(
         m, "convert_files_to_input_items",
         # Carré 900 mm : une pièce par tôle, rien à consolider.
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             {"id": 0, "file_slug": "sq", "coords": _sq(450.0), "holes": [],
              "handles": [], "color": None, "count": 3, "rotations": [0.0]},
         ],
