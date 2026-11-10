@@ -179,11 +179,13 @@
 import { themeType } from "~~/constants/theme.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
+import { safetyPatchForTargetMm } from "~/utils/spacingParams";
 import { capacityPanelModel } from "~/utils/capacityPanel";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB } from "~~/shared/constants/payment.constants";
 import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
+import { computeSpacingMargin } from "~/composables/localPayloadBuilder";
 import { isLocalComputeEnabled } from "~/composables/localCompute";
 import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
@@ -374,6 +376,8 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
                 file: localTooLarge.value.name,
                 w: localTooLarge.value.width,
                 h: localTooLarge.value.height,
+                ...(localTooLarge.value.margin != null
+                    ? { space: localTooLarge.value.space, margin: localTooLarge.value.margin } : {}),
             }
         : null,
 }));
@@ -512,11 +516,11 @@ const preflightReport = computed(() => {
         height: displayToMm(Number(String(s.height).replace(',', '.')) || 0),
         count: Number(s.count) || 1,
     }))
-    return capacityReport(
-        parts,
-        sheets,
-        displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0),
-    )
+    // Même espacement que le worker et le calcul sur l'appareil : demandé +
+    // marge de courbes (0 pour des rectangles ou un espacement 0).
+    const spaceMm = displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0)
+    const curveMargin = computeSpacingMargin(files.filter((f) => Number(f.count) > 0), spaceMm)
+    return capacityReport(parts, sheets, spaceMm + curveMargin)
 })
 const partsFilesLine = computed(() => {
     const nParts = unref(filesCount)
@@ -924,12 +928,13 @@ const applyReduceSpacing = (mm) => {
     if (mm == null || !Number.isFinite(Number(mm))) return false;
     const p = unref(params);
     // B.4 : le levier réduit la SÉCURITÉ — le kerf décrit l'outil physique,
-    // on n'y touche pas. Effectif cible = kerf + 2 × nouvelle sécurité ;
-    // si la cible ne permet même pas le kerf, le levier est masqué en
-    // amont (capacityPanel), on ne fait rien ici.
+    // on n'y touche pas. Effectif cible = 2 × kerf + nouvelle sécurité (règle
+    // du 13/09) ; si la cible ne permet pas les deux kerfs, le levier est
+    // masqué en amont (capacityPanel), on ne fait rien ici.
     const kerfMm = displayToMm(Number(String(p.kerf ?? '0').replace(',', '.')) || 0);
-    if (mm <= kerfMm) return false;
-    const disp = mmToDisplay((mm - kerfMm) / 2, unit.value);
+    const patch = safetyPatchForTargetMm(kerfMm, Number(mm));
+    if (!patch) return false;
+    const disp = mmToDisplay(patch.safetyMm, unit.value);
     actions.updateKerfSafety({
         safety: unit.value === 'inch' ? String(Math.round(disp * 10000) / 10000) : String(disp),
     });

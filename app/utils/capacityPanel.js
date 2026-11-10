@@ -80,9 +80,12 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
     const maxParts = num(unfit.maxPartsAtSpacing)
     // Un espacement maximal de 0 mm (ou moins) veut dire « rien ne tient, même
     // sans espacement » : ce n'est pas un levier à chiffrer (« environ 0 mm »).
+    // Exception : `maxSpacingZeroFits` (le maximum INTERNE dépassait 0 mais pas
+    // la marge de courbes) — 0 mm tient, c'est un vrai levier à 0.
     const rawMaxSpacing = num(unfit.maxSpacingForFitMm)
-    const maxSpacingMm = rawMaxSpacing != null && rawMaxSpacing > 0 ? rawMaxSpacing : null
-    const noFitEvenAtZero = rawMaxSpacing != null && rawMaxSpacing <= 0
+    const zeroFits = unfit.maxSpacingZeroFits === true && rawMaxSpacing != null && rawMaxSpacing <= 0
+    const maxSpacingMm = rawMaxSpacing != null && (rawMaxSpacing > 0 || zeroFits) ? Math.max(0, rawMaxSpacing) : null
+    const noFitEvenAtZero = rawMaxSpacing != null && rawMaxSpacing <= 0 && !zeroFits
     if (sheetsNeeded == null && maxParts == null && maxSpacingMm == null
         && num(unfit.unplaced) == null) {
         return null
@@ -96,13 +99,14 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
     // n'est pas une action) ET qu'il reste quelque chose à gagner —
     // sous 0,5 mm d'espacement courant le levier est MASQUÉ (la marge
     // restante est illusoire), et avec le kerf explicite la cible doit
-    // dépasser le kerf (on ne réduit jamais la largeur de coupe de
-    // l'outil).
+    // dépasser DEUX kerfs (espacement = 2 × kerf + sécurité : on ne réduit
+    // jamais la largeur de coupe de l'outil).
     const SPACING_FLOOR_MM = 0.5
-    const spacingAtFloor = spaceMm != null && spaceMm <= SPACING_FLOOR_MM
+    const spacingAtFloor = !zeroFits && spaceMm != null && spaceMm <= SPACING_FLOOR_MM
     const kerf = num(kerfMm)
     const leverWouldHelp = maxSpacingMm != null && spaceMm != null && maxSpacingMm < spaceMm
-    const kerfBlocks = leverWouldHelp && kerf != null && maxSpacingMm <= kerf
+    // Cible 0 : bloquée seulement si un kerf > 0 est déclaré (0 = kerf 0 est valide).
+    const kerfBlocks = leverWouldHelp && kerf != null && (zeroFits ? kerf > 0 : maxSpacingMm <= 2 * kerf)
     const canReduceSpacing = leverWouldHelp && !spacingAtFloor && !kerfBlocks
     return {
         reason: unfit.reason,
@@ -114,6 +118,6 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
         // C04 : espacement courant déjà au plancher (≤ 0,5 mm) ou kerf
         // bloquant — la page affiche « même sans espacement, ça ne tient
         // pas » au lieu d'un bouton inutile.
-        noSpacingGain: spacingAtFloor || kerfBlocks || noFitEvenAtZero,
+        noSpacingGain: !zeroFits && (spacingAtFloor || kerfBlocks || noFitEvenAtZero),
     }
 }

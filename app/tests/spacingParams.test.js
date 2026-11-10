@@ -89,7 +89,11 @@ describe('withKerfDefaults (migration projets existants)', () => {
 describe("safetyPatchForTargetMm (levier « réduire l'espacement »)", () => {
     it('réduit la sécurité, pas le kerf', () => {
         expect(safetyPatchForTargetMm(0.4, 2)).toEqual({ safetyMm: 1.2 })
-        expect(safetyPatchForTargetMm(0, 0)).toBeNull()
+        // Cible 0 sans kerf : contact permis, sécurité 0.
+        expect(safetyPatchForTargetMm(0, 0)).toEqual({ safetyMm: 0 })
+        expect(safetyPatchForTargetMm(0.5, 0)).toBeNull()
+        // Sans kerf, la sécurité vaut la cible entière (et non sa moitié).
+        expect(safetyPatchForTargetMm(0, 0.04)).toEqual({ safetyMm: 0.04 })
     })
     it('cible inférieure ou égale aux DEUX kerfs → impossible (levier masqué)', () => {
         expect(safetyPatchForTargetMm(0.5, 1)).toBeNull()

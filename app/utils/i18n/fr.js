@@ -212,7 +212,7 @@ export default {
     'settings.kerf': 'Kerf (largeur de coupe)',
     'settings.safety': 'Sécurité (marge par pièce)',
     'settings.spacingRule': 'Espacement entre pièces = 2 × kerf + sécurité = {v} {unit}',
-    'settings.spacingHolesDisabled': 'Au-delà de 2,4 mm d’espacement, l’imbrication dans les trous est désactivée (limite moteur).',
+    'settings.spacingHolesDisabled': 'À partir de 2,38 mm d’espacement, l’imbrication dans les trous peut être désactivée (limite moteur, marge de courbes comprise).',
     'settings.sheetPreset.hint': 'Format de tôle standard',
     'units.label': 'Unités de mesure',
     'units.mm': 'Millimètres (mm)',
@@ -449,6 +449,7 @@ export default {
     'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+    'localMode.partTooLargeMargin': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement ({space} mm, plus {margin} mm de marge pour les courbes) — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.partTooLargePlain': "Une pièce ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.spacingTooLarge': "L'espacement est trop grand pour cette tâche (la bande initiale serait vide) — réduisez l'espacement ou ajoutez des pièces/tôles. L'imbrication a été remboursée.",
     // Lot E4-b/E4-c : l'échelle et l'éclatement sont des actions SUR LA

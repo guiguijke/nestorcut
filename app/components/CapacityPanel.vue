@@ -53,7 +53,7 @@
             />
             <MainButton
                 v-if="!openProject && panel.reduceSpacingToMm != null"
-                :label="t('report.unfit.reduceSpacing', { v: panel.reduceSpacingToMm })"
+                :label="t('report.unfit.reduceSpacing', { v: fmtNumber(panel.reduceSpacingToMm, 2) })"
                 :size="sizeType.s"
                 :theme="themeType.secondary"
                 data-testid="capacity-reduce-spacing"

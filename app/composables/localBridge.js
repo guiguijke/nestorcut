@@ -1295,6 +1295,19 @@ export function enginePlacedById(alt) {
     return counts
 }
 
+/**
+ * Écart annoncé = (écart mesuré − marge), jamais négatif, jugé contre le
+ * demandé (tolérance 0,01 comme nest-report). Un écart mesuré NÉGATIF est un
+ * dépassement hors tôle, pas un espacement : laissé tel quel (ResultModal).
+ */
+export function applySpacingMargin(report, margin, requested) {
+    const v = report && !report.error ? report.verify : null
+    if (!v || typeof v.smallestGapMm !== 'number' || !(margin > 0) || v.smallestGapMm < 0) return report
+    v.smallestGapMm = Math.max(0, Math.round((v.smallestGapMm - margin) * 1000) / 1000)
+    v.spacingOk = v.smallestGapMm >= (Number(requested) || 0) - 0.01
+    return report
+}
+
 /** Miroir du plafonnage metrics.verify_layout (d57cbea) : occupants par trou
  * (centroïde d'aire de l'anneau externe posé dans l'anneau du trou, premier
  * hôte retenu) → filled = Σ min(n, CAPACITY) ; l'excédent part dans
@@ -1474,6 +1487,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             reportItems.push({ id: String(p.id), coords: p.coords, holes: p.holes || [] })
         }
         const space = Number(payload?.engineConfig?.min_item_separation) || 0
+        const requestedSpace = Number(payload?.requestedSpace ?? space) || 0
 
         const out = []
         // §17.2 : la géométrie des pièces, une fois — les deux états
@@ -1683,11 +1697,16 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 })
                 sheets.push(typeof svg === 'string' ? svg : null)
             }
+            // Le rapport mesure les contours simplifiés posés à l'espacement
+            // INTERNE ; on le lui donne tel quel (wasm inchangé), puis on
+            // retranche la marge : l'écart annoncé est une borne sur les
+            // vraies courbes, jugée contre le DEMANDÉ.
             const report = await geoComputeReport({
                 items: reportItems,
                 containers,
                 space,
             })
+            applySpacingMargin(report, space - requestedSpace, requestedSpace)
             applyTrueAreasToReport(report, containers, partsById)
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout
             // d57cbea) : le bundle wasm compte sans plafond — un double-
@@ -1887,7 +1906,9 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
  * 1-based du layout (parse_result_containers).
  */
 export async function buildSheetDxf(jobSlug, layoutIndex, container, payload, sources) {
-    const space = Number(payload?.engineConfig?.min_item_separation) || 0
+    // Cadre du DXF livré : espacement DEMANDÉ.
+    const space = Number(payload?.requestedSpace
+        ?? payload?.engineConfig?.min_item_separation) || 0
     const outputUnit = payload?.outputUnit || 'mm'
     const addOutShape = Boolean(payload?.addOutShape)
 

@@ -82,6 +82,7 @@ export default defineEventHandler(async (event) => {
                 ? { maxPartsAtSpacing: num(rawUnfit.maxPartsAtSpacing, 0, 10_000_000) } : {}),
             ...(num(rawUnfit.maxSpacingForFitMm, 0, 10_000) != null
                 ? { maxSpacingForFitMm: num(rawUnfit.maxSpacingForFitMm, 0, 10_000) } : {}),
+            ...(rawUnfit.maxSpacingZeroFits === true ? { maxSpacingZeroFits: true } : {}),
         }
         : null
 

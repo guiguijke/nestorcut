@@ -213,7 +213,7 @@ export default {
     'settings.kerf': 'Kerf (cut width)',
     'settings.safety': 'Safety (margin per part)',
     'settings.spacingRule': 'Part-to-part spacing = 2 × kerf + safety = {v} {unit}',
-    'settings.spacingHolesDisabled': 'Above 2.4 mm spacing, nesting inside cutouts is disabled (engine limit).',
+    'settings.spacingHolesDisabled': 'From 2.38 mm spacing, nesting inside cutouts may be disabled (engine limit, curve margin included).',
     'settings.sheetPreset.hint': 'Standard sheet size',
     'units.label': 'Measurement units',
     'units.mm': 'Millimeters (mm)',
@@ -461,6 +461,7 @@ export default {
     'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+    'localMode.partTooLargeMargin': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing ({space} mm, plus {margin} mm margin for curves) — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.partTooLargePlain': 'A part does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.spacingTooLarge': 'Spacing is too large for this job (the initial strip would be empty) — reduce the spacing or add more parts/sheets. The nesting was refunded.',
     // Lot E0 : the engine refused ONE part's geometry at import. Naming

@@ -395,6 +395,100 @@ export function simplifyPart(coords, holes, tol = SIMPLIFY_MM) {
 }
 
 // ---------------------------------------------------------------------------
+// Marge d'espacement (l'espacement demandé est tenu sur les VRAIES courbes)
+// ---------------------------------------------------------------------------
+
+/** Marge maximale ajoutée à l'espacement demandé (mm). */
+export const SPACING_MARGIN_CAP_MM = 0.12
+/** Réserve d'aplatissement pour un anneau courbe (> 8 sommets), en mm. */
+const FLATTEN_RESERVE_MM = 0.02
+
+const pointSegDist = (p, a, b) => {
+    const dx = b[0] - a[0]
+    const dy = b[1] - a[1]
+    const l2 = dx * dx + dy * dy
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2))
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+}
+
+/** Plus grande distance entre un sommet de l'anneau d'origine et l'anneau simplifié. */
+function ringSimplificationGap(orig, simp) {
+    if (orig === simp || orig.length === simp.length) return 0
+    let gap = 0
+    for (const p of orig) {
+        let d = Infinity
+        for (let i = 0; i < simp.length - 1; i++) d = Math.min(d, pointSegDist(p, simp[i], simp[i + 1]))
+        if (d > gap) gap = d
+    }
+    return gap
+}
+
+// Écart et courbure d'une pièce, mesurés une seule fois (le pré-vol de la page
+// et l'API rappellent computeSpacingMargin à chaque réglage).
+const _partStats = new WeakMap()
+function partSimplificationStats(part) {
+    const cached = _partStats.get(part)
+    if (cached) return cached
+    const coords = part.coordinates ?? part.coords ?? []
+    const holes = part.holes ?? []
+    const simp = simplifyPart(coords, holes)
+    const rings = [[coords, simp.coords], ...holes.map((h, i) => [h, simp.holes[i]])]
+    let gapMax = 0
+    let curved = false
+    for (const [orig, s] of rings) {
+        if ((isClosedRing(orig) ? orig.length - 1 : orig.length) > 8) curved = true
+        const gap = ringSimplificationGap(orig, s)
+        // Un sommet retiré hors de la ligne = courbe aplatie : réserve
+        // d'aplatissement, même sous 8 sommets.
+        if (gap > 1e-9) curved = true
+        gapMax = Math.max(gapMax, gap)
+    }
+    const st = { gap: gapMax, curved }
+    _partStats.set(part, st)
+    return st
+}
+
+/**
+ * Marge = 2 × (écart maximal de simplification sur toutes les pièces)
+ * + 0,02 si un anneau d'origine a plus de 8 sommets ou si la simplification
+ * a retiré un sommet (écart > 1e-9), plafonnée à 0,12 ;
+ * 0 si l'espacement demandé est 0 (le contact y est permis).
+ *
+ * Limite connue : une courbe aplatie en UN SEUL segment n'est pas détectable
+ * ici (rien ne la distingue d'un côté droit) ; sa perte est bornée à 0,02 mm.
+ */
+export function computeSpacingMargin(files, requested) {
+    if (!(Number(requested) > 0)) return 0
+    let maxGap = 0
+    let curved = false
+    for (const file of files || []) {
+        for (const part of file.parts || []) {
+            const st = partSimplificationStats(part)
+            if (st.curved) curved = true
+            maxGap = Math.max(maxGap, st.gap)
+        }
+    }
+    return Math.min(SPACING_MARGIN_CAP_MM, 2 * maxGap + (curved ? FLATTEN_RESERVE_MM : 0))
+}
+
+/**
+ * Espacement maximal qui tient, converti de l'INTERNE vers le DEMANDÉ pour
+ * l'utilisateur : (interne − marge), arrondi au centième PAR DÉFAUT (jamais
+ * au-dessus de ce qui tient). Quand 0 < maximum interne <= marge, la
+ * conversion tombe à 0 mais le job passe à espacement 0 (marge nulle) :
+ * `maxSpacingZeroFits` le dit, pour que le panneau propose 0 mm au lieu de
+ * « même sans espacement, ça ne tient pas » (réservé au maximum interne 0).
+ */
+export function userMaxSpacing(internalMax, margin) {
+    const internal = Number(internalMax)
+    if (!Number.isFinite(internal) || internal <= 0) return { maxSpacingForFitMm: 0 }
+    const requested = Math.max(0, Math.floor((internal - (Number(margin) || 0)) * 100 + 1e-9) / 100)
+    return requested > 0
+        ? { maxSpacingForFitMm: requested }
+        : { maxSpacingForFitMm: 0, maxSpacingZeroFits: true }
+}
+
+// ---------------------------------------------------------------------------
 // Canaux capillaires (miroir de core/holed_polygons.py)
 // ---------------------------------------------------------------------------
 
@@ -593,7 +687,11 @@ function metaSlots(inputItems, hostId, fillId, capacity) {
  *     main.py part_index_by_id). La vue live mappe ids moteur → fichier/pièce.
  */
 export async function buildLocalPayload({ files, params = {}, profile = {} }, deps = {}) {
-    const space = Number(params.space) || 0
+    // Espacement DEMANDÉ (dit à l'utilisateur, jugé par la vérification) ;
+    // `space` ci-dessous est l'espacement INTERNE = demandé + marge, celui
+    // que le moteur et tout le pipeline interne reçoivent.
+    const requestedSpace = Number(params.space) || 0
+    const space = requestedSpace + computeSpacingMargin(files, requestedSpace)
     // fillHoles : défaut ON (rétro-compat, miroir de params.get("fillHoles", True))
     const fillHoles = params.fillHoles !== false
     const addOutShape = Boolean(params.addOutShape)
@@ -837,9 +935,13 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             .map((p) => `'${p.name}' (${pyFixed0(p.width)}x${pyFixed0(p.height)}mm, x${p.count})`)
             .join(', ')
         const sheetDesc = sheets.map((s) => `${pyFixed0(s.width)}x${pyFixed0(s.height)}mm`).join(' / ')
+        // Marge de courbes dite quand elle est > 0 : la garde décide avec
+        // demandé + marge, les chiffres seuls diraient que la pièce tient.
+        const curveMargin = space - requestedSpace
+        const marginNote = curveMargin > 0 ? ` (plus ${curveMargin.toFixed(2)}mm margin for curves)` : ''
         const tooLargeErr = new Error(
             `Part(s) too large for the sheet: ${details} — sheet(s): ${sheetDesc}, `
-            + `spacing: ${pyStrSpace(space)}mm. Use a larger sheet, allow more rotations, or reduce spacing.`,
+            + `spacing: ${pyStrSpace(requestedSpace)}mm${marginNote}. Use a larger sheet, allow more rotations, or reduce spacing.`,
         )
         // Lot A1 (audit P3-4) : marqueur structuré pour un refus ACTIONNABLE
         // à l'écran. Sans lui, le catch de runLocalJobPrivate réduisait ce
@@ -853,6 +955,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             name: (files || []).find((f) => f.slug === firstOffender.name)?.name || firstOffender.name,
             width: pyFixed0(firstOffender.width),
             height: pyFixed0(firstOffender.height),
+            ...(curveMargin > 0 ? { space: requestedSpace, margin: curveMargin.toFixed(2) } : {}),
         }
         throw tooLargeErr
     }
@@ -934,7 +1037,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             ratio: cap.ratio,
             sheetsNeeded: cap.sheetsNeeded,
             maxPartsAtSpacing: totalMax,
-            maxSpacingForFitMm: cap.maxSpacingForFitMm,
+            // Sortie : l'espacement max est dit en espacement DEMANDÉ.
+            ...userMaxSpacing(cap.maxSpacingForFitMm, space - requestedSpace),
         }
         throw err
     }
@@ -1158,6 +1262,9 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         instance: solveInstance,
         meta,
         engineConfig,
+        // Espacement demandé par l'utilisateur, HORS engineConfig (qui porte
+        // l'interne) : seuil de la vérification et tout ce qui est affiché.
+        requestedSpace,
         parts,
         // V15 (vérif 2026-09-04) : containerMapBack à la RACINE du payload
         // (dans `instance` il était hashé dans le seed ET envoyé au wasm).

@@ -97,9 +97,11 @@ export function withKerfDefaults(params) {
  * Levier « réduire l'espacement à X mm » : réduit la SÉCURITÉ, jamais le
  * kerf (il décrit l'outil physique). Retourne le patch {safety} (en
  * millimètres) qui amène l'effectif exactement à `targetMm`, ou null si
- * la cible ne permet même pas les deux kerfs courants.
+ * la cible ne permet même pas les deux kerfs courants. Cible 0 sans kerf :
+ * sécurité 0, le contact est un réglage valide.
  */
 export function safetyPatchForTargetMm(kerfMm, targetMm) {
+    if (targetMm === 0 && kerfMm === 0) return { safetyMm: 0 }
     if (!(targetMm > 2 * kerfMm)) return null
     return { safetyMm: targetMm - 2 * kerfMm }
 }

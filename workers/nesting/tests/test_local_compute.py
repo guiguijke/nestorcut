@@ -96,7 +96,7 @@ def test_local_job_is_prepared_not_solved(monkeypatch):
     monkeypatch.setattr(
         m,
         "convert_files_to_input_items",
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             {"id": 0, "file_slug": "f1", "coords": _square(0, 0, 40), "holes": [],
              "handles": ["A1", "B2"], "color": "#123456",
              "count": 4, "rotations": [0.0, 90.0, 180.0, 270.0]}
@@ -118,6 +118,9 @@ def test_local_job_is_prepared_not_solved(monkeypatch):
     assert len(payload["instance"]["items"]) == 1
     cfg = payload["engineConfig"]
     assert cfg["time_budget_sec"] == 13
+    # Espacement demandé porté à part (l'interne = demandé + marge, ici 0).
+    assert payload["requestedSpace"] == 2.0
+    assert cfg["min_item_separation"] == 2.0
     assert isinstance(cfg["prng_seed"], int) and cfg["prng_seed"] > 0
     # J-083 : instance triviale (1 pièce ×4, 20 sommets) ⇒ patience courte,
     # pas le plancher historique de 12 s qui brûlait tout le budget navigateur.
@@ -158,7 +161,7 @@ def test_local_holes_meta_prepass_keeps_instance_importable(monkeypatch):
     monkeypatch.setattr(
         m,
         "convert_files_to_input_items",
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             # carré 10×10 posé dans un quadrant (coin en (1.5,1.5)) : les 4
             # rotations pinwheel laissent ~3 mm d'espacement → capacité 4.
             {"id": 0, "file_slug": "fill", "coords": _square(6.5, 6.5, 5), "holes": [],
@@ -217,7 +220,7 @@ def test_refused_capacity_job_never_reaches_engine(monkeypatch):
     monkeypatch.setattr(
         m,
         "convert_files_to_input_items",
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             {"id": 0, "file_slug": "f1", "coords": _square(0, 0, 40), "holes": [],
              "handles": [], "color": None, "count": 100,
              "rotations": [0.0, 90.0, 180.0, 270.0]}
@@ -276,7 +279,7 @@ def test_server_job_runs_normally(monkeypatch):
     monkeypatch.setattr(
         m,
         "convert_files_to_input_items",
-        lambda files, dek: [
+        lambda files, dek, stats=None: [
             {"id": 0, "file_slug": "f1", "coords": _square(0, 0, 40), "holes": [], "count": 4, "rotations": [0.0, 90.0, 180.0, 270.0]}
         ],
     )

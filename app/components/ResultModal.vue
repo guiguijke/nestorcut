@@ -217,6 +217,7 @@ const unfitData = computed(() => {
         sheetsNeeded: jobUnfit?.sheetsNeeded ?? null,
         maxParts: jobUnfit?.maxPartsAtSpacing ?? null,
         maxSpacingMm: jobUnfit?.maxSpacingForFitMm ?? null,
+        maxSpacingZeroFits: jobUnfit?.maxSpacingZeroFits === true,
         unplaced: jobUnfit?.unplaced ?? null,
         overflowMm,
         reason: jobUnfit?.reason ?? (overflowMm != null ? 'strip' : 'layout'),
@@ -237,6 +238,7 @@ const capacityPanel = computed(() => {
         sheetsNeeded: u.sheetsNeeded,
         maxPartsAtSpacing: u.maxParts,
         maxSpacingForFitMm: u.maxSpacingMm,
+        maxSpacingZeroFits: u.maxSpacingZeroFits,
         unplaced: u.unplaced,
     }, {
         sheets: p.sheets || [],

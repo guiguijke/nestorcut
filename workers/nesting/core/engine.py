@@ -350,12 +350,15 @@ def item_geometry_message(item_id, target, file_name=None):
     }
 
 
-def too_large_message(unplaceable, sheets, space):
+def too_large_message(unplaceable, sheets, space, margin=0.0):
     """Refus de pré-vol : pièces plus grandes que toute tôle. Cite le NOM du
     fichier de l'utilisateur entre guillemets doubles (comme les autres refus
     du worker), jamais l'identifiant interne ; inconnu → « one of the files ».
     `unplaceable` : [{name, width, height, count}] avec name = nom du fichier
-    ou None."""
+    ou None.
+    `space` = espacement DEMANDÉ ; `margin` = marge de courbes ajoutée en
+    interne (la garde décide avec demandé + marge) : si > 0 elle est dite,
+    sinon les chiffres affirmeraient que la pièce tient."""
     details = ", ".join(
         (f'"{p["name"]}"' if p.get("name") else "one of the files")
         + f' ({p["width"]:.0f}x{p["height"]:.0f}mm, x{p["count"]})'
@@ -364,9 +367,11 @@ def too_large_message(unplaceable, sheets, space):
     sheet_desc = " / ".join(
         f"{float(s.get('width')):.0f}x{float(s.get('height')):.0f}mm" for s in sheets
     )
+    margin_note = (f" (plus {float(margin):.2f}mm margin for curves)"
+                   if margin and margin > 0 else "")
     return (
         f"Part(s) too large for the sheet: {details} — sheet(s): {sheet_desc}, "
-        f"spacing: {space}mm. Use a larger sheet, allow more rotations, or reduce spacing."
+        f"spacing: {space}mm{margin_note}. Use a larger sheet, allow more rotations, or reduce spacing."
     )
 
 

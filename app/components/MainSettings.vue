@@ -97,7 +97,7 @@
                 >
                     {{ t('settings.spacingKerf') }}
                 </div>
-                <!-- B.4 : au-delà de 2,4 mm d'espacement le moteur ne peut plus
+                <!-- B.4 : dès 2,38 mm d'espacement le moteur ne peut plus
                      ouvrir les trous pour y nicher (limite canal, D-MOT-2). -->
                 <div
                     v-if="holesDisabledHint"
@@ -196,6 +196,7 @@
 
 <script setup>
     import { SHEET_PRESETS } from '~/utils/units'
+    import { holesDisabledHintVisible } from '~/utils/holesHint'
     import { DEMO_MAX_DIRECTIONS, DEMO_PROJECT_SLUG, DEMO_WALK_CHOICES, resolveDemoWalks } from '~~/shared/constants/demo.constants'
     import { displayDirectionArrow } from '~/utils/sheetView'
 
@@ -248,8 +249,9 @@
         })
     )
 
+    // Dès 2,38 mm (2,5 − marge de courbes maximale 0,12) : voir utils/holesHint.
     const holesDisabledHint = computed(() =>
-        effectiveSpace.value > 2.4 && unref(params).fillHoles !== false
+        holesDisabledHintVisible(effectiveSpace.value, unref(params).fillHoles !== false)
     )
 
     const localAddOutShape = computed({

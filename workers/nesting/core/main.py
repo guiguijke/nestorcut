@@ -97,6 +97,61 @@ def _simplify_part(coords, holes):
     return new_coords, new_holes
 
 
+# Marge d'espacement : le contour simplifié passe À L'INTÉRIEUR de la vraie
+# pièce, donc l'espacement garanti par le moteur entre contours simplifiés
+# est plus petit sur les courbes. Espacement interne = demandé + marge.
+SPACING_MARGIN_CAP_MM = 0.12
+_FLATTEN_RESERVE_MM = 0.02
+
+
+def _note_simplification(stats, orig_rings, new_rings):
+    """Cumule dans `stats` l'écart max de simplification (distance d'un
+    sommet d'origine à l'anneau simplifié) et la présence d'un anneau > 8
+    sommets. Anneau inchangé : écart 0."""
+    import shapely
+    for orig, new in zip(orig_rings, new_rings):
+        if len(orig) - 1 > 8:
+            stats["curved"] = True
+        if len(new) == len(orig):
+            continue
+        d = shapely.distance(shapely.linearrings(new), shapely.points(orig))
+        gap = float(d.max())
+        stats["gap"] = max(stats.get("gap", 0.0), gap)
+        # Un sommet retiré hors de la ligne = courbe aplatie : réserve
+        # d'aplatissement, même sous 8 sommets (arc peu cintré en 3 segments).
+        if gap > 1e-9:
+            stats["curved"] = True
+
+
+def spacing_margin(stats, requested):
+    """Marge mesurée = 2 x écart max + 0,02 (anneau > 8 sommets ou sommet
+    retiré par la simplification), plafonnée à 0,12 ; 0 si l'espacement
+    demandé est 0 (contact permis).
+
+    Limite connue : une courbe aplatie en UN SEUL segment n'est pas
+    détectable ici (rien ne la distingue d'un côté droit) ; sa perte est
+    bornée à 0,02 mm (la tolérance d'aplatissement vaut 0,01 mm de chaque
+    côté)."""
+    if not (requested and requested > 0):
+        return 0.0
+    margin = 2 * stats.get("gap", 0.0) + (
+        _FLATTEN_RESERVE_MM if stats.get("curved") else 0.0)
+    return min(SPACING_MARGIN_CAP_MM, margin)
+
+
+def user_max_spacing(internal_max, margin):
+    """Espacement maximal qui tient, dit à l'utilisateur : (interne - marge)
+    arrondi au centième PAR DÉFAUT. Retourne (valeur, zero_tient). Quand
+    0 < maximum interne <= marge, la valeur tombe à 0 mais le job passe à
+    espacement 0 (marge nulle) : zero_tient = True, 0 mm est un vrai levier.
+    Maximum interne 0 : rien ne tient même sans espacement (False)."""
+    internal = float(internal_max or 0)
+    if internal <= 0:
+        return 0.0, False
+    requested = max(0.0, math.floor((internal - float(margin or 0)) * 100 + 1e-9) / 100)
+    return (requested, False) if requested > 0 else (0.0, True)
+
+
 def _convex_hull_ring(points):
     """E4-a (§8.1) : enveloppe convexe — miroir EXACT de convexHullRing
     (localPayloadBuilder.js) : chaîne monotone d'Andrew, anneau FERMÉ,
@@ -154,7 +209,7 @@ def _blocks_report(input_items, result_containers):
     return {"blocks": {"placed": placed_blocks, "pieces": pieces}}
 
 
-def convert_files_to_input_items(files, dek=None):
+def convert_files_to_input_items(files, dek=None, stats=None):
     """Builds the nesting input items from the project's files.
 
     The requested gap (`space`) is enforced natively by jagua-rs via
@@ -162,6 +217,8 @@ def convert_files_to_input_items(files, dek=None):
     (interior rings extracted at file processing time) are carried along and
     opened with a hairline channel so the engine nests parts inside cutouts
     natively. Geometry is lightly simplified first (see SIMPLIFY_MM).
+    `stats` (dict, optionnel) reçoit l'écart de simplification mesuré
+    (voir spacing_margin).
     """
     input_items = []
     id = 0
@@ -183,6 +240,12 @@ def convert_files_to_input_items(files, dek=None):
             coords, holes = _simplify_part(
                 part.get("coordinates"), part.get("holes") or []
             )
+            if stats is not None:
+                _note_simplification(
+                    stats,
+                    [part.get("coordinates")] + list(part.get("holes") or []),
+                    [coords] + list(holes),
+                )
             processed.append({
                 "coords": coords,
                 "holes": holes,
@@ -625,7 +688,12 @@ def _nesting_process_impl(doc):
     # Map allowRotation boolean to allowed_orientations array (fallback for backward compatibility)
     default_allowed_orientations = [0.0, 90.0, 180.0, 270.0] if allow_rotation else [0.0]
 
-    input_items = convert_files_to_input_items(files, dek)
+    # Espacement DEMANDÉ (dit à l'utilisateur, jugé par verify_layout) ;
+    # `space` devient l'INTERNE = demandé + marge, pour tout le pipeline.
+    requested_space = space
+    _simpl_stats = {}
+    input_items = convert_files_to_input_items(files, dek, _simpl_stats)
+    space = requested_space + spacing_margin(_simpl_stats, requested_space)
 
     # ------------------------------------------------------------------
     # Instant feasibility pre-check: an item whose bbox (+ the requested
@@ -668,7 +736,8 @@ def _nesting_process_impl(doc):
                         {"slug": p["slug"]}, {"name": 1}) or {}).get("name")
                 except Exception:
                     p["name"] = None
-        message = too_large_message(unplaceable, sheets, space)
+        message = too_large_message(
+            unplaceable, sheets, requested_space, space - requested_space)
         logger.warning("Unplaceable parts detected", extra={
             "unplaceable": [{k: v for k, v in p.items() if k != "name"}
                             for p in unplaceable]})
@@ -934,6 +1003,12 @@ def _nesting_process_impl(doc):
     cap_sheets = [{"width": s.get("width"), "height": s.get("height"),
                    "count": int(s.get("count") or 1)} for s in sheets]
     _cap = _capacity_report(cap_parts, cap_sheets, space)
+    if _cap:
+        # Sortie : l'espacement max suggéré se dit en espacement DEMANDÉ.
+        _cap["maxSpacingForFitMm"], _zero_fits = user_max_spacing(
+            _cap["maxSpacingForFitMm"], space - requested_space)
+        if _zero_fits:
+            _cap["maxSpacingZeroFits"] = True
     # Z2 (vérif 2026-09-05) : défense en profondeur — le 422 de l'API a pu
     # être contourné (job semé directement, une autre route que nest.post).
     # Un job refusé par le pré-contrôle ne part JAMAIS au moteur : statut
@@ -949,6 +1024,8 @@ def _nesting_process_impl(doc):
             "maxPartsAtSpacing": sum(
                 (v or 0) for v in (_cap.get("maxPartsAtSpacing") or {}).values()),
             "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+            **({"maxSpacingZeroFits": True}
+               if _cap.get("maxSpacingZeroFits") else {}),
         }
         information = ("This job does not fit the declared sheets at this "
                        "spacing — try adding a sheet, reducing the spacing "
@@ -1188,6 +1265,9 @@ def _nesting_process_impl(doc):
                         # rattache les fillers en pinwheel (miroir du serveur).
                         "meta": meta,
                         "engineConfig": engine_config,
+                        # Espacement DEMANDÉ (engineConfig porte l'interne) :
+                        # le navigateur y juge sa vérification.
+                        "requestedSpace": requested_space,
                         "parts": payload_parts,
                         # D7 (audit 2026-09-03) : gate de trou identique au
                         # serveur — le navigateur remplissait les trous sur
@@ -1453,6 +1533,8 @@ def _nesting_process_impl(doc):
                         (v or 0) for v in (_cap.get("maxPartsAtSpacing")
                                            or {}).values()),
                     "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+                    **({"maxSpacingZeroFits": True}
+                       if _cap.get("maxSpacingZeroFits") else {}),
                 })
             information = ("This job does not fit the declared sheets at this "
                            "spacing — try adding a sheet, reducing the spacing "
@@ -2090,7 +2172,7 @@ def _nesting_process_impl(doc):
                     parse_result_containers(
                         {"solution": {"layouts": snapshot}}, input_items, bin_dims_engine
                     )[0],
-                    input_items, space,
+                    input_items, requested_space, space - requested_space,
                 )
                 snap_copy = copy.deepcopy(snapshot)
                 if meta.get("packs"):
@@ -2104,7 +2186,7 @@ def _nesting_process_impl(doc):
                     parse_result_containers(
                         {"solution": {"layouts": exp_layouts}}, input_items, bin_dims_engine
                     )[0],
-                    input_items, space,
+                    input_items, requested_space, space - requested_space,
                 )
                 origin = "engine" if _dirty(pre) else "expand" if _dirty(expanded) else "post_pass"
         except Exception as e:
@@ -2262,7 +2344,8 @@ def _nesting_process_impl(doc):
         # structurelle hors tôle est JETÉE → repli moteur. Les alternatives
         # MOTEUR gardent leur badge insideSheet (piège #6 : le SPP sparrow
         # n'a pas de borne dure, c'est le contrat moteur).
-        verification = verify_layout(result_containers, input_items, space)
+        verification = verify_layout(
+            result_containers, input_items, requested_space, space - requested_space)
         if engine_alt.get("structural") and not verification.get("insideSheet"):
             logger.warning(
                 "structural alternative outside sheet, discarding",
@@ -2296,7 +2379,7 @@ def _nesting_process_impl(doc):
         report_progress("building", rank, n_alternatives,
                         min(99, round(rank / max(1, n_alternatives) * 100)))
         dxf_files, svg_files = build_result_dxf_files(
-            owner_id, alt_slug, result_containers, input_items, add_out_shape, space, dek,
+            owner_id, alt_slug, result_containers, input_items, add_out_shape, requested_space, dek,
             output_unit
         )
         sheet_area = sum(
@@ -2513,6 +2596,8 @@ def _nesting_process_impl(doc):
                 "maxPartsAtSpacing": sum(
                     (v or 0) for v in (_cap.get("maxPartsAtSpacing") or {}).values()),
                 "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+                **({"maxSpacingZeroFits": True}
+                   if _cap.get("maxSpacingZeroFits") else {}),
             })
         final_set["unfit"] = _partial
     db["nesting_jobs"].update_one(

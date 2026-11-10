@@ -69,9 +69,15 @@ export function serverRefusalCode(information) {
  * nom qu'un identifiant.
  */
 export function tooLargeParams(information) {
+    const text = String(information || '')
     const m = /^\s*Part\(s\) too large for the sheet: "(.+?)" \((\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)mm/
-        .exec(String(information || ''))
-    return m ? { file: m[1], w: m[2], h: m[3] } : null
+        .exec(text)
+    if (!m) return null
+    // Marge de courbes (le worker la dit quand elle est > 0) : lue après le
+    // nom, jamais dedans — le nom du fichier est retiré avant.
+    const tail = text.replace(/"[\s\S]*"/g, '""')
+    const k = /spacing: (\d+(?:\.\d+)?)mm \(plus (\d+(?:\.\d+)?)mm margin for curves\)/.exec(tail)
+    return k ? { file: m[1], w: m[2], h: m[3], space: k[1], margin: k[2] } : { file: m[1], w: m[2], h: m[3] }
 }
 
 /** Code de refus d'un `information` : un code stable, ou le refus d'un worker. */
