@@ -107,7 +107,7 @@ fn bulge_sagittas(points: &[[f64; 2]], bulges: &[f64], closed: bool) -> Vec<f64>
         }
         let j = if i + 1 < n {
             i + 1
-        } else if closed && n > 2 {
+        } else if closed && n >= 2 {
             0
         } else {
             continue;
@@ -675,5 +675,20 @@ mod tests {
         assert_eq!(py_str(11.811023622047244), "11.811023622047244");
         assert_eq!(py_str(1e-5), "1e-05");
         assert_eq!(py_str(0.30000000000000004), "0.30000000000000004");
+    }
+
+    #[test]
+    fn the_closing_segment_of_a_two_vertex_closed_polyline_counts() {
+        // Bulge 0 sur (0,0), bulge 1 sur (100,0) : le segment de fermeture (100,0)->(0,0)
+        // est un demi-cercle de flèche 50.
+        let s = bulge_sagittas(&[[0.0, 0.0], [100.0, 0.0]], &[0.0, 1.0], true);
+        assert_eq!(s.len(), 1);
+        assert!((s[0] - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_two_vertex_closed_polyline_with_two_bulges_has_two_segments() {
+        let s = bulge_sagittas(&[[0.0, 0.0], [100.0, 0.0]], &[1.0, 1.0], true);
+        assert_eq!(s.len(), 2);
     }
 }
