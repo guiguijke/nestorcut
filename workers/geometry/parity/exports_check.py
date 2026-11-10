@@ -129,7 +129,7 @@ def report_parity(tol=1e-6):
     if err:
         return ("report", False, json.dumps(py), json.dumps(rs), err)
     # Régime band (layout > budget) : offcut doit matcher exactement ici.
-    err2 = band_offcut_parity(cmp)
+    err2 = band_offcut_parity(cmp) or nested_in_hole_parity(cmp)
     return ("report", err2 is None, json.dumps(py), json.dumps(rs), err2)
 
 
@@ -157,6 +157,35 @@ def band_offcut_parity(cmp):
     return cmp(py, rs, "band")
 
 
+def nested_in_hole_parity(cmp):
+    """Pièce en L dans un trou en L, et deux vrais chevauchements : le centroïde d'un L fin
+    tombe dans l'encoche du trou, donc dans la matière de l'hôte (B11)."""
+    from core import metrics
+    host = {"id": "host", "coords": [[0, 0], [100, 0], [100, 100], [0, 100], [0, 0]],
+            "holes": [[[10, 10], [90, 10], [90, 30], [30, 30], [30, 90], [10, 90], [10, 10]]]}
+
+    def thin_l(dx):
+        pts = [[12 + dx, 12], [88 + dx, 12], [88 + dx, 18], [18 + dx, 18], [18 + dx, 88], [12 + dx, 88]]
+        return {"id": "in", "coords": pts + [pts[0]], "holes": []}
+
+    square = {"id": "sq", "coords": [[92, 92], [98, 92], [98, 98], [92, 98], [92, 92]], "holes": []}
+    for name, other in (("L dans le trou", thin_l(0)), ("L qui mord la paroi", thin_l(-5)),
+                        ("carre sur la matiere", square)):
+        ts = [T("host", 20, 20, 0.0), T(other["id"], 20, 20, 0.0)]
+        items = [host, other]
+        py = metrics.verify_layout([C(200.0, 200.0, ts)], items, 2.0)
+        spec = {"items": items,
+                "containers": [{"bin_width": 200.0, "bin_height": 200.0,
+                                "transforms": [{"item_id": t.item_id, "angle": 0.0, "x": t.x, "y": t.y}
+                                               for t in ts]}],
+                "space": 2.0}
+        rs = json.loads(run([REPORT_CLI], json.dumps(spec)))["verify"]
+        err = cmp(py, rs, name)
+        if err:
+            return err
+    return None
+
+
 def list_of_items(items):
     return [dict(id=k, **v) for k, v in items.items()]
 
@@ -181,6 +210,10 @@ def _canon(doc):
         elif t == "LWPOLYLINE":
             g = ("P", e.closed,
                  tuple(tuple(round(c, 6) for c in p) for p in e.get_points(format="xyb")))
+        elif t == "POLYLINE":
+            g = ("PL", e.is_closed,
+                 tuple((round(v.dxf.location.x, 6), round(v.dxf.location.y, 6), round(v.dxf.bulge, 6))
+                       for v in e.vertices))
         elif t == "ELLIPSE":
             g = ("E", tuple(e.dxf.center)[:2], tuple(e.dxf.major_axis)[:2], e.dxf.ratio,
                  e.dxf.start_param, e.dxf.end_param)
@@ -193,10 +226,9 @@ def _canon(doc):
 
 
 def _cmp_canon(a, b, tol_geo=1e-9, tol_loose=1e-2):
-    # OUT_SHAPE = bbox dérivée via ezdxf.bbox (approximative, dépend des
-    # extrêmes de courbes) : informative, pas soumise à la parité stricte.
-    a = [e for e in a if e[1] != "OUT_SHAPE"]
-    b = [e for e in b if e[1] != "OUT_SHAPE"]
+    # OUT_SHAPE = bbox dérivée via ezdxf.bbox, qui approche les arcs par des Bézier
+    # (jusqu'à 4e-3 mm d'écart avec l'analytique) : comparée à 1e-2, pas ignorée. Ignorée,
+    # elle laissait passer un cadre décalé de dizaines de mm sur une pièce à arcs.
     if len(a) != len(b):
         return f"entity count {len(a)} vs {len(b)}"
     for i, (ea, eb) in enumerate(zip(a, b)):
@@ -237,6 +269,8 @@ def dxf_parity():
     msp = src.modelspace()
     msp.add_line((0, 0), (50, 0), dxfattribs={"layer": "CUT"})
     msp.add_lwpolyline([(0, 0, 0.3), (40, 0, 0.0), (40, 20, 0.0), (0, 20, 0.0)],
+                       format="xyb", close=True, dxfattribs={"layer": "CUT"})
+    msp.add_polyline2d([(70, 0, 1.0), (110, 0, 0.0), (110, 20, -0.4), (70, 20, 0.0)],
                        format="xyb", close=True, dxfattribs={"layer": "CUT"})
     msp.add_arc((25, 25), 10, 0, 120, dxfattribs={"layer": "CUT"})
     msp.add_circle((60, 30), 8, dxfattribs={"layer": "CUT"})

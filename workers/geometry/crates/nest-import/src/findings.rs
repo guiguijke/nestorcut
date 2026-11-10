@@ -35,6 +35,13 @@ pub const NOISE_ENTITIES: &[&str] = &[
     "ACAD_TABLESTYLE", "LAYOUT", "VERTEX",
 ];
 
+/// Écart (mm) à partir duquel un bulge de polyligne mérite d'être dit : l'imbrication
+/// travaille sur la corde (D-IMP-8), le fichier de coupe garde l'arc. Deux arcs face à face
+/// perdent chacun leur flèche, donc l'espacement perdu vaut jusqu'à 2 x la flèche : c'est
+/// cette valeur qui est comparée au seuil. Sous ce seuil, l'écart est plus petit que le
+/// trait de découpe : rien à dire.
+pub const NOTABLE_SAGITTA_MM: f64 = 0.1;
+
 pub const LEVEL_INFO: &str = "info";
 pub const LEVEL_ATTENTION: &str = "attention";
 
@@ -100,10 +107,23 @@ pub struct ImportStats {
     pub dangling_paths: usize,
     /// Corps écartés à l'émission (plus petits que 0,1 mm sur un côté).
     pub dropped_parts: usize,
+    /// Entités de dessin écartées parce qu'elles sont en espace papier.
+    pub paper_space_skipped: usize,
     /// Trous rebouchés parce que trop petits pour être découpés (lot E1).
     pub micro_voids: usize,
     /// Sommets retirés des aller-retours de largeur nulle (lot E1).
     pub spurs_removed: usize,
+    /// Entités lues et gardées dans le DXF canonique mais rattachées à aucune
+    /// pièce : le fichier de coupe est construit pièce par pièce, elles n'y
+    /// seront pas. Type d'entité → nombre.
+    pub uncut: std::collections::BTreeMap<String, usize>,
+    /// Segments de polyligne à bulge dont 2 x la flèche atteint `NOTABLE_SAGITTA_MM`.
+    pub bulge_segments: usize,
+    /// Plus grande flèche (mm) de tous les segments à bulge (0 si aucun).
+    pub bulge_max_sagitta: f64,
+    /// Handle canonique → type DXF, pour nommer les entités non rattachées.
+    /// Rempli par la lecture, jamais sérialisé.
+    pub kinds_by_handle: std::collections::HashMap<String, &'static str>,
 }
 
 impl ImportStats {
@@ -140,11 +160,35 @@ impl ImportStats {
                 self.dangling_paths,
             ));
         }
+        if !self.uncut.is_empty() {
+            let total: usize = self.uncut.values().sum();
+            let mut types: Vec<(&String, &usize)> = self.uncut.iter().collect();
+            types.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+            out.push(
+                Finding::new("import.entitiesUncut", LEVEL_ATTENTION, total)
+                    .with_types(types.into_iter().map(|(k, _)| k.clone()).collect()),
+            );
+        }
+        if self.bulge_segments > 0 && 2.0 * self.bulge_max_sagitta >= NOTABLE_SAGITTA_MM {
+            out.push(
+                Finding::new("import.bulgesChorded", LEVEL_ATTENTION, self.bulge_segments)
+                    .with_value(format!("{:.2}", 2.0 * self.bulge_max_sagitta)),
+            );
+        }
         if self.dropped_parts > 0 {
             out.push(Finding::new(
                 "import.partsDropped",
                 LEVEL_ATTENTION,
                 self.dropped_parts,
+            ));
+        }
+        // Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte
+        // (règle 2), et une pièce oubliée là ne serait jamais découpée.
+        if self.paper_space_skipped > 0 {
+            out.push(Finding::new(
+                "import.paperSpaceSkipped",
+                LEVEL_ATTENTION,
+                self.paper_space_skipped,
             ));
         }
         if self.unit_unknown {
@@ -278,6 +322,61 @@ mod tests {
         );
         assert_eq!(f[0].code, "import.contoursDropped");
         assert_eq!(f[0].count, 12);
+    }
+
+    #[test]
+    fn uncut_entities_are_attention_and_named_by_decreasing_count() {
+        let mut uncut = std::collections::BTreeMap::new();
+        uncut.insert("LINE".to_string(), 2);
+        uncut.insert("SPLINE".to_string(), 478);
+        uncut.insert("ARC".to_string(), 2);
+        let stats = ImportStats { uncut, insunits: 4, unit_factor: 1.0, ..Default::default() };
+        let f = stats.findings();
+        assert_eq!(f[0].code, "import.entitiesUncut");
+        assert_eq!(f[0].level, LEVEL_ATTENTION);
+        assert_eq!(f[0].count, 482);
+        assert_eq!(f[0].types, vec!["SPLINE", "ARC", "LINE"]);
+    }
+
+    #[test]
+    fn chorded_bulges_carry_the_largest_sagitta_with_two_decimals() {
+        let stats = ImportStats {
+            bulge_segments: 3,
+            bulge_max_sagitta: 0.5858,
+            insunits: 4,
+            unit_factor: 1.0,
+            ..Default::default()
+        };
+        let f = stats.findings();
+        assert_eq!(f[0].code, "import.bulgesChorded");
+        assert_eq!(f[0].level, LEVEL_ATTENTION);
+        assert_eq!(f[0].count, 3);
+        // deux arcs face à face perdent chacun leur flèche : 2 x 0,5858
+        assert_eq!(f[0].value.as_deref(), Some("1.17"));
+    }
+
+    #[test]
+    fn chorded_bulges_are_announced_from_twice_the_sagitta_threshold() {
+        // 2 x 0,09 = 0,18 >= 0,1 : constat émis, valeur doublée.
+        let big = ImportStats {
+            bulge_segments: 1,
+            bulge_max_sagitta: 0.09,
+            insunits: 4,
+            unit_factor: 1.0,
+            ..Default::default()
+        };
+        let f = big.findings();
+        assert_eq!(f[0].code, "import.bulgesChorded");
+        assert_eq!(f[0].value.as_deref(), Some("0.18"));
+        // 2 x 0,04 = 0,08 < 0,1 : aucun constat, même avec un segment compté.
+        let quiet = ImportStats {
+            bulge_segments: 1,
+            bulge_max_sagitta: 0.04,
+            insunits: 4,
+            unit_factor: 1.0,
+            ..Default::default()
+        };
+        assert!(quiet.findings().iter().all(|x| x.code != "import.bulgesChorded"));
     }
 
     #[test]

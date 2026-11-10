@@ -10,6 +10,7 @@ const REASON_KEYS = {
     dwg_version_unsupported: 'files.importError.dwgVersion',
     dwg_conversion_failed: 'files.importError.dwgCorrupt',
     dwg_output_unreadable: 'files.importError.dwgOutput',
+    paper_space_only: 'files.importError.paperSpaceOnly',
 }
 
 export function importErrorReasonKey(code) {

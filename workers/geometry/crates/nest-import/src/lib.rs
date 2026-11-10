@@ -104,6 +104,11 @@ impl std::fmt::Display for ImportError {
                         "DXF block nesting exceeds {} levels",
                         budget::MAX_INSERT_DEPTH
                     ),
+                    budget::TooHeavyReason::PaperSpaceOnly => write!(
+                        f,
+                        "the whole DXF drawing is in paper space ({} entities), model space is empty",
+                        t.entities
+                    ),
                 }
             }
         }
@@ -182,6 +187,21 @@ pub fn import_dxf_limited(
     if count > limits.max_entities {
         return Err(too_many_entities(count, false, limits, &dl));
     }
+    let model_has_matter = stats.skipped.keys().any(|k| findings::is_material(k))
+        || entities.iter().any(|p| match p {
+            dxf::flatten::Primitive::Unsupported(kind) => findings::is_material(kind),
+            _ => true,
+        });
+    if stats.paper_space_skipped > 0 && !model_has_matter {
+        return Err(ImportError::TooHeavy(TooHeavy {
+            reason: budget::TooHeavyReason::PaperSpaceOnly,
+            entities: stats.paper_space_skipped,
+            entities_at_least: false,
+            max_entities: limits.max_entities,
+            elapsed_ms: dl.elapsed_ms(),
+            time_budget_ms: limits.time_budget_ms,
+        }));
+    }
     let (linework, w2, entity_count) = assemble::collect_linework_until(&entities, flatten_tol, &dl)
         .map_err(|e| out_of_time(count, limits, e))?;
     warnings.extend(w2);
@@ -189,6 +209,10 @@ pub fn import_dxf_limited(
         .map_err(|e| out_of_time(count, limits, e))?;
     stats.dangling_paths = asm.dangling_paths;
     stats.dropped_parts = asm.dropped_parts;
+    for h in &asm.uncut_handles {
+        let kind = stats.kinds_by_handle.get(h).copied().unwrap_or("?");
+        *stats.uncut.entry(kind.to_string()).or_insert(0) += 1;
+    }
     stats.micro_voids = asm.micro_voids;
     stats.spurs_removed = asm.spurs_removed;
     Ok(ImportResult {

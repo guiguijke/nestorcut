@@ -32,6 +32,28 @@ def _rust_table(name):
     return tuple(re.findall(r'"([^"]+)"', m.group(1)))
 
 
+class TestUncutAndBulges:
+    def test_uncut_entities_are_attention_and_named_by_decreasing_count(self):
+        stats = {**empty_stats(), "uncut": {"LINE": 2, "SPLINE": 478, "ARC": 2}}
+        f = build_findings(stats)[0]
+        assert f == {"code": "import.entitiesUncut", "level": LEVEL_ATTENTION, "count": 482,
+                     "types": ["SPLINE", "ARC", "LINE"]}
+
+    def test_chorded_bulges_carry_the_largest_sagitta_with_two_decimals(self):
+        stats = {**empty_stats(), "bulgeSegments": 3, "bulgeMaxSagitta": 0.5858}
+        assert build_findings(stats) == [
+            {"code": "import.bulgesChorded", "level": LEVEL_ATTENTION, "count": 3, "value": "1.17"}]
+        big = {**empty_stats(), "bulgeSegments": 1, "bulgeMaxSagitta": 0.09}
+        assert build_findings(big)[0]["value"] == "0.18"
+        assert build_findings({**empty_stats(), "bulgeSegments": 1, "bulgeMaxSagitta": 0.04}) == []
+
+    def test_the_threshold_is_the_same_on_both_sides(self):
+        from worker_common.geometry.import_findings import NOTABLE_SAGITTA_MM
+        text = RUST.read_text(encoding="utf-8")
+        m = re.search(r"NOTABLE_SAGITTA_MM: f64 = ([0-9.]+);", text)
+        assert m and float(m.group(1)) == NOTABLE_SAGITTA_MM
+
+
 class TestParityWithRust:
     def test_the_material_and_noise_tables_are_the_same_on_both_sides(self):
         assert MATERIAL_ENTITIES == _rust_table("MATERIAL_ENTITIES")
@@ -48,6 +70,10 @@ class TestParityWithRust:
 
 
 class TestFindings:
+    def test_paper_space_is_attention_with_its_count(self):
+        out = build_findings({**empty_stats(), "paperSpaceSkipped": 7})
+        assert out == [{"code": "import.paperSpaceSkipped", "level": LEVEL_ATTENTION, "count": 7}]
+
     def test_a_clean_file_says_nothing(self):
         assert build_findings(empty_stats()) == []
         assert build_findings(None) == []

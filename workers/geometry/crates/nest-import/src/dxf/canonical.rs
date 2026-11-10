@@ -79,6 +79,66 @@ pub fn assign_canonical_handles(entities: &mut [Entity]) {
     }
 }
 
+/// Type DXF d'une entité canonique (les noms qu'ezdxf donne à `dxftype()`).
+pub fn entity_kind(e: &Entity) -> &'static str {
+    match e {
+        Entity::Line(_) => "LINE",
+        Entity::LwPolyline(_) => "LWPOLYLINE",
+        Entity::Polyline(_) => "POLYLINE",
+        Entity::Arc(_) => "ARC",
+        Entity::Circle(_) => "CIRCLE",
+        Entity::Ellipse(_) => "ELLIPSE",
+        Entity::Spline(_) => "SPLINE",
+        Entity::Point(_) => "POINT",
+        Entity::Insert(_) => "INSERT",
+        Entity::Unsupported(_) => "UNSUPPORTED",
+    }
+}
+
+/// Flèche (mm) de chaque segment à bulge d'une polyligne : |bulge| × corde / 2.
+/// Le segment de fermeture compte (son bulge est celui du dernier sommet).
+fn bulge_sagittas(points: &[[f64; 2]], bulges: &[f64], closed: bool) -> Vec<f64> {
+    let n = points.len();
+    let mut out = Vec::new();
+    for i in 0..n {
+        let b = bulges.get(i).copied().unwrap_or(0.0);
+        if b == 0.0 || !b.is_finite() {
+            continue;
+        }
+        let j = if i + 1 < n {
+            i + 1
+        } else if closed && n >= 2 {
+            0
+        } else {
+            continue;
+        };
+        let chord = ((points[j][0] - points[i][0]).powi(2) + (points[j][1] - points[i][1]).powi(2)).sqrt();
+        out.push(b.abs() * chord / 2.0);
+    }
+    out
+}
+
+/// Constat M5 : l'imbrication lit les polylignes en CORDES (D-IMP-8) alors que
+/// le DXF canonique, donc le fichier de coupe, garde l'arc. Mesuré sur les
+/// entités finales, en mm, après résolution des blocs et mise à l'unité.
+fn measure_bulges(flat: &[Entity], stats: &mut crate::findings::ImportStats) {
+    for e in flat {
+        let sags = match e {
+            Entity::LwPolyline(p) => bulge_sagittas(&p.points, &p.bulges, p.closed),
+            Entity::Polyline(p) => bulge_sagittas(&p.points, &p.bulges, p.closed),
+            _ => continue,
+        };
+        for s in sags {
+            if s > stats.bulge_max_sagitta {
+                stats.bulge_max_sagitta = s;
+            }
+            if 2.0 * s >= crate::findings::NOTABLE_SAGITTA_MM {
+                stats.bulge_segments += 1;
+            }
+        }
+    }
+}
+
 /// Entités canoniques mm du document : cleanup (Unsupported skippé avec
 /// warning, jumeau du delete TEXT/MTEXT/IMAGE/SOLID), decompose (INSERTs
 /// résolus), scale unitaire, handles canoniques. C'est LA source de vérité
@@ -152,10 +212,15 @@ pub fn canonical_entities_stats_bounded(
         }
     }
     assign_canonical_handles(&mut flat);
+    for e in &flat {
+        stats.kinds_by_handle.insert(e.handle().to_string(), entity_kind(e));
+    }
+    measure_bulges(&flat, &mut stats);
     // Splines COMPTÉES APRÈS résolution des INSERT : c'est le nombre que
     // l'importeur échantillonne réellement (une spline dans un bloc inséré
     // trois fois est échantillonnée trois fois).
     stats.splines = flat.iter().filter(|e| matches!(e, Entity::Spline(_))).count();
+    stats.paper_space_skipped = doc.paper_space_entities;
     stats.insunits = doc.source_insunits;
     stats.unit_factor = factor;
     stats.unit_unknown = unknown;
@@ -335,6 +400,10 @@ fn write_entity(s: &mut String, e: &Entity) -> bool {
                 grp(s, 100, "AcDbPolyline2dVertex");
                 num(s, 10, pt[0]);
                 num(s, 20, pt[1]);
+                let b = p.bulges.get(i).copied().unwrap_or(0.0);
+                if b != 0.0 {
+                    num(s, 42, b);
+                }
                 int(s, 70, 0);
             }
             grp(s, 0, "SEQEND");
@@ -542,6 +611,7 @@ mod tests {
         let mut ents = vec![
             Entity::Polyline(entities::Polyline {
                 points: vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                bulges: vec![0.0; 4],
                 closed: true,
                 common: entities::Common::default(),
                 vertex_handles: vec![],
@@ -605,5 +675,20 @@ mod tests {
         assert_eq!(py_str(11.811023622047244), "11.811023622047244");
         assert_eq!(py_str(1e-5), "1e-05");
         assert_eq!(py_str(0.30000000000000004), "0.30000000000000004");
+    }
+
+    #[test]
+    fn the_closing_segment_of_a_two_vertex_closed_polyline_counts() {
+        // Bulge 0 sur (0,0), bulge 1 sur (100,0) : le segment de fermeture (100,0)->(0,0)
+        // est un demi-cercle de flèche 50.
+        let s = bulge_sagittas(&[[0.0, 0.0], [100.0, 0.0]], &[0.0, 1.0], true);
+        assert_eq!(s.len(), 1);
+        assert!((s[0] - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_two_vertex_closed_polyline_with_two_bulges_has_two_segments() {
+        let s = bulge_sagittas(&[[0.0, 0.0], [100.0, 0.0]], &[1.0, 1.0], true);
+        assert_eq!(s.len(), 2);
     }
 }

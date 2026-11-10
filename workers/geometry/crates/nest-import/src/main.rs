@@ -2,14 +2,15 @@
 //! on stdout — the parity-harness driver (workers/geometry/parity/).
 //! Format detected by CONTENT signature (AGENTS #31), never by extension.
 
-use std::io::Read;
+use std::io::{Read, Write};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: nest-import-cli <file.dxf|file.svg> [flatten_tol]");
+        eprintln!("usage: nest-import-cli <file.dxf|file.svg> [flatten_tol | --canonical]");
         std::process::exit(2);
     }
+    let canonical = args.get(2).is_some_and(|a| a == "--canonical");
     let tol: f64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.01);
     let mut buf = Vec::new();
     match std::fs::File::open(&args[1]).and_then(|mut f| f.read_to_end(&mut buf)) {
@@ -18,6 +19,18 @@ fn main() {
             eprintln!("cannot read {}: {e}", args[1]);
             std::process::exit(1);
         }
+    }
+    if canonical {
+        // Les octets DXF canoniques, ceux que le navigateur stocke et dont
+        // l'export copie les entités (parity/wcs_check.py les relit par ezdxf).
+        match nest_import::canonical_dxf(&buf, tol) {
+            Ok(bytes) => std::io::stdout().write_all(&bytes).expect("stdout"),
+            Err(e) => {
+                eprintln!("canonical failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
     }
     match nest_import::import_file(&buf, tol) {
         Ok(res) => {

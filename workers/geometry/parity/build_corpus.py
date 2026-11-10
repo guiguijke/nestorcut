@@ -7,6 +7,7 @@ Run from repo root: python workers/geometry/parity/build_corpus.py
 """
 import math
 import os
+import sys
 
 import ezdxf
 
@@ -120,6 +121,301 @@ def main():
     print(f"extended corpus -> {OUT} ({len(os.listdir(OUT))} files)")
 
 
+# ---------------------------------------------------------- fichier de coupe
+# Cas où un import faux donnerait un fichier de coupe faux sans avertissement.
+# Pour écrire seulement ceux qui manquent, sans toucher au reste du corpus :
+#     python workers/geometry/parity/build_corpus.py coupe
+
+
+def plate_with_bulges(msp):
+    """Plaque à trou et pièce à arcs de sens opposés, en POLYLINE classique."""
+    msp.add_polyline2d([(0, 0, 1.0), (100, 0, 0.0), (100, 50, 0.0), (0, 50, 0.0)],
+                       format="xyb", close=True)
+    msp.add_polyline2d([(30, 15, 0.2), (50, 15, 0.2), (50, 35, 0.2), (30, 35, 0.2)],
+                       format="xyb", close=True)
+    msp.add_polyline2d([(200, 100, 0.4142135623730951), (240, 100, 0.0),
+                        (240, 140, -0.5), (200, 140, 0.0)], format="xyb", close=True)
+
+
+R12_NO_HANDLE_HEAD = "0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n"
+
+
+def r12_no_handle_polyline(vertices):
+    """POLYLINE fermée écrite à la main : R12 sans aucun handle, comme le font
+    d'anciens exporteurs. Le bulge est porté par le groupe 42 du VERTEX."""
+    out = "0\nPOLYLINE\n8\nCUT\n66\n1\n70\n1\n"
+    for x, y, b in vertices:
+        out += f"0\nVERTEX\n8\nCUT\n10\n{x}\n20\n{y}\n"
+        if b:
+            out += f"42\n{b}\n"
+    return out + "0\nSEQEND\n8\nCUT\n"
+
+
+def save_new(doc, name):
+    """N'écrit qu'un fichier absent : ezdxf y met une date et des GUID, réécrire
+    un échantillon déjà commité ferait un faux changement de corpus."""
+    if not os.path.exists(os.path.join(OUT, name)):
+        save(doc, name)
+
+
+def d_shape(blk):
+    """Pièce à trou et à un seul coin arrondi : l'ARC n'a aucune symétrie, un miroir
+    lu comme une rotation de 180° le pose ailleurs et le contour ne se referme plus."""
+    blk.add_line((0, 0), (40, 0))
+    blk.add_arc((40, 20), 20, -90, 0)
+    blk.add_line((60, 20), (60, 40))
+    blk.add_line((60, 40), (0, 40))
+    blk.add_line((0, 40), (0, 0))
+    blk.add_circle((25, 20), 8)
+
+
+def tilted_ellipse_point(t):
+    """Point de l'ellipse de grand axe (30, 20), ratio 0,4, centrée à l'origine."""
+    return (30 * math.cos(t) - 0.4 * 20 * math.sin(t), 20 * math.cos(t) + 0.4 * 30 * math.sin(t))
+
+
+def main_cut_cases():
+    os.makedirs(OUT, exist_ok=True)
+
+    # --- POLYLINE classique à bulges : R2010, R12, R12 écrit à la main.
+    doc = new_doc()
+    plate_with_bulges(doc.modelspace())
+    save_new(doc, "polyline_bulge.dxf")
+
+    doc = ezdxf.new("R12")
+    plate_with_bulges(doc.modelspace())
+    save_new(doc, "polyline_bulge_r12.dxf")
+
+    with open(os.path.join(OUT, "polyline_bulge_r12_nohandle.dxf"), "w", encoding="ascii") as f:
+        f.write(R12_NO_HANDLE_HEAD
+                + r12_no_handle_polyline([(0.0, 0.0, 1.0), (100.0, 0.0, 0), (100.0, 50.0, 0), (0.0, 50.0, 0)])
+                + "0\nENDSEC\n0\nEOF\n")
+
+    # --- INSERT à échelle inégale + rotation : l'échelle s'applique AVANT la
+    # rotation (ezdxf Insert.matrix44). Pièces à trou, point de base non nul.
+    doc = new_doc()
+    blk = doc.blocks.new(name="PLATE", base_point=(5, 5))
+    blk.add_lwpolyline([(0, 0), (30, 0), (30, 10), (0, 10)], close=True)
+    blk.add_lwpolyline([(10, 3), (20, 3), (20, 7), (10, 7)], close=True)
+    msp = doc.modelspace()
+    msp.add_blockref("PLATE", (100, 0), dxfattribs={"xscale": 2, "yscale": 1, "rotation": 90})
+    msp.add_blockref("PLATE", (0, 200), dxfattribs={"xscale": 2, "yscale": 0.5, "rotation": 30})
+    msp.add_blockref("PLATE", (300, 400), dxfattribs={"xscale": 0.5, "yscale": 3, "rotation": 225})
+    save_new(doc, "block_scale_rotation.dxf")
+
+    # --- Miroir tourné (xscale ou yscale négatif + rotation), sans arc : la
+    # pièce reste congruente, c'est sa position qui change.
+    doc = new_doc()
+    blk = doc.blocks.new(name="TAB")
+    blk.add_lwpolyline([(0, 0), (40, 0), (40, 10), (10, 30), (0, 30)], close=True)
+    msp = doc.modelspace()
+    msp.add_blockref("TAB", (100, 100), dxfattribs={"xscale": -1, "rotation": 30})
+    msp.add_blockref("TAB", (300, 300), dxfattribs={"yscale": -1, "rotation": 60})
+    msp.add_blockref("TAB", (500, 500), dxfattribs={"xscale": -2, "yscale": 1, "rotation": 90})
+    save_new(doc, "block_mirror_rotation.dxf")
+
+    # --- ARC et ELLIPSE dans un bloc miroir : xscale=-1, -2 uniforme, -2 inégal,
+    # miroir tourné. Le contour ne se referme que si l'arc reste du bon côté.
+    # Pièces empilées loin l'une de l'autre : compare.py juge les pièces dans
+    # l'ordre, et celui de GEOS ne suit y-min que si leurs hauteurs sont disjointes.
+    def mirrored_block_doc(build_block):
+        doc = new_doc()
+        build_block(doc.blocks.new(name="SHAPE"))
+        for k, attribs in enumerate((
+            {"xscale": -1},
+            {"xscale": -2, "yscale": 2},
+            {"xscale": -2, "yscale": 1},
+            {"yscale": -1, "rotation": 30},
+            {"xscale": -1.5, "yscale": 1, "rotation": 45},
+            {"xscale": 1, "yscale": 3},
+        )):
+            doc.modelspace().add_blockref("SHAPE", (200 * k, 400 * k), dxfattribs=attribs)
+        return doc
+
+    def half_ellipse(blk):
+        blk.add_ellipse((0, 0), major_axis=(30, 0), ratio=0.5, start_param=0, end_param=math.pi)
+        blk.add_line((-30, 0), (30, 0))
+
+    def tilted_ellipse(blk):
+        blk.add_ellipse((0, 0), major_axis=(30, 20), ratio=0.4,
+                        start_param=math.pi / 4, end_param=5 * math.pi / 4)
+        blk.add_line(tilted_ellipse_point(math.pi / 4), tilted_ellipse_point(5 * math.pi / 4))
+
+    save_new(mirrored_block_doc(d_shape), "block_mirror_arc.dxf")
+    save_new(mirrored_block_doc(half_ellipse), "block_mirror_ellipse.dxf")
+    save_new(mirrored_block_doc(tilted_ellipse), "block_mirror_ellipse_tilted.dxf")
+
+    # --- Miroirs imbriqués : deux miroirs s'annulent, un miroir + un non.
+    doc = new_doc()
+    d_shape(doc.blocks.new(name="D"))
+    doc.blocks.new(name="ONE_MIRROR").add_blockref("D", (0, 0), dxfattribs={"xscale": -1})
+    doc.blocks.new(name="MIRROR_ROTATED").add_blockref(
+        "D", (10, 5), dxfattribs={"xscale": -2, "yscale": 2, "rotation": 30})
+    msp = doc.modelspace()
+    msp.add_blockref("ONE_MIRROR", (100, 0))
+    msp.add_blockref("ONE_MIRROR", (300, 400), dxfattribs={"xscale": -1})
+    msp.add_blockref("ONE_MIRROR", (500, 800), dxfattribs={"rotation": 90})
+    msp.add_blockref("MIRROR_ROTATED", (100, 1200), dxfattribs={"yscale": -1})
+    msp.add_blockref("MIRROR_ROTATED", (400, 1600), dxfattribs={"xscale": -1, "rotation": 45})
+    save_new(doc, "block_mirror_nested.dxf")
+
+    # --- Polylignes à arcs dans un bloc miroir : le bulge change de signe ; sous
+    # une échelle inégale elles éclatent en LINE + ELLIPSE, comme ezdxf.
+    doc = new_doc()
+    blk = doc.blocks.new(name="BULGED")
+    blk.add_lwpolyline([(0, 0, 0.5), (60, 0, 0.0), (60, 40, -0.3), (0, 40, 0.0)], format="xyb", close=True)
+    blk.add_polyline2d([(20, 10, 0.2), (40, 10, 0.0), (40, 30, 0.2), (20, 30, 0.0)], format="xyb", close=True)
+    msp = doc.modelspace()
+    for k, attribs in enumerate((
+        {"xscale": -1},
+        {"xscale": -2, "yscale": 2},
+        {"xscale": -2, "yscale": 1},
+        {"xscale": 2, "yscale": 1, "rotation": 30},
+        {"xscale": -1, "rotation": 60},
+    )):
+        msp.add_blockref("BULGED", (300 * k, 400 * k), dxfattribs=attribs)
+    save_new(doc, "block_mirror_bulge.dxf")
+
+    # --- Espace papier : cadre et cartouche à côté de la pièce (R12, R2000, R2010),
+    # ou tout le dessin dedans, l'espace objet vide (à refuser, pas à vider).
+    def sheet_frame(layout):
+        layout.add_line((0, 0), (420, 0))
+        layout.add_line((420, 0), (420, 297))
+        layout.add_line((420, 297), (0, 297))
+        layout.add_line((0, 297), (0, 0))
+        layout.add_circle((400, 20), 5)
+        layout.add_text("CARTOUCHE")
+
+    def plate(layout):
+        layout.add_line((0, 0), (100, 0))
+        layout.add_line((100, 0), (100, 50))
+        layout.add_line((100, 50), (0, 50))
+        layout.add_line((0, 50), (0, 0))
+        layout.add_circle((50, 25), 10)
+
+    for version, tag in (("R12", "r12"), ("R2000", "r2000"), ("R2010", "r2010")):
+        doc = ezdxf.new(version)
+        doc.header["$INSUNITS"] = 4
+        plate(doc.modelspace())
+        sheet_frame(doc.paperspace())
+        if version == "R2010":
+            sheet_frame(doc.layouts.new("Plan"))  # présentation inactive, dans BLOCKS
+        save_new(doc, f"paperspace_{tag}.dxf")
+
+    for version, tag in (("R12", "r12"), ("R2010", "r2010")):
+        doc = ezdxf.new(version)
+        doc.header["$INSUNITS"] = 4
+        plate(doc.paperspace())
+        save_new(doc, f"paperspace_only_{tag}.dxf")
+
+    # --- Extrusion -Z (normale opposée) : les coordonnées d'ARC, CIRCLE, LWPOLYLINE,
+    # POLYLINE et INSERT sont en OCS (x opposé), celles d'ELLIPSE en WCS mais son petit
+    # axe et ses paramètres tournent autour de -Z.
+    minus_z = {"extrusion": (0, 0, -1)}
+    doc = new_doc()
+    blk = doc.blocks.new(name="CORNER")
+    blk.add_line((0, 0), (40, 0))
+    blk.add_arc((40, 15), 15, -90, 0)
+    blk.add_line((55, 15), (55, 30))
+    blk.add_line((55, 30), (0, 30))
+    blk.add_line((0, 30), (0, 0))
+    msp = doc.modelspace()
+    msp.add_circle((10, 0), 5, dxfattribs=minus_z)
+    msp.add_arc((50, 300), 20, 0, 90, dxfattribs=minus_z)
+    msp.add_line((-70, 300), (-50, 300))
+    msp.add_line((-50, 300), (-50, 320))
+    msp.add_lwpolyline([(200, 600, 0.5), (260, 600, 0.0), (260, 640, -0.25), (200, 640, 0.0)],
+                       format="xyb", close=True, dxfattribs=minus_z)
+    msp.add_polyline2d([(300, 900, 0.5), (360, 900, 0.0), (360, 940, -0.25), (300, 940, 0.0)],
+                       format="xyb", close=True, dxfattribs=minus_z)
+    msp.add_ellipse((0, 1200), major_axis=(30, 0), ratio=0.5, start_param=0, end_param=math.pi,
+                    dxfattribs=minus_z)
+    msp.add_line((-30, 1200), (30, 1200))
+    msp.add_blockref("CORNER", (400, 1500), dxfattribs=minus_z)
+    msp.add_blockref("CORNER", (400, 1800), dxfattribs={**minus_z, "rotation": 30, "xscale": 2, "yscale": 2})
+    save_new(doc, "extrusion_minus_z.dxf")
+
+    # --- Extrusion oblique : pas de vraie pièce plane, mais jamais une position
+    # fausse en silence. ezdxf projette sur XY, le Rust aussi.
+    oblique = {"extrusion": (0, 0.6, 0.8)}
+    doc = new_doc()
+    blk = doc.blocks.new(name="SQUARE")
+    blk.add_lwpolyline([(0, 0), (20, 0), (20, 20), (0, 20)], close=True)
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 200), (40, 200), (40, 230), (0, 230)], close=True,
+                       dxfattribs={"extrusion": (0.6, 0, 0.8), "elevation": 3})
+    msp.add_ellipse((0, 500, 0), major_axis=(30, 0, 0), ratio=0.5, dxfattribs=oblique)
+    msp.add_blockref("SQUARE", (0, 800, 10), dxfattribs=oblique)
+    save_new(doc, "extrusion_oblique.dxf")
+
+    # --- MINSERT : une grille d'occurrences, toutes à découper. La grille tourne avec
+    # le bloc mais ne subit pas son échelle (ezdxf multi_insert).
+    def minsert_doc():
+        doc = new_doc()
+        blk = doc.blocks.new(name="TILE", base_point=(2, 3))
+        blk.add_lwpolyline([(0, 0), (30, 0), (30, 20), (0, 20)], close=True)
+        blk.add_circle((15, 10), 4)
+        return doc
+
+    doc = minsert_doc()
+    doc.modelspace().add_blockref("TILE", (100, 100), dxfattribs={
+        "row_count": 2, "column_count": 3, "row_spacing": 40, "column_spacing": 60, "rotation": 1})
+    save_new(doc, "minsert_grid.dxf")
+
+    doc = minsert_doc()
+    doc.modelspace().add_blockref("TILE", (0, 0), dxfattribs={
+        "row_count": 3, "column_count": 2, "row_spacing": 90, "column_spacing": 150,
+        "rotation": 30, "xscale": 2, "yscale": 2})
+    save_new(doc, "minsert_rotated_scaled.dxf")
+
+    # Pas nul : une seule rangée, quel que soit row_count. Pas négatif : vers le bas.
+    # Compte à 0 : ramené à 1. MINSERT dans un bloc, lui-même inséré tourné.
+    doc = minsert_doc()
+    msp = doc.modelspace()
+    msp.add_blockref("TILE", (0, 0), dxfattribs={
+        "row_count": 5, "column_count": 3, "row_spacing": 0, "column_spacing": 50, "rotation": 2})
+    msp.add_blockref("TILE", (0, 2000), dxfattribs={"row_count": 3, "row_spacing": -300})
+    msp.add_blockref("TILE", (0, 4000), dxfattribs={"row_count": 0, "column_count": 4, "row_spacing": 10, "column_spacing": 100})
+    doc.blocks.new(name="COLUMN").add_blockref("TILE", (0, 0), dxfattribs={"row_count": 2, "row_spacing": 500})
+    msp.add_blockref("COLUMN", (0, 5000), dxfattribs={"rotation": 90})
+    save_new(doc, "minsert_edge_cases.dxf")
+
+    # --- Ce qui ne sera pas découpé : une plaque à trou, et à côté des entités qui ne
+    # touchent aucune pièce (une ligne, une polyligne ouverte, une spline ouverte, un
+    # point) ; du texte, retiré à la lecture.
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (100, 0), (100, 50), (0, 50)], close=True)
+    msp.add_circle((50, 25), 10)
+    msp.add_line((300, 0), (340, 0))
+    msp.add_lwpolyline([(400, 0), (450, 20), (470, 60)])
+    msp.add_open_spline([(500, 0), (520, 30), (560, 40), (600, 10)], degree=3)
+    msp.add_point((700, 700))
+    msp.add_text("REF 12", dxfattribs={"insert": (10, 60), "height": 5})
+    msp.add_text("TOLERANCE", dxfattribs={"insert": (10, 70), "height": 5})
+    msp.add_mtext("NOTE", dxfattribs={"insert": (10, 80)})
+    save_new(doc, "uncut_entities.dxf")
+
+    # --- Arcs de polylignes imbriqués en cordes : la flèche est |bulge| x corde / 2.
+    # LWPOLYLINE : 0,006 sur 100 mm = 0,30 mm (dit), 0,0016 sur 100 mm = 0,08 mm (sous le seuil).
+    doc = new_doc()
+    doc.modelspace().add_lwpolyline(
+        [(0, 0, 0.006), (100, 0, 0.0), (100, 50, 0.0016), (0, 50, 0.0)], format="xyb", close=True)
+    save_new(doc, "bulge_notable_lwpolyline.dxf")
+
+    # POLYLINE classique : 0,01 sur 100 mm et -0,02 sur 50 mm (segment de fermeture), 0,50 mm chacun.
+    doc = new_doc()
+    doc.modelspace().add_polyline2d(
+        [(0, 0, 0.01), (100, 0, 0.0), (100, 50, 0.0), (0, 50, -0.02)], format="xyb", close=True)
+    save_new(doc, "bulge_notable_polyline.dxf")
+
+    # Sous le seuil partout : rien à dire.
+    doc = new_doc()
+    doc.modelspace().add_lwpolyline(
+        [(0, 0, 0.0016), (100, 0, 0.0), (100, 50, 0.0), (0, 50, 0.0)], format="xyb", close=True)
+    save_new(doc, "bulge_negligible.dxf")
+
+    print(f"cas fichier de coupe -> {OUT}")
 
 
 # ---------------------------------------------------------------- SVG corpus
@@ -234,9 +530,110 @@ def main_svg():
         "svg_holed_plate.svg",
     )
 
+    # <defs> n'est jamais rendu, <use> instancie (x/y, transform, symbol,
+    # xlink:href). Le cadre de <defs> ne doit pas devenir une pièce.
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+        'viewBox="0 0 200 150">'
+        '<defs><rect id="frame" x="0" y="0" width="200" height="150"/>'
+        '<rect id="plate" x="0" y="0" width="30" height="20"/>'
+        '<symbol id="dot"><circle cx="10" cy="10" r="8"/></symbol></defs>'
+        '<use xlink:href="#plate" x="10" y="10"/>'
+        '<use href="#plate" transform="translate(100 50) rotate(90)"/>'
+        '<use href="#dot" x="150" y="100"/>'
+        '</svg>',
+        "svg_defs_use.svg",
+    )
+    # <use> de groupe transformé, <use> imbriqués, id en double (le dernier
+    # gagne), cible absente, display:none, <use> rangé dans <defs>.
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 120">'
+        '<defs>'
+        '<g id="inner" transform="scale(2)"><rect x="0" y="0" width="10" height="10"/></g>'
+        '<g id="pair"><use href="#inner" x="5"/><circle cx="60" cy="10" r="6"/></g>'
+        '<rect id="dup" x="0" y="0" width="5" height="5"/>'
+        '<rect id="dup" x="0" y="0" width="12" height="12"/>'
+        '<use href="#inner" x="150" y="0"/>'
+        '</defs>'
+        '<use href="#pair" transform="translate(20 20)" x="10" y="10"/>'
+        '<use href="#dup" x="150" y="60"/>'
+        '<use href="#nowhere" x="1"/>'
+        '<use href="#inner" display="none"/>'
+        '<use href="#inner" transform="translate(0 70)"/>'
+        '</svg>',
+        "svg_use_nested.svg",
+    )
+    # <use> qui se contient lui-même : svgelements refuse le fichier
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+        '<rect x="0" y="0" width="10" height="10"/>'
+        '<g id="a"><use href="#a"/></g>'
+        '</svg>',
+        "svg_use_cycle.svg",
+    )
+
+    # width / height en pourcentage : contre le viewBox (échelle 1 à 100 %)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 500 300">'
+        '<rect x="10" y="10" width="480" height="280"/>'
+        '<circle cx="250" cy="150" r="50"/>'
+        '</svg>',
+        "svg_width_percent.svg",
+    )
+    # un seul des deux en pourcentage, l'autre en px (la hauteur borne l'échelle)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="50%" viewBox="0 0 500 300">'
+        '<rect x="0" y="0" width="200" height="100"/>'
+        '</svg>',
+        "svg_width_percent_mixed.svg",
+    )
+    # un seul attribut présent, en pourcentage : l'autre vaut 100 % du viewBox
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="50%" viewBox="0 0 400 200">'
+        '<rect x="20" y="20" width="360" height="160"/>'
+        '</svg>',
+        "svg_width_percent_only.svg",
+    )
+    # sans viewBox : un pourcentage n'a pas d'effet d'échelle
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%">'
+        '<rect x="0" y="0" width="100" height="60"/>'
+        '</svg>',
+        "svg_width_percent_no_viewbox.svg",
+    )
+    # longueurs en % des formes : contre le viewBox, pas contre la taille physique
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 200 100">'
+        '<rect x="10%" y="10%" width="50%" height="50%"/>'
+        '<circle cx="75%" cy="85%" r="10"/>'
+        '</svg>',
+        "svg_percent_shapes_viewbox.svg",
+    )
+    # sans viewBox, svgelements résout contre la taille physique avec largeur et
+    # hauteur permutées (SVG.parse : height, width = s.width, s.height)
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200">'
+        '<rect x="10%" y="10%" width="50%" height="50%"/>'
+        '</svg>',
+        "svg_percent_shapes_no_viewbox.svg",
+    )
+
+    # un tracé ouvert seul, loin de la pièce : il n'est rattaché à rien, donc pas découpé
+    save_svg(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">'
+        '<rect x="10" y="10" width="100" height="60"/>'
+        '<path d="M 200 20 L 260 60 L 300 30" fill="none"/>'
+        '</svg>',
+        "svg_open_path_uncut.svg",
+    )
+
     print(f"svg corpus -> {SVG_OUT} ({len(os.listdir(SVG_OUT))} files)")
 
 
 if __name__ == "__main__":
-    main()
-    main_svg()
+    if sys.argv[1:] == ["coupe"]:
+        main_cut_cases()
+    else:
+        main()
+        main_svg()
+        main_cut_cases()

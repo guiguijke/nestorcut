@@ -129,7 +129,7 @@ describe('textes des constats (FR et EN)', () => {
     it('aucune clé de constat ne manque dans les deux langues', () => {
         const codes = [
             'import.entitiesSkipped', 'import.annotationsSkipped', 'import.contoursDropped',
-            'import.partsDropped', 'import.unitConverted', 'import.unitAssumed',
+            'import.partsDropped', 'import.paperSpaceSkipped', 'import.unitConverted', 'import.unitAssumed',
             'import.unitUnknown', 'import.unitImplausible', 'import.splinesSampled',
             'import.blocksFlattened', 'import.andMore', 'import.findingsTitle',
             'import.serverTooSlow',
@@ -141,6 +141,15 @@ describe('textes des constats (FR et EN)', () => {
             expect(fr(code, { n: 1, types: 'X', value: 'Y', seconds: 20, max: 2 }))
                 .not.toMatch(/\{[a-z]+\}/)
         }
+    })
+})
+
+describe('espace papier écarté', () => {
+    it('le constat monte sur la carte, avec son compte', () => {
+        const line = composeCardLine([f('import.paperSpaceSkipped', 'attention', 9)], fr)
+        expect(line.level).toBe('attention')
+        expect(line.line).toContain('9 entités')
+        expect(line.line).toContain('espace papier')
     })
 })
 
@@ -162,5 +171,47 @@ describe('refus serveur porté jusqu\'à la fiche (constat du vérificateur)', (
         expect(refusalMessage(null, fr)).toBeNull()
         expect(refusalMessage({}, fr)).toBeNull()
         expect(refusalMessage({ reason: 'blockDepth' }, fr)).toBeNull()
+    })
+})
+
+describe('entités non découpées et arcs imbriqués en cordes', () => {
+    const uncut = f('import.entitiesUncut', 'attention', 506, { types: ['SPLINE', 'LWPOLYLINE'] })
+    const bulges = f('import.bulgesChorded', 'attention', 180, { value: '0.59' })
+
+    it('les entités hors de toute pièce montent sur la carte, avec leur compte et leurs types', () => {
+        const card = composeCardLine([uncut], fr)
+        expect(card.level).toBe('attention')
+        expect(card.line).toContain('506 entité(s)')
+        expect(card.line).toContain('SPLINE, LWPOLYLINE')
+        expect(card.line).toContain('ne seront pas découpées')
+    })
+
+    it('la flèche des arcs imbriqués en cordes reste sur la fiche et se lit dans la locale', () => {
+        expect(composeCardLine([bulges], fr)).toBeNull()
+        const fmtDecimal = (v) => String(v).replace('.', ',')
+        const [item] = composeFindingList([bulges], fr, (v) => String(v), fmtDecimal)
+        expect(item.level).toBe('attention')
+        expect(item.text).toContain('180 arc(s)')
+        expect(item.text).toContain('0,59 mm')
+        expect(item.text).toContain('laissez au moins cet espacement')
+        expect(composeFindingList([bulges], en)[0].text).toContain('up to 0.59 mm off')
+    })
+
+    it('les textes et cotes ignorés disent leurs types sur la fiche, sans passer par la carte', () => {
+        const ann = f('import.annotationsSkipped', 'info', 6, { types: ['DIMENSION', 'TEXT'] })
+        expect(composeCardLine([ann], fr)).toBeNull()
+        expect(composeFindingList([ann], fr)[0].text).toBe(
+            'Textes et cotes ignorés (6 entités : DIMENSION, TEXT) — seuls les contours sont découpés.',
+        )
+    })
+
+    it('les nouvelles clés existent dans les six langues, sans placeholder oublié', () => {
+        for (const lg of ['fr', 'en', 'de', 'es', 'it', 'pt']) {
+            for (const code of ['import.entitiesUncut', 'import.bulgesChorded', 'import.annotationsSkipped']) {
+                const text = translate(code, lg, { n: 1, types: 'X', value: '0,5' })
+                expect(text, `${lg} ${code}`).not.toBe(code)
+                expect(text).not.toMatch(/\{[a-z]+\}/)
+            }
+        }
     })
 })

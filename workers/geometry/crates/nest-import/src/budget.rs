@@ -73,7 +73,7 @@ impl Default for Limits {
     }
 }
 
-/// Cause d'un refus « trop lourd ».
+/// Cause d'un refus : trop lourd, ou rien à découper en espace objet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum TooHeavyReason {
@@ -83,6 +83,9 @@ pub enum TooHeavyReason {
     Time,
     /// Graphe de blocs trop profond ou cyclique (pentest H-4).
     BlockDepth,
+    /// Tout le dessin est en espace papier, l'espace objet est vide : à dire
+    /// plutôt qu'à rendre vide en silence. Miroir Python : `PaperSpaceOnly`.
+    PaperSpaceOnly,
 }
 
 /// Échéance de travail. `unlimited()` n'expire jamais.

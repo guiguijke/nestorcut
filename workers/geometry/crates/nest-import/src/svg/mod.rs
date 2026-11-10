@@ -47,68 +47,145 @@ fn attr<'a>(node: &roxmltree::Node<'a, '_>, name: &str) -> Option<String> {
     None
 }
 
-fn walk(node: &roxmltree::Node, parent: &Ctx, prims: &mut Vec<Primitive>, warnings: &mut Vec<String>, vp: (f64, f64)) {
-    let tag = node.tag_name().name();
-    // Cascade: own transform string appended to the parent's.
-    let mut transform = parent.transform.clone();
-    if let Some(t) = attr(node, "transform") {
-        if !transform.is_empty() {
-            transform.push(' ');
-        }
-        transform.push_str(&t);
-    }
-    let display_none = parent.display_none
-        || attr(node, "display").map(|d| d.trim().eq_ignore_ascii_case("none")).unwrap_or(false);
-    let ctx = Ctx { transform: transform.clone(), display_none };
+/// Plafond d'instanciations de `<use>` : un SVG qui s'emboîte lui-même
+/// (`<use>` de `<use>` doublés sur N niveaux) ne doit pas figer l'onglet.
+const MAX_USE_EXPANSIONS: usize = 100_000;
 
-    match tag {
-        "g" | "svg" | "a" | "defs" | "symbol" | "switch" => {
-            if !display_none {
-                for child in node.children().filter(|c| c.is_element()) {
-                    walk(&child, &ctx, prims, warnings, vp);
-                }
+/// Parcours du document : états partagés par toute la descente.
+struct Walker<'a, 'input> {
+    /// id → noeud, le DERNIER gagne (svgelements `event_defs[id] = node`).
+    ids: std::collections::HashMap<&'a str, roxmltree::Node<'a, 'input>>,
+    prims: Vec<Primitive>,
+    warnings: Vec<String>,
+    /// Viewport des longueurs en % (voir `root_viewport`).
+    vp: (f64, f64),
+    /// `<use>` en cours d'instanciation (détection de cycle).
+    use_stack: Vec<&'a str>,
+    expansions: usize,
+}
+
+/// `href` d'un `<use>` : `href` prime sur `xlink:href` (svgelements) et le
+/// premier caractère est retiré sans regarder si c'est `#`.
+fn use_target_id<'a>(node: &roxmltree::Node<'a, '_>) -> Option<&'a str> {
+    let v = node
+        .attribute("href")
+        .or_else(|| node.attribute(("http://www.w3.org/1999/xlink", "href")))?;
+    let mut it = v.chars();
+    it.next()?;
+    Some(it.as_str())
+}
+
+impl<'a, 'input> Walker<'a, 'input> {
+    fn walk(&mut self, node: &roxmltree::Node<'a, 'input>, parent: &Ctx) -> Result<(), ImportError> {
+        let tag = node.tag_name().name();
+        // Cascade: own transform string appended to the parent's.
+        let mut transform = parent.transform.clone();
+        if let Some(t) = attr(node, "transform") {
+            if !transform.is_empty() {
+                transform.push(' ');
             }
+            transform.push_str(&t);
         }
-        "path" => {
-            if display_none {
-                return;
-            }
-            if let Some(d) = node.attribute("d") {
-                let mut p = path::parse_path(d);
-                let m = Matrix::parse(&transform);
-                if !m.is_identity() {
-                    for s in p.segs.iter_mut() {
-                        s.transform(&m);
+        let display_none = parent.display_none
+            || attr(node, "display").map(|d| d.trim().eq_ignore_ascii_case("none")).unwrap_or(false);
+        let ctx = Ctx { transform: transform.clone(), display_none };
+
+        match tag {
+            // `<defs>` : jamais rendu (svgelements ne rattache pas son contenu
+            // à l'arbre). Il ne sert que par `<use>`.
+            "defs" => {}
+            "g" | "svg" | "a" | "symbol" | "switch" => {
+                if !display_none {
+                    for child in node.children().filter(|c| c.is_element()) {
+                        self.walk(&child, &ctx)?;
                     }
                 }
-                emit_path(&p, prims);
+            }
+            "use" => {
+                if display_none {
+                    return Ok(());
+                }
+                // x/y du `<use>` : translation ajoutée APRÈS son transform,
+                // AVANT celui de la cible et de ses propres enfants. width/height ne servent pas.
+                let px = |name: &str| {
+                    attr(node, name).map(|v| Length::parse(&v).value_px(None)).unwrap_or(0.0)
+                };
+                let (x, y) = (px("x"), px("y"));
+                let mut use_ctx = Ctx { transform: ctx.transform.clone(), display_none: ctx.display_none };
+                if x != 0.0 || y != 0.0 {
+                    if !use_ctx.transform.is_empty() {
+                        use_ctx.transform.push(' ');
+                    }
+                    use_ctx.transform.push_str(&format!("translate({x}, {y})"));
+                }
+                // Les enfants propres du `<use>` d'abord, puis la cible
+                // (ordre de `_use_structure_parse`). Le contexte du `<use>` vaut pour les deux.
+                for child in node.children().filter(|c| c.is_element()) {
+                    self.walk(&child, &use_ctx)?;
+                }
+                let target = use_target_id(node).and_then(|id| self.ids.get(id).map(|n| (id, *n)));
+                let Some((id, target)) = target else {
+                    self.warnings.push("Skipping unresolved SVG <use> reference".to_string());
+                    return Ok(());
+                };
+                if self.use_stack.contains(&id) {
+                    return Err(ImportError::Corrupt(
+                        "Unreadable SVG file: <use> references itself".into(),
+                    ));
+                }
+                self.expansions += 1;
+                if self.expansions > MAX_USE_EXPANSIONS {
+                    return Err(ImportError::Corrupt(
+                        "Unreadable SVG file: too many <use> instances".into(),
+                    ));
+                }
+                self.use_stack.push(id);
+                let r = self.walk(&target, &use_ctx);
+                self.use_stack.pop();
+                r?;
+            }
+            "path" => {
+                if display_none {
+                    return Ok(());
+                }
+                if let Some(d) = node.attribute("d") {
+                    let mut p = path::parse_path(d);
+                    let m = Matrix::parse(&transform);
+                    if !m.is_identity() {
+                        for s in p.segs.iter_mut() {
+                            s.transform(&m);
+                        }
+                    }
+                    emit_path(&p, &mut self.prims);
+                }
+            }
+            "rect" | "circle" | "ellipse" | "polyline" | "polygon" => {
+                if display_none {
+                    return Ok(());
+                }
+                let m = Matrix::parse(&transform);
+                let shape = build_shape(tag, node, m, self.vp);
+                if let Some(shape) = shape {
+                    let p = shape.to_path();
+                    emit_path(&p, &mut self.prims);
+                }
+            }
+            // `<line>` est un `SimpleLine` pour svgelements — ABSENT de la liste
+            // _CONVERTIBLE de svg_to_drawing.py : le pipeline Python le saute
+            // (avec warning), donc aucune entité canonique, aucun handle (J-090,
+            // verrou svg_shapes : le <line> consommait un handle ici et décalait
+            // toute la séquence).
+            "text" | "tspan" | "image" | "desc" | "title" | "metadata" | "style" | "pattern"
+            | "line" | "linearGradient" | "radialGradient" | "clipPath" | "mask" | "marker" => {
+                self.warnings.push(format!("Skipping unsupported SVG element: {tag}"));
+            }
+            _ => {
+                if node.is_element() && !tag.is_empty() {
+                    self.warnings.push(format!("Skipping unsupported SVG element: {tag}"));
+                }
             }
         }
-        "rect" | "circle" | "ellipse" | "polyline" | "polygon" => {
-            if display_none {
-                return;
-            }
-            let m = Matrix::parse(&transform);
-            let shape = build_shape(tag, node, m, vp);
-            if let Some(shape) = shape {
-                let p = shape.to_path();
-                emit_path(&p, prims);
-            }
-        }
-        // `<line>` est un `SimpleLine` pour svgelements — ABSENT de la liste
-        // _CONVERTIBLE de svg_to_drawing.py : le pipeline Python le saute
-        // (avec warning), donc aucune entité canonique, aucun handle (J-090,
-        // verrou svg_shapes : le <line> consommait un handle ici et décalait
-        // toute la séquence).
-        "text" | "tspan" | "image" | "desc" | "title" | "metadata" | "style" | "use" | "pattern"
-        | "line" | "linearGradient" | "radialGradient" | "clipPath" | "mask" | "marker" => {
-            warnings.push(format!("Skipping unsupported SVG element: {tag}"));
-        }
-        _ => {
-            if node.is_element() && !tag.is_empty() {
-                warnings.push(format!("Skipping unsupported SVG element: {tag}"));
-            }
-        }
+        Ok(())
     }
 }
 
@@ -212,35 +289,52 @@ fn emit_path(p: &path::PathBuf, prims: &mut Vec<Primitive>) {
     }
 }
 
-/// ViewBox + viewport handling (SVG.parse root twin): physical width/height
-/// (96 dpi) defaulting to viewBox dims or 1000; viewport transform string.
-fn root_viewport(node: &roxmltree::Node) -> ((f64, f64), String) {
+/// Taille du viewport racine et transform viewBox → viewport (SVG.parse
+/// twin, svgelements 1.9.6).
+///
+/// * `width` / `height` absents valent `100%`, et un pourcentage se résout
+///   contre les dimensions du viewBox (1000 sans viewBox) : `width="100%"`
+///   garde donc l'échelle 1 du viewBox, `width="50%"` la divise par deux.
+///   Chaque attribut se résout seul : un seul des deux en pourcentage, ou
+///   un seul présent, ne change pas l'autre.
+/// * Longueurs `%` des formes : contre le viewBox s'il y en a un ; sinon
+///   svgelements les résout contre la taille physique avec largeur et
+///   hauteur permutées (`height, width = s.width, s.height` dans
+///   `SVG.parse`). Reproduit tel quel : le fichier de coupe doit sortir
+///   pareil des deux chemins.
+/// * viewBox de largeur ou hauteur nulle, ou taille physique nulle avec
+///   viewBox : svgelements rend un document vide (`None` ici).
+fn root_viewport(node: &roxmltree::Node) -> Option<((f64, f64), String)> {
     let viewbox = node.attribute("viewBox").and_then(|vb| {
         let nums = tokenize_floats(vb);
-        if nums.len() == 4 && nums[2] != 0.0 && nums[3] != 0.0 {
+        if nums.len() == 4 {
             Some((nums[0], nums[1], nums[2], nums[3]))
         } else {
             None
         }
     });
     let aspect = node.attribute("preserveAspectRatio").unwrap_or("").to_string();
-    let (w_px, h_px) = match (node.attribute("width"), node.attribute("height")) {
-        (Some(w), Some(h)) => (
-            Length::parse(w).value_px(None),
-            Length::parse(h).value_px(None),
-        ),
-        _ => match viewbox {
-            Some((_, _, vw, vh)) => (vw, vh),
-            None => (1000.0, 1000.0),
-        },
+    let (ref_w, ref_h) = match viewbox {
+        Some((_, _, vw, vh)) => (vw, vh),
+        None => (1000.0, 1000.0),
     };
-    let viewport_transform = match viewbox {
-        None => String::new(),
+    let resolve = |name: &str, rel: f64| -> f64 {
+        Length::parse(node.attribute(name).unwrap_or("100%")).value_px(Some(rel))
+    };
+    let w_px = resolve("width", ref_w);
+    let h_px = resolve("height", ref_h);
+    match viewbox {
+        None => Some(((h_px, w_px), String::new())),
         Some((vbx, vby, vbw, vbh)) => {
-            viewbox_transform(0.0, 0.0, w_px, h_px, vbx, vby, vbw, vbh, &aspect)
+            if w_px == 0.0 || h_px == 0.0 || vbw == 0.0 || vbh == 0.0 {
+                return None;
+            }
+            Some((
+                (vbw, vbh),
+                viewbox_transform(0.0, 0.0, w_px, h_px, vbx, vby, vbw, vbh, &aspect),
+            ))
         }
-    };
-    ((w_px, h_px), viewport_transform)
+    }
 }
 
 /// Viewbox.viewbox_transform twin (SVG 2.0 8.2).
@@ -343,6 +437,10 @@ pub fn import_svg_limited(
     };
     stats.dangling_paths = asm.dangling_paths;
     stats.dropped_parts = asm.dropped_parts;
+    // Un SVG devient des LWPOLYLINE : c'est le type que nomme aussi le serveur.
+    if !asm.uncut_handles.is_empty() {
+        stats.uncut.insert("LWPOLYLINE".to_string(), asm.uncut_handles.len());
+    }
     Ok(ImportResult {
         parts,
         source_units: 4,
@@ -364,7 +462,11 @@ fn svg_primitives(bytes: &[u8]) -> Result<(Vec<Primitive>, Vec<String>, usize), 
     if root.tag_name().name() != "svg" {
         return Err(ImportError::Corrupt("Unreadable SVG file: root is not <svg>".into()));
     }
-    let (vp, viewport_transform) = root_viewport(&root);
+    let Some((vp, viewport_transform)) = root_viewport(&root) else {
+        return Err(ImportError::Corrupt(
+            "No convertible geometry found in SVG (paths/shapes only)".to_string(),
+        ));
+    };
     // svgelements : transform propre de la racine PUIS viewport transform.
     let mut root_transform = String::new();
     if let Some(t) = attr(&root, "transform") {
@@ -376,12 +478,25 @@ fn svg_primitives(bytes: &[u8]) -> Result<(Vec<Primitive>, Vec<String>, usize), 
         }
         root_transform.push_str(&viewport_transform);
     }
-    let mut prims = Vec::new();
-    let mut warnings = Vec::new();
+    let mut ids = std::collections::HashMap::new();
+    for n in doc.descendants().filter(|n| n.is_element()) {
+        if let Some(id) = n.attribute("id") {
+            ids.insert(id, n);
+        }
+    }
+    let mut walker = Walker {
+        ids,
+        prims: Vec::new(),
+        warnings: Vec::new(),
+        vp,
+        use_stack: Vec::new(),
+        expansions: 0,
+    };
     let ctx = Ctx { transform: root_transform, display_none: false };
     for child in root.children().filter(|c| c.is_element()) {
-        walk(&child, &ctx, &mut prims, &mut warnings, vp);
+        walker.walk(&child, &ctx)?;
     }
+    let Walker { mut prims, warnings, .. } = walker;
     let entity_count = prims.len();
     if entity_count == 0 {
         return Err(ImportError::Corrupt(

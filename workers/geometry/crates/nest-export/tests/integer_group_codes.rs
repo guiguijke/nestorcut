@@ -123,6 +123,7 @@ fn spline_polyline_and_colors_export_as_integers() {
     });
     let polyline = Entity::Polyline(Polyline {
         points: vec![[0.0, 0.0], [50.0, 0.0], [50.0, 50.0], [0.0, 50.0]],
+        bulges: vec![0.0; 4],
         closed: true,
         common: common("A2"),
         vertex_handles: vec![],

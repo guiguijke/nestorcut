@@ -286,6 +286,7 @@ export default {
     'files.importError.dwgVersion': 'DWG file too recent (AutoCAD 2013 or later): save it as DXF or as DWG 2010 and upload it again.',
     'files.importError.dwgCorrupt': 'DWG file could not be read (corrupted, or unsupported version): export it as DXF and upload it again.',
     'files.importError.dwgOutput': 'DWG converted, but the DXF produced could not be read: export the file as DXF from your CAD software.',
+    'files.importError.paperSpaceOnly': 'The whole drawing in this file is in paper space and its model space is empty: move it to model space from your CAD, then import it again.',
     // Régime privacy (création + pastille projet).
     'privacy.choice': 'Where parts are stored',
     'privacy.device.title': 'This device',
@@ -314,9 +315,12 @@ export default {
     // Lot 2c — constats d'import (catalogue : docs/qa/import-2026-09-09/
     // rapport-reparation.md). Tout nombre porte son libellé (piège #24).
     'import.entitiesSkipped': '{n} unsupported entities skipped ({types}) — the material they described will not be cut.',
-    'import.annotationsSkipped': 'Text and dimensions skipped ({n} entities) — only contours are cut.',
+    'import.annotationsSkipped': 'Text and dimensions skipped ({n} entities: {types}) — only contours are cut.',
     'import.contoursDropped': '{n} open paths will not be cut — close them in your CAD.',
+    'import.entitiesUncut': '{n} entities belong to no part and will not be cut ({types}) — close or connect them in your CAD.',
+    'import.bulgesChorded': '{n} polyline arc(s) are nested as straight segments (up to {value} mm off) — the cut file keeps the arc, so leave at least that much spacing between parts.',
     'import.partsDropped': '{n} parts too small to cut were dropped.',
+    'import.paperSpaceSkipped': '{n} paper space entities ignored (frames, title blocks) — only model space is cut. Check that no part was left there.',
     'import.unitConverted': '{value} units detected — converted to millimeters.',
     'import.unitAssumed': 'No unit declared in the file — millimeters assumed.',
     'import.unitUnknown': 'Unknown drawing unit ($INSUNITS code {value}) — millimeters assumed. Check the dimensions before cutting.',
@@ -337,6 +341,7 @@ export default {
     'localImport.tooManyEntitiesAtLeast': 'This file has too many entities for in-browser import (more than {n} entities) — try “Our servers”.',
     'localImport.tooHeavy': 'This file is too heavy for in-browser import ({n} entities, over {seconds} s) — try “Our servers”.',
     'localImport.blockDepth': 'This file nests blocks too deeply to be read — re-save it with the blocks exploded from your CAD.',
+    'localImport.paperSpaceOnly': 'The whole drawing in this file is in paper space ({n} entities) and its model space is empty. Move it to model space from your CAD, then import it again.',
     'localImport.noParts': 'No closed part found in this file.',
     'localImport.emptyBrowser': 'These files live in this browser. Empty list: they were imported on another device, or this browser\'s storage was cleared — drop them again below. Nothing was sent to us.',
     // Lot J4 - depot d'un `.job` SheetCam (chemin navigateur). Le format

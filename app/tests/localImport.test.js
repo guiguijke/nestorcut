@@ -198,6 +198,25 @@ describe('importLocalFile (J-090)', () => {
         expect(err.message).toBe('localImport.blockDepth')
         expect(translate(err.message, 'fr', err.params)).not.toMatch(/serveurs/)
     })
+
+    it('says why a drawing entirely in paper space gives nothing to cut', async () => {
+        state.imported = {
+            refusal: {
+                reason: 'paperSpaceOnly',
+                entities: 5,
+                entitiesAtLeast: false,
+                maxEntities: 10000,
+                elapsedMs: 3,
+                timeBudgetMs: 20000,
+            },
+        }
+        const err = await importLocalFile(fakeFile('layout.dxf'), 'p').catch((e) => e)
+        expect(err.message).toBe('localImport.paperSpaceOnly')
+        const fr = translate(err.message, 'fr', err.params)
+        expect(fr).toContain('5 entités')
+        expect(fr).toContain('espace objet')
+        expect(fr).not.toMatch(/serveurs/)
+    })
 })
 
 describe('localRecordToUiFile', () => {

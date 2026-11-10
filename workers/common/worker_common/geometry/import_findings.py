@@ -33,6 +33,11 @@ NOISE_ENTITIES = (
     "ACAD_TABLESTYLE", "LAYOUT", "VERTEX",
 )
 
+# Écart (mm) à partir duquel un bulge de polyligne est dit : l'imbrication lit la corde
+# (D-IMP-8), le fichier de coupe garde l'arc. Deux arcs face à face perdent chacun leur
+# flèche : on compare 2 x la flèche à ce seuil. Miroir de `NOTABLE_SAGITTA_MM` côté Rust.
+NOTABLE_SAGITTA_MM = 0.1
+
 LEVEL_INFO = "info"
 LEVEL_ATTENTION = "attention"
 
@@ -62,8 +67,12 @@ def empty_stats() -> dict:
         "splines": 0,           # SPLINE échantillonnées
         "danglingPaths": 0,     # tracés ouverts ne refermant aucune pièce
         "droppedParts": 0,      # corps écartés à l'émission
+        "paperSpaceSkipped": 0, # entités de dessin écartées de l'espace papier
         "microVoids": 0,        # trous rebouchés, trop petits pour la découpe
         "spursRemoved": 0,      # sommets d'aller-retours de largeur nulle
+        "uncut": {},            # type d'entité rattachée à aucune pièce -> occurrences
+        "bulgeSegments": 0,     # segments de polyligne à bulge, 2 x flèche >= seuil
+        "bulgeMaxSagitta": 0.0, # plus grande flèche (mm), tous segments à bulge
         "scaleApplied": 1.0,    # facteur d'échelle appliqué à l'import (E2)
     }
 
@@ -103,8 +112,22 @@ def build_findings(stats: dict) -> list:
         ))
     if stats["danglingPaths"] > 0:
         out.append(_finding("import.contoursDropped", LEVEL_ATTENTION, stats["danglingPaths"]))
+    if stats["uncut"]:
+        uncut = sorted(((str(k).upper(), int(n)) for k, n in stats["uncut"].items()),
+                       key=lambda kv: (-kv[1], kv[0]))
+        out.append(_finding(
+            "import.entitiesUncut", LEVEL_ATTENTION,
+            sum(n for _, n in uncut), [k for k, _ in uncut],
+        ))
+    if stats["bulgeSegments"] > 0 and 2 * float(stats["bulgeMaxSagitta"]) >= NOTABLE_SAGITTA_MM:
+        out.append(_finding("import.bulgesChorded", LEVEL_ATTENTION, stats["bulgeSegments"],
+                            value=f"{2 * float(stats['bulgeMaxSagitta']):.2f}"))
     if stats["droppedParts"] > 0:
         out.append(_finding("import.partsDropped", LEVEL_ATTENTION, stats["droppedParts"]))
+    # Attention : un cadre le plus souvent, mais on ne sait pas ce qu'on écarte
+    # (règle 2), et une pièce oubliée là ne serait jamais découpée.
+    if stats["paperSpaceSkipped"] > 0:
+        out.append(_finding("import.paperSpaceSkipped", LEVEL_ATTENTION, stats["paperSpaceSkipped"]))
     if stats["unitUnknown"]:
         out.append(_finding("import.unitUnknown", LEVEL_ATTENTION, 1, value=stats["insunits"]))
     elif stats["unitFactor"] >= IMPLAUSIBLE_FACTOR_MM:

@@ -90,19 +90,19 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly canonical_dxf: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly canonical_dxf_part: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly canonical_dxf_scaled: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly compute_report: (a: number, b: number) => [number, number, number, number];
-    readonly export_dxf: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-    readonly export_svg_sheet: (a: number, b: number) => [number, number, number, number];
+    readonly wasm_memory_pages: () => number;
     readonly import_file: (a: number, b: number, c: number) => [number, number, number, number];
     readonly import_file_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly import_svg: (a: number, b: number, c: number) => [number, number, number, number];
-    readonly open_holes: (a: number, b: number) => [number, number, number, number];
+    readonly canonical_dxf: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly canonical_dxf_scaled: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly canonical_dxf_part: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly pinwheel_capacity: (a: number, b: number) => [number, number, number, number];
-    readonly wasm_memory_pages: () => number;
+    readonly open_holes: (a: number, b: number) => [number, number, number, number];
+    readonly export_svg_sheet: (a: number, b: number) => [number, number, number, number];
+    readonly compute_report: (a: number, b: number) => [number, number, number, number];
+    readonly export_dxf: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __externref_table_alloc: () => number;

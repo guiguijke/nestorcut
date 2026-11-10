@@ -569,8 +569,9 @@ def _nesting_process_impl(doc):
     # C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS — une tôle
     # `count: 0` au milieu de la liste cassait l'import (« consecutive
     # IDs », opaque). Les formats vides sont FILTRÉS ; container_map_back
-    # retraduit les container_id moteur vers les ids de formats d'origine
-    # (bin_dims reste indexé par l'id FORMAT, utilisé par le post-pass).
+    # mappe id moteur → id de format d'origine (coûts, dimensions, grille) —
+    # jamais appliqué aux container_id des tôles, qui sont des rangs 1..N
+    # (bin_dims reste indexé par l'id FORMAT).
     container_map_back = {}
     for bin_id, sheet in enumerate(sheets):
         sheet_width = float(sheet.get("width"))
@@ -595,8 +596,7 @@ def _nesting_process_impl(doc):
         for b, area in zip(bins, active_areas):
             b["cost"] = max(1, round(area / min_area * 100))
     # bin_dims_engine : clés = ids MOTEUR (0..len(bins)-1), valeurs = dims
-    # du format d'origine — le map-back des container_id (identité quand
-    # aucun format n'est filtré).
+    # du format d'origine (identité quand aucun format n'est filtré).
     bin_dims_engine = {
         eid: bin_dims[fid] for eid, fid in container_map_back.items()}
 
@@ -1705,8 +1705,8 @@ def _nesting_process_impl(doc):
     # Mêmes gardes que le mono (§5 généricité) : uniquement si le motif
     # « rectangle dominant + petite classe » est détecté, silencieux
     # sinon ; tout-ou-rien — le constructeur rend None (erreurs tracées)
-    # s'il ne couvre pas la demande. container_id = ids MOTEUR (l'aval
-    # map-back s'applique comme aux alternatives moteur).
+    # s'il ne couvre pas la demande. container_id = ids MOTEUR (dimensions
+    # résolues via bin_dims_engine, comme les alternatives moteur).
     if not is_spp and engine_alternatives:
         try:
             from core.structure_multi import build_grid_layouts_multi
@@ -2182,18 +2182,14 @@ def _nesting_process_impl(doc):
         # Échappatoire debug (A4) : livrer quand même une alternative
         # mesurée invalide pour inspection.
         allow_invalid_alts = os.environ.get("NEST_ALLOW_INVALID_ALTS") == "1"
+        # container_id = rang 1..N de la tôle (noms `_part_{N}` lus par le
+        # verrou Free) — jamais un id de format : le map-back du V15 le
+        # passait dans container_map_back (clé = id MOTEUR 0-based) et, avec
+        # un format vide en tête, dupliquait/décalait les noms. Le format ne
+        # sert qu'aux dimensions, déjà résolues par le parse (ids moteur).
         result_containers, placed_count, density, cost = parse_result_containers(
             {"solution": engine_alt["solution"]}, input_items, bin_dims_engine
         )
-        # V15 (vérif 2026-09-04) : les container_id PERSISTÉS (noms DXF/SVG,
-        # métrologie) doivent être rétablis en ids de FORMATS — le map-back
-        # existait mais n'était jamais appliqué. Ici, APRÈS le parse (qui
-        # résout les dimensions avec les ids moteur).
-        if container_map_back:
-            for c in result_containers:
-                c.container_id = container_map_back.get(
-                    getattr(c, "container_id", None),
-                    getattr(c, "container_id", None))
 
         # J4-bis : l'expansion n'a pas rattaché tout ce qui avait été retiré
         # de l'instance — les pièces manquantes ne sont sur aucune tôle. On

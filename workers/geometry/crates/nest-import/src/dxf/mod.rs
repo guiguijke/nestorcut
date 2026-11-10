@@ -15,7 +15,12 @@ pub struct Document {
     /// $INSUNITS code of the SOURCE file (0 = unitless).
     pub source_insunits: i32,
     pub blocks: Vec<entities::Block>,
+    /// Espace objet : le groupe 67 a déjà écarté l'espace papier.
     pub entities: Vec<Entity>,
+    /// Entités de dessin écartées de l'espace papier (groupe 67 de la section
+    /// ENTITIES, plus les blocs `*Paper_Space…` des présentations inactives).
+    /// Hors annotations : un VIEWPORT ou un cartouche en texte n'est pas du dessin.
+    pub paper_space_entities: usize,
 }
 
 pub struct GroupReader<'a> {
@@ -63,6 +68,27 @@ fn parse_f64(s: &str) -> Option<f64> {
     t.parse::<f64>().ok()
 }
 
+/// L'entité dont le lecteur vient de lire le (0, nom) est-elle en espace papier ?
+/// Regarde ses groupes sans les consommer : ezdxf accepte le 67 où qu'il soit
+/// parmi les groupes de l'entité. Une POLYLINE s'arrête à son premier VERTEX.
+fn next_entity_in_paper_space(reader: &GroupReader<'_>) -> bool {
+    let mut scan = GroupReader { lines: reader.lines.clone() };
+    while let Some((code, value)) = scan.next() {
+        match code {
+            0 => return false,
+            67 => return parse_int_tolerant(value) != 0,
+            _ => {}
+        }
+    }
+    false
+}
+
+/// `*Paper_Space`, `*Paper_Space0`… et `$Paper_Space` en R12.
+fn is_paper_space_block(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.starts_with("*paper_space") || lower.starts_with("$paper_space")
+}
+
 impl Document {
     pub fn parse(bytes: &[u8]) -> Result<Document, ImportError> {
         let text = String::from_utf8_lossy(bytes);
@@ -73,6 +99,7 @@ impl Document {
         let mut insunits: i32 = 0;
         let mut blocks = Vec::new();
         let mut entities = Vec::new();
+        let mut paper_space_entities = 0usize;
 
         // Section state machine: HEADER (vars), BLOCKS, ENTITIES.
         enum Section {
@@ -126,11 +153,16 @@ impl Document {
                             "ENDSEC" => section = Section::None,
                             "EOF" => break,
                             _ => {
-                                let (entity, look, r) = entities::read_entity(name, reader);
+                                let paper = next_entity_in_paper_space(&reader);
+                                let (read, look, r) = entities::read_entity(name, reader);
                                 reader = r;
                                 pending = look;
-                                if let Some(e) = entity {
-                                    entities.push(e);
+                                if paper {
+                                    if crate::findings::is_material(name) {
+                                        paper_space_entities += 1;
+                                    }
+                                } else {
+                                    entities.extend(read);
                                 }
                             }
                         },
@@ -156,10 +188,23 @@ impl Document {
             }
         }
 
+        // Les présentations inactives vivent dans leurs blocs, pas dans ENTITIES.
+        for block in blocks.iter().filter(|b| is_paper_space_block(&b.name)) {
+            paper_space_entities += block
+                .entities
+                .iter()
+                .filter(|e| match e {
+                    Entity::Unsupported(kind) => crate::findings::is_material(kind),
+                    _ => true,
+                })
+                .count();
+        }
+
         Ok(Document {
             source_insunits: insunits,
             blocks,
             entities,
+            paper_space_entities,
         }
         .with_recover_drops())
     }
