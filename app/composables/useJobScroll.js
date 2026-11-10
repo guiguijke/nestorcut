@@ -27,6 +27,14 @@
  * rechargement). Un refus = au plus un défilement, seulement si le message n'est
  * pas déjà entier à l'écran.
  *
+ * Fichier refusé à l'import (un `.job` dont un dessin ne se décode pas) : le
+ * message est en tête de page, au-dessus du dépôt et des fiches, donc hors écran
+ * quand la page est défilée sur une longue liste. Même règle que le refus de Nest :
+ * `expectImport()`, appelé au dépôt de CETTE page, arme le défilement ; le refus
+ * suivant amène le message à l'écran s'il n'y est pas déjà entier, sauf si
+ * l'utilisateur a défilé lui-même entre le dépôt et le refus. Jamais au retour sur
+ * la page, ni pour un refus que cette page n'a pas demandé.
+ *
  * La page ne fournit que ses refs : tout le reste est ici pour que les tests
  * exécutent le vrai code (app/tests/useJobScroll.test.js).
  */
@@ -51,14 +59,17 @@ import {
  * @param failureEl  ref du bandeau d'échec (null tant qu'il n'est pas rendu)
  * @param refusal    () => nombre de refus de soumission posés par le store
  * @param refusalEl  ref du message de refus (null tant qu'il n'est pas rendu)
+ * @param importPosted () => refus d'import posé par le store (texte et paramètres,
+ *                   objet neuf à chaque refus), ou une valeur vide quand il n'y en a pas
+ * @param importEl   ref du message de refus d'import (null tant qu'il n'est pas rendu)
  * @param target     window côté navigateur, null au rendu serveur (ne fait rien)
  * @param onFailed   (slug) => job en échec vu par cette page, transition ou retour
  *                   dessus, défilement ou non
  * @param seen       slugs déjà amenés à l'écran (survit au démontage de la page)
- * @returns {{ expectJob: () => void }}
+ * @returns {{ expectJob: () => void, expectImport: () => void }}
  */
-export function useJobScroll({ projectSlug = () => null, progress, serverSlug, serverJob = () => null, liveEl, failureEl, refusal = () => 0, refusalEl = null, target, onFailed, seen = scrolledJobSlugs }) {
-    if (!target) return { expectJob() {} }
+export function useJobScroll({ projectSlug = () => null, progress, serverSlug, serverJob = () => null, liveEl, failureEl, refusal = () => 0, refusalEl = null, importPosted = () => null, importEl = null, target, onFailed, seen = scrolledJobSlugs }) {
+    if (!target) return { expectJob() {}, expectImport() {} }
     const gesture = watchUserScroll(target)
     onScopeDispose(() => gesture.stop())
     const gate = createLiveScrollGate(seen)
@@ -103,6 +114,20 @@ export function useJobScroll({ projectSlug = () => null, progress, serverSlug, s
         el.scrollIntoView({ behavior: behavior(), block: 'center' })
     })
 
+    // Projet du dernier dépôt vu par cette page, consommé par son refus d'import.
+    let importExpectedFor = null
+    watch(importPosted, async (posted) => {
+        const armed = importExpectedFor
+        if (!posted) return
+        importExpectedFor = null
+        if (armed === null || armed !== projectSlug() || gesture.moved()) return
+        await nextTick()
+        if (gesture.moved()) return
+        const el = importEl?.value
+        if (!el || isWhollyInView(el.getBoundingClientRect(), target.innerHeight)) return
+        el.scrollIntoView({ behavior: behavior(), block: 'center' })
+    })
+
     let expected = null
     const isExpectedServerJob = (slug) => {
         if (!expected) return false
@@ -141,6 +166,10 @@ export function useJobScroll({ projectSlug = () => null, progress, serverSlug, s
     followFailure(serverJob, isExpectedServerJob)
 
     return {
+        expectImport() {
+            importExpectedFor = projectSlug() ?? ''
+            gesture.reset()
+        },
         expectJob() {
             expected = { before: serverJob()?.slug ?? null, project: projectSlug() }
             refusalExpectedFor = projectSlug() ?? ''

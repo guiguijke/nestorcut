@@ -27,6 +27,12 @@ function fakePage({ vh = 900, y = 641, liveInFlight = false } = {}) {
     page.banner = element('banner', 1228, 82, (top, height) => top + height / 2 - vh / 2)
     // Refus de Nest sous l'atelier : page défilée à y=222 (Nest visible), il est à top=1006 pour un écran de 900.
     page.refusal = element('refusal', 1228, 60, (top, height) => top + height / 2 - vh / 2)
+    // Refus d'import (.job illisible) : bandeau en tête de page, au-dessus du dépôt et des fiches.
+    page.importMsg = element('import', 140, 64, (top, height) => top + height / 2 - vh / 2)
+    page.importWhole = () => {
+        const r = page.importMsg.getBoundingClientRect()
+        return r.top >= 0 && r.bottom <= vh
+    }
     page.refusalWhole = () => {
         const r = page.refusal.getBoundingClientRect()
         return r.top >= 0 && r.bottom <= vh
@@ -80,10 +86,11 @@ describe('useJobScroll, sur le vrai registre local', () => {
 
     // Monte comme la page : le bandeau n'existe qu'une fois rendu, donc après
     // les watchers de la transition (`v-if`, d'où le watch post-flush).
-    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), serverJob = ref(null), onFailed, seen = new Set(), panel = false, staleBanner = false, refusals = ref(0), refusalText = ref('') } = {}) {
+    function mount(page, { projectSlug = ref('p1'), serverSlug = ref(null), serverJob = ref(null), onFailed, seen = new Set(), panel = false, staleBanner = false, refusals = ref(0), refusalText = ref(''), importPosted = ref(null) } = {}) {
         const scope = effectScope()
         const failureEl = ref(null)
         const refusalEl = ref(null)
+        const importEl = ref(null)
         let scroll
         scope.run(() => {
             scroll = useJobScroll({
@@ -95,6 +102,8 @@ describe('useJobScroll, sur le vrai registre local', () => {
                 failureEl,
                 refusal: () => refusals.value,
                 refusalEl,
+                importPosted: () => importPosted.value,
+                importEl,
                 onFailed,
                 target: page.target,
                 seen,
@@ -110,8 +119,10 @@ describe('useJobScroll, sur le vrai registre local', () => {
             )
             // Le bandeau de refus n'existe que tant que le texte est posé (v-if).
             watch(refusalText, (text) => { refusalEl.value = text ? page.refusal : null }, { flush: 'post', immediate: true })
+            // Le bandeau d'import n'existe que tant qu'un refus est posé (v-if).
+            watch(importPosted, (posted) => { importEl.value = posted ? page.importMsg : null }, { flush: 'post', immediate: true })
         })
-        return { scope, projectSlug, serverSlug, serverJob, seen, scroll, refusals, refusalText }
+        return { scope, projectSlug, serverSlug, serverJob, seen, scroll, refusals, refusalText, importPosted }
     }
 
     describe('vue live', () => {
@@ -824,6 +835,103 @@ describe('useJobScroll, sur le vrai registre local', () => {
             await frame('a')
             await fail('a')
             expect(names(page)).toEqual(['section', 'banner'])
+        })
+    })
+
+    describe('refus d’un fichier à l’import (.job illisible)', () => {
+        // Comme le store : le dépôt arme, le refus pose un NOUVEL objet de paramètres
+        // (le texte peut être identique d'un refus au suivant).
+        const drop = (m) => {
+            m.importPosted.value = null
+            m.scroll.expectImport()
+        }
+        const refuseImport = async (m) => {
+            m.importPosted.value = { key: 'jobImport.drawingRefused', params: { n: 2 } }
+            await flush()
+        }
+
+        it('dépôt puis refus hors écran : le message est amené, une seule fois', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            expect(page.importWhole()).toBe(false)
+            await refuseImport(m)
+            expect(names(page)).toEqual(['import'])
+            expect(page.calls[0]).toMatchObject({ block: 'center', behavior: 'smooth' })
+            expect(page.importWhole()).toBe(true)
+        })
+
+        it('message déjà entier à l’écran : aucun défilement', async () => {
+            const page = fakePage({ y: 0 })
+            const m = mount(page)
+            drop(m)
+            expect(page.importWhole()).toBe(true)
+            await refuseImport(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('l’utilisateur a défilé entre le dépôt et le refus : on le laisse où il est', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            page.wheel(400)
+            await refuseImport(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('deuxième refus identique après un défilement : ramené aussi', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            await refuseImport(m)
+            page.wheel(800)
+            expect(page.importWhole()).toBe(false)
+            drop(m)
+            await refuseImport(m)
+            expect(names(page)).toEqual(['import', 'import'])
+            expect(page.importWhole()).toBe(true)
+        })
+
+        it('refus qui ne suit pas un dépôt de cette page : aucun défilement', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            await refuseImport(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('page remontée sur un refus déjà affiché : aucun défilement', async () => {
+            const page = fakePage({ y: 1000 })
+            mount(page, { importPosted: ref({ key: 'jobImport.drawingRefused', params: { n: 2 } }) })
+            await flush()
+            expect(page.calls).toEqual([])
+        })
+
+        it('le dépôt est consommé par son refus : un refus suivant sans dépôt ne défile pas', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            await refuseImport(m)
+            page.wheel(800)
+            page.calls.length = 0
+            await refuseImport(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('l’utilisateur a quitté le projet entre le dépôt et le refus : aucun défilement', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            m.projectSlug.value = 'p2'
+            await refuseImport(m)
+            expect(page.calls).toEqual([])
+        })
+
+        it('dépôt accepté (le message est effacé, rien n’est posé) : aucun défilement', async () => {
+            const page = fakePage({ y: 1000 })
+            const m = mount(page)
+            drop(m)
+            await flush()
+            expect(page.calls).toEqual([])
         })
     })
 

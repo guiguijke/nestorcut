@@ -88,13 +88,16 @@ describe('isPartlyInView', () => {
 describe('câblage de la page projet', () => {
     const src = readFileSync(new URL('../pages/project/[slug].vue', import.meta.url), 'utf8')
     it('branche useJobScroll sur le job du projet affiché et sur les deux éléments du gabarit', () => {
-        expect(src).toMatch(/useJobScroll\(\{\s*projectSlug: \(\) => unref\(pageSlug\),\s*progress: \(\) => progressFor\(unref\(pageSlug\)\),\s*serverSlug: \(\) => unref\(liveResult\)\?\.slug,\s*serverJob: \(\) => unref\(serverJob\),\s*liveEl: liveSection,\s*failureEl: jobErrorEl,(?:\s*\/\/[^\n]*)*\s*refusal: \(\) => filesStore\.getters\.nestRefusals,\s*refusalEl: nestRefusalEl,\s*target: import\.meta\.client \? window : null,/)
+        expect(src).toMatch(/useJobScroll\(\{\s*projectSlug: \(\) => unref\(pageSlug\),\s*progress: \(\) => progressFor\(unref\(pageSlug\)\),\s*serverSlug: \(\) => unref\(liveResult\)\?\.slug,\s*serverJob: \(\) => unref\(serverJob\),\s*liveEl: liveSection,\s*failureEl: jobErrorEl,(?:\s*\/\/[^\n]*)*\s*refusal: \(\) => filesStore\.getters\.nestRefusals,\s*refusalEl: nestRefusalEl,(?:\s*\/\/[^\n]*)*\s*importPosted: \(\) => \(filesStore\.getters\.localImportError \? filesStore\.getters\.localImportErrorParams : null\),\s*importEl: importErrorEl,\s*target: import\.meta\.client \? window : null,/)
         expect(src).toMatch(/serverJobState\(unref\(resultsList\), unref\(pageSlug\)\)/)
         expect(src).toMatch(/onFailed: \(\) => resetLastParams\(\)/)
         expect(src).toMatch(/if \(busy\) jobScroll\.expectJob\(\)/)
         expect(src).toMatch(/<section ref="liveSection" class="atelier">/)
         expect(src).toMatch(/v-if="jobErrorText && !capacityPanel" ref="jobErrorEl" class="content__error"/)
         expect(src).toMatch(/v-if="nestSubmitError" ref="nestRefusalEl" class="content__error"/)
+        // Refus d'import (.job illisible) : le message est amené à l'écran après un dépôt de la page.
+        expect(src).toMatch(/v-if="localImportError" ref="importErrorEl" class="content__error"/)
+        expect(src).toMatch(/const addFiles = \(files\) => \{\s*jobScroll\.expectImport\(\)\s*actions\.addFiles/)
     })
     it('ne garde plus de défilement propre', () => {
         expect(src).not.toMatch(/scrollToFailure|watchUserScroll|lastLiveSlug/)

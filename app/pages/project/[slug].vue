@@ -42,7 +42,7 @@
         <p v-if="isLocalProject && filesCount === 0 && !localImportError" class="content__privacy">
             {{ t('localImport.emptyBrowser') }}
         </p>
-        <div v-if="localImportError" class="content__error">
+        <div v-if="localImportError" ref="importErrorEl" class="content__error" data-testid="import-error">
             {{ localImportErrorText }}
         </div>
         <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
@@ -357,6 +357,7 @@ const localLive = computed(() => {
 const liveSection = ref(null);
 const jobErrorEl = ref(null);
 const nestRefusalEl = ref(null);
+const importErrorEl = ref(null);
 const serverJob = computed(() => serverJobState(unref(resultsList), unref(pageSlug)));
 const jobScroll = useJobScroll({
     projectSlug: () => unref(pageSlug),
@@ -369,6 +370,11 @@ const jobScroll = useJobScroll({
     // à suivre — le composable l'amène à l'écran après un clic de cette page.
     refusal: () => filesStore.getters.nestRefusals,
     refusalEl: nestRefusalEl,
+    // Fichier refusé à l'import (.job illisible) : message en tête de page, que
+    // le composable amène à l'écran après un dépôt de CETTE page. Le store pose un
+    // objet de paramètres neuf à chaque refus, ce qui distingue deux refus au même texte.
+    importPosted: () => (filesStore.getters.localImportError ? filesStore.getters.localImportErrorParams : null),
+    importEl: importErrorEl,
     target: import.meta.client ? window : null,
     // Le job échoué n'a rien produit et le message propose de réessayer : Nest
     // redevient actif avec les MÊMES réglages (comme après une annulation, AA2).
@@ -1022,6 +1028,7 @@ const btnIsDisable = computed(() => {
     return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(sheetCountTooHigh) || unref(nestBusy)
 })
 const addFiles = (files) => {
+    jobScroll.expectImport()
     actions.addFiles(files, unref(slug))
 }
 
