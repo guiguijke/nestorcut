@@ -353,10 +353,11 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
             flex-wrap: nowrap;
             align-items: center;
 
-            /* Lot M3-bis, filet 567-679 : avec les libellés les plus
+            /* Lot M3-bis, filet 567-1023 : avec les libellés les plus
                longs, les boutons passent à la ligne plutôt que de
-               sortir de l'écran — repli dégradé, jamais de débordement. */
-            @media (min-width: 567px) and (max-width: 679px) {
+               sortir de l'écran — repli dégradé, jamais de débordement.
+               Une barre qui tient ne change pas. */
+            @media (min-width: 567px) and (max-width: 1023.98px) {
                 flex-wrap: wrap;
             }
 
@@ -450,16 +451,11 @@ const majorMinor = appVersion.split('.').slice(0, 2).join('.')
         }
 
         &__btn {
+            /* Le bouton de connexion reste dans la barre (il passe à la
+               ligne avec les autres) : posé en haut à droite, il recouvrait
+               le logo dès que son libellé est long. */
             &--login {
-                position: absolute;
-                top: 8px;
-                right: 4px;
-
-                @media (min-width: 567px) {
-                    position: initial;
-                    top: initial;
-                    right: initial;
-                }
+                position: static;
             }
 
             /* M3-ter : replié, le signalement vit dans le PANNEAU — le
