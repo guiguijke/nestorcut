@@ -390,6 +390,10 @@ fn flatten_spline(
     distance: f64,
 ) -> Vec<[f64; 2]> {
     const SEGMENTS: usize = 4;
+    // Degré hors plage (SPLINE corrompue) : rejet, sans panique.
+    if !(1..=25).contains(&degree) {
+        return Vec::new();
+    }
     if control.is_empty() || knots.len() < 2 {
         return Vec::new();
     }
@@ -621,6 +625,18 @@ mod tests {
         assert_eq!(pts.len(), 54);
         assert_eq!(pts[0], [0.0, 0.0]);
         assert_eq!(*pts.last().unwrap(), [40.0, 10.0]);
+    }
+
+    #[test]
+    fn spline_degree_out_of_range_is_rejected_without_panic() {
+        // Groupe 71 corrompu : degré négatif (-1) ou déraisonnable. Avant le
+        // garde-fou, order = degré + 1 débordait et find_span paniquait.
+        let knots = [0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0];
+        let control = [[0.0, 0.0], [10.0, 20.0], [30.0, -5.0], [40.0, 10.0]];
+        for degree in [-1, 0, 26, i32::MIN, i32::MAX] {
+            let pts = flatten_spline(degree, &knots, &control, &[], 0.01);
+            assert!(pts.is_empty(), "degré {degree} doit être rejeté");
+        }
     }
 
     #[test]
