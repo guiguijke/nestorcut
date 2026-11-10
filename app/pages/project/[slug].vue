@@ -179,6 +179,7 @@
 import { themeType } from "~~/constants/theme.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
+import { safetyPatchForTargetMm } from "~/utils/spacingParams";
 import { capacityPanelModel } from "~/utils/capacityPanel";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
@@ -927,13 +928,13 @@ const applyReduceSpacing = (mm) => {
     if (mm == null || !Number.isFinite(Number(mm))) return false;
     const p = unref(params);
     // B.4 : le levier réduit la SÉCURITÉ — le kerf décrit l'outil physique,
-    // on n'y touche pas. Effectif cible = kerf + 2 × nouvelle sécurité ;
-    // si la cible ne permet même pas le kerf, le levier est masqué en
-    // amont (capacityPanel), on ne fait rien ici.
+    // on n'y touche pas. Effectif cible = 2 × kerf + nouvelle sécurité (règle
+    // du 13/09) ; si la cible ne permet pas les deux kerfs, le levier est
+    // masqué en amont (capacityPanel), on ne fait rien ici.
     const kerfMm = displayToMm(Number(String(p.kerf ?? '0').replace(',', '.')) || 0);
-    // Cible 0 avec kerf 0 : sécurité 0, espacement effectif 0 — valide.
-    if (mm < kerfMm || (mm > 0 && mm === kerfMm)) return false;
-    const disp = mmToDisplay((mm - kerfMm) / 2, unit.value);
+    const patch = safetyPatchForTargetMm(kerfMm, Number(mm));
+    if (!patch) return false;
+    const disp = mmToDisplay(patch.safetyMm, unit.value);
     actions.updateKerfSafety({
         safety: unit.value === 'inch' ? String(Math.round(disp * 10000) / 10000) : String(disp),
     });

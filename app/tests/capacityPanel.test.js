@@ -182,11 +182,13 @@ describe('capacityPanelModel', () => {
         expect(m.levers.maxSpacingMm).toBe(2.1)
     })
 
-    it('kerf explicite : cible ≤ kerf → levier masqué (on ne coupe pas dans l’outil)', () => {
+    it('kerf explicite : cible ≤ 2 × kerf → levier masqué (on ne coupe pas dans l’outil)', () => {
         const m = capacityPanelModel(unfit, { sheets: [], spaceMm: 4, kerfMm: 2.5 })
         expect(m.reduceSpacingToMm).toBeNull()
         expect(m.noSpacingGain).toBe(true)
-        // Cible au-dessus du kerf → levier visible.
+        // Espacement = 2 × kerf + sécurité : une cible de 2,1 avec un kerf de
+        // 1,05 ne laisse aucune sécurité → masqué ; avec un kerf de 1 → visible.
+        expect(capacityPanelModel(unfit, { sheets: [], spaceMm: 4, kerfMm: 1.05 }).reduceSpacingToMm).toBeNull()
         const ok = capacityPanelModel(unfit, { sheets: [], spaceMm: 4, kerfMm: 1 })
         expect(ok.reduceSpacingToMm).toBe(2.1)
         expect(ok.noSpacingGain).toBeFalsy()
@@ -360,6 +362,7 @@ describe('levier 0 mm et kerf', () => {
 
     it('la page accepte la cible 0 avec kerf 0', () => {
         const slugVue = fs.readFileSync(fileURLToPath(new URL('../pages/project/[slug].vue', import.meta.url)), 'utf8')
-        expect(slugVue).toContain('if (mm < kerfMm || (mm > 0 && mm === kerfMm)) return false;')
+        expect(slugVue).toContain('safetyPatchForTargetMm(kerfMm, Number(mm))')
+        expect(slugVue).not.toContain('(mm - kerfMm) / 2')
     })
 })

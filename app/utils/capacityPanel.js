@@ -99,14 +99,14 @@ export function capacityPanelModel(unfit, { sheets = [], spaceMm = null, kerfMm 
     // n'est pas une action) ET qu'il reste quelque chose à gagner —
     // sous 0,5 mm d'espacement courant le levier est MASQUÉ (la marge
     // restante est illusoire), et avec le kerf explicite la cible doit
-    // dépasser le kerf (on ne réduit jamais la largeur de coupe de
-    // l'outil).
+    // dépasser DEUX kerfs (espacement = 2 × kerf + sécurité : on ne réduit
+    // jamais la largeur de coupe de l'outil).
     const SPACING_FLOOR_MM = 0.5
     const spacingAtFloor = !zeroFits && spaceMm != null && spaceMm <= SPACING_FLOOR_MM
     const kerf = num(kerfMm)
     const leverWouldHelp = maxSpacingMm != null && spaceMm != null && maxSpacingMm < spaceMm
     // Cible 0 : bloquée seulement si un kerf > 0 est déclaré (0 = kerf 0 est valide).
-    const kerfBlocks = leverWouldHelp && kerf != null && (zeroFits ? kerf > 0 : maxSpacingMm <= kerf)
+    const kerfBlocks = leverWouldHelp && kerf != null && (zeroFits ? kerf > 0 : maxSpacingMm <= 2 * kerf)
     const canReduceSpacing = leverWouldHelp && !spacingAtFloor && !kerfBlocks
     return {
         reason: unfit.reason,
