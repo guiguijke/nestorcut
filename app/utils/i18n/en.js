@@ -619,6 +619,7 @@ export default {
     'time.justNow': 'just now',
     'time.minAgo': '{n} min ago',
     'time.hoursAgo': '{n} hours ago',
+    'time.hourAgo': '1 hour ago',
     'time.dayAgo': '1 day ago',
     'time.daysAgo': '{n} days ago',
 
@@ -739,6 +740,8 @@ export default {
     'live.best': 'Best',
     'live.title': 'Live nesting',
     'live.ready': 'Ready to nest',
+    'live.finished': 'Nesting finished',
+    'live.openResult': 'Open the result',
     'live.walks': 'walks',
     'result.failed': 'Nesting failed',
     'result.failed.nofit': 'Could not fit all parts',

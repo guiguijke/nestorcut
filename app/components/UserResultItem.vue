@@ -160,10 +160,11 @@ import { statusType } from "~~/constants/status.constants";
 import { trackEvent } from '~/utils/track';
 import { altDensityPctOf } from '~/utils/resultQuality';
 import { degradedNoteKey, failureReasonKey } from '~/utils/failureReason';
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { iconType } from '~~/constants/icon.constants'
 import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
 import { altLayoutCount, altSheetNames, lockedSheetsTrackData, sheetGateModel } from '~/utils/sheetDownloadGate'
+import { relativeTimeParts } from '~/utils/relativeTime'
 
 const props = defineProps({
     result: {
@@ -471,18 +472,19 @@ const resultTitle = computed(() => {
     return parts.join(' · ')
 })
 
+// Hydratation : même règle que la liste des projets — le texte relatif
+// n'existe qu'après le montage, une espace insécable avant.
+const mounted = ref(false)
+onMounted(() => { mounted.value = true })
 const timeAgo = computed(() => {
+    if (!unref(mounted)) return '\u00a0'
     const raw = props.result?.createdAt
     if (!raw) return ''
     const past = new Date(raw)
     if (Number.isNaN(past.getTime())) return ''
     const diffMinutes = Math.floor((Date.now() - past.getTime()) / 60000)
-    const diffHours = Math.floor(diffMinutes / 60)
-    const diffDays = Math.floor(diffMinutes / 1440)
-    if (diffMinutes < 1) return t('time.justNow')
-    if (diffHours >= 1 && diffHours < 24) return t('time.hoursAgo', { n: diffHours })
-    if (diffDays >= 1) return diffDays === 1 ? t('time.dayAgo') : t('time.daysAgo', { n: diffDays })
-    return t('time.minAgo', { n: diffMinutes })
+    const { key, n } = relativeTimeParts(diffMinutes)
+    return t(key, { n })
 })
 
 const isResultCompleted = computed(() => {

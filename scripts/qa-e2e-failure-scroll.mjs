@@ -478,7 +478,6 @@ const SCENARIOS = {
             await serverJob(pB, 'processing')
             await sleep(1500)
             await scrollNestToEdge(page)
-            const before = await probe(page)
             const statuses = []
             page.on('response', (r) => { if (r.request().method() === 'POST' && /\/nest$/.test(r.url())) statuses.push(r.status()) })
             await clickNest(page)
@@ -501,7 +500,7 @@ const SCENARIOS = {
                 await clickNest(page)
                 await page.waitForFunction((sel) => document.querySelector(sel), REFUSAL, { timeout: 30000 })
                 const r2 = await finishRefusal(page, 'refus_409_reel_deuxieme')
-                check(`${tag} : le message avait quitté l'écran avant le deuxième clic`, gone.y < before.y, show({ gone, before }))
+                check(`${tag} : le message avait quitté l'écran avant le deuxième clic`, gone.y < r.y && gone.banner?.whole !== true, show({ gone, shown: r.y }))
                 check(`${tag} : deuxième refus, même texte, entier à l'écran`, (await refusalText(page)) === first && r2.refusal?.whole === true, show(r2))
                 check(`${tag} : deuxième refus, un défilement de plus`, refusalCalls(r2) === n0 + 1, show(r2.scrolls))
                 // Rechargement : le refus n'est pas une réponse à un clic de cette page.

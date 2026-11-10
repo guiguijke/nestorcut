@@ -26,6 +26,37 @@
         <p v-if="preflightLine" class="content__preflight" data-testid="project-preflight">
             {{ preflightLine }}
         </p>
+        <!-- Les pièces d'abord : on dépose, on règle les quantités, puis on
+             règle la tôle. Le bouton Nest, collant, reste à l'écran partout. -->
+        <!-- Lot J8-bis (§9.73 point 22) : l'INFORMATION de bascule « .job
+             détecté → passage en Cet appareil » — une seule fois, jamais
+             un refus : le projet est créé, dans le bon mode. -->
+        <div v-if="jobSwitchedInfo" class="content__notice">
+            {{ t('home.jobSwitched') }}
+        </div>
+        <!-- Lot J10-a (§9.77 point 11) : zone d'exclusion déclarée dans
+             le `.job` et non nulle — non honorée, DITE au dépôt. -->
+        <div v-if="localImportNotice" class="content__notice content__notice--warn">
+            {{ localImportNoticeText }}
+        </div>
+        <p v-if="isLocalProject && filesCount === 0 && !localImportError" class="content__privacy">
+            {{ t('localImport.emptyBrowser') }}
+        </p>
+        <div v-if="localImportError" ref="importErrorEl" class="content__error" data-testid="import-error">
+            {{ localImportErrorText }}
+        </div>
+        <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
+             paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
+        <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
+            {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
+        </div>
+        <ProjectFiles
+            :projectFiles="projectFiles"
+            :readonly="isDemo"
+            :local="isLocalProject"
+            @addFiles="addFiles"
+            class="content__files"
+        />
         <section ref="liveSection" class="atelier">
             <div class="atelier__stage stage" :class="{ 'stage--live': stageLive }">
                 <div class="stage__head">
@@ -55,6 +86,27 @@
                     </p>
                 </div>
                 <LiveNestingView v-if="stageLive" :result="stageLive" :job-done="stageJobDone" />
+                <!-- Calcul sur le serveur terminé : la vue live s'est retirée,
+                     la scène montre la première tôle produite et invite à
+                     ouvrir le résultat (même fenêtre que la carte). -->
+                <div v-else-if="stageResult" class="stage__done" data-testid="stage-result">
+                    <button type="button" class="stage__done-thumb" :aria-label="t('live.openResult')" @click="openStageResult">
+                        <SheetSvgPreview
+                            :src="stageResult.svgs[0]"
+                            :width="idleSheet.w"
+                            :height="idleSheet.h"
+                            class="stage__sheet"
+                        />
+                    </button>
+                    <p class="stage__done-line" data-testid="stage-result-line">{{ stageResultLine }}</p>
+                    <MainButton
+                        :theme="themeType.secondary"
+                        :label="t('live.openResult')"
+                        class="stage__done-open"
+                        data-testid="stage-result-open"
+                        @click="openStageResult"
+                    />
+                </div>
                 <div v-else class="stage__idle">
                     <svg
                         :viewBox="idleViewBox"
@@ -91,32 +143,6 @@
             </div>
             <aside class="atelier__params">
                 <MainSettings />
-                <div class="atelier__cta">
-                <MainButton
-                    :theme="themeType.primary"
-                    :label="btnLabel"
-                    :isDisable="btnIsDisable"
-                    trackingTag="project_nest_start"
-                    @click="startsNest"
-                    class="atelier__nest"
-                >
-                    <template v-if="runningJob">
-                        <CoresSpinner :cores="runningCores" :size="16" show-count />
-                        {{ t('nest.computing') }}
-                    </template>
-                </MainButton>
-                <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
-                     grisé, avant tout clic (en bas de page il sortait de l'écran). -->
-                <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
-                    {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
-                </p>
-                <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
-                <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
-                     les premières tôles seulement ; le dire avant le calcul. -->
-                <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
-                    {{ ctaFreeNote }}
-                </p>
-                </div>
                 <div v-if="capacityPanel" ref="capacityPanelEl">
                 <CapacityPanel
                     :panel="capacityPanel"
@@ -131,47 +157,44 @@
         <!-- AF1 (L3-bis) : UN SEUL message de refus — quand le panneau de
              capacité est affiché, le bandeau rouge sous la scène se tait
              (la mention de remboursement vit dans le panneau). -->
-        <!-- Lot J8-bis (§9.73 point 22) : l'INFORMATION de bascule « .job
-             détecté → passage en Cet appareil » — une seule fois, jamais
-             un refus : le projet est créé, dans le bon mode. -->
-        <div v-if="jobSwitchedInfo" class="content__notice">
-            {{ t('home.jobSwitched') }}
-        </div>
-        <!-- Lot J10-a (§9.77 point 11) : zone d'exclusion déclarée dans
-             le `.job` et non nulle — non honorée, DITE au dépôt. -->
-        <div v-if="localImportNotice" class="content__notice content__notice--warn">
-            {{ localImportNoticeText }}
-        </div>
         <div v-if="jobErrorText && !capacityPanel" ref="jobErrorEl" class="content__error" data-testid="job-error">
             {{ jobErrorText }}
         </div>
         <div v-if="isDemo && demoQuotaReached && !demoUnlimited" class="content__error">
             {{ t('demo.quotaEmpty') }}
         </div>
-        <p v-if="isLocalProject && filesCount === 0 && !localImportError" class="content__privacy">
-            {{ t('localImport.emptyBrowser') }}
-        </p>
         <div v-if="nestRequestError && !capacityPanel" class="content__error">
             {{ t(nestRequestError) }}
         </div>
         <div v-if="nestSubmitError" ref="nestRefusalEl" class="content__error" data-testid="nest-refusal">
             {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
         </div>
-        <div v-if="localImportError" class="content__error">
-            {{ localImportErrorText }}
+        <div class="atelier__cta">
+            <MainButton
+                :theme="themeType.primary"
+                :label="btnLabel"
+                :isDisable="btnIsDisable"
+                trackingTag="project_nest_start"
+                @click="startsNest"
+                class="atelier__nest"
+            >
+                <template v-if="runningJob">
+                    <CoresSpinner :cores="runningCores" :size="16" show-count />
+                    {{ t('nest.computing') }}
+                </template>
+            </MainButton>
+            <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
+                 grisé, avant tout clic (en bas de page il sortait de l'écran). -->
+            <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
+                {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+            </p>
+            <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
+            <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
+                 les premières tôles seulement ; le dire avant le calcul. -->
+            <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
+                {{ ctaFreeNote }}
+            </p>
         </div>
-        <!-- d6 : borne TECHNIQUE (Σ count > MAX_SHEETS_PER_JOB), tous
-             paliers — le plafond Free de 2 tôles n'existe plus (O1). -->
-        <div v-if="sheetCountTooHigh" class="content__error" data-testid="max-sheets-error">
-            {{ t('nest.error.maxSheets', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
-        </div>
-        <ProjectFiles
-            :projectFiles="projectFiles"
-            :readonly="isDemo"
-            :local="isLocalProject"
-            @addFiles="addFiles"
-            class="content__files"
-        />
     </div>
 </template>
 
@@ -191,7 +214,8 @@ import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
-import { belongsToProject, pickAwaitingLocal, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { belongsToProject, pickAwaitingLocal, pickFinishedServerJob, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { altDensityPctOf } from "~/utils/resultQuality";
 import { jobErrorBannerText } from "~/utils/failureReason";
 import { useJobScroll } from "~/composables/useJobScroll";
 import {
@@ -335,6 +359,7 @@ const localLive = computed(() => {
 const liveSection = ref(null);
 const jobErrorEl = ref(null);
 const nestRefusalEl = ref(null);
+const importErrorEl = ref(null);
 const serverJob = computed(() => serverJobState(unref(resultsList), unref(pageSlug)));
 const jobScroll = useJobScroll({
     projectSlug: () => unref(pageSlug),
@@ -347,6 +372,11 @@ const jobScroll = useJobScroll({
     // à suivre — le composable l'amène à l'écran après un clic de cette page.
     refusal: () => filesStore.getters.nestRefusals,
     refusalEl: nestRefusalEl,
+    // Fichier refusé à l'import (.job illisible) : message en tête de page, que
+    // le composable amène à l'écran après un dépôt de CETTE page. Le store pose un
+    // objet de paramètres neuf à chaque refus, ce qui distingue deux refus au même texte.
+    importPosted: () => (filesStore.getters.localImportError ? filesStore.getters.localImportErrorParams : null),
+    importEl: importErrorEl,
     target: import.meta.client ? window : null,
     // Le job échoué n'a rien produit et le message propose de réessayer : Nest
     // redevient actif avec les MÊMES réglages (comme après une annulation, AA2).
@@ -721,9 +751,36 @@ const stageJobDone = computed(() => liveJobDone({
     reveal: unref(localReveal),
 }));
 
+// Résultat du dernier calcul serveur, tant que les réglages sont ceux qui l'ont
+// produit : dès qu'on en change, la scène redevient « prête » (le bouton Nest
+// est de nouveau actif, le résultat affiché ne serait plus celui des réglages).
+const stageResult = computed(() => {
+    if (unref(stageLive) || unref(isNewParams)) return null
+    return pickFinishedServerJob(unref(resultsList), unref(pageSlug))
+});
+const stageResultLine = computed(() => {
+    const job = unref(stageResult)
+    if (!job) return ''
+    const alt = job.alternatives?.[0]
+    const sheetN = alt?.layoutCount || job.svgs.length
+    const bits = []
+    const pct = altDensityPctOf(alt)
+    if (pct != null) bits.push(`${fmtPercent(pct)} ${t('result.densityShort')}`)
+    bits.push(sheetN === 1 ? t('result.sheetCountOne') : t('result.sheetCount', { n: sheetN }))
+    return bits.join(' · ')
+});
+const resultDialog = useResultDialog();
+const openStageResult = () => {
+    const job = unref(stageResult)
+    if (!job) return
+    globalStore.actions.setModalResultData(job)
+    resultDialog.value = true
+};
+
 const stageHeading = computed(() => {
     if (unref(localComputeRunning)) return t('localCompute.title')
     if (unref(stageLive)) return t('live.title')
+    if (unref(stageResult)) return t('live.finished')
     return t('live.ready')
 });
 
@@ -976,6 +1033,7 @@ const btnIsDisable = computed(() => {
     return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(sheetCountTooHigh) || unref(nestBusy)
 })
 const addFiles = (files) => {
+    jobScroll.expectImport()
     actions.addFiles(files, unref(slug))
 }
 
@@ -1044,8 +1102,7 @@ const startsNest = () => {
     }
 
     &__files {
-        margin-top: 28px;
-        margin-bottom: 24px;
+        margin-bottom: 20px;
     }
 
     &__error {
@@ -1147,19 +1204,32 @@ const startsNest = () => {
 
     &__nest {
         width: 100%;
-        margin-top: 4px;
 
         :deep(.button) {
             width: 100%;
         }
     }
 
+    // Bloc collant : dernier enfant de la page, donc collé en bas de l'écran
+    // pendant tout le défilement (pièces, tôle, réglages), au repos en fin de
+    // page. Sur PC il s'aligne sur la colonne des réglages.
     &__cta {
         position: sticky;
         bottom: 0;
-        padding-top: 8px;
-        background: var(--background-primary);
         z-index: 2;
+        padding: 8px 0 10px;
+        background: var(--background-primary);
+        box-shadow: 0 -8px 12px -8px color-mix(in srgb, var(--label-primary) 14%, transparent);
+
+        @media (min-width: 900px) {
+            width: 340px;
+            margin-left: auto;
+        }
+
+        // Entre 480 et 1318 px le bouton « Support » est fixé en bas à droite.
+        @media (min-width: 480px) and (max-width: 1318px) {
+            padding-right: 104px;
+        }
     }
 
     &__cta-hint {
@@ -1222,6 +1292,36 @@ const startsNest = () => {
 
         :deep(.live) {
             min-height: 60vh;
+        }
+    }
+
+    &__done {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    &__done-thumb {
+        display: block;
+        width: 100%;
+        padding: 0;
+        border: none;
+        background: none;
+        cursor: pointer;
+    }
+
+    &__done-line {
+        margin: 0;
+        font-size: var(--fs-14);
+        font-weight: 600;
+        color: var(--label-primary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__done-open {
+        :deep(.button) {
+            min-width: 200px;
         }
     }
 

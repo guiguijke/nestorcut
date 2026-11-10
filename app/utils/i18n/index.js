@@ -78,11 +78,12 @@ export function translate(key, locale = DEFAULT_LOCALE, params = {}) {
  * Lot L0 : la balise Intl vient du REGISTRE — une langue nouvelle hérite
  * de sa virgule décimale en ajoutant une ligne à INTL_TAGS.
  */
-export function formatNumber(v, locale = DEFAULT_LOCALE, digits = 1) {
+export function formatNumber(v, locale = DEFAULT_LOCALE, digits = 1, minDigits = 0) {
     const n = Number(v)
     if (!Number.isFinite(n)) return '—'
     return new Intl.NumberFormat(intlTag(locale), {
-        minimumFractionDigits: 0,
+        // minDigits (optionnel) : décimales toujours écrites, « 5,0 » et non « 5 ».
+        minimumFractionDigits: Math.min(minDigits, digits),
         maximumFractionDigits: digits,
     }).format(n)
 }

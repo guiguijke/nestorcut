@@ -418,7 +418,7 @@ function onTierClick(tier) {
     }
 
     &__name {
-        color: var(--accent-primary);
+        color: var(--text);
         font-weight: 700;
         font-size: var(--fs-18);
         text-align: center;
@@ -518,7 +518,7 @@ function onTierClick(tier) {
         }
 
         thead th {
-            color: var(--accent-primary);
+            color: var(--text);
             font-weight: 700;
             font-size: var(--fs-14);
             border-bottom: 1px solid var(--separator-primary);
@@ -527,12 +527,29 @@ function onTierClick(tier) {
         tbody tr:not(:last-child) td {
             border-bottom: 1px solid var(--separator-secondary);
         }
+
+        // Téléphone : les trois offres tiennent dans le cadre, sans défilement
+        // caché. Libellés et valeurs passent à la ligne, colonnes resserrées.
+        @media (max-width: 640px) {
+            min-width: 0;
+            font-size: var(--fs-13);
+
+            th, td {
+                padding: 10px 6px;
+            }
+        }
     }
 
     &__label {
         text-align: left !important;
         color: var(--label-primary);
         font-weight: 600;
+
+        // Téléphone : un long mot (allemand) se coupe plutôt que d'élargir la table.
+        @media (max-width: 640px) {
+            hyphens: auto;
+            overflow-wrap: anywhere;
+        }
     }
 
     &__value {

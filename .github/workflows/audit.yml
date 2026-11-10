@@ -1,0 +1,52 @@
+# Audit des dépendances : une fois par semaine (lundi) et à la demande.
+# Ne se déclenche ni sur push ni sur pull_request. Les étapes ne bloquent
+# rien pour l'instant (continue-on-error) : le résultat est dans le journal
+# de chaque exécution.
+name: audit
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+        continue-on-error: true
+
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        continue-on-error: true
+        with:
+          node-version: "24"
+
+      - name: npm audit (dépendances de production)
+        continue-on-error: true
+        run: npm audit --omit=dev
+
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+        continue-on-error: true
+
+      - name: Installer cargo-audit
+        continue-on-error: true
+        run: cargo install --locked cargo-audit
+
+      - name: cargo audit (workspace moteur de nesting)
+        continue-on-error: true
+        working-directory: workers/nesting/engine
+        run: cargo audit
+
+      - name: cargo audit (workspace géométrie)
+        continue-on-error: true
+        working-directory: workers/geometry
+        run: cargo audit
