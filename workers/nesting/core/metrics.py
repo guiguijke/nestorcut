@@ -394,7 +394,7 @@ def overlapping_pairs(containers, input_items, space=0.0, cap=20):
 
 
 
-def verify_layout(containers, input_items, space=0.0):
+def verify_layout(containers, input_items, space=0.0, margin=0.0):
     """Physical verification of a layout — MEASURED, not declared.
 
     Computes, per job alternative:
@@ -403,6 +403,12 @@ def verify_layout(containers, input_items, space=0.0):
       - overlap_free: no two parts intersect beyond OVERLAP_EPS_MM2;
       - inside_sheet: every part fully within its sheet;
       - spacing_ok: smallest_gap >= requested space (minus epsilon);
+
+    `space` est l'espacement DEMANDÉ. Les contours posés sont simplifiés et
+    le moteur a travaillé à demandé + `margin` : l'écart mesuré est donc un
+    écart INTERNE. L'écart annoncé (smallestGapMm) est (mesuré - margin),
+    borne garantie sur les vraies courbes, jamais négatif ; spacingOk le
+    juge contre le demandé.
       - duplicate_poses: pairs of parts at distance 0 covering >= 99% of
         each other (same part placed twice — anti-loss guard was blind to
         them because they preserve the total count);
@@ -438,7 +444,8 @@ def verify_layout(containers, input_items, space=0.0):
     # V19 (vérif 2026-09-04) : rayon ≥ 5 mm — à 1 mm la paire la plus
     # proche hors rayon n'est pas candidate et smallestGap affichait la
     # distance au BORD de la tôle (340 mm pour deux hôtes à 10 mm).
-    search_r = max(float(space or 0) + 1.0, 5.0)
+    margin = max(0.0, float(margin or 0))
+    search_r = max(float(space or 0) + margin + 1.0, 5.0)
 
     for container in containers:
         sheet_w = container.bin_width or 0
@@ -514,6 +521,7 @@ def verify_layout(containers, input_items, space=0.0):
     if not pair_checks_done:
         report["verifyStatus"] = "skipped"
     if pair_checks_done and smallest_gap != float("inf"):
+        smallest_gap = max(0.0, smallest_gap - margin)
         report["smallestGapMm"] = round(smallest_gap, 3)
         report["overlapFree"] = overlap_free
         report["spacingOk"] = smallest_gap >= float(space or 0) - 0.01

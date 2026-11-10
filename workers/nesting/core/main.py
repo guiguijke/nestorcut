@@ -2152,7 +2152,7 @@ def _nesting_process_impl(doc):
                     parse_result_containers(
                         {"solution": {"layouts": snapshot}}, input_items, bin_dims_engine
                     )[0],
-                    input_items, requested_space,
+                    input_items, requested_space, space - requested_space,
                 )
                 snap_copy = copy.deepcopy(snapshot)
                 if meta.get("packs"):
@@ -2166,7 +2166,7 @@ def _nesting_process_impl(doc):
                     parse_result_containers(
                         {"solution": {"layouts": exp_layouts}}, input_items, bin_dims_engine
                     )[0],
-                    input_items, requested_space,
+                    input_items, requested_space, space - requested_space,
                 )
                 origin = "engine" if _dirty(pre) else "expand" if _dirty(expanded) else "post_pass"
         except Exception as e:
@@ -2328,7 +2328,8 @@ def _nesting_process_impl(doc):
         # structurelle hors tôle est JETÉE → repli moteur. Les alternatives
         # MOTEUR gardent leur badge insideSheet (piège #6 : le SPP sparrow
         # n'a pas de borne dure, c'est le contrat moteur).
-        verification = verify_layout(result_containers, input_items, requested_space)
+        verification = verify_layout(
+            result_containers, input_items, requested_space, space - requested_space)
         if engine_alt.get("structural") and not verification.get("insideSheet"):
             logger.warning(
                 "structural alternative outside sheet, discarding",

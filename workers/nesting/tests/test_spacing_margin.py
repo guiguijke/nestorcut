@@ -76,14 +76,42 @@ class TestSpacingMargin:
         assert build_engine_config(10, 1, 1, min_separation=0 + m.spacing_margin(stats, 0))[
             "min_item_separation"] is None
 
-    def test_verification_judges_against_requested(self):
+    @staticmethod
+    def _pair(x2):
         sq = {"id": 0, "coords": [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]}
         cont = ResultContainer(1, [
             Transform("f", ["h"], 30.0, 30.0, 0.0, item_id=0),
-            Transform("f", ["h"], 42.05, 30.0, 0.0, item_id=0),
+            Transform("f", ["h"], x2, 30.0, 0.0, item_id=0),
         ], bin_width=100.0, bin_height=100.0)
-        assert verify_layout([cont], [sq], 2.0)["spacingOk"] is True
-        assert verify_layout([cont], [sq], 2.12)["spacingOk"] is False  # l'interne ne doit pas juger
+        return cont, sq
+
+    def test_reported_gap_is_measured_minus_margin(self):
+        # Paire posée à l'interne 2,12 (demandé 2 + marge 0,12) : l'écart
+        # annoncé est 2,00, borne garantie sur les vraies courbes.
+        cont, sq = self._pair(42.12)
+        rep = verify_layout([cont], [sq], 2.0, margin=0.12)
+        assert rep["smallestGapMm"] == pytest.approx(2.0, abs=1e-9)
+        assert rep["spacingOk"] is True
+
+    def test_deficit_hidden_by_internal_gap_is_now_caught(self):
+        # Paire à 2,05 sur les contours simplifiés, marge 0,12 : sur les
+        # vraies courbes l'écart garanti est 1,93 < 2 - 0,01.
+        cont, sq = self._pair(42.05)
+        rep = verify_layout([cont], [sq], 2.0, margin=0.12)
+        assert rep["smallestGapMm"] == pytest.approx(1.93, abs=1e-9)
+        assert rep["spacingOk"] is False
+
+    def test_reported_gap_never_negative(self):
+        cont, sq = self._pair(40.05)  # écart mesuré 0,05 < marge
+        rep = verify_layout([cont], [sq], 2.0, margin=0.12)
+        assert rep["smallestGapMm"] == 0
+        assert rep["spacingOk"] is False
+
+    def test_margin_zero_unchanged(self):
+        cont, sq = self._pair(42.05)
+        rep = verify_layout([cont], [sq], 2.0)
+        assert rep["smallestGapMm"] == pytest.approx(2.05, abs=1e-9)
+        assert rep["spacingOk"] is True
 
     def test_original_contours_keep_requested_spacing(self, monkeypatch):
         ring = _disc(50)

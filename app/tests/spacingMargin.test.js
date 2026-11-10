@@ -11,11 +11,17 @@ vi.mock('../composables/geometryClient', () => ({
     geoComputeReport: vi.fn(async (spec) => {
         const xs = spec.containers[0].transforms.map((t) => t.x).sort((a, b) => a - b)
         const gap = xs[1] - xs[0] - 10
-        return { per_sheet: [], totals: null, verify: { spacingOk: gap >= spec.space - 0.01, gap } }
+        reportSpaces.push(spec.space)
+        return {
+            per_sheet: [], totals: null,
+            verify: { smallestGapMm: Math.round(gap * 1000) / 1000, spacingOk: gap >= spec.space - 0.01 },
+        }
     }),
     geoExportDxfSheet: vi.fn(async () => null),
 }))
 
+// Espace réellement transmis au rapport wasm, par appel.
+const reportSpaces = []
 const rect = (w, h) => [[0, 0], [w, 0], [w, h], [0, h], [0, 0]]
 const disc = (r, n = 160) => {
     const pts = []
@@ -81,7 +87,7 @@ describe('marge d’espacement', () => {
         expect(payload.engineConfig.min_item_separation).toBeCloseTo(2 + computeSpacingMargin([fileOf(disc(50))], 2), 12)
     })
 
-    it('le rapport de vérification juge contre le DEMANDÉ : paire à 2,05, demandé 2, interne 2,12', async () => {
+    const reportFor = async (x2) => {
         const { buildAlternativeArtifacts } = await import('../composables/localBridge')
         const sq = [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]]
         const payload = {
@@ -94,10 +100,30 @@ describe('marge d’espacement', () => {
         const t = (x) => ({ item_id: 0, transformation: { rotation: 0, translation: [x, 500] } })
         const result = {
             problem: 'spp',
-            alternatives: [{ rank: 0, seed: 1, solution: { layout: { container_id: 0, placed_items: [t(500), t(512.05)] } } }],
+            alternatives: [{ rank: 0, seed: 1, solution: { layout: { container_id: 0, placed_items: [t(500), t(x2)] } } }],
         }
+        reportSpaces.length = 0
         const arts = await buildAlternativeArtifacts(result, payload)
-        expect(arts[0].report.verify.spacingOk).toBe(true)
+        return arts[0].report.verify
+    }
+
+    it('le rapport reçoit l’espacement INTERNE ; l’écart annoncé = mesuré − marge, jugé contre le demandé', async () => {
+        const v = await reportFor(512.12) // interne 2,12 posé exactement
+        expect(reportSpaces).toEqual([2.12])
+        expect(v.smallestGapMm).toBeCloseTo(2.0, 9)
+        expect(v.spacingOk).toBe(true)
+    })
+
+    it('un déficit caché par l’écart interne est vu : paire à 2,05 (interne 2,12) -> 1,93, spacingOk faux', async () => {
+        const v = await reportFor(512.05)
+        expect(v.smallestGapMm).toBeCloseTo(1.93, 9)
+        expect(v.spacingOk).toBe(false)
+    })
+
+    it('l’écart annoncé n’est jamais négatif à cause de la marge', async () => {
+        const v = await reportFor(510.05)
+        expect(v.smallestGapMm).toBe(0)
+        expect(v.spacingOk).toBe(false)
     })
 })
 
