@@ -149,16 +149,28 @@ export function isFinalStage(stage) {
 
 /**
  * Ce que dit le badge de l'en-tête live :
- *  - 'done'      : étape finale seulement (le calcul est fini) ;
- *  - 'fits'      : en cours de recherche, la meilleure disposition tient sur
- *                  la tôle (ce n'est PAS « terminé » : le moteur continue) ;
+ *  - 'done'      : SEULEMENT quand la page signale que le job entier est fini
+ *                  (`jobDone`). Aucune frame ni aucune étape ne suffit : la
+ *                  frame championne passe à `final` dès qu'une direction ou
+ *                  une recherche se termine, alors que d'autres tournent ;
+ *  - 'fits'      : la meilleure disposition tient sur la tôle (ce n'est PAS
+ *                  « terminé » : le calcul peut continuer) ;
  *  - 'searching' : rien de présentable pour l'instant ;
  *  - null        : pas de frame, pas de badge.
  */
-export function liveBadgeKind(frame, stage) {
+export function liveBadgeKind(frame, jobDone = false) {
     if (!frame) return null
     if (!frameFitsSheet(frame)) return 'searching'
-    return isFinalStage(stage) ? 'done' : 'fits'
+    return jobDone === true ? 'done' : 'fits'
+}
+
+/**
+ * Le job ENTIER est fini, vu de la page : sur l'appareil, plus aucun calcul
+ * en cours ET la scène affiche le résultat reçu (pas une frame de recherche).
+ * Sur le serveur, la vue se retire à la fin : ce signal reste faux.
+ */
+export function liveJobDone({ computeRunning, jobPending = false, stage, reveal }) {
+    return !computeRunning && !jobPending && !!reveal && stage === reveal
 }
 
 /**

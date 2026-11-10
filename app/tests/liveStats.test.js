@@ -56,3 +56,19 @@ describe('vue en direct : densité d’un job serveur', () => {
         expect(source).toMatch(/liveDensity\(frame, props\.result\)/)
     })
 })
+
+describe('vue en direct : statistiques sur téléphone', () => {
+    const style = parse(source).descriptor.styles.map((x) => x.content).join('\n')
+    const block = (sel) => {
+        const i = style.indexOf(sel)
+        expect(i).toBeGreaterThan(-1)
+        return style.slice(i, i + 700)
+    }
+    it("l'en-tête et la rangée des statistiques passent à la ligne", () => {
+        expect(block('&__header {')).toContain('flex-wrap: wrap')
+        expect(block('&__stats {')).toContain('flex-wrap: wrap')
+    })
+    it('sous une largeur de téléphone, les statistiques prennent toute la ligne', () => {
+        expect(block('&__stats {')).toMatch(/@media \(max-width: 640px\)[\s\S]*flex: 1 1 100%/)
+    })
+})

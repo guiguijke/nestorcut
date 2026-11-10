@@ -176,7 +176,12 @@ const { data: subscriptionInfo, execute: loadSubscriptionInfo } = useFetch('/api
     server: false,
     immediate: false,
 })
+// Le rendu serveur ne connaît pas l'éligibilité à l'essai : le premier rendu
+// client doit être identique (sinon erreur d'hydratation), les libellés qui
+// en dépendent ne se mettent à jour qu'après le montage.
+const mountedOnClient = ref(false)
 onMounted(() => {
+    mountedOnClient.value = true
     if (userIsSet.value) loadSubscriptionInfo()
 })
 watch(userIsSet, (isSet) => {
@@ -196,7 +201,7 @@ function ctaFor(tier) {
     if (!userIsSet.value) {
         return { label: tier.cta, disabled: Boolean(tier.comingSoon) }
     }
-    const info = unref(subscriptionInfo)
+    const info = unref(mountedOnClient) ? unref(subscriptionInfo) : undefined
     const cta = signedInPlanCta({
         tierKey: tier.tierKey,
         level: unref(authGetters.user)?.compute?.level,

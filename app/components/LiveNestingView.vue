@@ -221,6 +221,9 @@ import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStag
 const props = defineProps({
     result: { type: Object, required: true },
     compact: { type: Boolean, default: false },
+    // Le job ENTIER est fini (posé par la page d'après l'état réel du calcul).
+    // Seul ce signal autorise « Terminé » ; une frame `final` ne suffit pas.
+    jobDone: { type: Boolean, default: false },
 });
 
 const { t, fmtPercent } = useLocale();
@@ -511,7 +514,7 @@ const best = computed(() => {
 });
 
 const liveStage = computed(() => resolveLiveStage(props.result, best.value?.stage));
-const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, liveStage.value) : null));
+const badgeKind = computed(() => (best.value ? liveBadgeKind(best.value, props.jobDone) : null));
 const badgeText = computed(() => ({
     done: t('live.feasible'),
     fits: t('live.fitsSheet'),
@@ -749,8 +752,10 @@ const formatElapsed = (sec) => {
 
     &__header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 10px;
+        min-width: 0;
         font-size: var(--fs-13);
         color: var(--label-primary);
     }
@@ -780,8 +785,19 @@ const formatElapsed = (sec) => {
     /* U3 passe 3 : rangée de UiStat alignée à droite de l'en-tête. */
     &__stats {
         display: flex;
+        flex-wrap: wrap;
         align-items: flex-start;
-        gap: var(--sp-4);
+        gap: var(--sp-2) var(--sp-4);
+        min-width: 0;
+        max-width: 100%;
+
+        // Téléphone : les statistiques passent sous le titre et à la ligne,
+        // libellés entiers (compteur de cœurs compris), au lieu d'une rangée
+        // unique coupée par le bord de l'écran.
+        @media (max-width: 640px) {
+            flex: 1 1 100%;
+            gap: var(--sp-2) var(--sp-3);
+        }
     }
 
     &__stat--accent :deep(.ui-stat__value) {

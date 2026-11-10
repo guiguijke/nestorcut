@@ -46,6 +46,20 @@ from .logger import setup_logger
 from .mongo import db
 
 
+def loggable_error(e):
+    """(message, traceback) à journaliser pour une exception de job.
+
+    Une exception qui porte un `log_message` a un texte destiné à
+    l'utilisateur (il peut citer le nom de son fichier) : le journal n'en
+    garde que ce `log_message`, ni le texte ni la chaîne de causes. Les
+    autres exceptions sont journalisées telles quelles."""
+    safe = getattr(e, "log_message", None)
+    if not safe:
+        return str(e), traceback.format_exc()
+    frames = "".join(traceback.format_tb(e.__traceback__))
+    return safe, f"{frames}{type(e).__name__}: {safe}\n"
+
+
 @dataclass
 class WorkerConfig:
     name: str
@@ -303,9 +317,10 @@ def run_worker(config: WorkerConfig) -> None:
                 if config.refund:
                     config.refund(doc)
             else:
+                log_error, log_tb = loggable_error(e)
                 logger.error(
                     f"Error in {config.name} processing",
-                    extra={"error": str(e), "traceback": traceback.format_exc()},
+                    extra={"error": log_error, "traceback": log_tb},
                 )
                 if config.refund:
                     config.refund(doc)

@@ -7,6 +7,7 @@ import {
     frameFitsSheet,
     frameIsBetter,
     liveBadgeKind,
+    liveJobDone,
     liveUsedLength,
     resolveLiveStage,
     serverJobState,
@@ -171,17 +172,43 @@ describe('resolveLiveStage — P4 Finalisation visible malgré le champion', () 
 describe('liveJob : badge et longueur utilisée', () => {
     const fit = { feasible: true, strip_width: 800, sheets: [[1000, 500]], isSpp: true }
 
-    it('« Terminé » seulement à l’étape finale', () => {
-        expect(liveBadgeKind(fit, 'final')).toBe('done')
-        expect(liveBadgeKind(fit, 'reveal')).toBe('done')
-        expect(liveBadgeKind(fit, 'exploration')).toBe('fits')
-        expect(liveBadgeKind(fit, 'finalizing')).toBe('fits')
-        expect(liveBadgeKind(fit, null)).toBe('fits')
+    it('« Terminé » seulement quand le job entier est fini, jamais sur une étape', () => {
+        for (const stage of ['final', 'reveal', 'exploration', 'finalizing', null]) {
+            // le badge ne lit plus l'étape : la frame `final` d'une direction
+            // ou d'une recherche qui se termine pendant que d'autres tournent
+            expect(liveBadgeKind({ ...fit, stage })).toBe('fits')
+            expect(liveBadgeKind({ ...fit, stage }, false)).toBe('fits')
+            expect(liveBadgeKind({ ...fit, stage }, true)).toBe('done')
+        }
+    })
+    it('multi-sens : une direction finie (final) ne dit pas Terminé tant que le job tourne', () => {
+        const left = { ...fit, stage: 'final', bias: 'left' }
+        const right = { ...fit, stage: 'exploration', bias: 'right' }
+        expect(liveBadgeKind(left, false)).toBe('fits')
+        expect(liveBadgeKind(right, false)).toBe('fits')
+        expect(liveBadgeKind(left, true)).toBe('done')
+    })
+    it('une fois le job fini, une frame moins bonne ne défait pas « Terminé »', () => {
+        expect(liveBadgeKind(fit, true)).toBe('done')
+        expect(liveBadgeKind({ ...fit, stage: 'exploration' }, true)).toBe('done')
     })
     it('recherche tant que rien ne tient', () => {
-        expect(liveBadgeKind({ ...fit, feasible: false }, 'exploration')).toBe('searching')
-        expect(liveBadgeKind({ ...fit, strip_width: 1200 }, 'final')).toBe('searching')
-        expect(liveBadgeKind(null, 'final')).toBe(null)
+        expect(liveBadgeKind({ ...fit, feasible: false }, false)).toBe('searching')
+        expect(liveBadgeKind({ ...fit, strip_width: 1200 }, true)).toBe('searching')
+        expect(liveBadgeKind(null, true)).toBe(null)
+    })
+    it('signal de la page : fini seulement sans calcul en cours et résultat affiché', () => {
+        const reveal = { slug: 'a' }
+        const frame = { slug: 'a' }
+        expect(liveJobDone({ computeRunning: true, stage: frame, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: true, stage: reveal, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: frame, reveal })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: reveal, reveal })).toBe(true)
+        // Bouton encore sur « Calcul en cours » : pas encore « Terminé ».
+        expect(liveJobDone({ computeRunning: false, jobPending: true, stage: reveal, reveal })).toBe(false)
+        // serveur : pas de résultat local, jamais fini
+        expect(liveJobDone({ computeRunning: false, stage: frame, reveal: null })).toBe(false)
+        expect(liveJobDone({ computeRunning: false, stage: null, reveal: null })).toBe(false)
     })
     it('longueur utilisée : SPP en recherche, valeur saine seulement', () => {
         expect(liveUsedLength(fit, 'exploration')).toBe(800)

@@ -319,6 +319,24 @@ describe('decorateLiveLayout (vue live = modal après J-085)', () => {
         expect(noWidth.density).toBeCloseTo(fits.density, 9)
     })
 
+    it('densité : deux formats différents, jamais la première tôle multipliée', () => {
+        const base = {
+            feasible: true,
+            isSpp: false,
+            sheets: [[500, 500], [1000, 1000]],
+            items: [[1, 0, 0, 100, 100], [1, 1, 0, 100, 100]],
+        }
+        const payload = { parts: [fill, host], engineConfig: { min_item_separation: 0 } }
+        expect(decorateLiveLayout(base, payload).density).toBeNull()
+        // deux types de tôle de même taille : le chiffre est sûr
+        const same = decorateLiveLayout({ ...base, sheets: [[500, 500], [500, 500]] }, payload)
+        const area = 10000 - 0.5 * 8 * 35 * 35 * Math.sin(Math.PI / 4)
+        expect(same.density).toBeCloseTo((2 * area) / (2 * 250000), 6)
+        // un seul type, deux tôles utilisées
+        const one = decorateLiveLayout({ ...base, sheets: [[500, 500]] }, payload)
+        expect(one.density).toBeCloseTo((2 * area) / (2 * 250000), 6)
+    })
+
     it('densité : sans tôle connue, pas de chiffre', () => {
         const out = decorateLiveLayout(
             { feasible: true, isSpp: true, sheets: [], items: [[1, 0, 100, 100]], density: 0.9 },
