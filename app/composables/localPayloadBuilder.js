@@ -423,6 +423,31 @@ function ringSimplificationGap(orig, simp) {
     return gap
 }
 
+// Écart et courbure d'une pièce, mesurés une seule fois (le pré-vol de la page
+// et l'API rappellent computeSpacingMargin à chaque réglage).
+const _partStats = new WeakMap()
+function partSimplificationStats(part) {
+    const cached = _partStats.get(part)
+    if (cached) return cached
+    const coords = part.coordinates ?? part.coords ?? []
+    const holes = part.holes ?? []
+    const simp = simplifyPart(coords, holes)
+    const rings = [[coords, simp.coords], ...holes.map((h, i) => [h, simp.holes[i]])]
+    let gapMax = 0
+    let curved = false
+    for (const [orig, s] of rings) {
+        if ((isClosedRing(orig) ? orig.length - 1 : orig.length) > 8) curved = true
+        const gap = ringSimplificationGap(orig, s)
+        // Un sommet retiré hors de la ligne = courbe aplatie : réserve
+        // d'aplatissement, même sous 8 sommets.
+        if (gap > 1e-9) curved = true
+        gapMax = Math.max(gapMax, gap)
+    }
+    const st = { gap: gapMax, curved }
+    _partStats.set(part, st)
+    return st
+}
+
 /**
  * Marge = 2 × (écart maximal de simplification sur toutes les pièces)
  * + 0,02 si un anneau d'origine a plus de 8 sommets ou si la simplification
@@ -438,18 +463,9 @@ export function computeSpacingMargin(files, requested) {
     let curved = false
     for (const file of files || []) {
         for (const part of file.parts || []) {
-            const coords = part.coordinates ?? part.coords ?? []
-            const holes = part.holes ?? []
-            const simp = simplifyPart(coords, holes)
-            const rings = [[coords, simp.coords], ...holes.map((h, i) => [h, simp.holes[i]])]
-            for (const [orig, s] of rings) {
-                if ((isClosedRing(orig) ? orig.length - 1 : orig.length) > 8) curved = true
-                const gap = ringSimplificationGap(orig, s)
-                // Un sommet retiré hors de la ligne = courbe aplatie : réserve
-                // d'aplatissement, même sous 8 sommets.
-                if (gap > 1e-9) curved = true
-                maxGap = Math.max(maxGap, gap)
-            }
+            const st = partSimplificationStats(part)
+            if (st.curved) curved = true
+            maxGap = Math.max(maxGap, st.gap)
         }
     }
     return Math.min(SPACING_MARGIN_CAP_MM, 2 * maxGap + (curved ? FLATTEN_RESERVE_MM : 0))

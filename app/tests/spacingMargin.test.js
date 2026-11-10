@@ -181,3 +181,25 @@ describe('espacement maximal dit à l’utilisateur (panneau de capacité)', () 
         expect(Math.round(v * 100) / 100).toBe(v)
     })
 })
+
+describe('pré-contrôles : la capacité est jugée à l’espacement interne comme dans le worker', () => {
+    it('computeSpacingMargin sur les mêmes polygonParts : résultat stable (mesure mise en cache)', () => {
+        const file = { parts: [{ coordinates: disc(50), holes: [], handles: ['A'] }] }
+        const first = computeSpacingMargin([file], 2)
+        expect(first).toBeGreaterThan(0)
+        expect(computeSpacingMargin([file], 2)).toBe(first)
+        expect(computeSpacingMargin([file], 0)).toBe(0)
+    })
+
+    it('l’API et le pré-vol de la page ajoutent la marge avant capacityReport', async () => {
+        const { readFileSync } = await import('node:fs')
+        const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
+        const api = read('../../server/api/project/[slug]/nest.post.js')
+        expect(api).toContain('computeSpacingMargin(')
+        expect(api).toContain('capacityReport(parts, normalizedSheets, space + curveMargin)')
+        expect(api).toContain('...userMaxSpacing(cap.maxSpacingForFitMm, curveMargin)')
+        const page = read('../pages/project/[slug].vue')
+        expect(page).toContain('computeSpacingMargin(')
+        expect(page).toContain('capacityReport(parts, sheets, spaceMm + curveMargin)')
+    })
+})

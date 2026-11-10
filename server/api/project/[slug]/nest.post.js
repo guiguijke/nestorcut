@@ -262,7 +262,14 @@ export default defineEventHandler(async (event) => {
         }
         if (parts.length > 0) {
             const { capacityReport } = await import('~~/app/composables/capacityClient')
-            const cap = capacityReport(parts, normalizedSheets, space)
+            // Le worker et le calcul sur l'appareil jugent la capacité à
+            // l'espacement INTERNE (demandé + marge de courbes) : le même
+            // calcul ici, sur les mêmes polygonParts, évite une bande de jobs
+            // acceptés puis refusés et remboursés.
+            const { computeSpacingMargin, userMaxSpacing } = await import('~~/app/composables/localPayloadBuilder')
+            const curveMargin = computeSpacingMargin(
+                filteredFiles.map((f) => ({ parts: partsBySlug.get(f.slug) || [] })), space)
+            const cap = capacityReport(parts, normalizedSheets, space + curveMargin)
             if (cap && cap.refused) {
                 const totalMax = Object.values(cap.maxPartsAtSpacing || {})
                     .reduce((n, v) => n + Number(v || 0), 0)
@@ -275,7 +282,7 @@ export default defineEventHandler(async (event) => {
                             ratio: cap.ratio,
                             sheetsNeeded: cap.sheetsNeeded,
                             maxPartsAtSpacing: totalMax,
-                            maxSpacingForFitMm: cap.maxSpacingForFitMm,
+                            ...userMaxSpacing(cap.maxSpacingForFitMm, curveMargin),
                         },
                     },
                 })
