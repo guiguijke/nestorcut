@@ -334,6 +334,32 @@ impl CornerType {
 /// Offsets a [`SPolygon`] by a certain `distance` either inwards or outwards depending on the [`ShapeModifyMode`].
 /// Relies on the [`geo_offset`](https://crates.io/crates/geo_offset) crate.
 pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Result<SPolygon> {
+    offset_shape_with(sp, mode, distance, &robust_inflate_ring)
+}
+
+/// Repli de gonflement injectable (les tests y mettent un repli qui échoue ou
+/// qui compte ses appels ; le moteur n'utilise que `robust_inflate_ring`).
+pub type InflateFallback<'a> = &'a dyn Fn(&[Point], f32) -> Result<Vec<(f32, f32)>>;
+
+/// [`offset_shape`] avec le repli de gonflement passé en paramètre.
+pub fn offset_shape_with(
+    sp: &SPolygon,
+    mode: ShapeModifyMode,
+    distance: f32,
+    fallback: InflateFallback,
+) -> Result<SPolygon> {
+    offset_shape_with_limits(sp, mode, distance, fallback, INFLATE_FALLBACK_MAX_WORK)
+}
+
+/// [`offset_shape_with`] avec la borne de travail du repli PROCHE en
+/// paramètre (`INFLATE_FALLBACK_MAX_WORK` pour le moteur).
+pub fn offset_shape_with_limits(
+    sp: &SPolygon,
+    mode: ShapeModifyMode,
+    distance: f32,
+    fallback: InflateFallback,
+    max_work: f64,
+) -> Result<SPolygon> {
     let offset = match mode {
         ShapeModifyMode::Deflate => -distance,
         ShapeModifyMode::Inflate => distance,
@@ -351,88 +377,100 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
     // Create the offset polygon
     let geo_poly_offsets = geo_buffer::buffer_polygon_rounded(&geo_poly, offset as f64).0;
 
-    // Gonflement : 0 ou plusieurs polygones = résultat faux (une pièce
-    // creuse ne se réduit pas à sa première composante) -> REPLI. L'érosion
-    // garde exactement son comportement d'origine.
-    let geo_poly_offset = match (geo_poly_offsets.len(), mode) {
-        (0, ShapeModifyMode::Deflate) => bail!("Offset resulted in an empty polygon"),
-        (1, _) => Some(&geo_poly_offsets[0]),
-        (0, ShapeModifyMode::Inflate) | (_, ShapeModifyMode::Inflate) => None,
-        (_, ShapeModifyMode::Deflate) => {
-            // If there are multiple polygons, we take the first one.
-            // This can happen if the offset creates multiple disconnected parts.
-            warn!("Offset resulted in multiple polygons, taking the first one.");
-            Some(&geo_poly_offsets[0])
-        }
+    let import_first = |poly: &geo_types::Polygon<f64>| {
+        let ext_s_polygon = ExtSPolygon(
+            poly.exterior()
+                .points()
+                .map(|p| (p.x() as f32, p.y() as f32))
+                .collect_vec(),
+        );
+        import::import_simple_polygon(&ext_s_polygon)
     };
 
-    // Convert back to internal representation (by using the import function)
-    let primary = match geo_poly_offset {
-        Some(poly) => {
-            let ext_s_polygon = ExtSPolygon(
-                poly.exterior()
-                    .points()
-                    .map(|p| (p.x() as f32, p.y() as f32))
-                    .collect_vec(),
-            );
-            import::import_simple_polygon(&ext_s_polygon)
-        }
-        None => Err(anyhow::anyhow!(
-            "geo_buffer returned {} polygons for an inflation",
-            geo_poly_offsets.len()
-        )),
+    // ÉROSION : comportement d'origine, inchangé (pas de repli, pas de contrôle).
+    if mode == ShapeModifyMode::Deflate {
+        let first = match geo_poly_offsets.len() {
+            0 => bail!("Offset resulted in an empty polygon"),
+            1 => &geo_poly_offsets[0],
+            _ => {
+                // If there are multiple polygons, we take the first one.
+                // This can happen if the offset creates multiple disconnected parts.
+                warn!("Offset resulted in multiple polygons, taking the first one.");
+                &geo_poly_offsets[0]
+            }
+        };
+        return import_first(first);
+    }
+
+    // GONFLEMENT. `kept` = ce que le code d'AVANT le contrôle rendait quand
+    // il ne passait pas par le repli : le premier polygone de `geo_buffer`,
+    // s'il s'importe ; sinon l'erreur d'avant. Si le repli échoue à son tour,
+    // c'est EXACTEMENT cela qu'on rend (un job qui marchait ne devient jamais
+    // une erreur à cause du contrôle) et la pièce est nommée : son espacement
+    // n'est plus garanti.
+    let n_polys = geo_poly_offsets.len();
+    let kept: Result<SPolygon> = match geo_poly_offsets.first() {
+        None => Err(anyhow::anyhow!("Offset resulted in an empty polygon")),
+        Some(poly) => import_first(poly),
     };
 
     // Contrôle de l'anneau de `geo_buffer` (défaut C6) : un anneau SIMPLE peut
     // être faux (plus petit que la pièce, ou collé à elle). Le contrôle ne
     // fait que LIRE : un bon anneau repart tel quel, bit pour bit.
     // Deux niveaux : GROSSIER (repli + pièce nommée) et PROCHE (repli
-    // silencieux : l'anneau de repli est exact, rien à vérifier pour
-    // l'utilisateur).
-    let mut close: Option<SPolygon> = None;
-    let primary = match (primary, mode) {
-        (Ok(shape), ShapeModifyMode::Inflate) => match inflate_verdict(sp, &shape, distance) {
-            InflateVerdict::Good => Ok(shape),
-            InflateVerdict::Close(_) => {
-                close = Some(shape.clone());
-                Err(anyhow::anyhow!("geo_buffer ring closer than the spacing"))
-            }
-            InflateVerdict::Gross(why) => Err(anyhow::anyhow!("geo_buffer ring rejected: {why}")),
+    // silencieux tant qu'il réussit : l'anneau de repli est exact).
+    // 0 ou plusieurs polygones = résultat faux (une pièce creuse ne se réduit
+    // pas à sa première composante) : GROSSIER.
+    let (why, close) = match (&kept, n_polys) {
+        (Ok(shape), 1) => match inflate_verdict(sp, shape, distance) {
+            // CHEMIN NORMAL, INCHANGÉ : rien ne bouge, pas un flottant de
+            // plus (verrou de déterminisme).
+            InflateVerdict::Good => return kept,
+            InflateVerdict::Close(_) => ("geo_buffer ring closer than the spacing".to_owned(), true),
+            InflateVerdict::Gross(why) => (format!("geo_buffer ring rejected: {why}"), false),
         },
-        (other, _) => other,
+        (Err(e), 1) => (e.to_string(), false),
+        _ => (format!("geo_buffer returned {n_polys} polygons for an inflation"), false),
     };
 
-    match primary {
-        // CHEMIN NORMAL, INCHANGÉ : quand `geo_buffer` rend un anneau simple
-        // et sain, rien ne bouge — pas un flottant de plus (verrou de
-        // déterminisme).
+    // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
+    let run_fallback = || -> Result<SPolygon> {
+        let ring = fallback(&sp.vertices, distance)
+            .map_err(|e| anyhow::anyhow!("offset fallback failed: {e} (geo_buffer: {why})"))?;
+        import::import_simple_polygon(&ExtSPolygon(ring)).map_err(|e| {
+            anyhow::anyhow!("offset fallback produced no simple ring: {e} (geo_buffer: {why})")
+        })
+    };
+
+    if close {
+        let geo_ring = kept.expect("niveau PROCHE : l'anneau de geo_buffer existe");
+        // Travail du repli trop grand (sommets minuscules devant d) : il peut
+        // durer des minutes. On garde l'anneau de `geo_buffer`, qui tient la
+        // pièce à plus de `d * GROSS_RATIO`, et on nomme la pièce.
+        if inflate_fallback_work(&sp.vertices, distance, max_work) > max_work {
+            note_fallback();
+            return Ok(geo_ring);
+        }
+        // PROCHE : repli silencieux ; s'il échoue, l'anneau de `geo_buffer`
+        // reste (comportement d'avant) mais l'espacement n'est plus tenu :
+        // la pièce est nommée.
+        return Ok(run_fallback().unwrap_or_else(|_| {
+            note_fallback();
+            geo_ring
+        }));
+    }
+
+    note_fallback();
+    match run_fallback() {
         Ok(shape) => Ok(shape),
-        // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
-        Err(first) => match mode {
-            ShapeModifyMode::Inflate => {
-                if let Some(geo_ring) = close {
-                    // PROCHE : repli silencieux ; s'il échoue, l'anneau de
-                    // `geo_buffer` reste (comportement d'avant) — un anneau
-                    // proche ne doit jamais transformer un job qui marche
-                    // en erreur.
-                    return Ok(robust_inflate_ring(&sp.vertices, distance)
-                        .ok()
-                        .and_then(|ring| import::import_simple_polygon(&ExtSPolygon(ring)).ok())
-                        .unwrap_or(geo_ring));
-                }
-                note_fallback();
-                let ring = robust_inflate_ring(&sp.vertices, distance).map_err(|e| {
-                    anyhow::anyhow!("offset fallback failed: {e} (geo_buffer: {first})")
-                })?;
-                import::import_simple_polygon(&ExtSPolygon(ring)).map_err(|e| {
-                    anyhow::anyhow!(
-                        "offset fallback produced no simple ring: {e} (geo_buffer: {first})"
-                    )
-                })
+        Err(fallback_err) => match kept {
+            Ok(shape) => {
+                warn!("Inflation fallback failed, keeping the geo_buffer ring: {fallback_err}");
+                Ok(shape)
             }
-            // L'érosion n'a pas de repli : elle ne s'applique qu'au conteneur
-            // (rectangle de tôle), qui n'a jamais mis `geo_buffer` en défaut.
-            ShapeModifyMode::Deflate => Err(first),
+            // Aucun polygone : l'ancien code rendait cette erreur-là sans repli.
+            Err(old) if n_polys == 0 => Err(old),
+            Err(_) => Err(fallback_err),
         },
     }
 }
@@ -485,8 +523,12 @@ pub fn inflate_min_boundary_distance(part: &SPolygon, ring: &SPolygon) -> f64 {
 /// moins de `d * GROSS_RATIO`, pièce hors de l'anneau. PROCHE : sinon, bord à
 /// moins de `d * HELD_RATIO - HELD_SLACK` (si `INFLATE_HOLD_SPACING`).
 ///
-/// Arithmétique : + - * / et comparaisons en f64 (pas de racine), aucune
-/// transcendante, aucun hasard : identique natif ≡ wasm.
+/// Arithmétique : + - * / et comparaisons en f64, plus `sqrt` (taille de case
+/// de la grille et mesure exacte, racine IEEE correctement arrondie) et
+/// `powi(2)` ; aucune transcendante, aucun hasard : identique natif ≡ wasm.
+/// Le verdict ne dépend pas de la taille de case : la grille ne fait qu'élaguer
+/// (tout couple à distance <= rayon est visité) et la double boucle de repli
+/// rend le même minimum.
 pub fn inflate_verdict(part: &SPolygon, ring: &SPolygon, distance: f32) -> InflateVerdict {
     use InflateVerdict::*;
     if !(ring.area >= part.area) {
@@ -531,6 +573,52 @@ fn edge_box(p: [f64; 2], q: [f64; 2]) -> [f64; 4] {
     [p[0].min(q[0]), p[1].min(q[1]), p[0].max(q[0]), p[1].max(q[1])]
 }
 
+/// Double boucle simple de la passe de recherche : mêmes boîtes élaguées à
+/// `radius`, même `seg_seg_dist2`, même sortie anticipée sous `stop_below`.
+fn brute_pass_min_dist2(
+    a: &[[f64; 2]],
+    b: &[[f64; 2]],
+    b_boxes: &[[f64; 4]],
+    radius: f64,
+    stop_below: f64,
+) -> f64 {
+    let m = b.len();
+    let mut best = f64::INFINITY;
+    for i in 0..a.len() {
+        let (p, q) = (a[i], a[(i + 1) % a.len()]);
+        let pb = edge_box(p, q);
+        for (e, bb) in b_boxes.iter().enumerate() {
+            if pb[0] - bb[2] > radius || bb[0] - pb[2] > radius
+                || pb[1] - bb[3] > radius || bb[1] - pb[3] > radius
+            {
+                continue;
+            }
+            let d2 = seg_seg_dist2(p, q, b[e], b[(e + 1) % m]);
+            if d2 < best {
+                best = d2;
+                if best < stop_below {
+                    return best;
+                }
+            }
+        }
+    }
+    best
+}
+
+/// La grille cède la place à la double boucle quand son coût (cases remplies
+/// + cases parcourues) dépasse `max(GRID_MIN_COST, couples / GRID_MAX_FRACTION)`.
+/// MESURÉ (`cout_du_controle`) : le coût de la grille vaut 0,05 % à 2,5 % des
+/// couples sur les cercles et les couronnes de 500 à 20 000 sommets, 3,3 %
+/// sur la spirale carrée de 4 002 sommets alignée sur les axes (4 ms), mais
+/// 70 % une fois cette spirale tournée de 45 degrés (grille seule : 1 310 ms,
+/// double boucle : 155 ms). Une case coûte à peu près un test de couple
+/// (8 ns contre 10 ns mesurés) : 1/8 des couples laisse une marge x3 au plus
+/// mauvais cas sain mesuré (3,3 %) et coupe bien avant que la grille ne
+/// coûte autant que la double boucle. Le plancher évite de basculer sur les
+/// petites pièces où tout est gratuit.
+const GRID_MAX_FRACTION: u64 = 8;
+const GRID_MIN_COST: u64 = 4096;
+
 /// Passe de recherche : plus petit carré de distance parmi les couples
 /// d'arêtes dont les boîtes sont à moins de `radius` l'une de l'autre (grille
 /// sur les arêtes de `b`). S'arrête dès qu'un couple tombe sous `stop_below`.
@@ -554,8 +642,6 @@ fn pass_min_dist2(a: &[[f64; 2]], b: &[[f64; 2]], radius: f64, stop_below: f64) 
     let nx = ((w / cs) as usize + 1).max(1);
     let ny = ((h / cs) as usize + 1).max(1);
     let cell = |v: f64, o: f64, n: usize| (((v - o) / cs).max(0.0) as usize).min(n - 1);
-    // Grille en CSR : `start[c]..start[c+1]` indexe `items`.
-    let mut start = vec![0u32; nx * ny + 1];
     let range = |bb: &[f64; 4], r: f64| {
         (
             cell(bb[0] - r, x0, nx),
@@ -564,6 +650,25 @@ fn pass_min_dist2(a: &[[f64; 2]], b: &[[f64; 2]], radius: f64, stop_below: f64) 
             cell(bb[3] + r, y0, ny),
         )
     };
+    // COÛT de la grille, compté AVANT de la construire : cases remplies par
+    // les arêtes de `b` + cases parcourues par les requêtes de `a`. Une longue
+    // arête DIAGONALE remplit toute sa boîte (grille inutile : spirale carrée
+    // de 4 002 sommets tournée de 45 degrés, 1 310 ms contre 157 ms pour la
+    // double boucle). Au-delà de `GRID_MAX_FRACTION` du nombre de couples,
+    // double boucle simple : MÊME arithmétique, mêmes couples retenus (la
+    // grille ne fait qu'élaguer), donc même minimum et même verdict.
+    let cells_of = |(i0, i1, j0, j1): (usize, usize, usize, usize)| ((i1 - i0 + 1) * (j1 - j0 + 1)) as u64;
+    let slop = radius * 1e-9 + 1e-12;
+    let grid_cost: u64 = b_boxes.iter().map(|bb| cells_of(range(bb, 0.0))).sum::<u64>()
+        + (0..a.len())
+            .map(|i| cells_of(range(&edge_box(a[i], a[(i + 1) % a.len()]), radius + slop)))
+            .sum::<u64>();
+    let pairs = a.len() as u64 * m as u64;
+    if grid_cost > GRID_MIN_COST.max(pairs / GRID_MAX_FRACTION) {
+        return brute_pass_min_dist2(a, b, &b_boxes, radius, stop_below);
+    }
+    // Grille en CSR : `start[c]..start[c+1]` indexe `items`.
+    let mut start = vec![0u32; nx * ny + 1];
     for bb in &b_boxes {
         let (i0, i1, j0, j1) = range(bb, 0.0);
         for j in j0..=j1 {
@@ -589,7 +694,6 @@ fn pass_min_dist2(a: &[[f64; 2]], b: &[[f64; 2]], radius: f64, stop_below: f64) 
     }
     let mut stamp = vec![u32::MAX; m];
     let mut best = f64::INFINITY;
-    let slop = radius * 1e-9 + 1e-12;
     for i in 0..a.len() {
         let (p, q) = (a[i], a[(i + 1) % a.len()]);
         let pb = edge_box(p, q);
@@ -689,6 +793,74 @@ fn point_in_ring(pt: [f64; 2], ring: &[[f64; 2]]) -> bool {
     }
     inside
 }
+
+/// Travail estimé de `robust_inflate_ring` pour une pièce : `n + Σ k_i²`, où
+/// `k_i` est le nombre d'AUTRES sommets à moins de `2 d` du sommet `i` (leurs
+/// disques de rayon `d` et les rectangles de leurs arêtes se recouvrent : la
+/// profondeur de recouvrement coûte plus que le nombre de couples, mesuré :
+/// à nombre de couples égal, une clique de sommets est 15 fois plus lente
+/// qu'un bord long). Une pièce à sommets minuscules devant `d` fait exploser
+/// ce nombre (500 sommets sur un rayon de 0,5 mm à d = 5 : 255 s mesurés).
+///
+/// Le compte se fait sur une grille de pas `2 d`. Il rend `f64::INFINITY` dès
+/// que le nombre de couples rend la somme supérieure à `cap` (Cauchy-Schwarz :
+/// `Σ k_i² >= (2 P)² / n`), ce qui borne le coût du compte par `cap`.
+/// Arithmétique : additions, produits, comparaisons f64 et une division par
+/// `2 d` ; aucune transcendante, aucun hasard : même valeur natif ≡ wasm.
+pub fn inflate_fallback_work(vertices: &[Point], distance: f32, cap: f64) -> f64 {
+    use std::collections::HashMap;
+    let n = vertices.len();
+    if n < 3 || !(distance > 0.0) {
+        return n as f64;
+    }
+    let reach = 2.0 * distance as f64;
+    let reach2 = reach * reach;
+    let cell_of = |p: Point| ((p.0 as f64 / reach).floor() as i64, (p.1 as f64 / reach).floor() as i64);
+    let mut grid: HashMap<(i64, i64), Vec<u32>> = HashMap::new();
+    for (i, p) in vertices.iter().enumerate() {
+        grid.entry(cell_of(*p)).or_default().push(i as u32);
+    }
+    let mut k = vec![0u32; n];
+    let mut pairs = 0.0f64;
+    let mut visit = |a: u32, b: u32| -> f64 {
+        let (p, q) = (vertices[a as usize], vertices[b as usize]);
+        let (dx, dy) = ((p.0 - q.0) as f64, (p.1 - q.1) as f64);
+        if dx * dx + dy * dy <= reach2 {
+            k[a as usize] += 1;
+            k[b as usize] += 1;
+            1.0
+        } else {
+            0.0
+        }
+    };
+    // Chaque couple de cellules voisines est visité une fois (moitié des 8
+    // voisins) : le compte ne dépend pas de l'ordre de la table.
+    for (&(cx, cy), cell) in &grid {
+        for (i, &a) in cell.iter().enumerate() {
+            for &b in &cell[i + 1..] {
+                pairs += visit(a, b);
+            }
+        }
+        for (ox, oy) in [(1i64, -1i64), (1, 0), (1, 1), (0, 1)] {
+            if let Some(other) = grid.get(&(cx + ox, cy + oy)) {
+                for &a in cell {
+                    for &b in other {
+                        pairs += visit(a, b);
+                    }
+                }
+            }
+        }
+        if (2.0 * pairs) * (2.0 * pairs) / n as f64 > cap {
+            return f64::INFINITY;
+        }
+    }
+    n as f64 + k.iter().map(|&c| c as f64 * c as f64).sum::<f64>()
+}
+
+/// Au-delà de ce travail estimé, le niveau PROCHE garde l'anneau de
+/// `geo_buffer` et nomme la pièce au lieu d'appeler le repli. Calibré sur
+/// des mesures (voir `tests/inflate_corpus.rs`, `calibrage_du_repli`).
+pub const INFLATE_FALLBACK_MAX_WORK: f64 = 3.0e7;
 
 /// Items dont le gonflement a pris le REPLI (lot E2, patch vendorisé §4).
 ///
