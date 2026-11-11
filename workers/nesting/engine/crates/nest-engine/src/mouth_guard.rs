@@ -417,11 +417,16 @@ pub fn guard_bp_runs(
         .collect();
     let mut total = MouthStats::default();
     for run in runs.iter_mut() {
+        // Pièces retirées par la garde dans CE run : elles comptent comme
+        // non placées, sinon le run paraît complet à la fusion.
+        let mut run_removed = 0usize;
         for layout in run.solution.layouts.iter_mut() {
             let s = guard_layout(&shapes, raw, space, &mut layout.placed_items);
             total.moved += s.moved;
             total.removed += s.removed;
+            run_removed += s.removed;
         }
+        run.cost.unplaced += run_removed;
     }
     total
 }
