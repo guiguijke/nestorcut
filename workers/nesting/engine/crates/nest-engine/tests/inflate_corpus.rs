@@ -348,3 +348,117 @@ fn fixtures_du_banc() {
     // d = 1,0 est l'espacement réel de toutes ces configs (2 mm) ; 0,5 en plus.
     mesure_ensemble("FIXTURES DU BANC (toutes instances)", &tous, &[0.5, 1.0]);
 }
+
+/// Temps (ms) de `robust_inflate_ring`, ou `None` au-delà de `cap_s` secondes
+/// (le fil abandonné continue en arrière-plan : on ne relance pas plus gros).
+fn temps_repli(part: &SPolygon, d: f32, cap_s: u64) -> Option<f64> {
+    let v = part.vertices.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let t = Instant::now();
+        let _ = robust_inflate_ring(&v, d);
+        let _ = tx.send(t.elapsed().as_secs_f64() * 1000.0);
+    });
+    rx.recv_timeout(std::time::Duration::from_secs(cap_s)).ok()
+}
+
+/// CALIBRAGE de `INFLATE_FALLBACK_MAX_WORK` : temps du repli contre
+/// `inflate_fallback_work` sur des cercles ondulés de 100 à 2 000
+/// sommets, rayons 0,5 à 50, d = 1 et 5. Un appel s'arrête à 20 s ; les
+/// cas sont lancés par travail estimé croissant et on s'arrête de monter dès
+/// le premier dépassement.
+#[test]
+#[ignore = "calibrage (minutes)"]
+fn calibrage_du_repli() {
+    use jagua_rs::geometry::shape_modification::inflate_fallback_work;
+    let mut cas: Vec<(f64, usize, f64, f32, SPolygon)> = Vec::new();
+    for n in [100usize, 200, 300, 500, 1000, 2000] {
+        for r in [0.5f64, 2.0, 5.0, 20.0, 50.0] {
+            for d in [1.0f32, 5.0] {
+                let ring: Vec<(f32, f32)> = (0..n)
+                    .map(|i| {
+                        let a = i as f64 / n as f64 * std::f64::consts::TAU;
+                        let rr = r * (1.0 + 0.1 * (a * 8.0).sin());
+                        ((rr * a.cos()) as f32, (rr * a.sin()) as f32)
+                    })
+                    .collect();
+                let Some(part) = import_ring(&ring) else {
+                    println!("n={n} r={r} d={d} : non importable");
+                    continue;
+                };
+                let w = inflate_fallback_work(&part.vertices, d, f64::INFINITY);
+                cas.push((w, n, r, d, part));
+            }
+        }
+    }
+    cas.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    let mut plafond = f64::INFINITY;
+    for (w, n, r, d, part) in &cas {
+        if *w >= plafond {
+            println!("n={n:>5} r={r:>5} d={d} travail={w:>12.0} : sauté (au-dessus d'un cas > 20 s)");
+            continue;
+        }
+        match temps_repli(part, *d, 20) {
+            Some(ms) => println!("n={n:>5} r={r:>5} d={d} travail={w:>12.0} : {ms:>10.1} ms"),
+            None => {
+                println!("n={n:>5} r={r:>5} d={d} travail={w:>12.0} : > 20 s");
+                plafond = *w * 1.5;
+            }
+        }
+    }
+}
+
+/// Le repli sur TOUTES les pièces réelles, d = 0,25 / 0,5 / 1 / 1,5 : temps,
+/// travail estimé, et combien de pièces la borne refuserait.
+#[test]
+#[ignore = "mesure sur le corpus réel (NEST_C6_CORPUS)"]
+fn corpus_borne_du_repli() {
+    use jagua_rs::geometry::shape_modification::{
+        INFLATE_FALLBACK_MAX_WORK, inflate_fallback_work,
+    };
+    let Ok(path) = std::env::var("NEST_C6_CORPUS") else {
+        println!("NEST_C6_CORPUS non défini : sauté");
+        return;
+    };
+    let v: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let mut rows: Vec<(f64, f64, String, f32, usize)> = Vec::new();
+    let (mut total, mut refuses, mut non_importees) = (0usize, 0usize, 0usize);
+    let mut max_w = 0.0f64;
+    for o in &v {
+        let ring: Vec<(f32, f32)> = o["ring"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_f64().unwrap() as f32, p[1].as_f64().unwrap() as f32))
+            .collect();
+        let Some(part) = import_ring(&ring) else {
+            non_importees += 1;
+            continue;
+        };
+        for d in [0.25f32, 0.5, 1.0, 1.5] {
+            let w = inflate_fallback_work(&part.vertices, d, f64::INFINITY);
+            let ms = temps_repli(&part, d, 20).unwrap_or(f64::INFINITY);
+            total += 1;
+            max_w = max_w.max(w);
+            if w > INFLATE_FALLBACK_MAX_WORK {
+                refuses += 1;
+            }
+            rows.push((ms, w, format!("{}#{}", o["file"].as_str().unwrap(), o["part"]), d, part.vertices.len()));
+        }
+    }
+    rows.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
+    println!("--- 12 appels les plus lents ---");
+    for (ms, w, nom, d, n) in rows.iter().take(12) {
+        println!("{ms:>9.1} ms  travail {w:>10.0}  d={d}  {n} sommets  {nom}");
+    }
+    let mut par_w: Vec<_> = rows.iter().collect();
+    par_w.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    println!("--- 8 plus gros travaux estimés ---");
+    for (ms, w, nom, d, n) in par_w.iter().take(8).map(|r| (r.0, r.1, &r.2, r.3, r.4)) {
+        println!("{ms:>9.1} ms  travail {w:>10.0}  d={d}  {n} sommets  {nom}");
+    }
+    println!(
+        "{total} appels ({} pièces importées, {non_importees} non importables), plus gros travail estimé {max_w:.0}, borne {INFLATE_FALLBACK_MAX_WORK:.0}, REFUSÉS par la borne : {refuses}",
+        v.len() - non_importees
+    );
+}

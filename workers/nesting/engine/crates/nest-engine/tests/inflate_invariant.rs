@@ -79,10 +79,59 @@ fn pt_seg(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f64 {
     (ex * ex + ey * ey).sqrt()
 }
 
-/// Distance minimale entre deux frontières : sommet -> segment dans LES DEUX
-/// sens (exacte quand les frontières ne se croisent pas, ce qui est le cas
-/// d'un anneau gonflé qui contient la pièce).
+/// Orientation (produit vectoriel) de c par rapport à la droite a->b, écrite
+/// ICI : l'oracle ne s'appuie sur aucune fonction du crate testé.
+fn orient(a: (f32, f32), b: (f32, f32), c: (f32, f32)) -> f64 {
+    (b.0 as f64 - a.0 as f64) * (c.1 as f64 - a.1 as f64)
+        - (b.1 as f64 - a.1 as f64) * (c.0 as f64 - a.0 as f64)
+}
+
+/// Les segments [p1 p2] et [q1 q2] se croisent-ils en un point strictement
+/// intérieur aux deux (croisement propre) ?
+fn segments_se_croisent(p1: (f32, f32), p2: (f32, f32), q1: (f32, f32), q2: (f32, f32)) -> bool {
+    let (o1, o2) = (orient(p1, p2, q1), orient(p1, p2, q2));
+    let (o3, o4) = (orient(q1, q2, p1), orient(q1, q2, p2));
+    ((o1 > 0.0 && o2 < 0.0) || (o1 < 0.0 && o2 > 0.0))
+        && ((o3 > 0.0 && o4 < 0.0) || (o3 < 0.0 && o4 > 0.0))
+}
+
+/// Une arête de `a` croise-t-elle une arête de `b` ENTRE leurs sommets ? La
+/// distance sommet -> segment ne le voit pas : deux arêtes peuvent se croiser
+/// sans qu'aucun sommet soit proche de l'autre arête.
+fn bords_se_croisent(a: &[(f32, f32)], b: &[(f32, f32)]) -> bool {
+    for i in 0..a.len() {
+        let (p1, p2) = (a[i], a[(i + 1) % a.len()]);
+        let (lo_x, hi_x) = (p1.0.min(p2.0), p1.0.max(p2.0));
+        let (lo_y, hi_y) = (p1.1.min(p2.1), p1.1.max(p2.1));
+        for j in 0..b.len() {
+            let (q1, q2) = (b[j], b[(j + 1) % b.len()]);
+            if q1.0.max(q2.0) < lo_x || q1.0.min(q2.0) > hi_x
+                || q1.1.max(q2.1) < lo_y || q1.1.min(q2.1) > hi_y
+            {
+                continue;
+            }
+            if segments_se_croisent(p1, p2, q1, q2) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Distance minimale entre deux frontières : 0 si une arête de l'une croise
+/// une arête de l'autre (y compris entre sommets) ; sinon sommet -> segment
+/// dans LES DEUX sens (exacte quand les frontières ne se croisent pas, ce qui
+/// est le cas d'un anneau gonflé qui contient la pièce).
 fn boundary_distance(a: &[(f32, f32)], b: &[(f32, f32)]) -> f64 {
+    if bords_se_croisent(a, b) {
+        return 0.0;
+    }
+    distance_sommets_segments(a, b)
+}
+
+/// Sommet -> segment dans les deux sens SEULEMENT (l'ancien oracle : aveugle à
+/// un croisement entre sommets).
+fn distance_sommets_segments(a: &[(f32, f32)], b: &[(f32, f32)]) -> f64 {
     let one_way = |x: &[(f32, f32)], y: &[(f32, f32)]| {
         let mut best = f64::INFINITY;
         for &p in x {
@@ -255,6 +304,8 @@ fn invariant_par_piece_sur_63_volutes_brutes_et_simplifiees() {
         }
     }
     println!("{total} cas, {repli} par le repli (dist/d min {min_repli:.4}), {echecs} violations");
+    // Le test ne doit pas pouvoir passer à vide : 126 volutes x 2 espacements.
+    assert!(total >= 252, "{total} cas seulement (252 attendus) : le test passe à vide");
     assert_eq!(
         echecs, 0,
         "{echecs} gonflements violent l'invariant (voir lignes ECHEC)"
@@ -426,6 +477,14 @@ fn les_formes_ordinaires_identiques_a_geo_buffer_ou_voie_proche() {
         }
     }
     println!("{identiques} formes identiques à geo_buffer ; voie PROCHE : {proches:#?}");
+    assert!(identiques >= 62, "{identiques} formes identiques seulement (62 attendues)");
+    if HOLD {
+        assert_eq!(
+            proches,
+            vec!["d=1 b_demo/instance.json#11".to_string(), "d=1 b_demo/instance.json#12".to_string()],
+            "la liste des formes ordinaires de la voie PROCHE doit être exactement #11 et #12 de b_demo"
+        );
+    }
 }
 
 const HOLD: bool = jagua_rs::geometry::shape_modification::INFLATE_HOLD_SPACING;
@@ -465,14 +524,26 @@ fn b_demo_11_et_12_tiennent_l_espacement_en_silence() {
     assert_eq!(echecs, 0, "b_demo #11/#12 : borne stricte ou silence violés");
 }
 
-/// Un cas GROSSIER nomme toujours la pièce : un carré de 10 mm gonflé de 4 mm
-/// à côté d'une pièce collée ne passe pas ici, on prend donc une volute dont
-/// les deux brins sont à 0,05 mm (geo_buffer rend 0 ou plusieurs polygones).
+/// Un cas GROSSIER nomme toujours la pièce. Volute g0.05 h0.6 t2.5 à d = 1 :
+/// `geo_buffer` rend UN SEUL anneau, importable, qui TRAVERSE la pièce (ses
+/// brins sont à 0,05 mm l'un de l'autre) ; le contrôle le juge grossier, le
+/// repli prend la main et la pièce est nommée. Préconditions vérifiées.
 #[test]
 fn un_cas_grossier_nomme_encore_la_piece() {
+    use jagua_rs::geometry::shape_modification::{InflateVerdict, inflate_verdict};
     let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
     let ring = volute_ring(0.05, 0.6, 2.5, 240);
     let part = import_ring(&ring).expect("import volute");
+    let geo = import_ring(&geo_buffer_ring(&part, 1.0).expect("geo_buffer : un anneau unique importable"))
+        .expect("anneau importable");
+    assert!(
+        bords_se_croisent(&verts(&part), &verts(&geo)),
+        "précondition : l'anneau unique de geo_buffer traverse la pièce"
+    );
+    assert!(
+        matches!(inflate_verdict(&part, &geo, 1.0), InflateVerdict::Gross(_)),
+        "précondition : verdict grossier"
+    );
     take_fallback_items();
     set_current_item(Some(7));
     let out = offset_shape(&part, ShapeModifyMode::Inflate, 1.0);
@@ -596,6 +667,54 @@ fn gonfle_radial(ring: &[(f32, f32)], d: f64) -> Vec<(f32, f32)> {
         .collect()
 }
 
+/// Spirale CARREE épaisse (bande de demi-largeur `h` autour d'une polyligne
+/// en spirale carrée, pas entre brins de 6 mm), `m` points de ligne centrale,
+/// donc `2 m` sommets (coins en onglet : exact pour des virages à 90 degrés).
+/// Les bouts sont prolongés de `ext`. Tournée de `deg` degrés. Une spirale de demi-largeur 1 et son « anneau
+/// décalé de 1 » (demi-largeur 2) forment une paire pièce / anneau gonflé
+/// dont le bord est à 1 mm partout, avec de LONGUES arêtes qui, tournées de
+/// 45 degrés, couvrent presque toute la boîte de la pièce.
+fn spirale_carree(h: f64, ext: f64, m: usize, deg: f64) -> Vec<(f32, f32)> {
+    let dirs = [(1.0f64, 0.0f64), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)];
+    let mut pts = vec![(0.0f64, 0.0f64)];
+    for k in 0..m - 1 {
+        let len = 10.0 + 6.0 * (k / 2) as f64;
+        let (dx, dy) = dirs[k % 4];
+        let (x, y) = *pts.last().unwrap();
+        pts.push((x + dx * len, y + dy * len));
+    }
+    // Prolongement des deux bouts de `ext` (les capuchons de l'anneau
+    // gonflé sont à `ext` de ceux de la pièce).
+    pts[0].0 -= dirs[0].0 * ext;
+    pts[0].1 -= dirs[0].1 * ext;
+    let (dl, last) = (dirs[(m - 2) % 4], m - 1);
+    pts[last].0 += dl.0 * ext;
+    pts[last].1 += dl.1 * ext;
+    // Normale gauche de l'arête k.
+    let normal = |k: usize| {
+        let (dx, dy) = dirs[k % 4];
+        (-dy, dx)
+    };
+    let (mut left, mut right) = (Vec::new(), Vec::new());
+    for (k, &(x, y)) in pts.iter().enumerate() {
+        let (nx, ny) = if k == 0 {
+            normal(0)
+        } else if k == m - 1 {
+            normal(m - 2)
+        } else {
+            let (a, b) = (normal(k - 1), normal(k));
+            (a.0 + b.0, a.1 + b.1)
+        };
+        left.push((x + h * nx, y + h * ny));
+        right.push((x - h * nx, y - h * ny));
+    }
+    let (s, c) = deg.to_radians().sin_cos();
+    left.into_iter()
+        .chain(right.into_iter().rev())
+        .map(|(x, y)| ((x * c - y * s) as f32, (x * s + y * c) as f32))
+        .collect()
+}
+
 /// Coût du CONTRÔLE seul (pas de `geo_buffer`) : anneau pièce de 500, 5 000 et
 /// 20 000 sommets, cercle et couronne ondulée (bord long, beaucoup d'arêtes
 /// proches), anneau gonflé construit analytiquement. Bornes 5 / 20 / 100 ms (marge x4 à x10 au
@@ -657,6 +776,28 @@ fn cout_du_controle() {
     assert!(pire_ms[0] < 5.0, "500 sommets : {:.2} ms", pire_ms[0]);
     assert!(pire_ms[1] < 20.0, "5 000 sommets : {:.2} ms", pire_ms[1]);
     assert!(pire_ms[2] < 100.0, "20 000 sommets : {:.2} ms", pire_ms[2]);
+
+    // Spirale carrée de 4 002 sommets et son anneau décalé de 1 : alignée sur
+    // les axes la grille est parfaite (4 ms mesurés) ; tournée de 45 degrés
+    // les arêtes diagonales remplissent leur boîte de cellules (1 310 ms
+    // mesurés avec la grille seule, 157 ms pour la double boucle simple). Le
+    // contrôle doit rester dans un facteur 2,5 de la double boucle.
+    for (deg, borne_ms) in [(0.0f64, 30.0f64), (45.0, 400.0)] {
+        let part = import_ring(&spirale_carree(1.0, 0.0, 2001, deg)).expect("spirale pièce");
+        let inf = import_ring(&spirale_carree(2.0, 1.0, 2001, deg)).expect("spirale anneau");
+        assert_eq!((part.vertices.len(), inf.vertices.len()), (4002, 4002));
+        let t = std::time::Instant::now();
+        let r = inflate_ring_defect(&part, &inf, d);
+        let ms = t.elapsed().as_secs_f64() * 1000.0;
+        let t = std::time::Instant::now();
+        let dist = inflate_min_boundary_distance(&part, &inf);
+        let ms_mesure = t.elapsed().as_secs_f64() * 1000.0;
+        println!("spirale {deg} deg : verdict {r:?} en {ms:.1} ms, mesure exacte {ms_mesure:.1} ms (dist {dist:.4})");
+        assert!(r.is_none(), "spirale {deg} : anneau décalé de 1 refusé : {r:?}");
+        assert!((dist - 1.0).abs() < 0.01, "spirale {deg} : dist {dist}");
+        assert!(ms < borne_ms, "spirale {deg} : contrôle {ms:.1} ms (borne {borne_ms})");
+        assert!(ms_mesure < 400.0, "spirale {deg} : mesure exacte {ms_mesure:.1} ms (borne 400)");
+    }
 }
 
 /// La grille ne change pas le verdict : sur les volutes et les formes
@@ -679,16 +820,18 @@ fn mesure_exacte_egale_la_force_brute() {
             let Some(r) = geo_buffer_ring(&part, d) else { continue };
             let inf = import_ring(&r).unwrap();
             let m = mesure(&verts(&part), &verts(&inf));
-            if !m.contenue {
-                continue;
-            }
             let exact = inflate_min_boundary_distance(&part, &inf);
-            if exact == 0.0 {
-                // Bords qui se croisent sans qu'aucun sommet soit proche : la
-                // force brute sommet -> segment ne le voit pas, la mesure oui.
+            if m.dist == 0.0 {
+                // L'oracle (croisement d'arêtes écrit dans ce fichier) voit un
+                // croisement : la mesure exacte du crate doit dire 0 aussi.
+                assert_eq!(exact, 0.0, "d={d} {} : l'oracle voit un croisement, pas la mesure", c.nom);
                 croises += 1;
                 continue;
             }
+            if !m.contenue {
+                continue;
+            }
+            assert!(exact > 0.0, "d={d} {} : mesure 0 sans croisement de l'oracle", c.nom);
             assert!(
                 (exact - m.dist).abs() <= 1e-9 * m.dist.max(1.0),
                 "d={d} {} : exacte {exact} != brute {}",
@@ -709,5 +852,81 @@ fn mesure_exacte_egale_la_force_brute() {
         }
     }
     println!("{n} anneaux comparés à la force brute, {croises} à bords croisés (mesure 0)");
-    assert!(n > 100);
+    assert!(n >= 240, "{n} anneaux comparés seulement");
+    assert!(croises >= 1, "aucun anneau à bords croisés : l'oracle n'est pas exercé");
+
+    // Spirale carrée de 4 002 sommets (arêtes longues) et son anneau décalé de
+    // 1, alignée puis tournée de 45 degrés : la mesure exacte (grille ou
+    // double boucle selon le coût) égale la force brute, le verdict est sain.
+    for deg in [0.0f64, 45.0] {
+        let part = import_ring(&spirale_carree(1.0, 0.0, 2001, deg)).expect("spirale pièce");
+        let inf = import_ring(&spirale_carree(2.0, 1.0, 2001, deg)).expect("spirale anneau");
+        let m = mesure(&verts(&part), &verts(&inf));
+        let exact = inflate_min_boundary_distance(&part, &inf);
+        assert!(m.contenue, "spirale {deg} : l'anneau doit contenir la pièce");
+        assert!(
+            (exact - m.dist).abs() <= 1e-9 * m.dist.max(1.0),
+            "spirale {deg} : exacte {exact} != brute {}",
+            m.dist
+        );
+        assert_eq!(inflate_verdict(&part, &inf, 1.0), InflateVerdict::Good, "spirale {deg}");
+    }
+}
+
+/// Les trois volutes de `bench/fixtures/e0_volute/instance.json` (espacement
+/// 2 mm, d = 1) prennent toujours le REPLI et sont NOMMEES ; leur anneau tient
+/// la borne stricte (c'est l'anneau de repli, pas celui de `geo_buffer`).
+#[test]
+fn les_trois_volutes_de_e0_prennent_le_repli_et_sont_nommees() {
+    let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../bench/fixtures/e0_volute/instance.json");
+    let j: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let items = j["items"].as_array().unwrap();
+    assert_eq!(items.len(), 3, "trois volutes attendues dans la fixture");
+    let d = 1.0f32;
+    for (k, it) in items.iter().enumerate() {
+        let ring: Vec<(f32, f32)> = it["shape"]["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_f64().unwrap() as f32, p[1].as_f64().unwrap() as f32))
+            .collect();
+        let part = import_ring(&ring).expect("import volute e0");
+        take_fallback_items();
+        set_current_item(Some(k as u64));
+        let out = offset_shape(&part, ShapeModifyMode::Inflate, d).expect("offset");
+        set_current_item(None);
+        assert_eq!(take_fallback_items(), vec![k as u64], "volute e0 #{k} : doit être nommée");
+        let m = mesure(&verts(&part), &verts(&out));
+        println!("e0_volute#{k} : dist/d = {:.4}, contenue={}", m.dist / d as f64, m.contenue);
+        assert!(
+            m.contenue && m.aire_ratio >= 1.0 && m.dist >= strict_min(d),
+            "volute e0 #{k} : l'anneau de repli doit tenir la borne stricte ({:.4})",
+            m.dist / d as f64
+        );
+    }
+}
+
+/// L'oracle voit un croisement d'arêtes ENTRE les sommets : pièce = barre
+/// 100 x 10, anneau = grand rectangle qui contient tous ses sommets mais dont
+/// une fente étroite (x de 50 à 54) traverse son bord haut au milieu. Aucun
+/// sommet n'est près de l'autre bord (5 mm) : la distance sommet -> segment
+/// seule dit 5 et « contenue » ; avec le croisement, l'oracle dit 0 et refuse.
+#[test]
+fn l_oracle_voit_un_croisement_entre_sommets() {
+    let barre = [(0.0f32, 0.0f32), (100.0, 0.0), (100.0, 10.0), (0.0, 10.0)];
+    let anneau = [
+        (-50.0f32, -50.0f32), (150.0, -50.0), (150.0, 60.0),
+        (54.0, 60.0), (54.0, 5.0), (50.0, 5.0), (50.0, 60.0), (-50.0, 60.0),
+    ];
+    let seul = distance_sommets_segments(&barre, &anneau);
+    assert!((seul - 5.0).abs() < 1e-9, "précondition : l'ancien oracle voit {seul}");
+    assert!(barre.iter().all(|&p| point_in_ring(p, &anneau)), "précondition : sommets dedans");
+    assert!(bords_se_croisent(&barre, &anneau));
+    let m = mesure(&barre, &anneau);
+    assert_eq!(m.dist, 0.0);
+    assert!(!m.contenue, "l'oracle doit refuser un anneau dont le bord traverse la pièce");
+    // et la mesure exacte du crate dit la même chose
+    let (p, r) = (import_ring(&barre).unwrap(), import_ring(&anneau).unwrap());
+    assert_eq!(jagua_rs::geometry::shape_modification::inflate_min_boundary_distance(&p, &r), 0.0);
 }
