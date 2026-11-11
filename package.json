@@ -35,7 +35,7 @@
         "patch-package": "^8.0.0",
         "postinstall-postinstall": "^2.1.0",
         "prettier": "3.5.3",
-        "sass": "^1.83.0",
+        "sass": "^1.108.1",
         "sass-loader": "^16.0.2",
         "typescript": "^5.7.2",
         "vitest": "^3.2.4"
