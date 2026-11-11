@@ -351,29 +351,53 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
     // Create the offset polygon
     let geo_poly_offsets = geo_buffer::buffer_polygon_rounded(&geo_poly, offset as f64).0;
 
-    let geo_poly_offset = match geo_poly_offsets.len() {
-        0 => bail!("Offset resulted in an empty polygon"),
-        1 => &geo_poly_offsets[0],
-        _ => {
+    // Gonflement : 0 ou plusieurs polygones = résultat faux (une pièce
+    // creuse ne se réduit pas à sa première composante) -> REPLI. L'érosion
+    // garde exactement son comportement d'origine.
+    let geo_poly_offset = match (geo_poly_offsets.len(), mode) {
+        (0, ShapeModifyMode::Deflate) => bail!("Offset resulted in an empty polygon"),
+        (1, _) => Some(&geo_poly_offsets[0]),
+        (0, ShapeModifyMode::Inflate) | (_, ShapeModifyMode::Inflate) => None,
+        (_, ShapeModifyMode::Deflate) => {
             // If there are multiple polygons, we take the first one.
             // This can happen if the offset creates multiple disconnected parts.
             warn!("Offset resulted in multiple polygons, taking the first one.");
-            &geo_poly_offsets[0]
+            Some(&geo_poly_offsets[0])
         }
     };
 
     // Convert back to internal representation (by using the import function)
-    let ext_s_polygon = ExtSPolygon(
-        geo_poly_offset
-            .exterior()
-            .points()
-            .map(|p| (p.x() as f32, p.y() as f32))
-            .collect_vec(),
-    );
+    let primary = match geo_poly_offset {
+        Some(poly) => {
+            let ext_s_polygon = ExtSPolygon(
+                poly.exterior()
+                    .points()
+                    .map(|p| (p.x() as f32, p.y() as f32))
+                    .collect_vec(),
+            );
+            import::import_simple_polygon(&ext_s_polygon)
+        }
+        None => Err(anyhow::anyhow!(
+            "geo_buffer returned {} polygons for an inflation",
+            geo_poly_offsets.len()
+        )),
+    };
 
-    match import::import_simple_polygon(&ext_s_polygon) {
-        // CHEMIN NORMAL, INCHANGÉ : quand `geo_buffer` rend un anneau simple,
-        // rien ne bouge — pas un flottant de plus (verrou de déterminisme).
+    // Contrôle de l'anneau de `geo_buffer` (défaut C6) : un anneau SIMPLE peut
+    // être faux (plus petit que la pièce, ou collé à elle). Le contrôle ne
+    // fait que LIRE : un bon anneau repart tel quel, bit pour bit.
+    let primary = match (primary, mode) {
+        (Ok(shape), ShapeModifyMode::Inflate) => match inflate_ring_defect(sp, &shape, distance) {
+            None => Ok(shape),
+            Some(why) => Err(anyhow::anyhow!("geo_buffer ring rejected: {why}")),
+        },
+        (other, _) => other,
+    };
+
+    match primary {
+        // CHEMIN NORMAL, INCHANGÉ : quand `geo_buffer` rend un anneau simple
+        // et sain, rien ne bouge — pas un flottant de plus (verrou de
+        // déterminisme).
         Ok(shape) => Ok(shape),
         // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
         Err(first) => match mode {
@@ -393,6 +417,223 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
             ShapeModifyMode::Deflate => Err(first),
         },
     }
+}
+
+/// Seuil du contrôle de gonflement : le bord de l'anneau doit rester à au
+/// moins `distance * INFLATE_MIN_DIST_RATIO - INFLATE_MIN_DIST_SLACK` (mm) du
+/// bord de la pièce. SEUL endroit du seuil.
+/// MESURÉ (`tests/inflate_invariant.rs`, `distribution_des_rapports`) : un bon
+/// anneau de `geo_buffer` est à 0,9987 d (corde des arrondis) ; à d = 1 certains
+/// anneaux uniques, importables et contenants tombent plus bas (0,36 d pour une
+/// pièce de `b_demo` à encoche étroite), les anneaux faux à <= 0,014 d.
+/// 0,1 / 0 = « défauts grossiers seulement ». Le choix « espacement tenu »
+/// serait 0,99 / 0,001.
+pub const INFLATE_MIN_DIST_RATIO: f64 = 0.1;
+pub const INFLATE_MIN_DIST_SLACK: f64 = 0.0;
+
+fn pts_f64(v: &[Point]) -> Vec<[f64; 2]> {
+    v.iter().map(|p| [p.0 as f64, p.1 as f64]).collect()
+}
+
+/// Distance minimale EXACTE (mm) entre le bord de `part` et celui de `ring`,
+/// sans sortie anticipée ; 0 si les bords se croisent. Pour les harnais de
+/// mesure. Même arithmétique que `inflate_ring_defect` (même `seg_seg_dist2`).
+pub fn inflate_min_boundary_distance(part: &SPolygon, ring: &SPolygon) -> f64 {
+    let (a, b) = (pts_f64(&part.vertices), pts_f64(&ring.vertices));
+    if a.len() < 2 || b.len() < 2 {
+        return f64::INFINITY;
+    }
+    min_boundary_dist2_exact(&a, &b).sqrt()
+}
+
+/// `None` si l'anneau gonflé `ring` est sain, sinon la raison du refus.
+/// Sain = aire >= celle de la pièce, aucun couple d'arêtes (pièce, anneau) à
+/// moins de `distance * RATIO - SLACK` (croisements compris), et la pièce
+/// dedans (un sommet suffit : les bords sont disjoints).
+///
+/// Arithmétique : + - * / et comparaisons en f64 (pas de racine), aucune
+/// transcendante, aucun hasard : identique natif ≡ wasm.
+pub fn inflate_ring_defect(part: &SPolygon, ring: &SPolygon, distance: f32) -> Option<&'static str> {
+    if !(ring.area >= part.area) {
+        return Some("area below the part's");
+    }
+    let thr = (distance as f64 * INFLATE_MIN_DIST_RATIO - INFLATE_MIN_DIST_SLACK).max(0.0);
+    let (a, b) = (pts_f64(&part.vertices), pts_f64(&ring.vertices));
+    if a.len() < 3 || b.len() < 3 {
+        return Some("degenerate ring");
+    }
+    if thr > 0.0 && pass_min_dist2(&a, &b, thr, thr * thr) < thr * thr {
+        return Some("boundary closer than the offset distance");
+    }
+    // Bords disjoints : un sommet de la pièce dedans (ou dehors) tranche.
+    if !point_in_ring(a[0], &b) {
+        return Some("part not inside the ring");
+    }
+    None
+}
+
+/// Boîte (xmin, ymin, xmax, ymax) de l'arête p-q.
+fn edge_box(p: [f64; 2], q: [f64; 2]) -> [f64; 4] {
+    [p[0].min(q[0]), p[1].min(q[1]), p[0].max(q[0]), p[1].max(q[1])]
+}
+
+/// Passe de recherche : plus petit carré de distance parmi les couples
+/// d'arêtes dont les boîtes sont à moins de `radius` l'une de l'autre (grille
+/// sur les arêtes de `b`). S'arrête dès qu'un couple tombe sous `stop_below`.
+/// La grille ne fait qu'élaguer : tout couple à distance <= `radius` est
+/// visité, donc le minimum rendu est exact dès qu'il est <= radius².
+fn pass_min_dist2(a: &[[f64; 2]], b: &[[f64; 2]], radius: f64, stop_below: f64) -> f64 {
+    let m = b.len();
+    let b_boxes: Vec<[f64; 4]> = (0..m).map(|j| edge_box(b[j], b[(j + 1) % m])).collect();
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for bb in &b_boxes {
+        x0 = x0.min(bb[0]);
+        y0 = y0.min(bb[1]);
+        x1 = x1.max(bb[2]);
+        y1 = y1.max(bb[3]);
+    }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let mut cs = radius.max((w * h / (4.0 * m as f64 + 16.0)).sqrt()).max(w.max(h) / 2048.0);
+    if !(cs > 0.0) {
+        cs = 1.0;
+    }
+    let nx = ((w / cs) as usize + 1).max(1);
+    let ny = ((h / cs) as usize + 1).max(1);
+    let cell = |v: f64, o: f64, n: usize| (((v - o) / cs).max(0.0) as usize).min(n - 1);
+    // Grille en CSR : `start[c]..start[c+1]` indexe `items`.
+    let mut start = vec![0u32; nx * ny + 1];
+    let range = |bb: &[f64; 4], r: f64| {
+        (
+            cell(bb[0] - r, x0, nx),
+            cell(bb[2] + r, x0, nx),
+            cell(bb[1] - r, y0, ny),
+            cell(bb[3] + r, y0, ny),
+        )
+    };
+    for bb in &b_boxes {
+        let (i0, i1, j0, j1) = range(bb, 0.0);
+        for j in j0..=j1 {
+            for i in i0..=i1 {
+                start[j * nx + i + 1] += 1;
+            }
+        }
+    }
+    for c in 0..nx * ny {
+        start[c + 1] += start[c];
+    }
+    let mut fill = start.clone();
+    let mut items = vec![0u32; start[nx * ny] as usize];
+    for (e, bb) in b_boxes.iter().enumerate() {
+        let (i0, i1, j0, j1) = range(bb, 0.0);
+        for j in j0..=j1 {
+            for i in i0..=i1 {
+                let c = j * nx + i;
+                items[fill[c] as usize] = e as u32;
+                fill[c] += 1;
+            }
+        }
+    }
+    let mut stamp = vec![u32::MAX; m];
+    let mut best = f64::INFINITY;
+    let slop = radius * 1e-9 + 1e-12;
+    for i in 0..a.len() {
+        let (p, q) = (a[i], a[(i + 1) % a.len()]);
+        let pb = edge_box(p, q);
+        let (i0, i1, j0, j1) = range(&pb, radius + slop);
+        for j in j0..=j1 {
+            for ci in i0..=i1 {
+                let c = j * nx + ci;
+                for &e in &items[start[c] as usize..start[c + 1] as usize] {
+                    let e = e as usize;
+                    if stamp[e] == i as u32 {
+                        continue;
+                    }
+                    stamp[e] = i as u32;
+                    let bb = &b_boxes[e];
+                    if pb[0] - bb[2] > radius || bb[0] - pb[2] > radius
+                        || pb[1] - bb[3] > radius || bb[1] - pb[3] > radius
+                    {
+                        continue;
+                    }
+                    let d2 = seg_seg_dist2(p, q, b[e], b[(e + 1) % m]);
+                    if d2 < best {
+                        best = d2;
+                        if best < stop_below {
+                            return best;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    best
+}
+
+/// Minimum exact : rayon de recherche multiplié par 4 jusqu'à ce que le
+/// minimum trouvé tienne dans le rayon.
+fn min_boundary_dist2_exact(a: &[[f64; 2]], b: &[[f64; 2]]) -> f64 {
+    let m = b.len();
+    let per: f64 = (0..m)
+        .map(|j| {
+            let (p, q) = (b[j], b[(j + 1) % m]);
+            ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt()
+        })
+        .sum::<f64>()
+        / m as f64;
+    let mut r = (2.0 * per).max(1e-6);
+    loop {
+        let best = pass_min_dist2(a, b, r, 0.0);
+        if best <= r * r {
+            return best;
+        }
+        r *= 4.0;
+    }
+}
+
+fn orient2(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
+    (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+}
+
+fn pt_seg_dist2(p: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let l2 = dx * dx + dy * dy;
+    let t = if l2 == 0.0 {
+        0.0
+    } else {
+        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0)
+    };
+    let (ex, ey) = (p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+    ex * ex + ey * ey
+}
+
+/// Distance AU CARRÉ entre deux segments, 0 s'ils se croisent.
+fn seg_seg_dist2(p1: [f64; 2], p2: [f64; 2], q1: [f64; 2], q2: [f64; 2]) -> f64 {
+    let (o1, o2) = (orient2(p1, p2, q1), orient2(p1, p2, q2));
+    let (o3, o4) = (orient2(q1, q2, p1), orient2(q1, q2, p2));
+    if ((o1 > 0.0 && o2 < 0.0) || (o1 < 0.0 && o2 > 0.0))
+        && ((o3 > 0.0 && o4 < 0.0) || (o3 < 0.0 && o4 > 0.0))
+    {
+        return 0.0;
+    }
+    pt_seg_dist2(p1, q1, q2)
+        .min(pt_seg_dist2(p2, q1, q2))
+        .min(pt_seg_dist2(q1, p1, p2))
+        .min(pt_seg_dist2(q2, p1, p2))
+}
+
+fn point_in_ring(pt: [f64; 2], ring: &[[f64; 2]]) -> bool {
+    let mut inside = false;
+    let mut j = ring.len() - 1;
+    for i in 0..ring.len() {
+        let (pi, pj) = (ring[i], ring[j]);
+        if (pi[1] > pt[1]) != (pj[1] > pt[1])
+            && pt[0] < (pj[0] - pi[0]) * (pt[1] - pi[1]) / (pj[1] - pi[1]) + pi[0]
+        {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 /// Items dont le gonflement a pris le REPLI (lot E2, patch vendorisé §4).
@@ -469,7 +710,9 @@ const INFLATE_DISK_SIDES: usize = 32;
 /// - il est reproductible natif ≡ wasm : les seules transcendantales sont
 ///   celles du crate `libm` (règle AGENTS #14b), et le booléen d'i_overlay
 ///   travaille en entier.
-fn robust_inflate_ring(vertices: &[Point], distance: f32) -> Result<Vec<(f32, f32)>> {
+///
+/// Publique pour les harnais de mesure (`tests/inflate_corpus.rs`) ; le moteur ne l'appelle que par `offset_shape`.
+pub fn robust_inflate_ring(vertices: &[Point], distance: f32) -> Result<Vec<(f32, f32)>> {
     use i_overlay::core::fill_rule::FillRule;
     use i_overlay::float::simplify::SimplifyShape;
 
