@@ -386,10 +386,18 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
     // Contrôle de l'anneau de `geo_buffer` (défaut C6) : un anneau SIMPLE peut
     // être faux (plus petit que la pièce, ou collé à elle). Le contrôle ne
     // fait que LIRE : un bon anneau repart tel quel, bit pour bit.
+    // Deux niveaux : GROSSIER (repli + pièce nommée) et PROCHE (repli
+    // silencieux : l'anneau de repli est exact, rien à vérifier pour
+    // l'utilisateur).
+    let mut close: Option<SPolygon> = None;
     let primary = match (primary, mode) {
-        (Ok(shape), ShapeModifyMode::Inflate) => match inflate_ring_defect(sp, &shape, distance) {
-            None => Ok(shape),
-            Some(why) => Err(anyhow::anyhow!("geo_buffer ring rejected: {why}")),
+        (Ok(shape), ShapeModifyMode::Inflate) => match inflate_verdict(sp, &shape, distance) {
+            InflateVerdict::Good => Ok(shape),
+            InflateVerdict::Close(_) => {
+                close = Some(shape.clone());
+                Err(anyhow::anyhow!("geo_buffer ring closer than the spacing"))
+            }
+            InflateVerdict::Gross(why) => Err(anyhow::anyhow!("geo_buffer ring rejected: {why}")),
         },
         (other, _) => other,
     };
@@ -402,6 +410,16 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
         // REPLI (patch vendorisé §3, lot E0 de `docs/PLAN-ECLATEMENT-2026-09-12.md`).
         Err(first) => match mode {
             ShapeModifyMode::Inflate => {
+                if let Some(geo_ring) = close {
+                    // PROCHE : repli silencieux ; s'il échoue, l'anneau de
+                    // `geo_buffer` reste (comportement d'avant) — un anneau
+                    // proche ne doit jamais transformer un job qui marche
+                    // en erreur.
+                    return Ok(robust_inflate_ring(&sp.vertices, distance)
+                        .ok()
+                        .and_then(|ring| import::import_simple_polygon(&ExtSPolygon(ring)).ok())
+                        .unwrap_or(geo_ring));
+                }
                 note_fallback();
                 let ring = robust_inflate_ring(&sp.vertices, distance).map_err(|e| {
                     anyhow::anyhow!("offset fallback failed: {e} (geo_buffer: {first})")
@@ -419,17 +437,31 @@ pub fn offset_shape(sp: &SPolygon, mode: ShapeModifyMode, distance: f32) -> Resu
     }
 }
 
-/// Seuil du contrôle de gonflement : le bord de l'anneau doit rester à au
-/// moins `distance * INFLATE_MIN_DIST_RATIO - INFLATE_MIN_DIST_SLACK` (mm) du
-/// bord de la pièce. SEUL endroit du seuil.
+/// Seuils du contrôle de gonflement, SEUL endroit. Distances de bord entre la
+/// pièce et l'anneau de `geo_buffer`.
 /// MESURÉ (`tests/inflate_invariant.rs`, `distribution_des_rapports`) : un bon
 /// anneau de `geo_buffer` est à 0,9987 d (corde des arrondis) ; à d = 1 certains
 /// anneaux uniques, importables et contenants tombent plus bas (0,36 d pour une
 /// pièce de `b_demo` à encoche étroite), les anneaux faux à <= 0,014 d.
-/// 0,1 / 0 = « défauts grossiers seulement ». Le choix « espacement tenu »
-/// serait 0,99 / 0,001.
-pub const INFLATE_MIN_DIST_RATIO: f64 = 0.1;
-pub const INFLATE_MIN_DIST_SLACK: f64 = 0.0;
+/// - GROSSIER : distance < d * INFLATE_GROSS_RATIO -> repli ET pièce nommée.
+/// - PROCHE (si `INFLATE_HOLD_SPACING`) : distance < d * INFLATE_HELD_RATIO -
+///   INFLATE_HELD_SLACK -> repli SANS nommer la pièce (anneau de repli exact).
+pub const INFLATE_GROSS_RATIO: f64 = 0.1;
+pub const INFLATE_HELD_RATIO: f64 = 0.99;
+pub const INFLATE_HELD_SLACK: f64 = 0.001;
+/// Allume le niveau PROCHE. `false` = comportement du commit 76d9ddf7 (T1).
+pub const INFLATE_HOLD_SPACING: bool = true;
+
+/// Verdict sur l'anneau gonflé de `geo_buffer`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InflateVerdict {
+    /// Sain : l'anneau repart tel quel.
+    Good,
+    /// Utilisable mais plus près que l'espacement tenu : repli silencieux.
+    Close(&'static str),
+    /// Faux : repli et pièce nommée.
+    Gross(&'static str),
+}
 
 fn pts_f64(v: &[Point]) -> Vec<[f64; 2]> {
     v.iter().map(|p| [p.0 as f64, p.1 as f64]).collect()
@@ -446,30 +478,52 @@ pub fn inflate_min_boundary_distance(part: &SPolygon, ring: &SPolygon) -> f64 {
     min_boundary_dist2_exact(&a, &b).sqrt()
 }
 
-/// `None` si l'anneau gonflé `ring` est sain, sinon la raison du refus.
-/// Sain = aire >= celle de la pièce, aucun couple d'arêtes (pièce, anneau) à
-/// moins de `distance * RATIO - SLACK` (croisements compris), et la pièce
-/// dedans (un sommet suffit : les bords sont disjoints).
+/// Verdict à deux niveaux sur l'anneau gonflé `ring` (UNE passe de grille,
+/// élaguée au plus grand des deux seuils, puis comparaison).
+/// GROSSIER : aire sous celle de la pièce, anneau dégénéré, bords qui se
+/// croisent ou se touchent (distance 0, quels que soient les seuils), bord à
+/// moins de `d * GROSS_RATIO`, pièce hors de l'anneau. PROCHE : sinon, bord à
+/// moins de `d * HELD_RATIO - HELD_SLACK` (si `INFLATE_HOLD_SPACING`).
 ///
 /// Arithmétique : + - * / et comparaisons en f64 (pas de racine), aucune
 /// transcendante, aucun hasard : identique natif ≡ wasm.
-pub fn inflate_ring_defect(part: &SPolygon, ring: &SPolygon, distance: f32) -> Option<&'static str> {
+pub fn inflate_verdict(part: &SPolygon, ring: &SPolygon, distance: f32) -> InflateVerdict {
+    use InflateVerdict::*;
     if !(ring.area >= part.area) {
-        return Some("area below the part's");
+        return Gross("area below the part's");
     }
-    let thr = (distance as f64 * INFLATE_MIN_DIST_RATIO - INFLATE_MIN_DIST_SLACK).max(0.0);
+    let gross = (distance as f64 * INFLATE_GROSS_RATIO).max(0.0);
+    let held = if INFLATE_HOLD_SPACING {
+        (distance as f64 * INFLATE_HELD_RATIO - INFLATE_HELD_SLACK).max(0.0)
+    } else {
+        0.0
+    };
     let (a, b) = (pts_f64(&part.vertices), pts_f64(&ring.vertices));
     if a.len() < 3 || b.len() < 3 {
-        return Some("degenerate ring");
+        return Gross("degenerate ring");
     }
-    if thr > 0.0 && pass_min_dist2(&a, &b, thr, thr * thr) < thr * thr {
-        return Some("boundary closer than the offset distance");
+    let big = gross.max(held);
+    let best = pass_min_dist2(&a, &b, big, gross * gross);
+    // `best == 0` : croisement (ou contact) — grossier même à seuil nul.
+    if best <= 0.0 || best < gross * gross {
+        return Gross("boundary closer than the offset distance");
     }
     // Bords disjoints : un sommet de la pièce dedans (ou dehors) tranche.
     if !point_in_ring(a[0], &b) {
-        return Some("part not inside the ring");
+        return Gross("part not inside the ring");
     }
-    None
+    if INFLATE_HOLD_SPACING && best < held * held {
+        return Close("boundary closer than the held spacing");
+    }
+    Good
+}
+
+/// Enveloppe : `None` si l'anneau est sain, sinon la raison (grossier ou proche).
+pub fn inflate_ring_defect(part: &SPolygon, ring: &SPolygon, distance: f32) -> Option<&'static str> {
+    match inflate_verdict(part, ring, distance) {
+        InflateVerdict::Good => None,
+        InflateVerdict::Close(w) | InflateVerdict::Gross(w) => Some(w),
+    }
 }
 
 /// Boîte (xmin, ymin, xmax, ymax) de l'arête p-q.

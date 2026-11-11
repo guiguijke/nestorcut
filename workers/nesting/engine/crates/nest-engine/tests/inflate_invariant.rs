@@ -31,7 +31,14 @@ static SERIE: Mutex<()> = Mutex::new(());
 /// Tolérance relative du test sur la distance de bord (le tour du disque par
 /// `geo_buffer` est une corde, donc légèrement sous `d`). Volontairement
 /// large : le test mesure l'invariant, pas le seuil du correctif.
+#[allow(dead_code)]
 const EPS_TEST: f64 = 0.10;
+
+/// Borne STRICTE du niveau « espacement tenu » : d * 0,99 - 0,001 mm.
+fn strict_min(d: f32) -> f64 {
+    use jagua_rs::geometry::shape_modification::{INFLATE_HELD_RATIO, INFLATE_HELD_SLACK};
+    d as f64 * INFLATE_HELD_RATIO - INFLATE_HELD_SLACK
+}
 
 fn volute_ring(gap: f64, half: f64, turns: f64, steps: usize) -> Vec<(f32, f32)> {
     let pitch = 2.0 * half + gap;
@@ -230,7 +237,8 @@ fn invariant_par_piece_sur_63_volutes_brutes_et_simplifiees() {
             if pris_repli {
                 min_repli = min_repli.min(m.dist / d as f64);
             }
-            let ok = m.contenue && m.aire_ratio >= 1.0 && m.dist >= d as f64 * (1.0 - EPS_TEST);
+            let min_strict = strict_min(d);
+            let ok = m.contenue && m.aire_ratio >= 1.0 && m.dist >= min_strict;
             if !ok {
                 echecs += 1;
                 println!(
@@ -239,9 +247,10 @@ fn invariant_par_piece_sur_63_volutes_brutes_et_simplifiees() {
                     m.contenue,
                     m.aire_ratio,
                     m.dist,
-                    d as f64 * (1.0 - EPS_TEST),
+                    min_strict,
                     pris_repli
                 );
+                println!("   ratio dist/d = {:.4}", m.dist / d as f64);
             }
         }
     }
@@ -367,9 +376,14 @@ fn distribution_des_rapports() {
     }
 }
 
+/// Vérité sous T2 : les formes ordinaires dont l'anneau de `geo_buffer` tient
+/// déjà la borne stricte reviennent IDENTIQUES (sommets exacts) à cet anneau ;
+/// les autres prennent la voie PROCHE (repli silencieux, jamais nommées) et
+/// sont listées par nom.
 #[test]
-fn les_formes_ordinaires_restent_sur_geo_buffer() {
+fn les_formes_ordinaires_identiques_a_geo_buffer_ou_voie_proche() {
     let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
+    let (mut identiques, mut proches) = (0, Vec::new());
     for d in [1.0f32, 0.25] {
         for (i, cas) in formes_ordinaires().iter().enumerate() {
             let Some(part) = import_ring(&cas.ring) else {
@@ -378,22 +392,110 @@ fn les_formes_ordinaires_restent_sur_geo_buffer() {
             let Some(attendu) = geo_buffer_ring(&part, d) else {
                 continue;
             };
+            let att_sp = import_ring(&attendu).unwrap();
+            let tient = jagua_rs::geometry::shape_modification::inflate_min_boundary_distance(
+                &part, &att_sp,
+            ) >= strict_min(d);
             take_fallback_items();
             set_current_item(Some(i as u64));
             let out = offset_shape(&part, ShapeModifyMode::Inflate, d).expect(&cas.nom);
             set_current_item(None);
             assert!(
                 take_fallback_items().is_empty(),
-                "d={d} {} : prise par le repli",
+                "d={d} {} : nommée (la voie proche est silencieuse)",
                 cas.nom
             );
-            assert_eq!(
-                verts(&out),
-                attendu,
-                "d={d} {} : anneau différent de geo_buffer",
-                cas.nom
-            );
+            if tient || !HOLD {
+                assert_eq!(
+                    verts(&out),
+                    attendu,
+                    "d={d} {} : anneau différent de geo_buffer",
+                    cas.nom
+                );
+                identiques += 1;
+            } else {
+                let m = mesure(&verts(&part), &verts(&out));
+                assert!(
+                    m.contenue && m.dist >= strict_min(d),
+                    "d={d} {} : anneau de repli sous la borne ({:.4})",
+                    cas.nom,
+                    m.dist / d as f64
+                );
+                proches.push(format!("d={d} {}", cas.nom));
+            }
         }
+    }
+    println!("{identiques} formes identiques à geo_buffer ; voie PROCHE : {proches:#?}");
+}
+
+const HOLD: bool = jagua_rs::geometry::shape_modification::INFLATE_HOLD_SPACING;
+
+/// b_demo #11 et #12 à d = 1 : anneaux de `geo_buffer` à 0,7155 d et 0,3631 d.
+/// Le repli doit tenir la borne stricte, SANS nommer les pièces.
+#[test]
+fn b_demo_11_et_12_tiennent_l_espacement_en_silence() {
+    let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../bench/fixtures/b_demo/instance.json");
+    let j: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let items = j["items"].as_array().unwrap();
+    let d = 1.0f32;
+    let mut echecs = 0;
+    for k in [11usize, 12] {
+        let ring: Vec<(f32, f32)> = items[k]["shape"]["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| (p[0].as_f64().unwrap() as f32, p[1].as_f64().unwrap() as f32))
+            .collect();
+        let part = import_ring(&ring).unwrap();
+        take_fallback_items();
+        set_current_item(Some(k as u64));
+        let out = offset_shape(&part, ShapeModifyMode::Inflate, d).expect("offset");
+        set_current_item(None);
+        let nommes = take_fallback_items();
+        let m = mesure(&verts(&part), &verts(&out));
+        println!("b_demo#{k} : dist/d = {:.4}, contenue={}, nommée={:?}", m.dist / d as f64, m.contenue, nommes);
+        if !(m.contenue && m.aire_ratio >= 1.0 && m.dist >= strict_min(d)) {
+            echecs += 1;
+        }
+        if !nommes.is_empty() {
+            echecs += 1;
+        }
+    }
+    assert_eq!(echecs, 0, "b_demo #11/#12 : borne stricte ou silence violés");
+}
+
+/// Un cas GROSSIER nomme toujours la pièce : un carré de 10 mm gonflé de 4 mm
+/// à côté d'une pièce collée ne passe pas ici, on prend donc une volute dont
+/// les deux brins sont à 0,05 mm (geo_buffer rend 0 ou plusieurs polygones).
+#[test]
+fn un_cas_grossier_nomme_encore_la_piece() {
+    let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
+    let ring = volute_ring(0.05, 0.6, 2.5, 240);
+    let part = import_ring(&ring).expect("import volute");
+    take_fallback_items();
+    set_current_item(Some(7));
+    let out = offset_shape(&part, ShapeModifyMode::Inflate, 1.0);
+    set_current_item(None);
+    assert!(out.is_ok());
+    assert_eq!(take_fallback_items(), vec![7], "la pièce grossière doit être nommée");
+}
+
+/// Croisement à seuil nul : un anneau qui TRAVERSE la pièce est GROSSIER même
+/// quand les seuils sont nuls (distance 0 = croisement). Exprimé par
+/// `inflate_verdict` avec une distance nulle.
+#[test]
+fn croisement_a_seuil_nul_est_grossier() {
+    use jagua_rs::geometry::shape_modification::{InflateVerdict, inflate_verdict};
+    let part = import_ring(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]).unwrap();
+    // Anneau plus grand en aire mais décalé : ses bords traversent ceux de la pièce.
+    let ring = import_ring(&[(5.0, 5.0), (30.0, 5.0), (30.0, 30.0), (5.0, 30.0)]).unwrap();
+    assert!(ring.area >= part.area);
+    for d in [0.0f32, 1.0] {
+        assert!(
+            matches!(inflate_verdict(&part, &ring, d), InflateVerdict::Gross(_)),
+            "d={d} : un anneau qui croise doit être grossier"
+        );
     }
 }
 
@@ -564,8 +666,8 @@ fn cout_du_controle() {
 #[test]
 fn mesure_exacte_egale_la_force_brute() {
     use jagua_rs::geometry::shape_modification::{
-        INFLATE_MIN_DIST_RATIO, INFLATE_MIN_DIST_SLACK, inflate_min_boundary_distance,
-        inflate_ring_defect,
+        INFLATE_GROSS_RATIO, InflateVerdict, inflate_min_boundary_distance,
+        inflate_verdict,
     };
     let _g = SERIE.lock().unwrap_or_else(|e| e.into_inner());
     let (mut n, mut croises) = (0, 0);
@@ -593,11 +695,11 @@ fn mesure_exacte_egale_la_force_brute() {
                 c.nom,
                 m.dist
             );
-            let thr = (d as f64 * INFLATE_MIN_DIST_RATIO - INFLATE_MIN_DIST_SLACK).max(0.0);
-            let verdict = inflate_ring_defect(&part, &inf, d);
+            let thr = (d as f64 * INFLATE_GROSS_RATIO).max(0.0);
+            let verdict = inflate_verdict(&part, &inf, d);
             if inf.area >= part.area {
                 assert_eq!(
-                    verdict == Some("boundary closer than the offset distance"),
+                    verdict == InflateVerdict::Gross("boundary closer than the offset distance"),
                     exact < thr,
                     "d={d} {} : verdict {verdict:?} pour exacte {exact} seuil {thr}",
                     c.nom
