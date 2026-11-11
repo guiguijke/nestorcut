@@ -626,7 +626,6 @@ const CAPACITY_SURFACE = [
     { name: 'panneau', sel: '[data-testid="report-capacity"]', within: '.modal-body' },
     { name: 'titre', sel: '[data-testid="report-capacity"] .capacity-panel__title', within: '[data-testid="report-capacity"]' },
     { name: 'levier', sel: '[data-testid="report-capacity"] .capacity-panel__levers li', within: '[data-testid="report-capacity"]' },
-    { name: 'note-free', sel: '[data-testid="report-capacity"] [data-testid="capacity-free-note"]', within: '[data-testid="report-capacity"]' },
     { name: 'ajouter', sel: '[data-testid="report-capacity"] [data-testid="capacity-add-sheet"]', within: '[data-testid="report-capacity"]' },
     { name: 'actions', sel: '[data-testid="report-actions"]', within: '.modal-body' },
     { name: 'action', sel: '[data-testid="report-actions"] > *', within: '[data-testid="report-actions"]' },
@@ -1056,7 +1055,8 @@ try {
                 + `en charge${state.sseMute ? ' — flux SSE des résultats muet, le job reste awaiting_local' : ''})`)
         }
         const freeNote = panel.locator('[data-testid="capacity-free-note"]')
-        check('D26 : information Free dans le panneau', await freeNote.isVisible().catch(() => false),
+        // ab62f439 : un refus ne porte plus la note Free (rien à télécharger).
+        check('refus : pas de note Free dans le panneau', !(await freeNote.isVisible().catch(() => false)),
             (await freeNote.innerText().catch(() => '')).trim())
         const pageAdd = panel.locator('[data-testid="capacity-add-sheet"]')
         log('bouton du panneau :', (await pageAdd.innerText().catch(() => '')).trim(),
@@ -1100,7 +1100,7 @@ try {
         const addBtn = rc.locator('[data-testid="capacity-add-sheet"]')
         check('fenêtre (projet du job) : capacity-add-sheet présent', await addBtn.isVisible())
         check('fenêtre (projet du job) : pas de capacity-open-project', !(await rc.locator('[data-testid="capacity-open-project"]').count()))
-        check('fenêtre : information D26 dans le panneau', await rc.locator('[data-testid="capacity-free-note"]').isVisible().catch(() => false))
+        check('fenêtre : pas de note Free dans un refus', !(await rc.locator('[data-testid="capacity-free-note"]').isVisible().catch(() => false)))
         check('fenêtre : plus de code brut capacity_exceeded',
             !(await P.locator('.modal-body').first().innerText()).includes('capacity_exceeded'))
         // Fix 6a711818 (ResultReport.vue, garde isHaveError || isUnfit sur
@@ -1138,8 +1138,7 @@ try {
                 check(`fenêtre refusée ${L} : « Ajouter … tôles et relancer » traduit (k=${kShown})`, addL === wantAdd,
                     `« ${addL} » (attendu « ${wantAdd} »)`)
                 const noteL = (await rcL.locator('[data-testid="capacity-free-note"]').innerText().catch(() => '')).trim()
-                check(`fenêtre refusée ${L} : information D26 traduite`,
-                    noteL === T('nest.capacity.freeDownloadNote', { cap: CAP }, loc), noteL)
+                check(`fenêtre refusée ${L} : pas de note Free dans un refus`, noteL === '', noteL)
                 checkSingleDownloadDisabled(`fenêtre refusée ${L} : bouton mono-tôle désactivé (fix 6a711818)`,
                     await singleDownloadButtons(P, loc))
                 await P.waitForTimeout(400)
