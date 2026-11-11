@@ -179,7 +179,10 @@ fn ordered_float(v: f32) -> u64 {
 ///
 /// B4 : tout classement commence par le NOMBRE DE PIÈCES POSÉES (décroissant),
 /// pour qu'un run amputé par la garde d'embouchure ne passe jamais devant un
-/// run complet. À nombre égal, l'ordre historique est conservé.
+/// run complet. À nombre égal, l'ordre historique est conservé. En mode
+/// directions, les champions de classe ne sont choisis que parmi les runs au
+/// nombre de pièces maximal (comme BPP ne les choisit que parmi les faisables) ;
+/// la liste `rest` garde son ordre (pièces posées, qualité).
 pub fn merge_sp_runs(
     ext_instance: &ExtSPInstance,
     runs: &[SpRun],
@@ -210,15 +213,28 @@ pub fn merge_sp_runs(
             };
             // B4 : pièces posées d'abord (plus = mieux), puis l'ordre historique.
             let placed = |r: &SpRun| std::cmp::Reverse(r.solution.layout.placed_items.len());
+            // Miroir de la règle BPP (faisabilité) : les champions de classe
+            // ne se choisissent que parmi les runs au nombre de pièces posées
+            // MAXIMAL. Sans cela, le champion d'une classe amputée par la
+            // garde passerait devant un run complet d'une autre classe (le
+            // nombre de pièces ne jouait qu'à l'intérieur de chaque classe).
+            // Quand tous les runs posent autant de pièces, le filtre ne retire
+            // rien et l'ordre est exactement l'historique.
+            let max_placed = runs
+                .iter()
+                .map(|r| r.solution.layout.placed_items.len())
+                .max()
+                .unwrap_or(0);
             let mut ordered: Vec<&SpRun> = DirBias::ALL
                 .into_iter()
                 .filter(|b| biases.contains(b))
                 .filter_map(|b| {
                     runs.iter()
                         .filter(|r| r.bias == Some(b))
+                        .filter(|r| r.solution.layout.placed_items.len() == max_placed)
                         .min_by_key(|r| match b {
-                            DirBias::Balanced => (placed(r), balance_delta(r), quality(r)),
-                            _ => (placed(r), 0, quality(r)),
+                            DirBias::Balanced => (balance_delta(r), quality(r)),
+                            _ => (0, quality(r)),
                         })
                 })
                 .collect();
