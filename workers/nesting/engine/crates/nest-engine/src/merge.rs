@@ -176,6 +176,10 @@ fn ordered_float(v: f32) -> u64 {
 /// égal. `max_strip_width` est nécessaire au calcul de `free_right` ; en son
 /// absence (strip libre) le rang balanced retombe sur la qualité pure.
 /// Les autres classes et le flux Flat sont inchangés.
+///
+/// B4 : tout classement commence par le NOMBRE DE PIÈCES POSÉES (décroissant),
+/// pour qu'un run amputé par la garde d'embouchure ne passe jamais devant un
+/// run complet. À nombre égal, l'ordre historique est conservé.
 pub fn merge_sp_runs(
     ext_instance: &ExtSPInstance,
     runs: &[SpRun],
@@ -204,6 +208,8 @@ pub fn merge_sp_runs(
                 let free_right = mw - r.solution.strip_width;
                 ordered_float((free_top - free_right).abs())
             };
+            // B4 : pièces posées d'abord (plus = mieux), puis l'ordre historique.
+            let placed = |r: &SpRun| std::cmp::Reverse(r.solution.layout.placed_items.len());
             let mut ordered: Vec<&SpRun> = DirBias::ALL
                 .into_iter()
                 .filter(|b| biases.contains(b))
@@ -211,22 +217,26 @@ pub fn merge_sp_runs(
                     runs.iter()
                         .filter(|r| r.bias == Some(b))
                         .min_by_key(|r| match b {
-                            DirBias::Balanced => (balance_delta(r), quality(r)),
-                            _ => (0, quality(r)),
+                            DirBias::Balanced => (placed(r), balance_delta(r), quality(r)),
+                            _ => (placed(r), 0, quality(r)),
                         })
                 })
                 .collect();
             let mut rest: Vec<&SpRun> = runs.iter().collect();
-            rest.sort_by_key(|r| quality(r));
+            rest.sort_by_key(|r| (placed(r), quality(r)));
             ordered.extend(rest);
             ordered
         }
         SpMergeMode::Flat => {
             let mut all: Vec<&SpRun> = runs.iter().collect();
             all.sort_by(|a, b| {
-                a.solution
-                    .strip_width
-                    .total_cmp(&b.solution.strip_width)
+                // B4 : pièces posées d'abord (plus = mieux).
+                b.solution
+                    .layout
+                    .placed_items
+                    .len()
+                    .cmp(&a.solution.layout.placed_items.len())
+                    .then(a.solution.strip_width.total_cmp(&b.solution.strip_width))
                     .then(a.used_height.total_cmp(&b.used_height))
                     .then(a.seed.cmp(&b.seed))
             });
@@ -817,6 +827,10 @@ mod tests {
     const LAYOUT_B: &[(u64, f32, f32, f32)] = &[(0, 0.0, 5.0, 5.0)];
     const LAYOUT_C: &[(u64, f32, f32, f32)] = &[(1, 0.0, 1.0, 1.0)];
     const LAYOUT_D: &[(u64, f32, f32, f32)] = &[(2, 45.0, 7.0, 8.0)];
+    // B4 : mêmes nombres de pièces (2) que LAYOUT_A, pour que le classement
+    // par nombre de pièces ne change pas l'ordre qualité testé.
+    const LAYOUT_B2: &[(u64, f32, f32, f32)] = &[(0, 0.0, 5.0, 5.0), (2, 0.0, 40.0, 40.0)];
+    const LAYOUT_C2: &[(u64, f32, f32, f32)] = &[(1, 0.0, 1.0, 1.0), (2, 0.0, 60.0, 60.0)];
 
     fn alt_seeds(out: &EngineOutput) -> Vec<u64> {
         out.alternatives
@@ -930,7 +944,7 @@ mod tests {
         // seed départage (le flux legacy Flat, lui, compare les f32 bruts).
         let runs = vec![
             sp_run(1, Some(DirBias::LeftFirst), 80.00002, 40.0, LAYOUT_A),
-            sp_run(9, Some(DirBias::LeftFirst), 80.00001, 40.0, LAYOUT_B),
+            sp_run(9, Some(DirBias::LeftFirst), 80.00001, 40.0, LAYOUT_B2),
         ];
         let biases = [DirBias::LeftFirst];
         let out = merge_sp_runs(
@@ -961,7 +975,7 @@ mod tests {
         // 22 gagne malgré sa largeur 80 > 50 (densité moindre).
         let runs = vec![
             sp_run(11, Some(DirBias::Balanced), 50.0, 20.0, LAYOUT_A),
-            sp_run(22, Some(DirBias::Balanced), 80.0, 60.0, LAYOUT_B),
+            sp_run(22, Some(DirBias::Balanced), 80.0, 60.0, LAYOUT_B2),
         ];
         let biases = [DirBias::Balanced];
         let out = merge_sp_runs(
@@ -1025,8 +1039,8 @@ mod tests {
     fn spp_flat_sorts_by_quality_and_omits_bias() {
         let runs = vec![
             sp_run(11, None, 90.0, 40.0, LAYOUT_A),
-            sp_run(22, None, 70.0, 50.0, LAYOUT_B),
-            sp_run(33, None, 80.0, 30.0, LAYOUT_C),
+            sp_run(22, None, 70.0, 50.0, LAYOUT_B2),
+            sp_run(33, None, 80.0, 30.0, LAYOUT_C2),
         ];
         let out = merge_sp_runs(&sp_instance(), &runs, SpMergeMode::Flat, None, 10)
             .unwrap()
@@ -1040,8 +1054,8 @@ mod tests {
     fn spp_flat_used_height_tiebreak_then_seed() {
         let runs = vec![
             sp_run(9, None, 80.0, 50.0, LAYOUT_A),
-            sp_run(5, None, 80.0, 30.0, LAYOUT_B),
-            sp_run(7, None, 80.0, 50.0, LAYOUT_C),
+            sp_run(5, None, 80.0, 30.0, LAYOUT_B2),
+            sp_run(7, None, 80.0, 50.0, LAYOUT_C2),
         ];
         let out = merge_sp_runs(&sp_instance(), &runs, SpMergeMode::Flat, None, 10)
             .unwrap()

@@ -7,11 +7,12 @@
 
 use jagua_rs::io::ext_repr::{ExtContainer, ExtItem, ExtLayout, ExtPlacedItem, ExtSPolygon, ExtShape, ExtTransformation};
 use jagua_rs::probs::bpp::io::ext_repr::{ExtBPInstance, ExtBPSolution, ExtBin, ExtItem as BpExtItem};
+use jagua_rs::probs::spp::io::ext_repr::{ExtItem as SpExtItem, ExtSPInstance, ExtSPSolution};
 use nest_engine::bpp::constructive::DirBias;
 use nest_engine::bpp::sa::Cost;
 use nest_engine::config::EngineConfig;
-use nest_engine::merge::{merge_bp_runs, BpRun};
-use nest_engine::mouth_guard::guard_bp_runs;
+use nest_engine::merge::{merge_bp_runs, merge_sp_runs, BpRun, SpMergeMode, SpRun};
+use nest_engine::mouth_guard::{guard_bp_runs, guard_sp_runs};
 
 fn rect(x0: f32, y0: f32, w: f32, h: f32) -> ExtShape {
     ExtShape::SimplePolygon(ExtSPolygon(vec![
@@ -74,6 +75,32 @@ fn bp_run(seed: u64, unplaced: usize, bin_cost: u64, layouts: Vec<ExtLayout>) ->
     }
 }
 
+fn sp_instance() -> ExtSPInstance {
+    ExtSPInstance {
+        name: "guard-merge-spp".to_owned(),
+        items: vec![
+            SpExtItem { base: base_item(0, rect(0.0, 0.0, 100.0, 100.0)), demand: 1 },
+            SpExtItem { base: base_item(1, rect(0.0, 0.0, 8.0, 8.0)), demand: 1 },
+        ],
+        strip_height: 200.0,
+    }
+}
+
+fn sp_run(seed: u64, strip_width: f32, used_height: f32, placed_items: Vec<ExtPlacedItem>) -> SpRun {
+    SpRun {
+        seed,
+        bias: Some(DirBias::LeftFirst),
+        evals: 1,
+        used_height,
+        solution: ExtSPSolution {
+            strip_width,
+            layout: layout(placed_items),
+            density: 0.5,
+            run_time_sec: 0,
+        },
+    }
+}
+
 /// Run A : tout posé légalement, un bac de plus. Run B : meilleur coût et
 /// unplaced 0 déclaré, mais la pièce 1 est dans le trou serré.
 #[test]
@@ -97,3 +124,46 @@ fn bpp_run_that_lost_a_part_to_the_guard_does_not_win() {
     );
 }
 
+/// Run étroit (largeur 50) qui a perdu la pièce 1 dans le trou ; run complet
+/// (largeur 60). Le complet doit être le rang 0, en mode directions comme à plat.
+#[test]
+fn spp_narrow_run_that_lost_a_part_does_not_rank_first() {
+    let inst = sp_instance();
+    let cfg = config();
+    let mut runs = vec![
+        sp_run(1, 50.0, 20.0, vec![placed(0, 0.0, 0.0), placed(1, 51.0, 51.0)]),
+        sp_run(2, 60.0, 20.0, vec![placed(0, 0.0, 0.0), placed(1, 80.0, 80.0)]),
+    ];
+    let stats = guard_sp_runs(&inst, &cfg, &mut runs);
+    assert_eq!(stats.removed, 1, "la garde doit retirer la pièce du trou serré");
+    assert_eq!(runs[0].solution.layout.placed_items.len(), 1);
+
+    let biases = [DirBias::LeftFirst];
+    let dir = merge_sp_runs(&inst, &runs, SpMergeMode::Directions(&biases), None, 3)
+        .expect("une solution existe");
+    assert_eq!(dir.output.alternatives[0]["seed"].as_u64(), Some(2), "mode directions");
+
+    let flat = merge_sp_runs(&inst, &runs, SpMergeMode::Flat, None, 3)
+        .expect("une solution existe");
+    assert_eq!(flat.output.alternatives[0]["seed"].as_u64(), Some(2), "mode à plat");
+}
+
+/// Témoin : deux runs complets gardent l'ordre qualité d'aujourd'hui.
+#[test]
+fn spp_two_complete_runs_keep_quality_order_in_both_modes() {
+    let inst = sp_instance();
+    let runs = vec![
+        sp_run(2, 60.0, 20.0, vec![placed(0, 0.0, 0.0), placed(1, 80.0, 80.0)]),
+        sp_run(1, 50.0, 20.0, vec![placed(0, 0.0, 0.0), placed(1, 81.0, 80.0)]),
+    ];
+    let biases = [DirBias::LeftFirst];
+    let dir = merge_sp_runs(&inst, &runs, SpMergeMode::Directions(&biases), None, 3)
+        .expect("une solution existe");
+    let seeds: Vec<u64> = dir.output.alternatives.iter().map(|a| a["seed"].as_u64().unwrap()).collect();
+    assert_eq!(seeds, vec![1, 2], "mode directions");
+
+    let flat = merge_sp_runs(&inst, &runs, SpMergeMode::Flat, None, 3)
+        .expect("une solution existe");
+    let seeds: Vec<u64> = flat.output.alternatives.iter().map(|a| a["seed"].as_u64().unwrap()).collect();
+    assert_eq!(seeds, vec![1, 2], "mode à plat");
+}
