@@ -616,6 +616,26 @@ function bestWalkDelivery(pool, payload, masterSeed, reason, message) {
     }
 }
 
+/**
+ * Items dont le gonflement d'import a pris le repli, tels que les walks
+ * ABOUTIS les ont nommés (`thin_items`, lot E2). Tous les walks importent la
+ * même instance au même espacement : leurs listes sont égales ; l'union
+ * triée ne sert qu'à tenir si un walk a échoué ou rend une liste partielle.
+ */
+function walkThinItems(pool) {
+    const seen = new Set()
+    for (const slot of pool.slots) {
+        if (!slot.outcome?.ok) continue
+        const list = slot.outcome.result?.thin_items
+        if (!Array.isArray(list)) continue
+        for (const id of list) {
+            const n = Number(id)
+            if (Number.isInteger(n) && n >= 0) seen.add(n)
+        }
+    }
+    return [...seen].sort((a, b) => a - b)
+}
+
 function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
     if (pool.settled) return
     const data = event.data || {}
@@ -681,10 +701,16 @@ function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
         }
         const alternatives = Array.isArray(merged.alternatives) ? merged.alternatives : []
         const preferred = preferChampion(pool, alternatives)
+        // La fusion ne voit pas l'import : `merge.rs` rend `thin_items` vide
+        // (« rempli par l'appelant »). L'appelant, ici, c'est le pool — sans
+        // cette reprise l'avertissement des pièces à traits fins ne sortait
+        // jamais d'un calcul à plusieurs walks.
+        const thinItems = walkThinItems(pool)
         pool.settle({
             ok: true,
             result: {
                 ...merged,
+                ...(thinItems.length ? { thin_items: thinItems } : {}),
                 problem: merged.problem ?? payload?.problem ?? slot.outcome?.result?.problem,
                 alternatives: preferred,
             },

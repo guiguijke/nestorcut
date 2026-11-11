@@ -753,6 +753,64 @@ describe('runPool — la fusion échoue après des walks réussis (lot A)', () =
     })
 })
 
+// ---------------------------------------------------------------------------
+// Pièces à traits fins : la fusion ne voit pas l'import (merge.rs rend
+// `thin_items` vide, « rempli par l'appelant »). L'appelant, ici, c'est le
+// pool : sans reprise des walks, l'avertissement `nest.thinParts` ne sortait
+// jamais d'un calcul sur l'appareil à plusieurs walks (constat du 12/11).
+// ---------------------------------------------------------------------------
+describe('runPool — les pièces à traits fins survivent à la fusion', () => {
+    /** Walks qui nomment des items, fusion qui rend `thin_items: []` comme le
+     * vrai wasm. */
+    function respondThin(thinByWorker) {
+        return (worker, msg) => {
+            const w = MockWorker.instances.indexOf(worker)
+            if (msg.op === 'merge') {
+                worker.emit({
+                    id: msg.id,
+                    jobSlug: msg.jobSlug,
+                    ok: true,
+                    result: JSON.stringify({ problem: 'spp', alternatives: msg.merge.runs, thin_items: [] }),
+                })
+                return
+            }
+            const thin = thinByWorker[w]
+            worker.emit({
+                ok: true,
+                jobSlug: msg.jobSlug,
+                result: { ...engineOut(w), ...(thin ? { thin_items: thin } : {}) },
+                memory: { pagesBefore: 10, pagesAfter: 20 },
+            })
+        }
+    }
+
+    it('fusion réussie : union triée, sans doublon, des items nommés par les walks', async () => {
+        MockWorker.respond = respondThin({ 0: [3, 1], 1: [1, 5] })
+        const out = await runPool('job-thin', makePayload({ walks: 2 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.thin_items).toEqual([1, 3, 5])
+    })
+
+    it('un seul walk les nomme (l’autre vient d’un bundle sans le champ) : ils sortent quand même', async () => {
+        MockWorker.respond = respondThin({ 1: [7] })
+        const out = await runPool('job-thin-1', makePayload({ walks: 2 }))
+        expect(out.result.thin_items).toEqual([7])
+    })
+
+    it('aucun walk n’en nomme : le résultat de la fusion reste tel quel', async () => {
+        MockWorker.respond = respondThin({})
+        const out = await runPool('job-thin-0', makePayload({ walks: 2 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.thin_items).toEqual([])
+    })
+
+    it('mono-walk : le champ du walk passe tel quel (chemin sans fusion)', async () => {
+        MockWorker.respond = respondThin({ 0: [2] })
+        const out = await runPool('job-thin-mono', makePayload({ walks: 1 }))
+        expect(out.result.thin_items).toEqual([2])
+    })
+})
+
 describe('championIdleMs (fenêtre d’arrêt ~ f(n))', () => {
     it('plancher 2 s sur un petit job ; +20 ms/pièce ; plafond = patience', () => {
         expect(championIdleMs(0)).toBe(2000)
