@@ -1,8 +1,8 @@
 /**
  * Page /benchmarks (3.9 — preuve publique de qualité) : chiffres du corpus
  * interne T-A..T-K, extraits du DERNIER run de vérification sur les images
- * Docker PUBLIÉES (commit 060867a1, run 2026-11-11 07:38 UTC — celui de
- * la V0.9.12). Extraction :
+ * Docker PUBLIÉES (commit bf12f2ba, run 2026-11-14 09:13 UTC — celui de
+ * la V0.9.13). Extraction :
  * workers/nesting/bench/densities_corpus.py.
  *
  * Méthode (reproductible) : chaque cas = un job standard du produit (BPP
@@ -14,18 +14,18 @@
  */
 export const BENCHMARKS = {
     meta: {
-        runDate: '2026-11-11',
+        runDate: '2026-11-14',
         // Image Docker PUBLIÉE qui a produit les chiffres (workflow
         // « Build and publish Docker images »), régénérée à chaque
-        // livraison moteur (AGENTS.md §6). Run du 2026-11-11 sur
-        // ghcr.io/…/nest2d-nesting-worker:060867a1 (V0.9.12 : petits
-        // travaux qui aboutissent, refus nommés des pièces à la cote de la
-        // tôle, espacement tenu sur les courbes) : corpus 11/11 OK, T-A
-        // [587, 313]. **NEUF des dix fiches publiées sont identiques** au
-        // run d890c92 ; seule T-F bouge, de 90 à 89 pièces sur 90. Sur
-        // cette image T-F a été rejouée dix fois : 89, 87, 89, 90, 89, 89,
-        // 89, 89, 88, 89 — le chiffre publié est celui du premier passage.
-        version: '060867a1',
+        // livraison moteur (AGENTS.md §6). Run du 2026-11-14 sur
+        // ghcr.io/…/nest2d-nesting-worker:bf12f2ba (V0.9.13 : espacement
+        // tenu sur toutes les pièces, pièces à traits fins préparées
+        // autrement et nommées, choix du meilleur résultat) : corpus
+        // 11/11 OK, T-A [587, 313]. **Les DIX fiches publiées sont
+        // identiques** au run 060867a1 (V0.9.12). Sur cette image T-F a
+        // été rejouée dix fois : 89, 88, 89, 89, 89, 90, 89, 89, 89, 88 —
+        // le chiffre publié est celui du premier passage.
+        version: 'bf12f2ba',
         machine: {
             en: 'Docker worker on an AMD Ryzen 9 9900X (12 cores/24 threads), 4 vcores allocated per job, 90 s budget',
             fr: 'Worker Docker sur AMD Ryzen 9 9900X (12 cœurs/24 threads), 4 vcores alloués par job, budget 90 s',
@@ -128,10 +128,11 @@ export const BENCHMARKS = {
             // Stock serré : le nombre de pièces posées oscille selon le
             // tirage (87 à 90 sur 90 — mesuré 88, 89, 88 sur l'image
             // 179b126, 89 sur e51e294, 89 sur 67eef23, 90 sur d890c92, puis
-            // 89, 87, 89, 90, 89, 89, 89, 89, 88, 89 sur **060867a1**) :
+            // 89, 87, 89, 90, 89, 89, 89, 89, 88, 89 sur 060867a1, puis
+            // 89, 88, 89, 89, 89, 90, 89, 89, 89, 88 sur **bf12f2ba**) :
             // bruit d'affectation du BPP, pas une différence de moteur. Le
             // chiffre publié est celui du run de vérification daté
-            // ci-dessus ; c'est le SEUL des dix qui a bougé.
+            // ci-dessus ; c'est le SEUL des dix qui a bougé depuis d890c92.
         },
         {
             id: 'G',
