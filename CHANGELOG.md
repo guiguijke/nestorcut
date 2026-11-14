@@ -4,6 +4,44 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.14
+
+*FR*
+
+- Dessins éclatés en pièces, cadres à paroi très fine : dans un calcul fait sur l'appareil, un cadre dont la paroi fait moins de 0,7 mm environ n'était pas reconnu comme une pièce. Ses tracés partaient avec la petite pièce dessinée en son milieu, et le fichier de coupe pouvait contenir des tracés posés sur d'autres pièces ou hors de la tôle alors que le rapport était vert. Le cadre est maintenant une pièce à part entière, placée et contrôlée comme les autres.
+- Pièces dont une découpe passe très près d'un bord : sur l'appareil, une telle pièce pouvait disparaître à l'import. Elle est maintenant lue comme sur le serveur.
+- « Imbriquer dans les trous » : sur certaines pièces, la zone réservée à la pièce débordait dans une de ses découpes. Ce débordement est corrigé.
+
+*EN*
+
+- Drawings split into parts, frames with a very thin wall: in a nesting run on the device, a frame whose wall is thinner than about 0.7 mm was not recognised as a part. Its lines travelled with the small part drawn in its middle, and the cut file could contain lines lying over other parts or outside the sheet while the report was green. The frame is now a part of its own, placed and checked like the others.
+- Parts with a cutout very close to an edge: on the device, such a part could disappear at import. It is now read as on the server.
+- "Nest parts inside holes": on some parts, the area reserved for the part spilled into one of its cutouts. This spill is fixed.
+
+*PT*
+
+- Desenhos separados em peças, molduras de parede muito fina: num cálculo feito no aparelho, uma moldura com parede de menos de cerca de 0,7 mm não era reconhecida como peça. Os seus traços seguiam com a pequena peça desenhada no meio, e o arquivo de corte podia conter traços sobre outras peças ou fora da chapa enquanto o relatório estava verde. A moldura agora é uma peça própria, posicionada e verificada como as outras.
+- Peças com um recorte muito perto de uma borda: no aparelho, uma peça assim podia desaparecer na importação. Agora ela é lida como no servidor.
+- Encaixe de peças nos furos: em algumas peças, a área reservada para a peça invadia um dos seus recortes. Essa invasão foi corrigida.
+
+*IT*
+
+- Disegni separati in pezzi, cornici con parete molto sottile: in un calcolo fatto sul dispositivo, una cornice con parete inferiore a circa 0,7 mm non era riconosciuta come pezzo. I suoi tracciati seguivano il piccolo pezzo disegnato al suo interno, e il file di taglio poteva contenere tracciati sopra altri pezzi o fuori dalla lamiera mentre il rapporto era verde. La cornice è ora un pezzo a sé, posizionato e controllato come gli altri.
+- Pezzi con un'apertura molto vicina a un bordo: sul dispositivo, un pezzo di questo tipo poteva sparire all'importazione. Ora viene letto come sul server.
+- Inserimento dei pezzi nei fori: su alcuni pezzi, la zona riservata al pezzo sconfinava in una delle sue aperture. Questo sconfinamento è corretto.
+
+*DE*
+
+- In Teile zerlegte Zeichnungen, Rahmen mit sehr dünner Wand: Bei einer Berechnung auf dem Gerät wurde ein Rahmen mit einer Wandstärke unter etwa 0,7 mm nicht als Teil erkannt. Seine Linien wanderten mit dem kleinen Teil, das in seiner Mitte gezeichnet ist, und die Schneiddatei konnte Linien über anderen Teilen oder außerhalb der Tafel enthalten, während der Bericht grün war. Der Rahmen ist jetzt ein eigenes Teil, das wie die anderen platziert und geprüft wird.
+- Teile mit einem Ausschnitt sehr nah an einer Kante: Auf dem Gerät konnte ein solches Teil beim Import verschwinden. Es wird jetzt wie auf dem Server gelesen.
+- Teile in Löchern verschachteln: Bei manchen Teilen ragte der für das Teil reservierte Bereich in einen seiner Ausschnitte hinein. Das ist behoben.
+
+*ES*
+
+- Dibujos separados en piezas, marcos de pared muy fina: en un cálculo hecho en el dispositivo, un marco con una pared de menos de unos 0,7 mm no se reconocía como pieza. Sus trazos se iban con la pieza pequeña dibujada en su centro, y el archivo de corte podía contener trazos sobre otras piezas o fuera de la chapa mientras el informe estaba en verde. El marco es ahora una pieza propia, colocada y comprobada como las demás.
+- Piezas con un recorte muy cerca de un borde: en el dispositivo, una pieza así podía desaparecer al importar. Ahora se lee como en el servidor.
+- Anidado de piezas en los agujeros: en algunas piezas, la zona reservada para la pieza invadía uno de sus recortes. Esa invasión está corregida.
+
 ## V0.9.13
 
 *FR*

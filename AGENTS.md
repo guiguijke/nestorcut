@@ -651,6 +651,55 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     bundle wasm — ajouter une op = rebuild `build-wasm.sh` DANS LA MÊME PR,
     sinon worker mort au chargement.
 
+33c. **Profondeur pair-impair : la sonde doit être DANS LA FACE, pas seulement
+    dans l'anneau** (défaut de prod du 14/11, import navigateur seulement).
+    `interior_probe` avance jusqu'à 1 mm sur la bissectrice d'un coin. Sur un
+    cadre à paroi sous 0,7 mm elle tombait dans l'ouverture : le cadre était
+    compté vide, ses deux contours partaient par le repli au centroïde
+    d'`attach.rs` avec la petite pièce du milieu, et le DXF d'un dessin éclaté
+    portait des tracés sur les voisines et hors tôle, rapport vert (les
+    contrôles ne mesurent que les contours des pièces). Une pièce dont un trou
+    longe le coin sondé disparaissait en entier. Sur une face étroite
+    (`open_holes_difference`) la sonde sortait de la face.
+    - Tout compte de profondeur passe par `ga::face_probes(_until)` : la sonde
+      historique est GARDÉE si elle est dans l'anneau et hors de tout anneau
+      plus petit (sortie identique au bit : 293 dessins sur 310), sinon
+      balayage horizontal sur la face (anneau moins anneaux plus petits) en
+      deux passes : bandes entre les ordonnées de l'anneau seul, puis, si
+      aucune ne convient (il faut des anneaux qui se croisent), avec celles
+      des anneaux imbriqués. `ring_depths_until` fait le même compte avec un
+      rejet par boîte (le plus gros dessin du corpus : environ 90 s → 33 s en
+      natif, deux mesures).
+    - `dissolve_boundary` passe aussi par la seconde passe pour UN SEUL corps
+      dès que deux boucles DIFFÉRENTES partagent une arête (une grille
+      dessinée dans une ouverture) : les cases fusionnent en un trou, comme
+      elles le faisaient déjà dès que le dessin avait deux pièces. Sans cela
+      la sonde corrigée livrait 205 trous jointifs au lieu de 13 sur deux
+      dessins réels (anneau ouvert invalide, 2,6 % de matière non couverte).
+      Une boucle qui repasse sur sa propre arête (ergot) ne déclenche pas la
+      passe : elle ne ferait que réordonner les anneaux.
+    - Python n'a pas le défaut (`representative_point` d'une face polygonisée
+      AVEC ses trous) : la correction rapproche le navigateur du serveur.
+    - Verrous : `nest-import/tests/thin_frames.rs`, tests `face_probe*` et
+      `thin_frame*` d'`assemble.rs`, corpus `thin_frame_island`,
+      `hole_near_corner`, `frame_in_frame` (goldens Python).
+    - NON corrigé, mesuré le 14/11, antérieur au lot : (a) un anneau qui en
+      touche un autre en UN sommet (trou rebouché, îlot devenu trou) ; (b) un
+      composant de plusieurs faces imbriqué dans une face (écarts avec Python
+      dans les deux sens, Python a ses propres erreurs) ; (c) le repli au
+      centroïde rattache encore une encre qui ne touche aucune matière à la
+      plus petite silhouette contenant son centroïde, même si l'encre en
+      dépasse (Python fait pareil) ; (d) `open_holes_difference` sur parois
+      fines : « Imbriquer dans les trous » échoue (« chevauchements mesurés »)
+      ou livre avec « ✗ Écart » ; (e) `pinwheel.rs::interior_probes` garde le
+      pas de bissectrice (une rotation perdue au pire, jamais un fichier
+      faux) ; (f) le lecteur Python (`recover.readfile`) vide un DXF R12 à
+      handles en double ; (g) une encre OUVERTE qui touche une pièce part
+      avec elle même si elle en dépasse (étape 2 d'`attach.rs`) : 8 tracés
+      sur 6 dessins à plusieurs pièces du corpus, dont un nouveau sur un
+      dessin où le lot reconnaît 24 pièces de plus. Aucun contrôle de l'app
+      ne mesure les tracés portés par une pièce, seulement son contour.
+
 ### Server (quotas & promo)
 
 34. **Toute limite user-specific passe par un resolver dans
