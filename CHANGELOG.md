@@ -4,6 +4,50 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.13
+
+*FR*
+
+- Espacement tenu sur toutes les pièces : sur certaines pièces, la marge calculée autour de la pièce était un peu plus petite que demandé, et deux pièces pouvaient se retrouver à 1,95 mm pour 2 mm demandés. L'espacement demandé est maintenant tenu. Sur ces pièces le calcul peut prendre un peu plus de temps.
+- Pièces en spirale ou à traits très fins : deux pièces de ce type pouvaient être posées l'une contre l'autre sans avertissement. Elles gardent maintenant l'espacement demandé, et l'application les nomme pour que vous les vérifiiez avant de découper.
+- Avertissement sur les pièces à traits fins : il ne s'affichait plus dans le rapport depuis la V0.9.9. Il s'affiche de nouveau, pour un calcul sur l'appareil comme sur le serveur, et il nomme les bons fichiers même quand des pièces sont rangées dans les trous d'autres pièces.
+- Choix du meilleur résultat : quand le contrôle final retire une pièce d'une disposition, cette disposition ne passe plus devant une disposition complète.
+
+*EN*
+
+- Spacing held on every part: on some parts, the margin computed around the part was slightly smaller than requested, and two parts could end up 1.95 mm apart for 2 mm requested. The requested spacing is now held. On these parts the nesting can take a little longer.
+- Spiral parts or parts with very thin strokes: two such parts could be placed against each other without any warning. They now keep the requested spacing, and the application names them so that you can check them before cutting.
+- Warning about parts with thin strokes: it had stopped showing in the report since V0.9.9. It shows again, for a nesting on the device as well as on the server, and it names the right files even when parts are nested inside the holes of other parts.
+- Choice of the best result: when the final check removes a part from a layout, that layout no longer ranks ahead of a complete layout.
+
+*PT*
+
+- Espaçamento mantido em todas as peças: em algumas peças, a margem calculada em volta da peça era um pouco menor do que o pedido, e duas peças podiam ficar a 1,95 mm para 2 mm pedidos. O espaçamento pedido agora é respeitado. Nessas peças o cálculo pode demorar um pouco mais.
+- Peças em espiral ou com traços muito finos: duas peças deste tipo podiam ser colocadas uma contra a outra sem aviso. Agora mantêm o espaçamento pedido, e o aplicativo informa o nome delas para que você as verifique antes de cortar.
+- Aviso sobre peças com traços finos: ele não aparecia mais no relatório desde a V0.9.9. Ele volta a aparecer, tanto num cálculo no aparelho como no servidor, e informa os arquivos certos mesmo quando há peças encaixadas nos furos de outras peças.
+- Escolha do melhor resultado: quando a verificação final retira uma peça de uma disposição, essa disposição não passa mais à frente de uma disposição completa.
+
+*IT*
+
+- Spaziatura mantenuta su tutti i pezzi: su alcuni pezzi, il margine calcolato attorno al pezzo era leggermente più piccolo del richiesto, e due pezzi potevano trovarsi a 1,95 mm per 2 mm richiesti. La spaziatura richiesta è ora rispettata. Su questi pezzi il calcolo può richiedere un po' più di tempo.
+- Pezzi a spirale o con tratti molto sottili: due pezzi di questo tipo potevano essere posati uno contro l'altro senza avviso. Ora mantengono la spaziatura richiesta, e l'applicazione li nomina perché possiate verificarli prima del taglio.
+- Avviso sui pezzi con tratti sottili: non compariva più nel rapporto dalla V0.9.9. Ora compare di nuovo, per un calcolo sul dispositivo come sul server, e nomina i file giusti anche quando dei pezzi sono inseriti nei fori di altri pezzi.
+- Scelta del risultato migliore: quando il controllo finale toglie un pezzo da una disposizione, quella disposizione non passa più davanti a una disposizione completa.
+
+*DE*
+
+- Abstand bei allen Teilen eingehalten: Bei manchen Teilen war der um das Teil berechnete Rand etwas kleiner als gewünscht, und zwei Teile konnten bei gewünschten 2 mm nur 1,95 mm auseinanderliegen. Der gewünschte Abstand wird jetzt eingehalten. Bei diesen Teilen kann die Berechnung etwas länger dauern.
+- Spiralförmige Teile oder Teile mit sehr dünnen Linien: Zwei solche Teile konnten ohne Warnung aneinandergelegt werden. Sie halten jetzt den gewünschten Abstand ein, und die Anwendung nennt sie, damit Sie sie vor dem Schneiden prüfen können.
+- Warnung zu Teilen mit dünnen Linien: Sie erschien seit V0.9.9 nicht mehr im Bericht. Sie erscheint jetzt wieder, bei einer Berechnung auf dem Gerät wie auf dem Server, und nennt die richtigen Dateien, auch wenn Teile in den Löchern anderer Teile liegen.
+- Wahl des besten Ergebnisses: Wenn die Schlusskontrolle ein Teil aus einer Anordnung entfernt, steht diese Anordnung nicht mehr vor einer vollständigen Anordnung.
+
+*ES*
+
+- Espaciado mantenido en todas las piezas: en algunas piezas, el margen calculado alrededor de la pieza era un poco menor de lo pedido, y dos piezas podían quedar a 1,95 mm para 2 mm pedidos. El espaciado pedido se respeta ahora. En esas piezas el cálculo puede tardar un poco más.
+- Piezas en espiral o con trazos muy finos: dos piezas de este tipo podían colocarse una contra otra sin aviso. Ahora mantienen el espaciado pedido, y la aplicación las nombra para que las compruebe antes de cortar.
+- Aviso sobre piezas con trazos finos: había dejado de mostrarse en el informe desde la V0.9.9. Vuelve a mostrarse, tanto en un cálculo en el dispositivo como en el servidor, y nombra los archivos correctos incluso cuando hay piezas colocadas en los huecos de otras piezas.
+- Elección del mejor resultado: cuando el control final retira una pieza de una disposición, esa disposición ya no pasa por delante de una disposición completa.
+
 ## V0.9.12
 
 *FR*

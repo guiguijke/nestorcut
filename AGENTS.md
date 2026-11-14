@@ -167,6 +167,54 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
    `item_geometry:<id>:`) — sinon ni le worker ni le navigateur ne peuvent
    nommer le fichier et la pièce, et l'utilisateur lit « arrêté de façon
    inattendue » pour un contour précis.
+2d. **Un anneau SIMPLE de `geo_buffer` peut être faux : il se contrôle, il ne se
+   croit pas.** Le piège 2c ne couvrait que l'anneau refusé à l'import. Or
+   `buffer_polygon_rounded` rend aussi, sans erreur, un anneau simple et
+   importable qui est FAUX : plus petit que la pièce, ou qui la traverse
+   (volutes : 23 cas sur 252, deux volutes posées à 0,0000 mm réel pour 2
+   demandés, `thin_items` vide), ou seulement trop près d'elle. Mesuré sur
+   1 915 vraies pièces (230 DXF), à espacement 2 : 351 pièces (18,3 %, 19
+   fichiers) avaient un anneau à moins de 0,99 d de la pièce, et la prod
+   livrait des paires sous l'espacement sur 2 fichiers de 197 (1,95 mm pour 2).
+   Un bon anneau est à 0,9987 d (erreur de corde). `offset_shape` contrôle
+   donc chaque gonflement (`inflate_verdict`, lecture seule, une passe sur
+   grille), à deux niveaux :
+   - **BON** : l'anneau de `geo_buffer` repart tel quel, bit pour bit.
+   - **PROCHE** (bord à moins de `0,99 d − 0,001 mm`) : repli
+     `robust_inflate_ring`, SANS avertissement (l'anneau de repli est exact).
+   - **GROSSIER** (0 ou plusieurs polygones, non importable, aire sous celle
+     de la pièce, pièce non contenue, bord à moins de 0,1 d, croisement) :
+     repli ET pièce nommée (`note_fallback` → `thin_items` →
+     `nest.thinParts`).
+   Règles à tenir :
+   - **Le contrôle ne casse jamais un job qui marchait** : si le repli échoue
+     (ou rend un anneau non importable), on rend ce que l'ancien code rendait
+     et on NOMME la pièce — pour les deux niveaux.
+   - **Le repli PROCHE est borné en travail** (`inflate_fallback_work`,
+     `INFLATE_FALLBACK_MAX_WORK = 3e7`) : 500 sommets dans un rayon de 0,5 mm à
+     d = 5 coûtent 255 s. Au-dessus de la borne, l'anneau de `geo_buffer` reste
+     et la pièce est nommée. Plus grande vraie pièce du corpus : 76 727
+     (390 fois sous la borne) ; aucune vraie pièce refusée sur 7 660 appels.
+   - **La grille du contrôle bascule en force brute** au-delà de
+     `max(4096, paires/8)` cellules : une spirale carrée tournée de 45° la
+     dégénérait (1 311 ms contre 147 ms à 4 002 sommets). Le verdict ne dépend
+     pas de la taille des cellules.
+   - Rien que de l'arithmétique f64, `sqrt` IEEE et `powi(2)` : pas de
+     fonction transcendante (piège 14b), natif ≡ wasm.
+   - **Le SHA de `b_demo` passe de `a1bd8810…` à `4ae9473b…`** : ses pièces
+     n° 11 et 12 prennent la voie PROCHE. Même résultat visible (304/304,
+     2 tôles, densité 0,3753). Les trois autres fixtures du verrou sont
+     inchangées.
+   - Coût mesuré sur les vrais fichiers (espacement 2) : 12 fichiers sur 197
+     changent de voie, largeur de bande médiane 0,00 %, pire +0,30 % ; temps
+     médian +7 %, pire +17 % ; les 185 autres sont identiques. Aucune pièce
+     posée en moins.
+   - Tout changement de seuil rejoue `tests/inflate_invariant.rs`,
+     `tests/inflate_fallback_failure.rs` et, sur le corpus privé,
+     `tests/inflate_corpus.rs` (`--ignored`, `NEST_C6_CORPUS=<fichier local>`).
+   - Dans un test, jamais d'anneau de plus de 4 000 sommets dans `geo_buffer`
+     (20 000 sommets : 5,6 Go et plus de dix minutes).
+   - L'érosion (`Deflate`) n'est pas contrôlée : comportement d'origine.
 3. **`min_item_separation` = inflation jagua** (exacte, ±space/2 de chaque
    côté → séparation totale `space`). Toute validation d'ajustement (filler
    dans trou) doit garantir **distance ≥ `space` à la paroi** : candidat NON
@@ -373,6 +421,48 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     (fetch `cache:'reload'` ou Ctrl+Shift+R) et vérifier par hash SHA-256
     servi vs local avant de conclure « le fix ne marche pas » (constat
     2026-08-29 : deux sessions de debug sur un wasm périmé).
+14j. **Une pièce retirée par la garde d'embouchure se COMPTE, et la fusion
+    classe d'abord au nombre de pièces posées.** `guard_layout` peut retirer
+    une pièce juste avant `merge_bp_runs` / `merge_sp_runs`. Avant le 11/11 le
+    coût du run n'était pas mis à jour : un run amputé gardait son ancien coût
+    et pouvait sortir en tête devant un run complet. Désormais
+    `guard_bp_runs` ajoute les pièces retirées à `run.cost.unplaced`, et
+    `merge_sp_runs` classe au nombre de pièces posées AVANT la qualité, en mode
+    plat comme en mode Directions (les champions de classe ne viennent que des
+    runs au maximum de pièces posées ; une classe sans run complet ne donne
+    pas de champion, ses runs passent dans le reste). À pièces égales, l'ordre
+    canonique du piège 12 est inchangé. Tests :
+    `tests/guard_merge_cases.rs`.
+14k. **Le constat « pièces à traits fins » passe par sept maillons, et chacun
+    peut le perdre sans qu'aucun test moteur ne le voie.** Constat du 14/11 :
+    la ligne `nest.thinParts` n'était visible sur AUCUN chemin depuis le 25/10
+    (`RESULT_FIELDS` ne portait plus `thinParts`) ; sur l'appareil elle se
+    perdait en plus à la fusion des walks et au règlement idle du champion, et
+    sous réduction J-085 elle nommait le mauvais fichier. La chaîne :
+    - moteur : `note_fallback` → évènement `{"type":"import","kind":"thin_items"}`
+      ET `out.thin_items` (la fusion wasm rend une liste vide : « rempli par
+      l'appelant ») ;
+    - `public/workers/engine.worker.js` relaie l'évènement en `{jobSlug, thin}`
+      (un règlement idle du champion n'a jamais le résultat final d'un walk) ;
+    - `localPool.js` : `pool.thinRelayed` + `walkThinItems`, posés par
+      `withThinItems` sur TOUT règlement `ok:true` (champion idle, mono-walk,
+      fusion, livraison dégradée). Un nouveau règlement passe par là ;
+    - `localJobPrivate.js` : `thinPartsSummary(items, itemMap, meta.idMap)` —
+      le moteur nomme des ids RÉDUITS (J-085), l'itemMap porte les ids
+      d'origine ; un id hors de l'idMap est écarté, jamais deviné. Côté worker
+      Python : `thin_items_original` dans `_on_engine_event`, même règle ;
+    - liste TRIÉE (pièces nommées d'abord) puis bornée à 50, et le vrai nombre
+      part à côté (`thinCount`) : `local-quota` et `main.py` l'écrivent sur le
+      job, jamais sous la longueur de la liste ;
+    - `resultcontroller.js` : `thinParts` et `thinCount` dans `RESULT_FIELDS`
+      ET dans le mapping, coupés à ce que la ligne affiche (3 noms + compte) —
+      ce flux part à chaque changement ;
+    - `ResultModal.vue` → `composeThinPartsLine(liste, fichiers, t, total)`.
+    Un changement sur un maillon se vérifie À L'ÉCRAN, sur l'appareil et sur
+    le serveur, avec les 67 volutes à espacement 6 (39 pièces nommées) : les
+    tests unitaires de chaque maillon étaient verts pendant que la ligne
+    n'apparaissait nulle part. Un résultat ouvert sur un autre appareil n'a
+    pas de rapport, donc pas de ligne (voulu).
 
 ### Métriques & pipeline Python
 15. **largest_empty_rectangle : compter les sommets DES TROUS** dans le
