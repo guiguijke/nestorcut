@@ -529,10 +529,13 @@ pub fn point_in_ring(p: Pt, ring: &[Pt]) -> bool {
     inside
 }
 
-/// Guaranteed-interior probe (GEOS representative_point twin): from a convex
-/// vertex, a small step along the interior angle bisector. The ear-centroid
-/// shortcut is NOT safe (the diagonal can cross a notch) — the bisector step
-/// is local and always lands inside a simple CCW ring.
+/// Probe from a convex vertex: a step along the interior angle bisector
+/// (quarter of the shorter adjacent edge, at most 1 mm). The ear-centroid
+/// shortcut is NOT safe (the diagonal can cross a notch).
+///
+/// NOT a face probe: the step can land inside a loop nested in the ring
+/// (thin-walled frame) or leave a narrow ring altogether. Depth counts must
+/// go through `face_probes`, which keeps this point only when it is valid.
 pub fn interior_probe(ring: &[Pt]) -> Pt {
     let n = ring.len();
     // Orientation-agnostic: the convex-vertex turn sign follows the ring's
@@ -570,6 +573,237 @@ pub fn interior_probe(ring: &[Pt]) -> Pt {
         cy += p[1];
     }
     [cx / n as f64, cy / n as f64]
+}
+
+/// Sondes « de face » : pour chaque anneau, un point DANS l'anneau et HORS
+/// de tout anneau plus petit — donc dans la face elle-même, jamais dans une
+/// boucle imbriquée. C'est ce que rend `representative_point()` côté Python,
+/// où `polygonize` livre des faces AVEC leurs trous.
+///
+/// Pourquoi (défaut de prod du 14/11) : `interior_probe` avance jusqu'à 1 mm
+/// le long de la bissectrice d'un coin. Un cadre dont la paroi fait moins de
+/// 0,7 mm voyait sa sonde tomber dans son propre vide : compté à la
+/// profondeur 2, il n'était plus de la matière, et ses deux contours
+/// partaient avec la petite pièce posée en son milieu (attach.rs, repli au
+/// centroïde). Une face étroite (bande en C d'un trou ouvert) voyait de même
+/// sa sonde sortir d'elle-même.
+///
+/// Les anneaux viennent d'un linework nodé : ils ne se croisent pas (sauf
+/// croisement créé par le snap à 1e-4, qui n'est pas re-nodé — de l'ordre de
+/// la grille). Un anneau plus petit qui contient un point de l'anneau `i`
+/// est donc imbriqué dans `i` ; un anneau plus grand le contient en entier.
+/// « Dans l'anneau, hors des plus petits » suffit.
+///
+/// La sonde historique est GARDÉE dès qu'elle est valide : la sortie reste
+/// identique au bit près sur tout dessin où elle ne se trompait pas.
+pub fn face_probes(rings: &[Vec<Pt>]) -> Vec<Pt> {
+    face_probes_until(rings, &Deadline::unlimited())
+        .unwrap_or_else(|_| unreachable!("échéance illimitée"))
+}
+
+/// `face_probes` sous échéance.
+pub fn face_probes_until(rings: &[Vec<Pt>], dl: &Deadline) -> Result<Vec<Pt>, Expired> {
+    let areas: Vec<f64> = rings.iter().map(|r| ring_signed_area(r).abs()).collect();
+    let boxes: Vec<[f64; 4]> = rings.iter().map(|r| ring_bbox(r)).collect();
+    let mut out: Vec<Pt> = Vec::with_capacity(rings.len());
+    for (i, ring) in rings.iter().enumerate() {
+        dl.check_at(i)?;
+        let legacy = interior_probe(ring);
+        if ring.len() < 3 {
+            out.push(legacy);
+            continue;
+        }
+        let nested = |j: usize| j != i && areas[j] < areas[i];
+        let valid = |p: Pt| {
+            // Même garde de boîte que `ring_depths_until` : la sonde retenue
+            // est comptée dans son propre anneau par le compte de profondeur.
+            in_bbox(p, &boxes[i])
+                && point_in_ring(p, ring)
+                && !(0..rings.len()).any(|j| {
+                    nested(j) && in_bbox(p, &boxes[j]) && point_in_ring(p, &rings[j])
+                })
+        };
+        if valid(legacy) {
+            out.push(legacy);
+            continue;
+        }
+        let bi = boxes[i];
+        let inner: Vec<&[Pt]> = (0..rings.len())
+            .filter(|&j| {
+                let b = boxes[j];
+                nested(j) && b[0] <= bi[2] && b[2] >= bi[0] && b[1] <= bi[3] && b[3] >= bi[1]
+            })
+            .map(|j| rings[j].as_slice())
+            .collect();
+        let found = scanline_probe(ring, &inner, &valid);
+        if found.is_none() && std::env::var("NI_DEBUG").is_ok() {
+            // Ne se produit que si des anneaux se croisent : on garde alors
+            // la sonde historique, comme avant ce lot.
+            eprintln!("[probe] anneau {i} : aucune sonde de face, sonde historique gardée");
+        }
+        out.push(found.unwrap_or(legacy));
+    }
+    Ok(out)
+}
+
+/// Profondeur de chaque sonde : nombre d'anneaux qui la contiennent. Même
+/// compte qu'avant (`point_in_ring` sur tous les anneaux), avec un rejet par
+/// boîte englobante : hors de la boîte, `point_in_ring` répond toujours faux
+/// (aucune traversée si y est hors bornes ou x au-delà du bord droit, un
+/// nombre pair si x est avant le bord gauche). Le résultat est le même, à
+/// une exception près, mesurée en relecture : pour un point posé à 1 ou 2 ulp
+/// HORS de la boîte en x, à l'ordonnée exacte d'un sommet, l'ancienne formule
+/// pouvait répondre « dedans » par arrondi ; le rejet répond « dehors », ce
+/// qui est la bonne réponse. Aucune sonde ne tombe là (724 dessins comparés,
+/// profondeurs égales). Le coût passe d'anneaux × sommets à anneaux × boîtes,
+/// ce qui paie largement le contrôle des sondes de `face_probes`.
+pub fn ring_depths_until(
+    rings: &[Vec<Pt>],
+    probes: &[Pt],
+    dl: &Deadline,
+) -> Result<Vec<usize>, Expired> {
+    let boxes: Vec<[f64; 4]> = rings.iter().map(|r| ring_bbox(r)).collect();
+    let mut depths: Vec<usize> = Vec::with_capacity(probes.len());
+    for (i, &p) in probes.iter().enumerate() {
+        dl.check_at(i)?;
+        depths.push(
+            rings
+                .iter()
+                .zip(&boxes)
+                .filter(|(r, b)| in_bbox(p, b) && point_in_ring(p, r))
+                .count(),
+        );
+    }
+    Ok(depths)
+}
+
+fn in_bbox(p: Pt, b: &[f64; 4]) -> bool {
+    p[0] >= b[0] && p[0] <= b[2] && p[1] >= b[1] && p[1] <= b[3]
+}
+
+fn ring_bbox(r: &[Pt]) -> [f64; 4] {
+    r.iter().fold(
+        [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY],
+        |a, p| [a[0].min(p[0]), a[1].min(p[1]), a[2].max(p[0]), a[3].max(p[1])],
+    )
+}
+
+/// Abscisses où l'horizontale `y` traverse l'anneau, triées. Même règle
+/// demi-ouverte et même formule que `point_in_ring` : les intervalles
+/// [x0,x1), [x2,x3)… sont exactement ceux où `point_in_ring` répond vrai.
+fn scan_crossings(ring: &[Pt], y: f64) -> Vec<f64> {
+    let n = ring.len();
+    let mut xs: Vec<f64> = Vec::new();
+    for i in 0..n {
+        let a = ring[i];
+        let b = ring[(i + 1) % n];
+        if (a[1] > y) != (b[1] > y) {
+            xs.push(a[0] + (y - a[1]) * (b[0] - a[0]) / (b[1] - a[1]));
+        }
+    }
+    xs.sort_by(|p, q| p.total_cmp(q));
+    xs
+}
+
+/// Nombre maximal d'horizontales essayées par passe de `scanline_probe`.
+/// Sans croisement d'anneaux la première suffit (les anneaux imbriqués ne
+/// touchent pas le bord) ; la borne majore le coût d'un cas dégénéré.
+const SCANLINE_MAX_TRIES: usize = 64;
+
+/// Sonde par balayage (algorithme de `InteriorPointArea` de GEOS, sur la
+/// face = anneau moins anneaux imbriqués) : sur une horizontale passant
+/// entre deux ordonnées de sommets, on retire aux intervalles intérieurs de
+/// l'anneau ceux des anneaux imbriqués et on prend le milieu du plus large
+/// reste. Que des +, −, ×, ÷ et des tris : identique en natif et en wasm.
+///
+/// Deux passes. D'abord les bandes prises entre les seules ordonnées de
+/// l'anneau : sans croisement d'anneaux la première convient, et le coût ne
+/// dépend pas du nombre d'anneaux imbriqués. Si aucune ne convient (une
+/// bande entièrement couverte, ce qui demande des anneaux qui se croisent),
+/// on reprend avec, en plus, les ordonnées des anneaux imbriqués, comme
+/// GEOS.
+fn scanline_probe(ring: &[Pt], inner: &[&[Pt]], valid: &dyn Fn(Pt) -> bool) -> Option<Pt> {
+    let own_ys: Vec<f64> = ring.iter().map(|p| p[1]).collect();
+    if let Some(p) = scan_bands(ring, inner, own_ys.clone(), valid) {
+        return Some(p);
+    }
+    let (y_lo, y_hi) = own_ys
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &y| (lo.min(y), hi.max(y)));
+    let mut ys = own_ys;
+    let n_own = ys.len();
+    for r in inner {
+        ys.extend(r.iter().map(|p| p[1]).filter(|&y| y > y_lo && y < y_hi));
+    }
+    if ys.len() == n_own {
+        return None;
+    }
+    scan_bands(ring, inner, ys, valid)
+}
+
+/// Une passe de `scanline_probe` sur les bandes définies par `ys`.
+fn scan_bands(
+    ring: &[Pt],
+    inner: &[&[Pt]],
+    mut ys: Vec<f64>,
+    valid: &dyn Fn(Pt) -> bool,
+) -> Option<Pt> {
+    ys.sort_by(|p, q| p.total_cmp(q));
+    ys.dedup();
+    // Bandes entre ordonnées consécutives : la plus haute d'abord (à
+    // égalité, la plus basse en y) — ordre déterministe.
+    let mut bands: Vec<(f64, f64)> = ys
+        .windows(2)
+        .map(|w| (w[1] - w[0], (w[0] + w[1]) / 2.0))
+        .collect();
+    bands.sort_by(|p, q| q.0.total_cmp(&p.0).then(p.1.total_cmp(&q.1)));
+    for &(_, y) in bands.iter().take(SCANLINE_MAX_TRIES) {
+        let own = scan_crossings(ring, y);
+        let mut cuts: Vec<(f64, f64)> = Vec::new();
+        for r in inner {
+            for c in scan_crossings(r, y).chunks_exact(2) {
+                cuts.push((c[0], c[1]));
+            }
+        }
+        cuts.sort_by(|p, q| p.0.total_cmp(&q.0).then(p.1.total_cmp(&q.1)));
+        // (largeur, milieu) du plus large reste ; à égalité, le premier.
+        let mut best: Option<(f64, f64)> = None;
+        let mut consider = |a: f64, b: f64| {
+            let w = b - a;
+            if w > 0.0 && best.map(|(bw, _)| w > bw).unwrap_or(true) {
+                best = Some((w, (a + b) / 2.0));
+            }
+        };
+        for seg in own.chunks_exact(2) {
+            let (lo, hi) = (seg[0], seg[1]);
+            let mut cur = lo;
+            for &(c0, c1) in &cuts {
+                if c1 <= cur {
+                    continue;
+                }
+                if c0 >= hi {
+                    break;
+                }
+                if c0 > cur {
+                    consider(cur, c0);
+                }
+                cur = cur.max(c1);
+                if cur >= hi {
+                    break;
+                }
+            }
+            if cur < hi {
+                consider(cur, hi);
+            }
+        }
+        if let Some((_, x)) = best {
+            let p = [x, y];
+            if valid(p) {
+                return Some(p);
+            }
+        }
+    }
+    None
 }
 
 pub fn ring_contains(outer: &[Pt], inner: &[Pt]) -> bool {
@@ -677,8 +911,19 @@ pub fn strip_spurs(ring: &mut Vec<Pt>) -> usize {
 /// Boundary of the union of material BODIES: edges (undirected, snapped)
 /// appearing in exactly one body — a body = a material face PLUS its hole
 /// rings (a hole edge borders exactly one body → kept; a shared outer edge
-/// borders two → dissolved). Returns None when nothing merges (single body
-/// or fully disjoint parts — no second pass needed).
+/// borders two → dissolved). Returns None when there is nothing to dissolve
+/// for a single body: no material, or one body no two rings of which share
+/// an edge (a ring that walks one of its own edges twice, a zero-width spur,
+/// does not count: `strip_spurs` deals with it, and sending such a drawing
+/// through the second pass would only reorder its rings).
+///
+/// A single body whose HOLES share walls (a grid drawn inside an opening)
+/// does go through the second pass, like any drawing with several bodies:
+/// its cells merge into one hole outline. Without it the cells came out as
+/// separate touching holes for a one-part drawing and as one hole as soon
+/// as the drawing had a second part (measured 14/11 on two real drawings:
+/// 205 touching holes, an opened ring that was not valid and left 2.6 % of
+/// the material uncovered, against 13 holes and a valid ring once merged).
 fn dissolve_boundary(
     unique: &[Vec<Pt>],
     depths: &[usize],
@@ -686,12 +931,16 @@ fn dissolve_boundary(
     material: &[usize],
     dl: &Deadline,
 ) -> Result<Option<Vec<(Pt, Pt)>>, Expired> {
-    if material.len() <= 1 {
+    if material.is_empty() {
         return Ok(None);
     }
     let mut counts: HashMap<((u64, u64), (u64, u64)), (Pt, Pt)> = HashMap::new();
     let mut multi: std::collections::HashSet<((u64, u64), (u64, u64))> = std::collections::HashSet::new();
-    let mut account = |ring: &[Pt]| {
+    // Première boucle à avoir posé chaque arête, et : deux boucles
+    // DIFFÉRENTES partagent-elles une arête ?
+    let mut owner: HashMap<((u64, u64), (u64, u64)), usize> = HashMap::new();
+    let mut shared_wall = false;
+    let mut account = |ring: &[Pt], ring_id: usize| {
         let n = ring.len();
         for i in 0..n {
             let a = ring[i];
@@ -702,20 +951,26 @@ fn dissolve_boundary(
             if counts.insert(key, (a, b)).is_some() {
                 multi.insert(key);
             }
+            if *owner.entry(key).or_insert(ring_id) != ring_id {
+                shared_wall = true;
+            }
         }
     };
     for (mi_idx, &mi) in material.iter().enumerate() {
         dl.check_at(mi_idx)?;
-        account(&unique[mi]);
+        account(&unique[mi], mi);
         // Holes of this body: cycles one level deeper contained in it.
         for (j, u) in unique.iter().enumerate() {
             if j == mi || depths[j] != depths[mi] + 1 {
                 continue;
             }
             if ring_contains(&unique[mi], &[probes[j]]) {
-                account(u);
+                account(u, j);
             }
         }
+    }
+    if material.len() == 1 && !shared_wall {
+        return Ok(None);
     }
     // Iteration d'une HashMap = ordre aléatoire par processus (RandomState) :
     // il faut un ordre d'émission DÉTERMINISTE des arêtes de frontière, sinon
@@ -927,12 +1182,8 @@ pub fn build_parts_stats_until(
         }
     }
     dl.check()?;
-    let probes: Vec<Pt> = unique.iter().map(|r| interior_probe(r)).collect();
-    let mut depths: Vec<usize> = Vec::with_capacity(unique.len());
-    for i in 0..unique.len() {
-        dl.check_at(i)?;
-        depths.push(unique.iter().filter(|u| ring_contains(u, &[probes[i]])).count());
-    }
+    let probes: Vec<Pt> = face_probes_until(&unique, dl)?;
+    let depths: Vec<usize> = ring_depths_until(&unique, &probes, dl)?;
     let material: Vec<usize> = (0..unique.len()).filter(|&i| depths[i] % 2 == 1).collect();
     if std::env::var("NI_DEBUG").is_ok() {
         eprintln!("[dbg] unique={} depths={:?} material={:?}", unique.len(), depths, material);
@@ -968,12 +1219,8 @@ pub fn build_parts_stats_until(
             }
         }
         dl.check()?;
-        let probes2: Vec<Pt> = uniq2.iter().map(|r| interior_probe(r)).collect();
-        let mut depths2: Vec<usize> = Vec::with_capacity(uniq2.len());
-        for i in 0..uniq2.len() {
-            dl.check_at(i)?;
-            depths2.push(uniq2.iter().filter(|u| ring_contains(u, &[probes2[i]])).count());
-        }
+        let probes2: Vec<Pt> = face_probes_until(&uniq2, dl)?;
+        let depths2: Vec<usize> = ring_depths_until(&uniq2, &probes2, dl)?;
         let mat2: Vec<usize> = (0..uniq2.len()).filter(|&i| depths2[i] % 2 == 1).collect();
         if std::env::var("NI_DEBUG").is_ok() {
             eprintln!("[dbg] pass2 uniq2={} depths2={:?} mat2={:?}", uniq2.len(), depths2, mat2);
@@ -1269,6 +1516,216 @@ mod tests {
         let n = circle.len();
         assert_eq!(strip_spurs(&mut circle), 0);
         assert_eq!(circle.len(), n);
+    }
+
+    // ---- Sondes de face (défaut de prod du 14/11 : cadres à paroi fine) ----
+
+    fn rect_ring(x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<Pt> {
+        vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
+    }
+
+    fn parts_of(prims: &[Primitive]) -> Vec<Part> {
+        let (lw, _, _) = collect_linework(prims, 0.01);
+        build_parts(lw, 0.01)
+    }
+
+    fn dims(p: &Part) -> (f64, f64) {
+        ((p.width * 1e3).round() / 1e3, (p.height * 1e3).round() / 1e3)
+    }
+
+    #[test]
+    fn face_probes_keeps_the_historical_probe_when_valid() {
+        let rings = vec![rect_ring(0.0, 0.0, 20.0, 20.0), rect_ring(5.0, 5.0, 10.0, 10.0)];
+        let probes = face_probes(&rings);
+        assert_eq!(probes.len(), 2);
+        for (r, p) in rings.iter().zip(&probes) {
+            let h = interior_probe(r);
+            assert_eq!(p[0].to_bits(), h[0].to_bits());
+            assert_eq!(p[1].to_bits(), h[1].to_bits());
+        }
+    }
+
+    #[test]
+    fn face_probe_of_a_thin_frame_stays_in_the_wall() {
+        for w in [0.05, 0.1, 0.3, 0.5, 0.7] {
+            let outer = rect_ring(0.0, 0.0, 10.0, 5.0);
+            let inner = rect_ring(w, w, 10.0 - w, 5.0 - w);
+            // Le défaut : la sonde historique tombe dans le vide du cadre.
+            assert!(
+                point_in_ring(interior_probe(&outer), &inner),
+                "w={w} : la sonde historique devait tomber dans l'anneau intérieur"
+            );
+            let rings = vec![outer.clone(), inner.clone()];
+            let probes = face_probes(&rings);
+            assert!(point_in_ring(probes[0], &outer), "w={w} : hors de l'extérieur");
+            assert!(!point_in_ring(probes[0], &inner), "w={w} : dans le vide");
+            assert!(point_in_ring(probes[1], &inner), "w={w} : sonde du vide hors du vide");
+        }
+    }
+
+    #[test]
+    fn face_probe_of_a_narrow_c_ring_stays_inside() {
+        // Bande en C de 0,2 mm, jambes de 10 mm ; premier sommet = coin
+        // convexe (10,0) : le pas de 1 mm sort de la bande.
+        let ring: Vec<Pt> = vec![
+            [10.0, 0.0],
+            [10.0, 10.0],
+            [0.0, 10.0],
+            [0.0, 9.8],
+            [9.8, 9.8],
+            [9.8, 0.2],
+            [0.0, 0.2],
+            [0.0, 0.0],
+        ];
+        assert!(!point_in_ring(interior_probe(&ring), &ring), "défaut documenté");
+        let probes = face_probes(std::slice::from_ref(&ring));
+        assert!(point_in_ring(probes[0], &ring), "{:?}", probes[0]);
+    }
+
+    #[test]
+    fn thin_frame_with_island_gives_frame_island_and_neighbour() {
+        for w in [0.05, 0.1, 0.3, 0.5, 0.7, 1.0] {
+            let parts = parts_of(&[
+                rect(0.0, 0.0, 10.0, 5.0),
+                rect(w, w, 10.0 - w, 5.0 - w),
+                rect(4.0, 2.0, 6.0, 3.0),
+                rect(20.0, 0.0, 25.0, 5.0),
+            ]);
+            assert_eq!(parts.len(), 3, "w={w}");
+            let frame: Vec<_> = parts.iter().filter(|p| dims(p) == (10.0, 5.0)).collect();
+            assert_eq!(frame.len(), 1, "w={w}");
+            assert_eq!(frame[0].holes.len(), 1, "w={w}");
+            let island: Vec<_> = parts.iter().filter(|p| dims(p) == (2.0, 1.0)).collect();
+            assert_eq!(island.len(), 1, "w={w}");
+            assert!(island[0].holes.is_empty(), "w={w}");
+            let other: Vec<_> = parts.iter().filter(|p| dims(p) == (5.0, 5.0)).collect();
+            assert_eq!(other.len(), 1, "w={w}");
+        }
+    }
+
+    #[test]
+    fn hole_near_the_walls_does_not_make_the_part_vanish() {
+        // Trou à 0,3 mm des parois haute et droite.
+        let parts = parts_of(&[rect(0.0, 0.0, 10.0, 5.0), rect(5.0, 2.0, 9.7, 4.7)]);
+        assert_eq!(parts.len(), 1);
+        assert_eq!(dims(&parts[0]), (10.0, 5.0));
+        assert_eq!(parts[0].holes.len(), 1);
+    }
+
+    #[test]
+    fn frame_inside_a_frame_with_an_island_gives_three_parts() {
+        let parts = parts_of(&[
+            rect(0.0, 0.0, 20.0, 20.0),
+            rect(0.3, 0.3, 19.7, 19.7),
+            rect(1.3, 1.3, 18.7, 18.7),
+            rect(1.6, 1.6, 18.4, 18.4),
+            rect(8.0, 8.0, 12.0, 12.0),
+        ]);
+        assert_eq!(parts.len(), 3);
+        let mut holes: Vec<usize> = parts.iter().map(|p| p.holes.len()).collect();
+        holes.sort();
+        assert_eq!(holes, vec![0, 1, 1]);
+        let mut sizes: Vec<(f64, f64)> = parts.iter().map(dims).collect();
+        sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert_eq!(sizes, vec![(4.0, 4.0), (17.4, 17.4), (20.0, 20.0)]);
+    }
+
+    #[test]
+    fn thin_frame_rotated_45_degrees_is_a_part_with_one_hole() {
+        let (s, c) = (std::f64::consts::FRAC_PI_4.sin(), std::f64::consts::FRAC_PI_4.cos());
+        let rot = |pts: Vec<Pt>| -> Primitive {
+            Primitive::Polyline {
+                points: pts.into_iter().map(|p| [p[0] * c - p[1] * s, p[0] * s + p[1] * c]).collect(),
+                closed: true,
+                handle: "h".into(),
+                layer: "0".into(),
+            }
+        };
+        let parts = parts_of(&[
+            rot(rect_ring(0.0, 0.0, 10.0, 5.0)),
+            rot(rect_ring(0.3, 0.3, 9.7, 4.7)),
+            rot(rect_ring(4.0, 2.0, 6.0, 3.0)),
+        ]);
+        assert_eq!(parts.len(), 2);
+        let with_hole: Vec<_> = parts.iter().filter(|p| p.holes.len() == 1).collect();
+        let without: Vec<_> = parts.iter().filter(|p| p.holes.is_empty()).collect();
+        assert_eq!((with_hole.len(), without.len()), (1, 1));
+        // Cadre : 10 x 5 tourné de 45 degrés -> boîte (10+5)/racine(2).
+        let side = 15.0 * c;
+        assert!((with_hole[0].width - side).abs() < 0.01, "{}", with_hole[0].width);
+        assert!((without[0].width - 3.0 * c).abs() < 0.01, "{}", without[0].width);
+    }
+
+    #[test]
+    fn face_probe_uses_the_ordinates_of_nested_rings_too() {
+        // Cas de la relecture : entre les seules ordonnées du carré (0 et 10)
+        // l'unique bande passe à y = 5, entièrement couverte par la barre.
+        // Avec les ordonnées des anneaux plus petits, une bande libre existe.
+        let square = rect_ring(0.0, 0.0, 10.0, 10.0);
+        let bar = rect_ring(-1.0, 4.9, 11.0, 5.1);
+        // Un petit anneau posé sur la sonde historique du carré.
+        let h = interior_probe(&square);
+        let on_probe = rect_ring(h[0] - 0.25, h[1] - 0.25, h[0] + 0.25, h[1] + 0.25);
+        assert!(point_in_ring(h, &on_probe), "précondition");
+        let rings = vec![square.clone(), bar.clone(), on_probe.clone()];
+        let p = face_probes(&rings)[0];
+        assert!(point_in_ring(p, &square), "{p:?}");
+        assert!(!point_in_ring(p, &bar) && !point_in_ring(p, &on_probe), "{p:?}");
+    }
+
+    #[test]
+    fn ring_depths_match_the_plain_count() {
+        // Le rejet par boîte ne change pas le compte : même résultat que
+        // `point_in_ring` sur tous les anneaux, sondes hors boîte comprises.
+        let rings = vec![
+            rect_ring(0.0, 0.0, 20.0, 20.0),
+            rect_ring(5.0, 5.0, 10.0, 10.0),
+            rect_ring(6.0, 6.0, 7.0, 7.0),
+            rect_ring(30.0, 0.0, 40.0, 10.0),
+            vec![[0.0, 30.0], [10.0, 30.0], [5.0, 40.0]],
+        ];
+        let probes: Vec<Pt> = vec![
+            [6.5, 6.5], [5.5, 5.5], [1.0, 1.0], [35.0, 5.0], [5.0, 33.0], [9.9, 30.1],
+            [20.0, 20.0], [0.0, 0.0], [10.0, 5.0], [-1.0, 5.0], [50.0, 5.0], [5.0, 30.0],
+        ];
+        let got = ring_depths_until(&rings, &probes, &Deadline::unlimited()).unwrap();
+        let want: Vec<usize> = probes
+            .iter()
+            .map(|&p| rings.iter().filter(|r| point_in_ring(p, r)).count())
+            .collect();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn hole_cells_sharing_a_wall_merge_whatever_the_number_of_parts() {
+        // Une grille dessinée dans une ouverture : deux cases 5x5 collées.
+        // Elles forment UN trou 10x5, que le dessin ait une pièce ou deux.
+        let plate = [
+            rect(0.0, 0.0, 30.0, 20.0),
+            rect(5.0, 5.0, 10.0, 10.0),
+            rect(10.0, 5.0, 15.0, 10.0),
+        ];
+        let alone = parts_of(&plate);
+        assert_eq!(alone.len(), 1);
+        assert_eq!(alone[0].holes.len(), 1, "les deux cases font un seul trou");
+        let hole_area = ring_signed_area(&alone[0].holes[0]).abs();
+        assert!((hole_area - 50.0).abs() < 1e-9, "aire du trou {hole_area}");
+
+        let mut two = plate.to_vec();
+        two.push(rect(40.0, 0.0, 45.0, 5.0));
+        let with_neighbour = parts_of(&two);
+        assert_eq!(with_neighbour.len(), 2);
+        let big = with_neighbour.iter().find(|p| dims(p) == (30.0, 20.0)).expect("plaque");
+        assert_eq!(big.holes.len(), 1);
+        assert_eq!(big.holes, alone[0].holes, "même trou avec ou sans seconde pièce");
+    }
+
+    #[test]
+    fn face_probes_until_obeys_the_deadline() {
+        let rings = vec![rect_ring(0.0, 0.0, 10.0, 5.0), rect_ring(1.0, 1.0, 9.0, 4.0)];
+        let dl = Deadline::new(1);
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(face_probes_until(&rings, &dl).is_err());
     }
 
 }

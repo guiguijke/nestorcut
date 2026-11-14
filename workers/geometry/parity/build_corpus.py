@@ -418,6 +418,47 @@ def main_cut_cases():
     print(f"cas fichier de coupe -> {OUT}")
 
 
+# ------------------------------------------------------------ cadres minces
+# Parois de 0,3 mm : la sonde de profondeur de l'import tombait dans l'ouverture
+# du cadre, qui n'était plus reconnu comme pièce. Mode : build_corpus.py cadres
+
+
+def rect(msp, x0, y0, x1, y1):
+    msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True)
+
+
+def main_thin_frames():
+    os.makedirs(OUT, exist_ok=True)
+
+    # Cadre 10x5 (deux boucles, paroi 0,3), îlot 2x1 dans son ouverture, autre pièce 5x5.
+    doc = new_doc()
+    msp = doc.modelspace()
+    rect(msp, 0, 0, 10, 5)
+    rect(msp, 0.3, 0.3, 9.7, 4.7)
+    rect(msp, 4, 2, 6, 3)
+    rect(msp, 20, 10, 25, 15)  # hauteur disjointe du cadre : l'ordre des pièces est alors celui d'y-min
+    save_new(doc, "thin_frame_island.dxf")
+
+    # Plaque 10x5 dont le trou longe deux bords à 0,3 mm.
+    doc = new_doc()
+    msp = doc.modelspace()
+    rect(msp, 0, 0, 10, 5)
+    rect(msp, 5.0, 2.0, 9.7, 4.7)
+    save_new(doc, "hole_near_corner.dxf")
+
+    # Cadre 20x12 paroi 0,3, second cadre 1 mm à l'intérieur (paroi 0,3), îlot 2x1 au centre.
+    doc = new_doc()
+    msp = doc.modelspace()
+    rect(msp, 0, 0, 20, 12)
+    rect(msp, 0.3, 0.3, 19.7, 11.7)
+    rect(msp, 1, 1, 19, 11)
+    rect(msp, 1.3, 1.3, 18.7, 10.7)
+    rect(msp, 9, 5.5, 11, 6.5)
+    save_new(doc, "frame_in_frame.dxf")
+
+    print(f"cadres minces -> {OUT}")
+
+
 # ---------------------------------------------------------------- SVG corpus
 SVG_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_svg")
 
@@ -633,7 +674,10 @@ def main_svg():
 if __name__ == "__main__":
     if sys.argv[1:] == ["coupe"]:
         main_cut_cases()
+    elif sys.argv[1:] == ["cadres"]:
+        main_thin_frames()
     else:
         main()
         main_svg()
         main_cut_cases()
+        main_thin_frames()

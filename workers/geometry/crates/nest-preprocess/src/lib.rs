@@ -180,12 +180,17 @@ pub fn open_holes_difference(outer_ring: &[Pt], hole_rings: &[Vec<Pt>], width: f
 
     // Classifiant : matière = profondeur impaire sur (outer + trous) ET
     // hors de tout rectangle.
+    // Sonde DE FACE (ga::face_probes) : sur une paroi fine, le pas de
+    // bissectrice de interior_probe sortait de la face (bande en C plus
+    // étroite que le pas) et la matière était classée vide.
+    let positive: Vec<Vec<Pt>> = faces
+        .iter()
+        .filter(|f| ga::ring_signed_area(f) > 1e-12)
+        .cloned()
+        .collect();
+    let probes = ga::face_probes(&positive);
     let mut matter: Vec<Vec<Pt>> = Vec::new();
-    for f in &faces {
-        if ga::ring_signed_area(f) <= 1e-12 {
-            continue;
-        }
-        let probe = ga::interior_probe(f);
+    for (f, &probe) in positive.iter().zip(&probes) {
         let mut depth = 0usize;
         if ga::point_in_ring(probe, outer_ring) {
             depth += 1;
@@ -436,6 +441,50 @@ mod tests {
         let expected = 10000.0 - 400.0 - 40.0 * 2.1;
         assert!((area - expected).abs() / expected < 0.05, "area={area} vs {expected}");
         assert!(ring.first() == ring.last());
+    }
+
+    /// Trou presque aussi grand que la plaque 100x50 : parois `(gauche, bas,
+    /// droite, haut)` toutes inférieures au pas de la sonde historique
+    /// (0,7 mm). Le canal de 0,6 mm perce la paroi la plus fine ; le corps
+    /// restant est une bande en C dont la sonde de bissectrice sort de la face.
+    fn assert_channel_cut(walls: (f64, f64, f64, f64)) {
+        let (l, b, r, t) = walls;
+        let outer = rect(0.0, 0.0, 100.0, 50.0);
+        let hole = rect(l, b, 100.0 - r, 50.0 - t);
+        let ring = open_holes_difference(&outer, &[hole.clone()], 0.6);
+        assert_ne!(ring, outer, "walls={walls:?} : anneau extérieur rendu intact");
+        let area = ga::ring_signed_area(&ring).abs();
+        let h = ga::ring_signed_area(&hole).abs();
+        let thinnest = l.min(b).min(r).min(t);
+        // Matière retirée par le canal, au centième de mm² près : la paroi
+        // la plus fine sur 0,6 de large, plus 0,3 x 1,2 dans la paroi voisine
+        // (le canal est centré sur un coin du trou et prolongé de deux
+        // largeurs : sa moitié extérieure longe le trou sur 1,2 mm).
+        let expected = 5000.0 - h - thinnest * 0.6 - 0.3 * 1.2;
+        assert!((area - expected).abs() < 0.01, "walls={walls:?} area={area} vs {expected}");
+    }
+
+    #[test]
+    fn thin_left_wall_still_opens_the_channel() {
+        assert_channel_cut((0.3, 0.5, 0.6, 0.6));
+    }
+
+    // Les deux cas suivants (paroi fine en bas, à droite) passaient déjà avant
+    // le correctif : l'anneau de la face y commence sur un autre sommet. Ils
+    // restent pour fixer le résultat sur les quatre côtés.
+    #[test]
+    fn thin_bottom_wall_still_opens_the_channel() {
+        assert_channel_cut((0.5, 0.3, 0.6, 0.6));
+    }
+
+    #[test]
+    fn thin_right_wall_still_opens_the_channel() {
+        assert_channel_cut((0.6, 0.6, 0.3, 0.5));
+    }
+
+    #[test]
+    fn thin_top_wall_still_opens_the_channel() {
+        assert_channel_cut((0.6, 0.6, 0.5, 0.3));
     }
 
     #[test]
