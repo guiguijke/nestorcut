@@ -68,6 +68,11 @@ self.onmessage = async (event) => {
                         if (evt.type === 'layout') {
                             // Snapshots de placements pour la vue live.
                             self.postMessage({ jobSlug, live: evt })
+                        } else if (evt.type === 'import' && evt.kind === 'thin_items') {
+                            // Pièces à traits fins nommées à l'import : le pool
+                            // les garde (un settle idle du champion n'a pas le
+                            // résultat final du walk).
+                            self.postMessage({ jobSlug, thin: Array.isArray(evt.items) ? evt.items : [] })
                         } else if (evt.type === 'evals' || evt.type === 'heartbeat') {
                             // Compteur de combinaisons (SPP: evals, BPP:
                             // iterations SA, normalisé en `n`) — le pool

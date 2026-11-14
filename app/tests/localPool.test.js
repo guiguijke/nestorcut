@@ -811,6 +811,86 @@ describe('runPool — les pièces à traits fins survivent à la fusion', () => 
     })
 })
 
+// ---------------------------------------------------------------------------
+// Lot « thin parts » : l'événement d'import `thin_items` est relayé par
+// engine.worker.js ({ jobSlug, thin: [ids] }) ; le pool le garde et TOUT
+// règlement ok:true le porte, y compris quand aucun walk n'a rendu son
+// résultat (settle idle du champion).
+// ---------------------------------------------------------------------------
+describe('runPool — thin_items relayés par les événements d’import', () => {
+    it('settle idle du champion : thin_items = ids relayés, triés, sans doublon', async () => {
+        vi.useFakeTimers()
+        MockWorker.respond = null
+        const payload = makePayload({ walks: 2, biases: ['left'] })
+        payload.instance.items = [{ id: 0, demand: 500 }]
+        const promise = runPool('job-champ-thin', payload, { onLive: () => {} })
+        MockWorker.instances[0].emit({ jobSlug: 'job-champ-thin', thin: [3, 1] })
+        MockWorker.instances[1].emit({ jobSlug: 'job-champ-thin', thin: [1, 5] })
+        MockWorker.instances[0].emit({
+            live: {
+                feasible: true, strip_width: 900, density: 0.7, bias: 'left',
+                items: Array.from({ length: 500 }, (_, i) => [i, 0, 0, 0, 0]),
+            },
+        })
+        await vi.advanceTimersByTimeAsync(3100)
+        const out = await promise
+        expect(out.ok).toBe(true)
+        expect(out.result.thin_items).toEqual([1, 3, 5])
+        vi.useRealTimers()
+    })
+
+    it('mono-walk : un événement relayé que le résultat ne reprend pas sort quand même', async () => {
+        MockWorker.respond = (worker, msg) => {
+            worker.emit({ jobSlug: msg.jobSlug, thin: [4] })
+            worker.emit({ ok: true, jobSlug: msg.jobSlug, result: engineOut(0), memory: { pagesBefore: 1, pagesAfter: 2 } })
+        }
+        const out = await runPool('job-mono-relay', makePayload({ walks: 1 }))
+        expect(out.ok).toBe(true)
+        expect(out.result.thin_items).toEqual([4])
+    })
+
+    it('fusion réussie : union des événements relayés et des listes des walks', async () => {
+        MockWorker.respond = (worker, msg) => {
+            const w = MockWorker.instances.indexOf(worker)
+            if (msg.op === 'merge') {
+                worker.emit({
+                    id: msg.id, jobSlug: msg.jobSlug, ok: true,
+                    result: JSON.stringify({ problem: 'spp', alternatives: msg.merge.runs, thin_items: [] }),
+                })
+                return
+            }
+            worker.emit({ jobSlug: msg.jobSlug, thin: [9] })
+            worker.emit({
+                ok: true, jobSlug: msg.jobSlug,
+                result: { ...engineOut(w), ...(w === 0 ? { thin_items: [2] } : {}) },
+                memory: { pagesBefore: 1, pagesAfter: 2 },
+            })
+        }
+        const out = await runPool('job-merge-relay', makePayload({ walks: 2 }))
+        expect(out.result.thin_items).toEqual([2, 9])
+    })
+
+    it('livraison dégradée (fusion en échec) : les ids relayés suivent', async () => {
+        const payload = makePayload({ walks: 2 })
+        MockWorker.respond = (worker, msg) => {
+            const w = MockWorker.instances.indexOf(worker)
+            if (msg.op === 'merge') {
+                worker.emit({ id: msg.id, jobSlug: msg.jobSlug, ok: false, error: 'boom' })
+                return
+            }
+            worker.emit({ jobSlug: msg.jobSlug, thin: [6] })
+            const out = engineOut(w)
+            // livraison complète : une pièce posée pour une demandée
+            out.alternatives[0].solution = { layout: { placed_items: [[0, 0, 0, 0, 0]] } }
+            worker.emit({ ok: true, jobSlug: msg.jobSlug, result: out, memory: { pagesBefore: 1, pagesAfter: 2 } })
+        }
+        const out = await runPool('job-degraded-relay', payload)
+        expect(out.ok).toBe(true)
+        expect(out.result.degraded).toBeTruthy()
+        expect(out.result.thin_items).toEqual([6])
+    })
+})
+
 describe('championIdleMs (fenêtre d’arrêt ~ f(n))', () => {
     it('plancher 2 s sur un petit job ; +20 ms/pièce ; plafond = patience', () => {
         expect(championIdleMs(0)).toBe(2000)

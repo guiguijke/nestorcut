@@ -534,7 +534,7 @@ const exportCsv = () => {
 const thinPartsLine = computed(() => {
     const list = unref(resultModalData)?.thinParts
     if (!Array.isArray(list) || !list.length) return null
-    return composeThinPartsLine(list, filesStore.getters.projectFiles, t)
+    return composeThinPartsLine(list, filesStore.getters.projectFiles, t, unref(resultModalData)?.thinCount)
 })
 
 const reportBadges = computed(() => {

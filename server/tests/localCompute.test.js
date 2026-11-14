@@ -514,6 +514,31 @@ describe('POST local-quota — comptabilité seule, zéro géométrie (PR5, J-07
         expect(other.degraded).toBeUndefined() // texte libre jamais stocké
     })
 
+    it('garde le constat des pièces à traits fins : liste bornée à 50 + vrai compte borné', async () => {
+        const many = Array.from({ length: 70 }, (_, k) => ({ item: k, slug: 'f', part: k }))
+        const jobDoc = localJob()
+        state.config = { public: { localComputeEnabled: true } }
+        state.db = fakeDb({ nesting_jobs: [jobDoc], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, thinParts: many, thinCount: 80 }))
+        expect(jobDoc.thinParts).toHaveLength(50)
+        expect(jobDoc.thinCount).toBe(80)
+
+        const small = localJob()
+        state.db = fakeDb({ nesting_jobs: [small], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, thinParts: many.slice(0, 3), thinCount: 1 }))
+        expect(small.thinCount).toBe(3) // jamais sous la longueur de la liste
+
+        const huge = localJob()
+        state.db = fakeDb({ nesting_jobs: [huge], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, thinParts: many.slice(0, 3), thinCount: 9e12 }))
+        expect(huge.thinCount).toBe(10_000_000) // borné
+
+        const none = localJob()
+        state.db = fakeDb({ nesting_jobs: [none], users: [freeUser()] })
+        await quotaHandler(ev('u1', 'job-1', { placed: 10, thinCount: 12 }))
+        expect(none.thinCount).toBeUndefined() // sans liste, rien n'est stocké
+    })
+
     it('409 si pas awaiting_local, 404 pour un autre utilisateur, 404 flag OFF', async () => {
         state.config = { public: { localComputeEnabled: true } }
         state.db = fakeDb({ nesting_jobs: [localJob({ status: 'done' })], users: [freeUser()] })

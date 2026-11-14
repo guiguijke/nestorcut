@@ -48,8 +48,11 @@ const MAX_CARD_FRAGMENTS = 3
  * Forme : trois pièces nommées au plus, puis « et N autres » — la même règle
  * que la ligne de carte du lot 2c (une ligne qu'on lit d'un coup d'œil, pas
  * un journal). Rend `null` quand il n'y a rien à dire.
+ *
+ * `total` : le VRAI nombre de pièces nommées quand la liste stockée est
+ * bornée (jamais cru s'il est plus petit que la liste).
  */
-export function composeThinPartsLine(thinParts, files, t) {
+export function composeThinPartsLine(thinParts, files, t, total) {
     const list = Array.isArray(thinParts) ? thinParts.filter(Boolean) : []
     if (!list.length) return null
     const byName = new Map(
@@ -60,9 +63,10 @@ export function composeThinPartsLine(thinParts, files, t) {
         return `${name} (${t('import.partRank', { n: (Number(e.part) || 0) + 1 })})`
     }
     const shown = list.slice(0, MAX_CARD_FRAGMENTS).map(label)
-    const rest = list.length - shown.length
+    const n = Math.max(list.length, Math.trunc(Number(total)) || 0)
+    const rest = n - shown.length
     const parts = rest > 0 ? [...shown, t('import.andMore', { n: rest })] : shown
-    return t('nest.thinParts', { n: list.length, list: parts.join(', ') })
+    return t('nest.thinParts', { n, list: parts.join(', ') })
 }
 
 /** Niveau le plus grave de la liste, ou null si elle est vide. */

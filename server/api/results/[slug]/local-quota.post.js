@@ -62,6 +62,9 @@ export default defineEventHandler(async (event) => {
             }))
             .filter((e) => e.slug)
         : []
+    // Vrai nombre de pièces nommées (la liste ci-dessus est bornée à 50) :
+    // scalaire borné, jamais inférieur à la liste.
+    const thinCount = Math.max(thinParts.length, num(body?.thinCount, 0, 10_000_000) ?? 0)
     // Livraison dégradée (la fusion a échoué, meilleur walk livré sans
     // finition) : code CONNU seulement, jamais de texte libre.
     const degraded = DEGRADED_CODES.has(body?.degraded) ? body.degraded : null
@@ -99,7 +102,7 @@ export default defineEventHandler(async (event) => {
                 // Comptabilité seule — la géométrie reste dans le navigateur.
                 placed: placed ?? job.requested ?? 0,
                 ...(requested != null ? { requested } : {}),
-                ...(thinParts.length ? { thinParts } : {}),
+                ...(thinParts.length ? { thinParts, thinCount } : {}),
                 ...(degraded ? { degraded } : {}),
                 layoutCount: layoutCount ?? 0,
                 density: density ?? null,

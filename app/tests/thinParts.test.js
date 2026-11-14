@@ -7,7 +7,7 @@
  * jamais une erreur.
  */
 import { describe, expect, it } from 'vitest'
-import { thinPartsFromItems } from '../composables/localGeomError'
+import { thinPartsFromItems, thinPartsSummary } from '../composables/localGeomError'
 import { composeThinPartsLine } from '../composables/importFindings'
 import { translate } from '../utils/i18n'
 
@@ -89,5 +89,61 @@ describe('E2 — la ligne du rapport', () => {
             expect(line.toLowerCase()).not.toMatch(/erreur|error|échec|failed/)
             expect(translate('import.partRank', locale, { n: 2 })).not.toBe('import.partRank')
         }
+    })
+})
+
+describe('thin parts — ids réduits (J-085) et compte exact', () => {
+    // Instance réduite : id réduit 0 -> original 4, 1 -> 2, 2 -> 0.
+    const ID_MAP = [4, 2, 0]
+
+    it('traduit un id RÉDUIT en id d’origine avant de lire l’itemMap', () => {
+        expect(thinPartsFromItems([0, 1], ITEM_MAP, ID_MAP)).toEqual([
+            { item: 2, slug: 'ecrin', part: 1 },
+            { item: 4, slug: 'ecrin', part: 3 },
+        ])
+    })
+
+    it('un id hors de l’idMap n’est jamais deviné : il est écarté', () => {
+        expect(thinPartsFromItems([1, 9, -1], ITEM_MAP, ID_MAP)).toEqual([
+            { item: 2, slug: 'ecrin', part: 1 },
+        ])
+    })
+
+    it('trie AVANT de borner : les 50 premières par fichier/rang, pas les 50 premiers ids', () => {
+        const map = Array.from({ length: 80 }, (_, k) => ({
+            id: k, slug: k < 40 ? 'zz' : 'aa', part: k < 40 ? k : k - 40,
+        }))
+        const out = thinPartsFromItems(Array.from({ length: 80 }, (_, k) => k), map)
+        expect(out).toHaveLength(50)
+        // 'aa' (ids 40..79) passe devant 'zz' : les 40 'aa' puis 10 'zz'.
+        expect(out[0]).toEqual({ item: 40, slug: 'aa', part: 0 })
+        expect(out[39]).toEqual({ item: 79, slug: 'aa', part: 39 })
+        expect(out[49]).toEqual({ item: 9, slug: 'zz', part: 9 })
+    })
+
+    it('le résumé donne le VRAI nombre de pièces nommées, au-delà de 50', () => {
+        const map = Array.from({ length: 80 }, (_, k) => ({ id: k, slug: 'f', part: k }))
+        const { parts, count } = thinPartsSummary(Array.from({ length: 80 }, (_, k) => k), map)
+        expect(parts).toHaveLength(50)
+        expect(count).toBe(80)
+    })
+
+    it('le compte ignore les doublons et les ids sans nom', () => {
+        const { count } = thinPartsSummary([1, 1, 2, 99], ITEM_MAP)
+        expect(count).toBe(2)
+    })
+
+    it('la ligne lit le total, pas la longueur de la liste coupée', () => {
+        const parts = Array.from({ length: 50 }, (_, k) => ({ slug: 'ecrin', part: k }))
+        const line = composeThinPartsLine(parts, FILES, t, 80)
+        expect(line).toMatch(/^80 pièce/)
+        expect(line).toContain('et 77 autres')
+    })
+
+    it('sans total, la ligne retombe sur la longueur de la liste (anciens jobs)', () => {
+        const parts = [{ slug: 'ecrin', part: 0 }, { slug: 'ecrin', part: 1 }]
+        expect(composeThinPartsLine(parts, FILES, t)).toMatch(/^2 pièce/)
+        // Un total plus petit que la liste n'est jamais cru.
+        expect(composeThinPartsLine(parts, FILES, t, 1)).toMatch(/^2 pièce/)
     })
 })

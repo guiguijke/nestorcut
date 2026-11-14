@@ -78,21 +78,42 @@ export function itemUnplaceableTarget(message, itemMap, idMap) {
  */
 export const MAX_THIN_PARTS = 50
 
-export function thinPartsFromItems(items, itemMap) {
+/**
+ * `idMap` (optionnel) : `meta.idMap` de l'instance réduite (J-085). Le moteur
+ * nomme alors des ids RÉDUITS, l'itemMap porte les ids d'origine : même
+ * conversion que `targetOfId`, un id hors de l'idMap est écarté (jamais
+ * deviné). La liste est triée AVANT d'être bornée ; `count` est le vrai
+ * nombre de pièces nommées (sans doublon), au-delà de la borne.
+ */
+export function thinPartsSummary(items, itemMap, idMap) {
     const map = Array.isArray(itemMap) ? itemMap : []
-    const out = []
-    for (const raw of (Array.isArray(items) ? items : []).slice(0, MAX_THIN_PARTS)) {
-        const id = Number(raw)
+    const seen = new Set()
+    const all = []
+    for (const raw of (Array.isArray(items) ? items : [])) {
+        let id = Number(raw)
         if (!Number.isFinite(id)) continue
+        if (Array.isArray(idMap)) {
+            if (!Number.isInteger(id) || id < 0 || id >= idMap.length) continue
+            id = Number(idMap[id])
+        }
+        if (seen.has(id)) continue
+        seen.add(id)
         const hit = map.find((e) => Number(e?.id) === id)
-        out.push({
+        all.push({
             item: id,
             slug: hit?.slug ? String(hit.slug) : null,
             part: Number.isFinite(Number(hit?.part)) ? Number(hit.part) : 0,
         })
     }
-    out.sort((a, b) => String(a.slug || '').localeCompare(String(b.slug || '')) || a.part - b.part)
-    return out
+    all.sort((a, b) => String(a.slug || '').localeCompare(String(b.slug || '')) || a.part - b.part)
+    return {
+        parts: all.slice(0, MAX_THIN_PARTS),
+        count: all.filter((e) => e.slug).length,
+    }
+}
+
+export function thinPartsFromItems(items, itemMap, idMap) {
+    return thinPartsSummary(items, itemMap, idMap).parts
 }
 
 /**

@@ -290,10 +290,10 @@ function settleFromChampion(pool) {
     const alt = championAlt(pool)
     pool.settle({
         ok: true,
-        result: {
+        result: withThinItems(pool, {
             problem: pool.isSpp ? 'spp' : 'bpp',
             alternatives: alt ? [alt] : [],
-        },
+        }),
         memory: poolMemory(pool),
     })
 }
@@ -415,6 +415,7 @@ export function runPool(jobSlug, payload, { onLive, walks, concurrency } = {}) {
             isSpp,
             demand,
             multiBias,
+            thinRelayed: [],
             bestLive: null,
             bestLiveByClass: {},
             // Fenêtre d'égalité des largeurs pour liveBetter : phase 2 vit
@@ -608,12 +609,12 @@ function bestWalkDelivery(pool, payload, masterSeed, reason, message) {
     const runSeed = deriveSeed(walkSeed, 0).toString()
     const alternatives = best.complete.map((alt, rank) => ({ ...alt, rank, seed: runSeed }))
     console.warn(`[local] fusion dégradée (${reason}) : meilleur walk ${best.slot.w} livré sans fusion ni finition${message ? ` — ${message}` : ''}`)
-    return {
+    return withThinItems(pool, {
         ...best.slot.outcome.result,
         problem: best.slot.outcome.result?.problem ?? payload?.problem,
         alternatives,
         degraded: { reason, walk: best.slot.w },
-    }
+    })
 }
 
 /**
@@ -624,21 +625,39 @@ function bestWalkDelivery(pool, payload, masterSeed, reason, message) {
  */
 function walkThinItems(pool) {
     const seen = new Set()
-    for (const slot of pool.slots) {
-        if (!slot.outcome?.ok) continue
-        const list = slot.outcome.result?.thin_items
-        if (!Array.isArray(list)) continue
+    const add = (list) => {
+        if (!Array.isArray(list)) return
         for (const id of list) {
             const n = Number(id)
             if (Number.isInteger(n) && n >= 0) seen.add(n)
         }
     }
+    // Ids relayés par l'événement d'import (engine.worker.js) : présents dès
+    // le début du solve, donc aussi quand aucun walk n'a rendu son résultat
+    // (settle idle du champion).
+    add(pool.thinRelayed)
+    for (const slot of pool.slots) {
+        if (!slot.outcome?.ok) continue
+        add(slot.outcome.result?.thin_items)
+    }
     return [...seen].sort((a, b) => a - b)
+}
+
+/** Résultat réglé + union des items à traits fins (relayés et walks). */
+function withThinItems(pool, result) {
+    const thinItems = walkThinItems(pool)
+    return thinItems.length ? { ...result, thin_items: thinItems } : result
 }
 
 function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
     if (pool.settled) return
     const data = event.data || {}
+    // Événement d'import `thin_items` relayé par engine.worker.js : on garde
+    // les ids (jamais un règlement de solve).
+    if (Array.isArray(data.thin)) {
+        pool.thinRelayed.push(...data.thin)
+        return
+    }
     // Frame live intermédiaire : re-taguée avec l'index du worker PHYSIQUE
     // (le moteur interne mono-walk émet toujours worker:0) — le champion
     // lock de LiveNestingView gère N workers comme le flux SSE serveur.
@@ -759,7 +778,7 @@ function checkAllSettled(jobSlug, pool, payload) {
     if (n === 1) {
         const out = pool.slots[0].outcome
         pool.settle(out.ok
-            ? { ok: true, result: out.result, memory: out.memory }
+            ? { ok: true, result: withThinItems(pool, out.result), memory: out.memory }
             : { ok: false, error: out.error || 'engine error', memory: out.memory })
         return
     }

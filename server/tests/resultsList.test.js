@@ -74,6 +74,8 @@ const fullJob = (i, extra = {}) => ({
     degraded: 'merge_unavailable',
     errorCode: 'engine_error',
     itemGeometry: { slug: 'f', part: 2 },
+    thinParts: [{ item: 3, slug: 'f', part: 1 }],
+    thinCount: 80,
     unfit: { reason: 'partial' },
     progress: { stage: 's', done: 1, total: 2 },
     liveLayout: { sheets: [[1, 2]] },
@@ -114,6 +116,17 @@ describe('getResults — projection, borne et index', () => {
         expect(done.errorCode).toBe('engine_error')
         // Pièce nommée par un refus : exposée, sinon le bandeau perd son nom après un rechargement.
         expect(done.itemGeometry).toEqual({ slug: 'f', part: 2 })
+        // Constat « pièces à traits fins » (local ET serveur) : sans ces champs la ligne du rapport ne sort jamais.
+        expect(done.thinParts).toEqual([{ item: 3, slug: 'f', part: 1 }])
+        expect(done.thinCount).toBe(80)
+    })
+
+    it('un job sans constat de traits fins n’en annonce aucun', async () => {
+        const { thinParts, thinCount, ...legacy } = fullJob(1)
+        state.db = dbOver([legacy], { honorOptions: true })
+        const { items } = await getResults('u1')
+        expect(items[0].thinParts).toBeNull()
+        expect(items[0].thinCount).toBeNull()
     })
 
     it('un job sans livraison dégradée n’en annonce aucune', async () => {

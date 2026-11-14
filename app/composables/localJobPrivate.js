@@ -867,8 +867,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // Lot E2 : le moteur rend les items dont le gonflement d'import a pris
     // le repli (pièces plus fines que l'espacement) — on les traduit en
     // fichier + rang de pièce avec le même mapping que le lot E0.
-    const { thinPartsFromItems } = await import('./localGeomError')
-    const thinParts = thinPartsFromItems(result?.thin_items, itemMap || payload?.itemMap)
+    const { thinPartsSummary } = await import('./localGeomError')
+    // Le moteur nomme des ids RÉDUITS quand la réduction J-085 a réindexé
+    // l'instance : on repasse par meta.idMap comme les refus nommés.
+    const { parts: thinParts, count: thinCount } = thinPartsSummary(
+        result?.thin_items, itemMap || payload?.itemMap, payload?.meta?.idMap,
+    )
     const best = alternatives[0] || {}
     await $fetch(`/api/results/${jobSlug}/local-quota`, {
         method: 'POST',
@@ -885,7 +889,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             requested,
             // Lot E2 : pièces plus fines que l'espacement (le gonflement
             // d'import a pris le repli). Même champ que le chemin serveur.
-            ...(thinParts.length ? { thinParts } : {}),
+            ...(thinParts.length ? { thinParts, thinCount } : {}),
             // Livraison dégradée (fusion en échec : meilleur walk sans
             // finition) : le code seul, pour que la base et l'admin la voient.
             ...(result?.degraded?.reason ? { degraded: String(result.degraded.reason) } : {}),

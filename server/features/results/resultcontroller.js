@@ -2,13 +2,13 @@ import { connectDB } from "~~/server/db/mongo";
 
 // Champs de nesting_jobs réellement lus par le mapping ci-dessous (donc par
 // l'app via le flux SSE). Tout le reste du document (localPayload = instance
-// complète en clair, params, files, charge, engineConfig, thinParts, …) n'est
+// complète en clair, params, files, charge, engineConfig, …) n'est
 // plus rapatrié à chaque seconde et par onglet. Ajouter ici tout champ lu
 // dans le mapping : server/tests/resultsList.test.js le verrouille.
 const RESULT_FIELDS = [
     'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly',
     'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
-    'information', 'errorCode', 'itemGeometry', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
+    'information', 'errorCode', 'itemGeometry', 'thinParts', 'thinCount', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
     'dxf_files', 'svg_files',
     'alternatives.alt_id', 'alternatives.seed', 'alternatives.density',
     'alternatives.usedSheetShare', 'alternatives.strategy', 'alternatives.offcut',
@@ -99,6 +99,10 @@ export async function getResults(userId, projectSlug) {
             // local-fail et par le worker) : le bandeau retrouve le nom du fichier
             // et le rang après un rechargement. Null sur les jobs sans refus nommé.
             itemGeometry: queueItem.itemGeometry ?? null,
+            // Constat « pièces à traits fins » (local-quota ou worker) : liste
+            // bornée {item, slug, part, name?} et vrai nombre de pièces nommées.
+            thinParts: queueItem.thinParts ?? null,
+            thinCount: queueItem.thinCount ?? null,
             // Livraison dégradée d'un calcul navigateur (code de liste fermée,
             // posé par local-quota) : la carte le dit, après rechargement aussi.
             degraded: queueItem.degraded ?? null,
