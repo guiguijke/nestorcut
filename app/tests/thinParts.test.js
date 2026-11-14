@@ -128,6 +128,16 @@ describe('thin parts — ids réduits (J-085) et compte exact', () => {
         expect(count).toBe(80)
     })
 
+    it('une pièce sans nom ne prend jamais la place d’une pièce nommée dans la liste bornée', () => {
+        // 60 ids nommés + 5 ids inconnus de l'itemMap : les 50 gardés sont tous nommés.
+        const map = Array.from({ length: 60 }, (_, k) => ({ id: k, slug: 'f', part: k }))
+        const ids = [900, 901, 902, 903, 904, ...Array.from({ length: 60 }, (_, k) => k)]
+        const { parts, count } = thinPartsSummary(ids, map)
+        expect(parts).toHaveLength(50)
+        expect(parts.every((e) => e.slug === 'f')).toBe(true)
+        expect(count).toBe(60)
+    })
+
     it('le compte ignore les doublons et les ids sans nom', () => {
         const { count } = thinPartsSummary([1, 1, 2, 99], ITEM_MAP)
         expect(count).toBe(2)

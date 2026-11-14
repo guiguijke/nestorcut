@@ -357,7 +357,9 @@ def thin_parts(items, part_index_by_id, names_by_slug=None):
         if name:
             entry["name"] = name
         out.append(entry)
-    out.sort(key=lambda e: (str(e["slug"] or ""), e["part"]))
+    # Les pieces sans nom passent en dernier : elles ne prennent jamais la
+    # place d'une piece nommee dans la liste bornee.
+    out.sort(key=lambda e: (0 if e["slug"] else 1, str(e["slug"] or ""), e["part"]))
     return out[:MAX_THIN_PARTS]
 
 

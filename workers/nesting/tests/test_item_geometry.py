@@ -205,6 +205,14 @@ def test_thin_parts_trie_avant_de_borner():
     assert out[49] == {"item": 9, "slug": "zz", "part": 9}
 
 
+def test_thin_parts_sans_nom_ne_prend_pas_la_place_d_une_piece_nommee():
+    from core.engine import MAX_THIN_PARTS, thin_parts
+    item_map = {k: {"slug": "f", "part": k} for k in range(60)}
+    out = thin_parts([900, 901, 902] + list(range(60)), item_map)
+    assert len(out) == MAX_THIN_PARTS
+    assert all(e["slug"] == "f" for e in out)
+
+
 def test_thin_named_count_donne_le_vrai_nombre_au_dela_de_la_borne():
     from core.engine import thin_named_count
     item_map = {k: {"slug": "f", "part": k} for k in range(80)}

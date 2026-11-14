@@ -105,7 +105,10 @@ export function thinPartsSummary(items, itemMap, idMap) {
             part: Number.isFinite(Number(hit?.part)) ? Number(hit.part) : 0,
         })
     }
-    all.sort((a, b) => String(a.slug || '').localeCompare(String(b.slug || '')) || a.part - b.part)
+    // Les pièces sans nom passent en dernier : elles ne prennent jamais la
+    // place d'une pièce nommée dans la liste bornée.
+    all.sort((a, b) => (a.slug ? 0 : 1) - (b.slug ? 0 : 1)
+        || String(a.slug || '').localeCompare(String(b.slug || '')) || a.part - b.part)
     return {
         parts: all.slice(0, MAX_THIN_PARTS),
         count: all.filter((e) => e.slug).length,

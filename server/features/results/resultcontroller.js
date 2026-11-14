@@ -25,6 +25,10 @@ const RESULT_PROJECTION = Object.fromEntries(RESULT_FIELDS.map((f) => [f, 1]))
 // compte lance peu de jobs simultanés.
 export const RESULTS_LIMIT = 200
 
+// Pièces à traits fins envoyées à l'écran par job : la ligne du rapport en
+// nomme trois (MAX_CARD_FRAGMENTS, importFindings.js), le reste est un compte.
+export const THIN_PARTS_SENT = 3
+
 /**
  * @param {string} userId 
  * @param {string} projectSlug 
@@ -101,8 +105,14 @@ export async function getResults(userId, projectSlug) {
             itemGeometry: queueItem.itemGeometry ?? null,
             // Constat « pièces à traits fins » (local-quota ou worker) : liste
             // bornée {item, slug, part, name?} et vrai nombre de pièces nommées.
-            thinParts: queueItem.thinParts ?? null,
-            thinCount: queueItem.thinCount ?? null,
+            // Le rapport ne nomme que trois pièces puis « et N autres » : on
+            // n'envoie que ce qu'il affiche (ce flux part à chaque changement).
+            thinParts: Array.isArray(queueItem.thinParts)
+                ? queueItem.thinParts.slice(0, THIN_PARTS_SENT)
+                : null,
+            thinCount: Array.isArray(queueItem.thinParts)
+                ? Math.max(queueItem.thinParts.length, Math.trunc(Number(queueItem.thinCount)) || 0)
+                : null,
             // Livraison dégradée d'un calcul navigateur (code de liste fermée,
             // posé par local-quota) : la carte le dit, après rechargement aussi.
             degraded: queueItem.degraded ?? null,

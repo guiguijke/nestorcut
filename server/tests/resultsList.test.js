@@ -121,6 +121,21 @@ describe('getResults — projection, borne et index', () => {
         expect(done.thinCount).toBe(80)
     })
 
+    it('n’envoie que les trois pièces que le rapport nomme, avec le vrai compte', async () => {
+        const many = Array.from({ length: 50 }, (_, k) => ({ item: k, slug: 'f', part: k }))
+        // Job serveur d'avant thinCount : le compte retombe sur la longueur de la liste.
+        const { thinCount, ...old } = fullJob(1, { thinParts: many })
+        state.db = dbOver([old, fullJob(2, { thinParts: many, thinCount: 78 })], { honorOptions: true })
+        const { items } = await getResults('u1')
+        const bySlug = Object.fromEntries(items.map((i) => [i.slug, i]))
+        const a = bySlug[old.slug]
+        const b = items.find((i) => i !== a)
+        expect(a.thinParts).toEqual(many.slice(0, 3))
+        expect(a.thinCount).toBe(50)
+        expect(b.thinParts).toEqual(many.slice(0, 3))
+        expect(b.thinCount).toBe(78)
+    })
+
     it('un job sans constat de traits fins n’en annonce aucun', async () => {
         const { thinParts, thinCount, ...legacy } = fullJob(1)
         state.db = dbOver([legacy], { honorOptions: true })
