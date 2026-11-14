@@ -17,6 +17,7 @@ from core.engine import (EngineCancelled, EngineError,
                          item_geometry_message, item_unplaceable_message,
                          too_large_message,
                          original_item_id, parse_item_geometry,
+                         thin_items_original, thin_named_count,
                          parse_item_unplaceable,
                          run_engine, thin_parts)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
@@ -1411,9 +1412,10 @@ def _nesting_process_impl(doc):
     def _on_engine_event(event):
         etype = event.get("type")
         if etype == "import" and event.get("kind") == "thin_items":
-            for raw in (event.get("items") or []):
-                if raw not in thin_items_seen:
-                    thin_items_seen.append(raw)
+            # Ids RÉDUITS (J-085) -> ids d'origine, comme l'erreur d'item.
+            for original in thin_items_original(event.get("items"), meta):
+                if original not in thin_items_seen:
+                    thin_items_seen.append(original)
             return
         if etype == "layout":
             # P2 : jamais de travail lourd sur le thread lecteur de stdout —
@@ -2479,6 +2481,7 @@ def _nesting_process_impl(doc):
     # Lot E2 : constat « pieces plus fines que l'espacement », nomme. Ecrit
     # sur le job en champ ADDITIF (les anciens jobs n'en ont pas).
     thin = []
+    thin_count = 0
     if thin_items_seen:
         names = {}
         # `fslug` et non `slug` : `slug` est celui du JOB, il ne doit pas
@@ -2495,6 +2498,7 @@ def _nesting_process_impl(doc):
             if doc.get("name"):
                 names[fslug] = doc["name"]
         thin = thin_parts(thin_items_seen, part_index_by_id, names)
+        thin_count = thin_named_count(thin_items_seen, part_index_by_id)
         logger.info("thin parts (inflation fallback)", extra={
             "slug": slug, "count": len(thin)})
 
@@ -2583,6 +2587,8 @@ def _nesting_process_impl(doc):
     # pas et s'affichent comme avant.
     if thin:
         final_set["thinParts"] = thin
+        # Vrai nombre de pieces nommees (la liste est bornee a 50).
+        final_set["thinCount"] = max(thin_count, len(thin))
     # Z3 (vérif 2026-09-05) : une solution partielle UTILE est livrée
     # (done, pas de refund — décision propriétaire) mais avec les leviers
     # structurés : l'utilisateur sait quoi faire des pièces non posées.

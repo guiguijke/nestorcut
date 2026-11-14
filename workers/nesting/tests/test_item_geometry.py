@@ -179,3 +179,36 @@ def test_too_large_message_cite_le_nom_jamais_lidentifiant():
     assert "f-a1b2c3" not in inconnue
     assert "one of the files (2000x50mm, x1)" in inconnue
     assert inconnue.startswith("Part(s) too large for the sheet:")
+
+
+# --- Constat « traits fins » : ids reduits, tri avant borne, vrai compte ----
+
+def test_thin_items_original_remappe_les_ids_reduits_sans_doublon():
+    from core.engine import thin_items_original
+    meta = {"idMap": [4, 2, 0]}
+    assert thin_items_original([0, 1, 1], meta) == [4, 2]
+    # Hors de l'idMap : jamais devine.
+    assert thin_items_original([9, -1, "x", None], meta) == []
+    # Sans reduction, les ids sont inchanges.
+    assert thin_items_original([3, 3, 5], {}) == [3, 5]
+    assert thin_items_original([3], None) == [3]
+
+
+def test_thin_parts_trie_avant_de_borner():
+    from core.engine import MAX_THIN_PARTS, thin_parts
+    item_map = {k: {"slug": "zz" if k < 40 else "aa", "part": k if k < 40 else k - 40}
+                for k in range(80)}
+    out = thin_parts(list(range(80)), item_map)
+    assert len(out) == MAX_THIN_PARTS
+    assert out[0] == {"item": 40, "slug": "aa", "part": 0}
+    assert out[39] == {"item": 79, "slug": "aa", "part": 39}
+    assert out[49] == {"item": 9, "slug": "zz", "part": 9}
+
+
+def test_thin_named_count_donne_le_vrai_nombre_au_dela_de_la_borne():
+    from core.engine import thin_named_count
+    item_map = {k: {"slug": "f", "part": k} for k in range(80)}
+    assert thin_named_count(list(range(80)), item_map) == 80
+    # Un id sans nom (absent de l'itemMap) n'est pas compte.
+    assert thin_named_count([1, 2, 500], item_map) == 2
+    assert thin_named_count(None, item_map) == 0

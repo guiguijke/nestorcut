@@ -297,16 +297,52 @@ def original_item_id(item_id, meta):
     return id_map[item_id]
 
 
+def thin_items_original(items, meta):
+    """Ids d'ORIGINE (sans doublon, ordre d'arrivee) des items « traits fins ».
+
+    Le moteur nomme des ids REDUITS quand la reduction J-085 a reindexe
+    l'instance (`meta["idMap"]`) ; `part_index_by_id` porte les ids d'origine.
+    Meme conversion que `original_item_id` : un id hors de l'idMap est ecarte,
+    jamais devine.
+    """
+    out = []
+    for raw in (items or []):
+        if isinstance(raw, bool):
+            continue
+        try:
+            item_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        original = original_item_id(item_id, meta)
+        if original is None or original in out:
+            continue
+        out.append(original)
+    return out
+
+
+def thin_named_count(items, part_index_by_id):
+    """Vrai nombre de pieces NOMMEES (slug connu), au-dela de la borne de la liste."""
+    seen = set()
+    for raw in (items or []):
+        try:
+            item_id = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if ((part_index_by_id or {}).get(item_id) or {}).get("slug"):
+            seen.add(item_id)
+    return len(seen)
+
+
 def thin_parts(items, part_index_by_id, names_by_slug=None):
     """Lot E2 : items « plus fins que l'espacement » -> fichier + rang.
 
-    `items` = ids rendus par le moteur (evenement
-    {"type":"import","kind":"thin_items"}), `part_index_by_id` = l'itemMap du
-    job. Rend une liste [{item, slug, part, name?}] TRIEE et bornee : c'est
-    un constat, pas un journal.
+    `items` = ids d'origine (voir `thin_items_original`), `part_index_by_id`
+    = l'itemMap du job. Rend une liste [{item, slug, part, name?}] TRIEE puis
+    bornee a MAX_THIN_PARTS : c'est un constat, pas un journal. Le vrai
+    compte est `thin_named_count`.
     """
     out = []
-    for raw in (items or [])[:MAX_THIN_PARTS]:
+    for raw in (items or []):
         try:
             item_id = int(raw)
         except (TypeError, ValueError):
@@ -322,7 +358,7 @@ def thin_parts(items, part_index_by_id, names_by_slug=None):
             entry["name"] = name
         out.append(entry)
     out.sort(key=lambda e: (str(e["slug"] or ""), e["part"]))
-    return out
+    return out[:MAX_THIN_PARTS]
 
 
 def item_geometry_message(item_id, target, file_name=None):
