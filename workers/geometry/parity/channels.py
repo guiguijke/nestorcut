@@ -123,10 +123,12 @@ def hole_interior_probe(hole):
     return body[0]
 
 
-def absolute_quality(ring, holes, space):
+def absolute_quality(ring, holes, space, golden_ring=None):
     """Qualité ABSOLUE du canal (indépendante du golden) :
     - anneau simple (0 auto-intersection)
-    - trou réellement ouvert (son intérieur n'est plus enfermé)
+    - trou réellement ouvert (son intérieur n'est plus enfermé), sauf si le
+      golden Python l'a lui-même laissé fermé (règles H : petit, profond,
+      conflit... un trou fermé est voulu, la matière pleine est sûre)
     Retourne (ok, détail)."""
     issues = []
     nx = edge_crossings(ring)
@@ -135,6 +137,8 @@ def absolute_quality(ring, holes, space):
     for h in holes:
         probe = hole_interior_probe(h)
         if point_in_ring(probe, ring):
+            if golden_ring is not None and point_in_ring(probe, golden_ring):
+                continue  # fermé par le golden aussi : décision des règles H
             issues.append("trou encore enfermé")
     return (not issues), "; ".join(issues) or "ok"
 
@@ -197,7 +201,7 @@ def main():
                 if not ok:
                     st["quality_fail"].append(f"{base}#{i}: {why}")
                 if i < len(holes_by_part):
-                    aok, awhy = absolute_quality(rr, holes_by_part[i], float(space))
+                    aok, awhy = absolute_quality(rr, holes_by_part[i], float(space), gr)
                     if not aok:
                         st["quality_fail"].append(f"{base}#{i}: {awhy}")
                 cmp = compare_rings(rr, gr)

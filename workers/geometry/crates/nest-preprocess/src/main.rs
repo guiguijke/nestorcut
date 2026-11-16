@@ -1,7 +1,9 @@
-//! nest-channels-cli: <file> <space> <difference|splice> — imports the file
+//! nest-channels-cli: <file> <space> <difference|splice|decisions> — imports the file
 //! via nest-import (content sniffing) and prints, for every holed part, the
 //! channel-opened ring as JSON {"rings": [...]}. Harness driver
-//! (workers/geometry/parity/channels.py).
+//! (workers/geometry/parity/channels.py). `decisions` prints instead, per
+//! holed part, the decision of each hole ("open", "small", "flush",
+//! "conflict", "deep"), to compare with plan_channels in Python.
 
 use serde::Serialize;
 use std::io::Read;
@@ -14,7 +16,7 @@ struct Out {
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 4 {
-        eprintln!("usage: nest-channels-cli <file> <space_mm> <difference|splice>");
+        eprintln!("usage: nest-channels-cli <file> <space_mm> <difference|splice|decisions>");
         std::process::exit(2);
     }
     let space: f64 = args[2].parse().unwrap_or(2.0);
@@ -49,6 +51,26 @@ fn main() {
         return;
     }
     let width = nest_preprocess::channel_width_for_space(space);
+    if method == "decisions" {
+        // Canaux scellés : aucune décision (les trous restent fermés).
+        let usable = nest_preprocess::channels_usable(space);
+        let decisions: Vec<Vec<&str>> = res
+            .parts
+            .iter()
+            .filter(|part| !part.holes.is_empty())
+            .map(|part| {
+                if !usable {
+                    return Vec::new();
+                }
+                nest_preprocess::plan_channels(&part.coordinates, &part.holes, width)
+                    .into_iter()
+                    .map(|d| d.name())
+                    .collect()
+            })
+            .collect();
+        println!("{}", serde_json::to_string(&serde_json::json!({ "decisions": decisions })).unwrap());
+        return;
+    }
     let usable = nest_preprocess::channels_usable(space);
     let mut rings = Vec::new();
     for part in &res.parts {
