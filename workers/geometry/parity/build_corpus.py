@@ -459,6 +459,27 @@ def main_thin_frames():
     print(f"cadres minces -> {OUT}")
 
 
+# ------------------------------------------------------- polyligne ouverte
+# Une polyligne ouverte de 4 segments ou plus qui touche le contour d'une pièce
+# donne une face qui repasse par ses sommets : la garde de longueur du
+# parcours de faces la jetait, la pièce disparaissait à l'import.
+# Mode : build_corpus.py ligne_ouverte
+
+
+def main_open_line():
+    os.makedirs(OUT, exist_ok=True)
+
+    # Carré 10x10, polyligne ouverte à 4 segments posée sur son bord gauche, autre pièce 5x5.
+    doc = new_doc()
+    msp = doc.modelspace()
+    rect(msp, 0, 0, 10, 10)
+    msp.add_lwpolyline([(0, 5), (2, 5), (2, 6), (3, 6), (3, 7)])
+    rect(msp, 20, 12, 25, 17)  # hauteur disjointe : l'ordre des pièces est celui d'y-min
+    save_new(doc, "open_line_on_outline.dxf")
+
+    print(f"polyligne ouverte -> {OUT}")
+
+
 # ---------------------------------------------------------------- SVG corpus
 SVG_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_svg")
 
@@ -676,8 +697,11 @@ if __name__ == "__main__":
         main_cut_cases()
     elif sys.argv[1:] == ["cadres"]:
         main_thin_frames()
+    elif sys.argv[1:] == ["ligne_ouverte"]:
+        main_open_line()
     else:
         main()
         main_svg()
         main_cut_cases()
         main_thin_frames()
+        main_open_line()

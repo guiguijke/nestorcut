@@ -508,7 +508,15 @@ pub fn polygonize_until(
                 if cur_from == from && cur_to == to {
                     break;
                 }
-                if face.len() > verts.len() + 2 {
+                // Garde-fou de longueur : une face parcourt chaque arête
+                // orientée au plus une fois, donc au plus 2 x arêtes. Avant le
+                // 16/11 la borne était « sommets + 2 » : une face qui repasse
+                // par ses sommets (un trait ouvert de 4 segments ou plus qui
+                // touche le contour, parcouru aller et retour) la dépassait
+                // dans un petit dessin, la face était abandonnée en silence et
+                // la pièce disparaissait à l'import (carré + trait de pliage :
+                // 0 pièce).
+                if face.len() > 2 * edges.len() + 2 {
                     ok = false;
                     break;
                 }
