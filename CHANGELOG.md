@@ -4,6 +4,38 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.15
+
+*FR*
+
+- « Imbriquer dans les trous », pièces à paroi fine, lettres et plaques très ajourées : pour rendre un trou utilisable, l'application ouvre un passage étroit entre le trou et le bord de la pièce. Sur une paroi fine, un trait de lettre ou entre deux trous voisins, ce passage pouvait effacer de la matière ou couper la pièce en morceaux pour le calcul. Une autre pièce pouvait alors être posée trop près, ou l'imbrication était refusée au contrôle final (« chevauchements mesurés ») et remboursée. Un trou n'est maintenant ouvert que si son passage n'abîme pas la pièce. Sinon il reste fermé pendant le calcul ; de petites pièces peuvent encore y être rangées à la fin.
+- Import sur l'appareil : dans un petit dessin, une pièce dont le contour est touché par un trait ouvert (ligne de pliage ou de gravure) pouvait disparaître. Elle est maintenant lue comme sur le serveur.
+
+*EN*
+
+- "Nest parts inside holes", parts with thin walls, letters and plates with many holes: to make a hole usable, the application opens a narrow passage between the hole and the edge of the part. On a thin wall, a letter stroke or between two neighbouring holes, this passage could erase material or cut the part into pieces for the nesting. Another part could then be placed too close, or the nesting was refused by the final check ("measured overlaps") and refunded. A hole is now opened only if its passage does not damage the part. Otherwise it stays closed during the nesting; small parts can still be put into it at the end.
+- Import on the device: in a small drawing, a part whose outline is touched by an open line (bend or engraving line) could disappear. It is now read as on the server.
+
+*PT*
+
+- Encaixe de peças nos furos, peças de parede fina, letras e chapas muito vazadas: para tornar um furo utilizável, o aplicativo abre uma passagem estreita entre o furo e a borda da peça. Numa parede fina, num traço de letra ou entre dois furos vizinhos, essa passagem podia apagar material ou cortar a peça em pedaços para o cálculo. Outra peça podia então ser colocada perto demais, ou o encaixe era recusado na verificação final («sobreposições medidas») e reembolsado. Um furo agora só é aberto se a passagem não danificar a peça. Caso contrário ele fica fechado durante o cálculo; peças pequenas ainda podem ser colocadas nele no final.
+- Importação no aparelho: num desenho pequeno, uma peça cujo contorno é tocado por um traço aberto (linha de dobra ou de gravação) podia desaparecer. Agora ela é lida como no servidor.
+
+*IT*
+
+- Inserimento dei pezzi nei fori, pezzi con parete sottile, lettere e lamiere molto forate: per rendere utilizzabile un foro, l'applicazione apre un passaggio stretto tra il foro e il bordo del pezzo. Su una parete sottile, un tratto di lettera o tra due fori vicini, questo passaggio poteva cancellare del materiale o tagliare il pezzo in più parti per il calcolo. Un altro pezzo poteva allora essere posato troppo vicino, oppure il nesting veniva rifiutato dal controllo finale («sovrapposizioni misurate») e rimborsato. Un foro viene ora aperto solo se il suo passaggio non danneggia il pezzo. Altrimenti resta chiuso durante il calcolo; dei pezzi piccoli possono ancora esservi inseriti alla fine.
+- Importazione sul dispositivo: in un disegno piccolo, un pezzo il cui contorno è toccato da un tratto aperto (linea di piega o di incisione) poteva sparire. Ora viene letto come sul server.
+
+*DE*
+
+- Teile in Löchern verschachteln, Teile mit dünner Wand, Buchstaben und stark durchbrochene Tafeln: Um ein Loch nutzbar zu machen, öffnet die Anwendung einen schmalen Durchgang zwischen dem Loch und dem Rand des Teils. An einer dünnen Wand, einem Buchstabenstrich oder zwischen zwei benachbarten Löchern konnte dieser Durchgang Material entfernen oder das Teil für die Berechnung in Stücke schneiden. Ein anderes Teil konnte dann zu nah platziert werden, oder die Verschachtelung wurde bei der Endprüfung abgelehnt („gemessene Überlappungen“) und erstattet. Ein Loch wird jetzt nur geöffnet, wenn sein Durchgang das Teil nicht beschädigt. Andernfalls bleibt es während der Berechnung geschlossen; kleine Teile können am Ende trotzdem noch hineingelegt werden.
+- Import auf dem Gerät: In einer kleinen Zeichnung konnte ein Teil verschwinden, dessen Kontur von einer offenen Linie (Biege- oder Gravurlinie) berührt wird. Es wird jetzt wie auf dem Server gelesen.
+
+*ES*
+
+- Anidado de piezas en los agujeros, piezas de pared fina, letras y chapas muy caladas: para que un agujero se pueda usar, la aplicación abre un paso estrecho entre el agujero y el borde de la pieza. En una pared fina, un trazo de letra o entre dos agujeros vecinos, ese paso podía borrar material o cortar la pieza en trozos para el cálculo. Otra pieza podía entonces colocarse demasiado cerca, o el anidado se rechazaba en la comprobación final («solapamientos medidos») y se reembolsaba. Ahora un agujero solo se abre si su paso no daña la pieza. Si no, queda cerrado durante el cálculo; al final todavía se pueden colocar piezas pequeñas en él.
+- Importación en el dispositivo: en un dibujo pequeño, una pieza cuyo contorno es tocado por un trazo abierto (línea de plegado o de grabado) podía desaparecer. Ahora se lee como en el servidor.
+
 ## V0.9.14
 
 *FR*

@@ -691,7 +691,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
       plus petite silhouette contenant son centroïde, même si l'encre en
       dépasse (Python fait pareil) ; (d) `open_holes_difference` sur parois
       fines : « Imbriquer dans les trous » échoue (« chevauchements mesurés »)
-      ou livre avec « ✗ Écart » ; (e) `pinwheel.rs::interior_probes` garde le
+      ou livre avec « ✗ Écart » (corrigé le 16/11, piège 33d) ; (e) `pinwheel.rs::interior_probes` garde le
       pas de bissectrice (une rotation perdue au pire, jamais un fichier
       faux) ; (f) le lecteur Python (`recover.readfile`) vide un DXF R12 à
       handles en double ; (g) une encre OUVERTE qui touche une pièce part
@@ -699,6 +699,56 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
       sur 6 dessins à plusieurs pièces du corpus, dont un nouveau sur un
       dessin où le lot reconnaît 24 pièces de plus. Aucun contrôle de l'app
       ne mesure les tracés portés par une pièce, seulement son contour.
+
+33d. **« Imbriquer dans les trous » : un trou n'est ouvert que si son canal
+    est inoffensif** (règle H, 16/11 ; `holed_polygons.py::plan_channels` et
+    son jumeau `nest-preprocess::plan_channels`). Avant, TOUS les trous
+    étaient ouverts : sur 246 pièces à trous du corpus, 36 à 46 sortaient
+    coupées en morceaux (un canal traverse un autre trou qui a son canal ; le
+    plus gros morceau seul était gardé), 56 à 68 laissaient poser une pièce
+    sur de la vraie matière, et un cadre à paroi de 0,3 mm perdait une paroi
+    entière (« chevauchements mesurés » et remboursement, ou « ✗ Écart »).
+    - Décision par trou, dans l'ORDRE DU DESSIN (pas de tri : l'ordre par
+      longueur ouvrait 14 % de trous en moins à sûreté égale) : `small` (trou
+      pas plus large que 2 largeurs de canal, ou dégénéré), `flush` (touche
+      l'extérieur), `conflict` (à 0,01 mm ou moins d'un trou ou d'un canal
+      déjà ouvert ; canal contre canal : 0,55 largeur), `deep` (ouvert seul,
+      le canal efface de la matière à plus de 0,55 largeur de ce qui reste).
+      Un trou fermé reste PLEIN pour le moteur ; la passe finale hole-fill,
+      qui travaille sur la vraie géométrie, peut encore le remplir.
+    - `deep` échantillonne une grille dans le canal ET les contours coupés au
+      canal : la grille seule enjambe une paroi plus fine que largeur/8.
+    - Le canal-contre-canal à 0,55 largeur n'est pas un confort : `deep`
+      regarde un trou SEUL, deux canaux voisins pouvaient chacun s'appuyer
+      sur la matière que l'autre efface.
+    - La construction d'UN canal ne change pas. Verrou à tenir : la pièce
+      hôte des benchmarks publics (`seed_corpus.py::host_ring`) rend un
+      anneau identique à l'octet ; sinon les chiffres publics bougent.
+    - Écarts connus serveur/navigateur : égalités de distance du point le
+      plus proche (12 trous dans 9 pièces du corpus, une décision) ; contacts
+      à 1 ulp, où le Rust ferme par prudence. Le wasm lit ses nombres avec le
+      parseur par défaut de serde_json, qui peut se tromper d'un ulp : tout
+      contrôle externe d'un anneau du navigateur compare avec une tolérance
+      (une comparaison exacte a produit une fausse alerte « trou recouvert »).
+    - Côté Rust, pas d'arrangement de toute la pièce par trou (le coût
+      croissait en trous x sommets) : voisinage du canal, arrangement
+      contrôlé, index par tranches plafonné.
+    - Restes connus : la matière abandonnée sous 0,05 mm² n'est pas dans
+      l'anneau (deux pièces du corpus à 2 mm, canal jusqu'à 0,81 largeur de
+      profondeur, aucune pose possible dedans) ; quand tous les trous d'une
+      pièce restent fermés, les appelants la traitent encore comme « à
+      trous » (travail perdu seulement).
+
+33e. **Marche des faces : la borne de longueur est 2 x arêtes, pas « sommets
+    + 2 »** (`assemble.rs::polygonize_until`, 16/11). Une face qui repasse
+    par ses sommets (contour touché par un trait ouvert de 4 segments ou
+    plus, parcouru aller et retour) dépassait l'ancienne borne dans un petit
+    dessin et était abandonnée EN SILENCE : carré + ligne de pliage sur son
+    bord = 0 pièce à l'import navigateur. Verrou :
+    `nest-import/tests/open_line_on_outline.rs` (le cas du corpus de parité
+    ne discrimine pas : sa seconde pièce ajoute des sommets). Ne pas
+    remettre une borne en nombre de sommets : une face n'est pas un cycle
+    simple.
 
 ### Server (quotas & promo)
 
