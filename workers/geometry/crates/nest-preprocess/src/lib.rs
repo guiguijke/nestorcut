@@ -421,6 +421,26 @@ mod tests {
     }
 
     #[test]
+    fn two_channels_edge_to_edge_keep_the_material() {
+        // Défaut du 16/11 : deux canaux de 0,6 mm qui se touchent bord à bord
+        // coupent le bord extérieur en deux points distants de 1 ulp
+        // (32,400000000000006 et 32,4). Le nodage en écartait un, la face de
+        // matière fusionnait avec la face extérieure et l'anneau rendu était
+        // l'extérieur intact (10 000 mm²) — ou, sur un vrai dessin, un
+        // morceau de 13 696 mm² pour une pièce de 867 477 mm².
+        // Sens et point de départ de l'anneau comptent : c'est le t le long
+        // du bord haut, parcouru de x = 0 vers x = 100, qui confondait les
+        // deux points.
+        let outer: Vec<Pt> = vec![[0.0, 0.0], [0.0, 100.0], [100.0, 100.0], [100.0, 0.0], [0.0, 0.0]];
+        let h1: Vec<Pt> = vec![[31.85, 80.0], [32.35, 80.0], [32.1, 90.0], [31.85, 80.0]];
+        let h2: Vec<Pt> = vec![[32.45, 80.0], [32.95, 80.0], [32.7, 90.0], [32.45, 80.0]];
+        let ring = open_holes_difference(&outer, &[h1, h2], 0.6);
+        let area = ga::ring_signed_area(&ring).abs();
+        // Valeur de la référence Python (shapely) sur les mêmes entrées.
+        assert!((area - 9981.632).abs() < 0.01, "aire {area}");
+    }
+
+    #[test]
     fn difference_opens_channel() {
         let outer = rect(0.0, 0.0, 100.0, 100.0);
         let hole = rect(40.0, 40.0, 60.0, 60.0);

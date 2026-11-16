@@ -358,17 +358,39 @@ pub fn node_segments_until(segments: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(
             out.push((a1, a2));
             continue;
         }
-        ts.sort_by(|x, y| x.0.total_cmp(&y.0));
-        ts.dedup_by(|x, y| (x.0 - y.0).abs() < 1e-12);
+        // Ordre le long du segment : le paramètre t, puis, à t égal, la
+        // coordonnée de l'axe dominant dans le sens du segment (deux points
+        // distincts à 1 ulp l'un de l'autre ont le même t sur une arête de
+        // 1800 mm).
+        let along = |q: Pt| -> f64 {
+            let (dx, dy) = (a2[0] - a1[0], a2[1] - a1[1]);
+            if dx.abs() >= dy.abs() {
+                if dx >= 0.0 { q[0] } else { -q[0] }
+            } else if dy >= 0.0 {
+                q[1]
+            } else {
+                -q[1]
+            }
+        };
+        ts.sort_by(|x, y| x.0.total_cmp(&y.0).then(along(x.1).total_cmp(&along(y.1))));
+        // On ne retire que les points IDENTIQUES (mêmes bits). Avant le
+        // 16/11, deux points de coupe distincts dont les t différaient de
+        // moins de 1e-12 étaient confondus : l'un était écarté, l'autre
+        // segment gardait pourtant son extrémité en ce point, qui restait
+        // posée au milieu d'une arête non coupée. `polygonize` (sommets par
+        // bits exacts) ne reliait plus rien, et la face de matière fusionnait
+        // avec la face extérieure : sur un cadre de 670x1800 à 111 trous,
+        // l'anneau ouvert tombait de 867 477 à 13 696 mm². Le cas se produit
+        // quand deux canaux se touchent bord à bord.
+        let same = |p: Pt, q: Pt| p[0].to_bits() == q[0].to_bits() && p[1].to_bits() == q[1].to_bits();
+        ts.dedup_by(|x, y| same(x.1, y.1));
         let mut prev = a1;
-        let mut prev_t = 0.0;
         for &(t, p) in &ts {
-            if t <= prev_t || t >= 1.0 {
+            if !(0.0..=1.0).contains(&t) || same(p, a1) || same(p, a2) || same(p, prev) {
                 continue;
             }
             out.push((prev, p));
             prev = p;
-            prev_t = t;
         }
         out.push((prev, a2));
     }
