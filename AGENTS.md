@@ -803,9 +803,13 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
       pièces par rang, le Rust les range par (y-min, x-min), GEOS non. Dans
       `rotated_plates.dxf` le carré est placé sous les plaques pour que les
       deux rangs coïncident.
-    - Les tests de `workers/fileprocessing` ne tournent pas dans la CI
-      (`build-images.yml` ne lance que ceux de `workers/nesting`) : les
-      lancer dans l'image du worker avant tout changement de l'importeur.
+    - Les tests de `workers/fileprocessing` et de `workers/common` tournent
+      dans la CI depuis le 18/11 (job `tests` de `build-images.yml`, qui
+      conditionne la construction des images). Avant, seuls ceux de
+      `workers/nesting` y tournaient. Les deux essais DWG aller-retour y sont
+      sautés (`dwgread` n'existe que dans l'image du worker) : pour ceux-là,
+      lancer la suite dans l'image, avec tout `workers/` monté (ces tests
+      lisent aussi `workers/geometry`, que l'image n'embarque pas).
 
 ### Server (quotas & promo)
 
@@ -1273,8 +1277,8 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 npx vitest run                                             # app+server (708 au 2026-09-13)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
-cd workers/common && python -m pytest tests/ -q            # 48 (image docker)
-cd workers/fileprocessing && python -m pytest tests/ -q    # 33 (+2 skipped) (image docker)
+cd workers/common && python -m pytest tests/ -q            # 101 au 18/11 (aussi dans la CI ; lit workers/geometry)
+cd workers/fileprocessing && python -m pytest tests/ -q    # 127 dans l'image du worker, 125 + 2 sautés (DWG) ailleurs et dans la CI (18/11 ; lit workers/geometry)
 python workers/nesting/bench/determinism_lock.py           # natif ≡ wasm, SHA identiques
 npx nuxt build                                             # app
 cd ../nestorcut-website && npm run build                   # site marketing (dépôt frère)

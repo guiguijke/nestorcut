@@ -84,6 +84,19 @@ jobs:
           NEST_ENGINE_BIN: ${{ github.workspace }}/workers/nesting/engine/target/release/nest-engine
         run: python -m pytest tests/ -m "not slow" -q
 
+      # Until 2026-11-18 only workers/nesting was tested here: the server
+      # importer (workers/fileprocessing) and the shared package could change
+      # and ship with no test run at all. Same Python environment as above
+      # (both requirement sets are already installed). The two DWG round-trip
+      # tests skip here: dwgread/dwgwrite only exist in the worker image.
+      - name: Shared package tests (worker_common)
+        working-directory: workers/common
+        run: python -m pytest tests/ -q
+
+      - name: File-processing worker tests (server importer)
+        working-directory: workers/fileprocessing
+        run: python -m pytest tests/ -q
+
   build-and-push:
     name: ${{ matrix.image }}
     runs-on: ubuntu-24.04
