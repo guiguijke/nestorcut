@@ -4,6 +4,44 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.16
+
+*FR*
+
+- Import : un éclat de dessin plus fin que 0,1 mm (souvent un contour refermé presque sur lui-même) pouvait être gardé comme une pièce. Le calcul refusait alors toute l'imbrication. Une telle pièce est maintenant écartée à l'import, sur l'appareil comme sur le serveur et quel que soit son sens dans le dessin, avec le message « pièces trop petites pour être découpées ont été écartées ». Les autres pièces s'imbriquent normalement.
+- Import sur le serveur : quand un fichier ne contient aucune pièce, la fiche en erreur en donne maintenant la raison (« Aucune pièce fermée trouvée dans ce fichier. »).
+- « Éclater en pièces », sur une fiche importée par le serveur, ne crée plus de fiche pour une pièce écartée.
+
+*EN*
+
+- Import: a drawing sliver thinner than 0.1 mm (often an outline closed almost onto itself) could be kept as a part. The nesting was then refused as a whole. Such a part is now dropped at import, on the device and on the server alike and whatever its direction in the drawing, with the message "parts too small to cut were dropped". The other parts nest normally.
+- Import on the server: when a file holds no part, the error card now gives the reason ("No closed part found in this file.").
+- "Split into parts", on a card imported by the server, no longer creates a card for a dropped part.
+
+*PT*
+
+- Importação: uma lasca de desenho mais fina que 0,1 mm (muitas vezes um contorno fechado quase sobre si mesmo) podia ser mantida como uma peça. O cálculo recusava então todo o encaixe. Uma peça assim agora é descartada na importação, tanto no aparelho quanto no servidor e qualquer que seja o seu sentido no desenho, com a mensagem «peças pequenas demais para cortar foram descartadas». As outras peças são encaixadas normalmente.
+- Importação no servidor: quando um arquivo não contém nenhuma peça, a ficha em erro agora diz o motivo («Nenhuma peça fechada encontrada neste arquivo.»).
+- «Separar em peças», numa ficha importada pelo servidor, não cria mais uma ficha para uma peça descartada.
+
+*IT*
+
+- Importazione: una scheggia di disegno più sottile di 0,1 mm (spesso un contorno richiuso quasi su se stesso) poteva essere tenuta come un pezzo. Il calcolo rifiutava allora tutto il nesting. Un pezzo così viene ora scartato all'importazione, sul dispositivo come sul server e qualunque sia il suo verso nel disegno, con il messaggio «pezzi troppo piccoli per essere tagliati sono stati scartati». Gli altri pezzi vengono inseriti normalmente.
+- Importazione sul server: quando un file non contiene nessun pezzo, la scheda in errore ne indica ora il motivo («Nessun pezzo chiuso trovato in questo file.»).
+- «Separa in pezzi», su una scheda importata dal server, non crea più una scheda per un pezzo scartato.
+
+*DE*
+
+- Import: Ein Zeichnungssplitter, der dünner als 0,1 mm ist (oft eine Kontur, die fast auf sich selbst geschlossen ist), konnte als Teil behalten werden. Die Berechnung lehnte dann die gesamte Verschachtelung ab. Ein solches Teil wird jetzt beim Import verworfen, auf dem Gerät wie auf dem Server und unabhängig von seiner Richtung in der Zeichnung, mit der Meldung „zu kleine Teile wurden verworfen“. Die anderen Teile werden normal verschachtelt.
+- Import auf dem Server: Wenn eine Datei kein Teil enthält, nennt die Fehlerkarte jetzt den Grund („Kein geschlossenes Teil in dieser Datei gefunden.“).
+- „In Einzelteile zerlegen“ erzeugt bei einer vom Server importierten Karte keine Karte mehr für ein verworfenes Teil.
+
+*ES*
+
+- Importación: una esquirla de dibujo más fina que 0,1 mm (a menudo un contorno cerrado casi sobre sí mismo) podía conservarse como una pieza. El cálculo rechazaba entonces todo el anidado. Una pieza así ahora se descarta en la importación, tanto en el dispositivo como en el servidor y sea cual sea su sentido en el dibujo, con el mensaje «piezas demasiado pequeñas para cortar han sido descartadas». Las demás piezas se anidan con normalidad.
+- Importación en el servidor: cuando un archivo no contiene ninguna pieza, la ficha en error indica ahora el motivo («No se ha encontrado ninguna pieza cerrada en este archivo.»).
+- «Separar en piezas», en una ficha importada por el servidor, ya no crea una ficha para una pieza descartada.
+
 ## V0.9.15
 
 *FR*

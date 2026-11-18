@@ -750,6 +750,63 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     remettre une borne en nombre de sommets : une face n'est pas un cycle
     simple.
 
+33f. **Règle W : un corps plus fin que 0,1 mm dans N'IMPORTE QUELLE direction
+    n'est pas une pièce** (18/11 ; `assemble.rs::ring_too_thin` et son miroir
+    `worker_common/geometry/cleanup.py::ring_too_thin`, seuil
+    `MIN_PART_WIDTH_MM`). Avant, seul le rectangle englobant était regardé
+    (largeur ou hauteur sous 0,1 mm) : une lame en biais passait. Une
+    polyligne fermée (40,30)-(50,40)-(40.004,30.003) était émise ou écartée
+    selon son sommet de départ, pas le même côté serveur et côté appareil, et
+    le moteur refusait alors TOUT le travail (« no pole found with 10 levels
+    of recursion »). Ce refus du moteur est erratique (il dépend de
+    l'alignement, pas d'un seuil net), mais rien d'au moins 0,1 mm d'épaisseur
+    n'a échoué.
+    - La règle : largeur minimale de l'enveloppe convexe de l'anneau extérieur
+      NETTOYÉ (plus petit écart entre deux parallèles qui l'enserrent) sous
+      0,1 mm => corps écarté et compté (`import.partsDropped`), juste après le
+      test du rectangle englobant. Pas de règle W sur les trous
+      (`is_micro_void` s'en charge).
+    - Même arithmétique, même ordre d'opérations en Rust et en Python (ni
+      `hypot`, ni `sqrt`, ni `mul_add`, comparaisons `<` / `>` écrites, pas de
+      `min`/`max`) : même anneau, même décision. Un test relit la constante
+      DANS le fichier Rust.
+    - **Les calibres tournants ne sont qu'un FILTRE.** En flottant,
+      l'enveloppe garde des sommets colinéaires à l'arrondi près, la boucle
+      s'arrête sur un faux plateau et rend une largeur fausse et minuscule :
+      un carré de 141 mm tourné de 45°, deux sommets en trop sur un bord,
+      était écarté. Avant d'écarter, on recalcule l'étendue de TOUS les
+      sommets de l'enveloppe par rapport au côté. Ne pas retirer ce balayage.
+      Verrous : `nest-import/tests/thin_parts.rs`,
+      `TestRingTooThinCollinear`, `corpus_extra/rotated_plates.dxf`. Un test
+      par tirage de points quelconques ne voit PAS ce défaut : il faut des
+      familles colinéaires / 45° / sur grille, jugées en arithmétique exacte.
+    - L'émission Python (`build_geometry.py::to_mongo_dict`) suit maintenant
+      l'ordre de `assemble.rs` : anneau extérieur nettoyé SANS son sommet de
+      fermeture (shapely répète le premier point ; nettoyer l'anneau fermé
+      était le défaut d'origine du serveur), moins de 3 sommets => écarté,
+      sommet de fermeture remis, rectangle englobant de l'anneau NETTOYÉ,
+      règle W, trous. `width`/`height` sont ceux de l'anneau nettoyé.
+      `reduce_ring` n'est PAS changé (cela déplacerait des sommets dans 9
+      dessins réels).
+    - Serveur : s'il ne reste aucune pièce, `importErrorCode: no_closed_part`
+      => la fiche en erreur dit « Aucune pièce fermée trouvée » (clé
+      `localImport.noParts`) ; « Éclater » ne fait une fiche que pour les
+      corps ÉMIS.
+    - Limites connues : (a) une forme concave fine partout (un V aux bras de
+      0,05 mm) a une enveloppe épaisse, elle est émise ; le moteur seul l'a
+      refusée, l'application l'a imbriquée : erratique, et le message de refus
+      nomme le fichier et la pièce. (b) Sur un anneau NON arrondi, des points
+      quasi confondus (1e-12 mm) laissent dans l'enveloppe flottante un point
+      intérieur : 6 lames de 0,098 à 0,09999 mm gardées sur 500 000 ; hors
+      d'atteinte après l'arrondi à 1e-4 des importeurs.
+    - Cas de parité avec des pièces TOURNÉES : `compare.py` compare les
+      pièces par rang, le Rust les range par (y-min, x-min), GEOS non. Dans
+      `rotated_plates.dxf` le carré est placé sous les plaques pour que les
+      deux rangs coïncident.
+    - Les tests de `workers/fileprocessing` ne tournent pas dans la CI
+      (`build-images.yml` ne lance que ceux de `workers/nesting`) : les
+      lancer dans l'image du worker avant tout changement de l'importeur.
+
 ### Server (quotas & promo)
 
 34. **Toute limite user-specific passe par un resolver dans
