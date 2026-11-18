@@ -480,6 +480,79 @@ def main_open_line():
     print(f"polyligne ouverte -> {OUT}")
 
 
+# ------------------------------------------------- piece degeneree
+# shapely repete le premier point en fin d'anneau ; le nettoyage (reduce_ring,
+# strip_spurs) travaille sur un anneau OUVERT. Le serveur le faisait sur
+# l'anneau FERME : une piece ramenee a deux points distincts (aller puis
+# retour a moins de 0,01 mm) passait le seuil de 3 points, etait emise, et le
+# moteur refusait ensuite tout le travail. Elle est maintenant ecartee et
+# comptee (import.partsDropped), comme sur l'appareil.
+# Mode : build_corpus.py anneaux
+
+
+def main_degenerate_rings():
+    os.makedirs(OUT, exist_ok=True)
+
+    doc = new_doc()
+    msp = doc.modelspace()
+    # Carre 20x20, piece degeneree (l'aller, 10 mm, puis le retour a 0,005 mm
+    # du depart), carre 10x10 : y-min distincts, l'ordre des pieces est celui d'y-min.
+    rect(msp, 0, 0, 20, 20)
+    msp.add_lwpolyline([(40, 30), (50, 40), (40.004, 30.003)], close=True)
+    rect(msp, 60, 60, 70, 70)
+    save_new(doc, "degenerate_ring_parts.dxf")
+
+    # Regle W (largeur minimale < 0,1 mm = pas une piece), quel que soit le
+    # sommet de depart et l'orientation : la meme lame (40,30)-(50,40)-
+    # (40.004,30.003) dessinee trois fois, chaque polyligne partant d'un
+    # sommet different, un triangle diagonal de 100 mm dont le sommet est
+    # releve de 0,05 mm au milieu de la base, deux pieces ordinaires.
+    # Attendu : 2 pieces (carre 20x20, carre 10x10), 4 corps ecartes.
+    doc = new_doc()
+    msp = doc.modelspace()
+    rect(msp, 0, 0, 20, 20)
+    base = [(40, 30), (50, 40), (40.004, 30.003)]
+    for k, dx in enumerate((0, 30, 60)):
+        ring = base[k:] + base[:k]
+        msp.add_lwpolyline([(x + dx, y) for x, y in ring], close=True)
+    # Base (0,0)-(100,100), sommet au milieu (50,50) + 0,05 mm le long de la normale.
+    nx, ny = -0.05 / 2 ** 0.5, 0.05 / 2 ** 0.5
+    msp.add_lwpolyline(
+        [(150, 0), (250, 100), (200 + nx, 50 + ny)], close=True)
+    rect(msp, 0, 60, 10, 70)
+    save_new(doc, "sliver_rotations.dxf")
+
+    # Plaques tournees (revue B1 de la regle W) : des sommets colineaires a
+    # l'arrondi pres sur un bord faisaient juger une plaque epaisse trop mince.
+    # Le carre de 141,4 mm tourne de 45 degres (deux sommets en trop sur un
+    # bord), deux plaques a 45 degres au 1e-4 pres (les sommets de la revue),
+    # un carre 20x20. Aucune plaque ne touche une autre. Le carre est place
+    # SOUS les plaques (y de -40 a -20) : le comparateur de parite compare les
+    # pieces par rang, le Rust les range par y-min, et GEOS ne range pas des
+    # pieces tournees selon cette cle (carre a y=0 ou y=20 : rangs differents
+    # des deux cotes, cas note DIVERGENT alors que les anneaux sont egaux).
+    # Attendu : 4 pieces, 0 corps ecarte.
+    doc = new_doc()
+    msp = doc.modelspace()
+    sq45 = [(206.6, 143.9), (232.6, 117.9), (294.6, 55.9), (306.6, 43.9), (406.6, 143.9), (306.6, 243.9)]
+    snap1 = [(636.7545, 252.7036), (811.0647, 427.0138), (525.3571, 712.7214), (405.2391, 592.6033),
+             (351.0469, 538.4111), (435.2852, 454.1728), (545.9314, 343.5266), (578.1704, 311.2876),
+             (592.3229, 297.1351)]
+    snap3 = [(94.4682, 69.9772), (102.1386, 62.3068), (143.2132, 21.2322), (164.4454, 0.0),
+             (192.7332, 28.2879), (196.0551, 31.6097), (199.8007, 35.3553), (160.6341, 74.522),
+             (101.2828, 133.8733), (54.0919, 181.0642), (47.7358, 174.7081), (43.9051, 170.8775),
+             (37.286, 164.2583), (23.5106, 150.483), (18.7365, 145.7089), (28.113, 136.3324)]
+    # Coordonnees telles quelles (une translation change l'arrondi et ferait
+    # echouer moins de plaques avec l'ancien code) ; les trois emprises sont
+    # disjointes, le carre 20x20 est a part.
+    for plate in (sq45, snap1, snap3):
+        msp.add_lwpolyline(plate, close=True)
+    rect(msp, 900, -40, 920, -20)
+    save_new(doc, "rotated_plates.dxf")
+
+    print(f"piece degeneree -> {OUT}")
+
+
 # ---------------------------------------------------------------- SVG corpus
 SVG_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_svg")
 
@@ -699,9 +772,12 @@ if __name__ == "__main__":
         main_thin_frames()
     elif sys.argv[1:] == ["ligne_ouverte"]:
         main_open_line()
+    elif sys.argv[1:] == ["anneaux"]:
+        main_degenerate_rings()
     else:
         main()
         main_svg()
         main_cut_cases()
         main_thin_frames()
         main_open_line()
+        main_degenerate_rings()

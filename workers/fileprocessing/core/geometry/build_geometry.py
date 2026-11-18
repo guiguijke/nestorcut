@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from worker_common.geometry.cleanup import is_micro_void, strip_spurs
+from worker_common.geometry.cleanup import is_micro_void, ring_too_thin, strip_spurs
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
 from worker_common.geometry.import_findings import NOTABLE_SAGITTA_MM
 
@@ -209,16 +209,7 @@ class ClosedPolygon:
         if not isinstance(self.geometry, Polygon):
             raise TypeError("The 'geometry' attribute must be a shapely Polygon.")
 
-        bounding_box = self.geometry.bounds
-
-        width = bounding_box[2] - bounding_box[0]
-        height = bounding_box[3] - bounding_box[1]
-
-        if (abs(width) < 0.1 or abs(height) < 0.1):
-            return None
-
-        def reduce_ring(ring) -> List[List[float]]:
-            coords = list(zip(*ring.coords.xy))
+        def reduce_ring(coords) -> List[List[float]]:
             if not coords:
                 return []
             reduced = [coords[0]]
@@ -228,20 +219,50 @@ class ClosedPolygon:
                     reduced.append(point)
             return [[p[0], p[1]] for p in reduced]
 
-        exterior_coords, spurs = strip_spurs(reduce_ring(self.geometry.exterior))
-        # Lot E1 : l'anneau nettoye doit encore fermer quelque chose.
-        if len(exterior_coords) < 3:
-            if stats is not None:
+        def clean_ring(ring):
+            """Nettoie un anneau shapely comme le fait le Rust (assemble.rs).
+
+            shapely REPETE le premier point en fin d'anneau, or reduce_ring et
+            strip_spurs travaillent sur un anneau OUVERT cyclique : on retire
+            la fermeture, on nettoie, on compte les sommets restants, et on
+            remet la fermeture seulement si l'anneau tient encore (>= 3
+            sommets). Rend (anneau ferme ou None, sommets d'ergots retires).
+            """
+            coords = list(zip(*ring.coords.xy))
+            if len(coords) > 1 and coords[0] == coords[-1]:
+                coords = coords[:-1]
+            open_ring, removed = strip_spurs(reduce_ring(coords))
+            if len(open_ring) < 3:
+                return None, removed
+            if open_ring[0] != open_ring[-1]:
+                open_ring.append(list(open_ring[0]))
+            return open_ring, removed
+
+        # Ordre de l'emission = miroir EXACT d'assemble.rs : on nettoie
+        # l'anneau (ergots comptes dans TOUS les cas, meme si le corps est
+        # ensuite ecarte), on mesure la bbox de l'anneau NETTOYE, puis la
+        # regle W (largeur minimale), puis les trous.
+        exterior_coords, spurs = clean_ring(self.geometry.exterior)
+        if exterior_coords is None:
+            if stats is not None and spurs:
+                stats["spursRemoved"] = stats.get("spursRemoved", 0) + spurs
+            return None
+        xs = [p[0] for p in exterior_coords]
+        ys = [p[1] for p in exterior_coords]
+        width = max(xs) - min(xs)
+        height = max(ys) - min(ys)
+        if abs(width) < 0.1 or abs(height) < 0.1 or ring_too_thin(exterior_coords):
+            if stats is not None and spurs:
                 stats["spursRemoved"] = stats.get("spursRemoved", 0) + spurs
             return None
         hole_rings = []
         micro_voids = 0
         for interior in self.geometry.interiors:
-            ring, removed = strip_spurs(reduce_ring(interior))
+            ring, removed = clean_ring(interior)
             spurs += removed
             # Lot E1 : un micro-vide n'est plus un trou — il est rebouche
             # (retire de la liste, la matiere reprend sa place) et compte.
-            if len(ring) < 3 or is_micro_void(ring):
+            if ring is None or is_micro_void(ring):
                 micro_voids += 1
                 continue
             hole_rings.append(ring)

@@ -25,6 +25,72 @@ un test les relit DANS le fichier Rust (pas une copie de constantes).
 MICRO_VOID_AREA_MM2 = 1.0
 MICRO_VOID_MIN_DIM_MM = 0.5
 SPUR_EPS_MM = 0.01
+# Regle W : un corps dont la LARGEUR MINIMALE (plus petit ecart entre deux
+# droites paralleles qui l'enserrent) est sous ce seuil n'est pas une piece.
+MIN_PART_WIDTH_MM = 0.1
+
+
+def _cross(o, a, b) -> float:
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def ring_too_thin(ring) -> bool:
+    """Regle W : la largeur minimale de l'anneau est-elle sous MIN_PART_WIDTH_MM ?
+
+    Enveloppe convexe (chaine monotone d'Andrew) puis calipers tournants : la
+    largeur minimale est atteinte sur un cote de l'enveloppe. Meme arithmetique,
+    meme ordre d'operations que `ring_too_thin` de assemble.rs (ni hypot, ni
+    sqrt, ni FMA) : meme anneau, meme decision, au bit pres. L'anneau peut etre
+    ouvert ou ferme (les points egaux sont dedoubles).
+    """
+    pts = sorted((float(p[0]), float(p[1])) for p in ring)
+    pts = [p for i, p in enumerate(pts) if i == 0 or p != pts[i - 1]]
+    if len(pts) < 3:
+        return True
+    lower = []
+    for p in pts:
+        while len(lower) >= 2 and _cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+    upper = []
+    for p in reversed(pts):
+        while len(upper) >= 2 and _cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+    hull = lower[:-1] + upper[:-1]
+    m = len(hull)
+    if m < 3:
+        return True
+    w2 = MIN_PART_WIDTH_MM * MIN_PART_WIDTH_MM
+    j = 1
+    for i in range(m):
+        p = hull[i]
+        q = hull[(i + 1) % m]
+        dx = q[0] - p[0]
+        dy = q[1] - p[1]
+        len2 = dx * dx + dy * dy
+        steps = 0
+        while steps < m and _cross(p, q, hull[(j + 1) % m]) > _cross(p, q, hull[j]):
+            j = (j + 1) % m
+            steps += 1
+        c = _cross(p, q, hull[j])
+        if c * c < w2 * len2:
+            # Les calibres ne sont qu'un FILTRE : en flottant, l'enveloppe garde
+            # des sommets colineaires a l'arrondi pres, la boucle ci-dessus
+            # s'arrete sur un faux plateau et `c` est une largeur fausse et
+            # minuscule (revue B1). On confirme par un balayage complet du cote.
+            lo = 0.0
+            hi = 0.0
+            for k in range(m):
+                v = _cross(p, q, hull[k])
+                if v < lo:
+                    lo = v
+                if v > hi:
+                    hi = v
+            e = hi - lo
+            if e * e < w2 * len2:
+                return True
+    return False
 
 
 def _ring_signed_area(ring) -> float:

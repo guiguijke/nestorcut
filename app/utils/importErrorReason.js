@@ -11,6 +11,9 @@ const REASON_KEYS = {
     dwg_conversion_failed: 'files.importError.dwgCorrupt',
     dwg_output_unreadable: 'files.importError.dwgOutput',
     paper_space_only: 'files.importError.paperSpaceOnly',
+    // Le fichier est lu mais aucune pièce fermée n'en sort (corps trop fins,
+    // trop petits ou non fermés) : même phrase que l'import sur l'appareil.
+    no_closed_part: 'localImport.noParts',
 }
 
 export function importErrorReasonKey(code) {

@@ -440,15 +440,18 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
     })
     
     if len(closed_parts) == 0:
+        _record_import_error(doc, "no_closed_part")
         raise Exception("Closed parts is 0")
     
     polygon_parts = []
+    emitted_parts = []
     # One random display color per part, sampled without replacement first so
     # parts of the same file look distinct in the viewer and result SVG.
     for part, color in zip(closed_parts, pick_colors(len(closed_parts))):
         mongo_dict = part.to_mongo_dict(color=color, stats=stats)
         if mongo_dict is not None:
             polygon_parts.append(mongo_dict)
+            emitted_parts.append(part)
         else:
             # Corps écarté à l'émission (côté sous 0,1 mm) : une pièce qui
             # n'arrivera jamais sur la tôle — constat lot 2c.
@@ -466,6 +469,17 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
         {"_id": doc["_id"]},
         {"$set": {"importReport": {"findings": findings}}},
     )
+
+    # Tous les corps ont ete ecartes a l'emission (cote sous 0,1 mm, anneau
+    # reduit a moins de 3 sommets, largeur minimale sous 0,1 mm = regle W) :
+    # il ne reste AUCUNE piece. Meme issue que
+    # « Closed parts is 0 » plus haut (fiche en erreur) et que l'appareil, dont
+    # l'import rend `parts: []` et refuse le fichier (« localImport.noParts »).
+    # Stocker une fiche « terminee » sans piece donnerait une carte vide, sans
+    # raison. Le constat `import.partsDropped` est deja ecrit ci-dessus.
+    if len(polygon_parts) == 0:
+        _record_import_error(doc, "no_closed_part")
+        raise Exception("Closed parts is 0 after emission (every part dropped)")
     
     dek = get_dek(db, doc)
     if dek is not None:
@@ -496,7 +510,9 @@ def _close_polygon_from_dxf(doc, logger_tag: str):
     logger.info("time taken", extra={"time": end_time - start_time})
     # Le dessin (mis a l'echelle le cas echeant) et ses pieces : l'eclatement
     # du lot E2 a besoin des handles, connus d'ici seulement.
-    return drawing, closed_parts
+    # Seuls les corps EMIS : un corps ecarte a l'emission n'a pas de fiche
+    # fille (l'appareil n'eclate que les pieces emises).
+    return drawing, emitted_parts
 
 def _exploded_names(name, total):
     """Noms des fiches d'un dessin eclate — miroir EXACT du navigateur :

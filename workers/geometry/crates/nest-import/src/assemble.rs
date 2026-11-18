@@ -871,6 +871,91 @@ pub const MICRO_VOID_MIN_DIM_MM: f64 = 0.5;
 /// Tolérance des aller-retours de largeur nulle (même 0,01 mm que
 /// `reduce_ring`, qui fusionne déjà deux sommets CONSÉCUTIFS sous ce seuil).
 pub const SPUR_EPS_MM: f64 = 0.01;
+/// Largeur minimale d'une pièce (règle W) : un corps dont l'anneau extérieur
+/// nettoyé a une largeur minimale (distance entre deux parallèles qui
+/// l'enserrent) sous ce seuil n'est pas une pièce. Miroir exact de
+/// `MIN_PART_WIDTH_MM` (`worker_common/geometry/cleanup.py`).
+pub const MIN_PART_WIDTH_MM: f64 = 0.1;
+
+#[inline]
+fn cross3(o: Pt, a: Pt, b: Pt) -> f64 {
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+}
+
+/// Règle W : la largeur minimale (plus petit calibre de l'enveloppe convexe)
+/// est-elle sous `MIN_PART_WIDTH_MM` ? Anneau ouvert ou fermé. Arithmétique
+/// identique au Python : ni `mul_add`, ni `hypot`, ni `sqrt`.
+pub fn ring_too_thin(ring: &[Pt]) -> bool {
+    let mut pts: Vec<Pt> = ring.to_vec();
+    pts.sort_by(|a, b| {
+        a[0].partial_cmp(&b[0])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a[1].partial_cmp(&b[1]).unwrap_or(std::cmp::Ordering::Equal))
+    });
+    pts.dedup_by(|a, b| a[0] == b[0] && a[1] == b[1]);
+    if pts.len() < 3 {
+        return true;
+    }
+    let mut lower: Vec<Pt> = Vec::new();
+    for &p in &pts {
+        while lower.len() >= 2 && cross3(lower[lower.len() - 2], lower[lower.len() - 1], p) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(p);
+    }
+    let mut upper: Vec<Pt> = Vec::new();
+    for &p in pts.iter().rev() {
+        while upper.len() >= 2 && cross3(upper[upper.len() - 2], upper[upper.len() - 1], p) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(p);
+    }
+    lower.pop();
+    upper.pop();
+    let mut hull = lower;
+    hull.extend(upper);
+    let m = hull.len();
+    if m < 3 {
+        return true;
+    }
+    let w2 = MIN_PART_WIDTH_MM * MIN_PART_WIDTH_MM;
+    let mut j = 1usize;
+    for i in 0..m {
+        let p = hull[i];
+        let q = hull[(i + 1) % m];
+        let dx = q[0] - p[0];
+        let dy = q[1] - p[1];
+        let len2 = dx * dx + dy * dy;
+        let mut steps = 0usize;
+        while steps < m && cross3(p, q, hull[(j + 1) % m]) > cross3(p, q, hull[j]) {
+            j = (j + 1) % m;
+            steps += 1;
+        }
+        let c = cross3(p, q, hull[j]);
+        if c * c < w2 * len2 {
+            // Les calibres ne sont qu'un FILTRE : en flottant, l'enveloppe garde
+            // des sommets colinéaires à l'arrondi près, la boucle ci-dessus
+            // s'arrête sur un faux plateau et `c` est une largeur fausse et
+            // minuscule (revue B1). On confirme par un balayage complet du côté.
+            let mut lo = 0.0f64;
+            let mut hi = 0.0f64;
+            for k in 0..m {
+                let v = cross3(p, q, hull[k]);
+                if v < lo {
+                    lo = v;
+                }
+                if v > hi {
+                    hi = v;
+                }
+            }
+            let e = hi - lo;
+            if e * e < w2 * len2 {
+                return true;
+            }
+        }
+    }
+    false
+}
 
 /// Un trou trop petit pour être découpé (aire ou plus petit côté).
 pub fn is_micro_void(ring: &[Pt]) -> bool {
@@ -1333,6 +1418,10 @@ pub fn build_parts_stats_until(
         let width = max_x - min_x;
         let height = max_y - min_y;
         if width.abs() < 0.1 || height.abs() < 0.1 {
+            asm.dropped_parts += 1;
+            continue;
+        }
+        if ring_too_thin(&ext) {
             asm.dropped_parts += 1;
             continue;
         }

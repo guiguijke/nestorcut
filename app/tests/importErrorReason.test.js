@@ -8,6 +8,7 @@ import { translate } from '../utils/i18n'
 const CODES = [
     'dwg_converter_missing', 'dwg_timeout', 'dwg_version_unsupported',
     'dwg_conversion_failed', 'dwg_output_unreadable', 'paper_space_only',
+    'no_closed_part',
 ]
 
 describe('importErrorReasonKey', () => {
@@ -27,6 +28,13 @@ describe('importErrorReasonKey', () => {
         expect(translate(key, 'fr')).toContain('espace objet')
         expect(translate(key, 'en')).toContain('paper space')
         expect(translate(key, 'en')).toContain('model space')
+    })
+
+    it("aucune pièce fermée : la phrase de l'import sur l'appareil (fr, en)", () => {
+        const key = importErrorReasonKey('no_closed_part')
+        expect(key).toBe('localImport.noParts')
+        expect(translate(key, 'fr')).toContain('Aucune pi')
+        expect(translate(key, 'en')).toContain('No closed part')
     })
 
     it('la version trop récente dit la cause et la sortie (fr, en)', () => {
