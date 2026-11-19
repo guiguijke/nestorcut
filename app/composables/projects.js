@@ -112,6 +112,9 @@ export async function deleteProject(project, { currentSlug } = {}) {
             const { purgeProject } = await import('./localResultsStore')
             await purgeProjectFiles(project.slug)
             await purgeProject(project.slug)
+            // Tôles importées du projet (jamais la bibliothèque « récentes »).
+            const { deleteProjectSheets } = await import('./localSheetsStore')
+            await deleteProjectSheets(project.slug)
         } catch {
             // Orphelins possibles sur ce poste, rien de récupérable ici.
         }

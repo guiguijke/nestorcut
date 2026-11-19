@@ -1064,9 +1064,18 @@ function updateKerfSafety(patch) {
 }
 function updateSheet(index, patch) {
     const state = filesState()
-    const sheets = normalizedSheets(state.params).map((sheet, i) =>
-        i === index ? { ...sheet, ...patch } : sheet
-    )
+    const sheets = normalizedSheets(state.params).map((sheet, i) => {
+        if (i !== index) return sheet
+        // Tôle importée (shapeId) : width/height = boîte englobante du contour,
+        // pas éditables (seul le nombre l'est) ; shapeId/name passent par
+        // replaceSheetShape, jamais par un patch libre.
+        if (sheet.shapeId) {
+            const rest = { ...patch }
+            for (const key of ['width', 'height', 'shapeId', 'name']) delete rest[key]
+            return { ...sheet, ...rest }
+        }
+        return { ...sheet, ...patch }
+    })
     state.params = { ...state.params, sheets }
     scheduleSnapshotPersist()
 }
@@ -1074,7 +1083,52 @@ function addSheet() {
     const state = filesState()
     const sheets = normalizedSheets(state.params)
     const last = sheets[sheets.length - 1] || { ...DEFAULT_SHEET.mm, count: '1' }
-    state.params = { ...state.params, sheets: [...sheets, { ...last, count: '1' }] }
+    // Une tôle simple : la copie d'une tôle importée ne reprend pas son
+    // shapeId (width/height = sa boîte englobante, éditables).
+    const plain = { ...last, count: '1' }
+    delete plain.shapeId
+    delete plain.name
+    state.params = { ...state.params, sheets: [...sheets, plain] }
+    scheduleSnapshotPersist()
+}
+
+// Longueur mm -> chaîne d'affichage (unité courante) pour une tôle importée.
+// Plus fine que la saisie (0,001 mm / 0,00001") : width/height repartent en mm
+// via displayToMm, l'arrondi d'affichage ne doit pas rogner la tôle.
+function shapeDisplayLength(mm, unit) {
+    const v = mmToDisplay(mm, unit)
+    return v.toFixed(unit === 'inch' ? 5 : 3).replace(/\.?0+$/, '') || '0'
+}
+function shapeSheetEntry(record, count) {
+    const unit = getUnitState()
+    return {
+        width: shapeDisplayLength(record.widthMm, unit),
+        height: shapeDisplayLength(record.heightMm, unit),
+        count: String(count),
+        shapeId: record.slug,
+        name: record.name,
+    }
+}
+/**
+ * Ajoute une tôle issue d'un DXF. Seuls shapeId, nom et boîte englobante
+ * entrent dans les réglages (donc dans le snapshot sessionStorage) ; la
+ * géométrie reste dans IndexedDB (localSheetsStore).
+ */
+function addSheetFromShape(record) {
+    const state = filesState()
+    const sheets = normalizedSheets(state.params)
+    state.params = { ...state.params, sheets: [...sheets, shapeSheetEntry(record, 1)] }
+    scheduleSnapshotPersist()
+}
+/** Remplace la forme de la tôle `index` (quantité conservée). */
+function replaceSheetShape(index, record) {
+    const state = filesState()
+    const sheets = normalizedSheets(state.params)
+    if (!Number.isInteger(index) || index < 0 || index >= sheets.length) return
+    state.params = {
+        ...state.params,
+        sheets: sheets.map((sheet, i) => (i === index ? shapeSheetEntry(record, sheet.count) : sheet)),
+    }
     scheduleSnapshotPersist()
 }
 
@@ -1111,6 +1165,11 @@ function syncParamsToUnit(toUnit) {
         return out.toFixed(d).replace(/\.?0+$/, '')
     }
     const convSheet = (s) => {
+        // Tôle importée : conversion numérique fine, jamais calée sur un standard.
+        if (s.shapeId) {
+            const mm = (v) => (fromUnit === 'inch' ? Number(v) * MM_PER_INCH : Number(v))
+            return { ...s, width: shapeDisplayLength(mm(s.width), toUnit), height: shapeDisplayLength(mm(s.height), toUnit) }
+        }
         const eq = equivalentSheetPreset(s.width, s.height, fromUnit, toUnit)
         return eq ? { ...s, ...eq } : { ...s, width: conv(s.width), height: conv(s.height) }
     }
@@ -1374,6 +1433,8 @@ export const filesStore = readonly({
         resetFicheScale,
         explodeFiche,
         addSheet,
+        addSheetFromShape,
+        replaceSheetShape,
         removeSheet,
         syncParamsToUnit,
         updateCount,

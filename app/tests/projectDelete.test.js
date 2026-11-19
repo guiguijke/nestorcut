@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
     purgedFiles: [],
     purgedResults: [],
+    deletedSheets: [],
 }))
 
 vi.mock('../composables/localFilesStore', () => ({
@@ -26,6 +27,12 @@ vi.mock('../composables/localFilesStore', () => ({
 vi.mock('../composables/localResultsStore', () => ({
     purgeProject: vi.fn(async (slug) => {
         state.purgedResults.push(slug)
+    }),
+}))
+
+vi.mock('../composables/localSheetsStore', () => ({
+    deleteProjectSheets: vi.fn(async (slug) => {
+        state.deletedSheets.push(slug)
     }),
 }))
 
@@ -50,6 +57,7 @@ function projectSlugs() {
 beforeEach(() => {
     state.purgedFiles = []
     state.purgedResults = []
+    state.deletedSheets = []
     globalThis.$fetch = vi.fn(async () => ({ ok: true, deleted: 1 }))
     globalThis.navigateTo = vi.fn(async () => {})
     globalStore.actions.setProjects([cloudProject, localProject, demoProject])
@@ -82,6 +90,14 @@ describe('deleteProject', () => {
         expect(projectSlugs()).toEqual(['alpha', 'demo'])
     })
 
+    it('deletes the imported sheets of a 100% private project by its slug, never for a cloud project', async () => {
+        await deleteProject(cloudProject, {})
+        expect(state.deletedSheets).toEqual([])
+
+        await deleteProject(localProject, {})
+        expect(state.deletedSheets).toEqual(['beta'])
+    })
+
     it('409 jobs_in_progress → dedicated error key, no purge, list untouched', async () => {
         globalThis.$fetch = vi.fn(async () => {
             // eslint-disable-next-line no-throw-literal
@@ -93,6 +109,7 @@ describe('deleteProject', () => {
         expect(result).toEqual({ ok: false, errorKey: 'project.deleteErrorActive' })
         expect(state.purgedFiles).toEqual([])
         expect(state.purgedResults).toEqual([])
+        expect(state.deletedSheets).toEqual([])
         expect(projectSlugs()).toEqual(['alpha', 'beta', 'demo'])
         expect(globalThis.navigateTo).not.toHaveBeenCalled()
     })
