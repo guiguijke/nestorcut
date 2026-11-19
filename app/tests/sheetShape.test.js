@@ -10,6 +10,7 @@ import {
     pointInRing,
     ringArea,
     ringBbox,
+    scaleContours,
     sheetLimits,
     usableAreaMm2,
     zoneCandidates,
@@ -227,5 +228,27 @@ describe('engineRings et makeSheetRecord', () => {
         expect(r.forbidden).toEqual([1])
         expect(r.areaMm2).toBe(10000 - 400)
         expect(engineRings(r).holes).toEqual([CONTOURS[1].ring])
+    })
+})
+
+describe('scaleContours', () => {
+    it('met à l\'échelle anneaux, aire et boîte ; profondeur et parent inchangés', () => {
+        const out = scaleContours(CONTOURS, 25.4)
+        expect(out).toHaveLength(CONTOURS.length)
+        expect(out[1].ring[1]).toEqual([30 * 25.4, 10 * 25.4])
+        expect(out[1].areaMm2).toBeCloseTo(400 * 25.4 * 25.4, 6)
+        expect(out[1].bbox).toEqual([10 * 25.4, 10 * 25.4, 30 * 25.4, 30 * 25.4])
+        expect(out[2].depth).toBe(3)
+        expect(out[2].parent).toBe(1)
+        // l'aire recalculée sur l'anneau mis à l'échelle concorde
+        expect(ringArea(out[0].ring)).toBeCloseTo(out[0].areaMm2, 6)
+    })
+    it('ne modifie pas l\'entrée', () => {
+        const before = JSON.stringify(CONTOURS)
+        scaleContours(CONTOURS, 2)
+        expect(JSON.stringify(CONTOURS)).toBe(before)
+    })
+    it('facteur inutilisable ou égal à 1 : le tableau d\'origine', () => {
+        for (const f of [1, 0, -2, NaN, Infinity, undefined]) expect(scaleContours(CONTOURS, f)).toBe(CONTOURS)
     })
 })

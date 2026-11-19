@@ -10,18 +10,23 @@
                     class="size__sheet sheet"
                 >
                     <div class="sheet__header">
-                        <span class="sheet__label">{{ t('settings.sheet', { n: index + 1 }) }}</span>
+                        <span
+                            :class="['sheet__label', { 'sheet__label--named': sheet.shapeId && sheet.name }]"
+                            :title="sheet.shapeId && sheet.name ? sheet.name : undefined"
+                        >{{ sheet.shapeId && sheet.name ? sheet.name : t('settings.sheet', { n: index + 1 }) }}</span>
+                        <span v-if="sheet.shapeId" class="shape__badge">{{ t('settings.sheetShape.badge') }}</span>
+                        <!-- Une tôle importée seule reste retirable : elle est alors remplacée par la tôle simple d'usine. -->
                         <button
-                            v-if="sheets.length > 1"
+                            v-if="sheets.length > 1 || sheet.shapeId"
                             class="sheet__remove"
-                            @click="removeSheet(index)"
+                            @click="onRemoveSheet(index)"
                             :title="t('settings.removeSheet')"
                         >
                             ✕
                         </button>
                     </div>
                     <div
-                        v-if="sheetPresets.length"
+                        v-if="sheetPresets.length && !sheet.shapeId"
                         class="sheet__presets presets"
                     >
                         <button
@@ -37,7 +42,23 @@
                             {{ preset.width }}×{{ preset.height }}
                         </button>
                     </div>
-                    <div class="size__line">
+                    <!-- Tôle importée d'un DXF : sa taille est celle du contour (lecture
+                         seule, libellée) ; seule la quantité s'édite. -->
+                    <div v-if="sheet.shapeId" class="shape" data-testid="settings-sheet-shape">
+                        <span class="shape__size" :title="t('settings.sheetShape.sizeFixed')">
+                            <span class="shape__label">{{ t('settings.sheetShape.size') }}</span>
+                            {{ shapeSizeText(sheet) }}
+                        </span>
+                        <button
+                            type="button"
+                            class="shape__edit"
+                            data-testid="settings-sheet-edit-zones"
+                            @click="openEdit(index)"
+                        >
+                            {{ t('settings.sheetShape.editZones') }}
+                        </button>
+                    </div>
+                    <div v-else class="size__line">
                         <InputField
                             :prefix="t('settings.width')"
                             :suffix="unitLabel"
@@ -66,6 +87,19 @@
                     @click="addSheet"
                 >
                     {{ t('settings.addSheet') }}
+                </button>
+                <!-- Tôle importée d'un DXF : projet local seulement (la géométrie
+                     reste dans le navigateur). -->
+                <button
+                    v-if="isLocalProject"
+                    class="size__add size__import"
+                    data-testid="settings-import-sheet"
+                    @click="openImport"
+                >
+                    <svg class="size__importIcon" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M8 11V3m0 0L5 6m3-3 3 3M3 13h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    {{ t('settings.importSheet') }}
                 </button>
                 </section>
                 <!-- B.4 / masterplan 3.10 : l'espacement se règle par ses deux
@@ -191,17 +225,24 @@
                 </section>
             </div>
         </div>
+        <SheetImportDialog
+            v-if="isLocalProject"
+            v-model:open="importOpen"
+            :projectSlug="String(route.params.slug || '')"
+            :replaceIndex="importIndex"
+            :editSlug="importSlug"
+        />
     </div>
 </template>
 
 <script setup>
-    import { SHEET_PRESETS } from '~/utils/units'
+    import { DEFAULT_SHEET, SHEET_PRESETS } from '~/utils/units'
     import { holesDisabledHintVisible } from '~/utils/holesHint'
     import { DEMO_MAX_DIRECTIONS, DEMO_PROJECT_SLUG, DEMO_WALK_CHOICES, resolveDemoWalks } from '~~/shared/constants/demo.constants'
     import { displayDirectionArrow } from '~/utils/sheetView'
 
     const { t } = useLocale()
-    const { unit, unitLabel, enabled: unitsEnabled } = useUnit()
+    const { unit, unitLabel, enabled: unitsEnabled, fmtLength, displayToMm } = useUnit()
     const { getters, actions } = filesStore
     const { updateParams, updateKerfSafety, updateSheet, addSheet, removeSheet } = actions
     const params = computed(() => getters.params)
@@ -214,6 +255,49 @@
         Number(String(sheet.height).replace(',', '.')) === preset.height
     const applyPreset = (index, preset) =>
         updateSheet(index, { width: String(preset.width), height: String(preset.height) })
+
+    // Tôle importée d'un DXF : projet local seulement. Entrée (« Importer »),
+    // édition des zones (ligne `index`), et suppression avec son enregistrement.
+    const isLocalProject = computed(() => Boolean(unref(getters.projectLocal)))
+    const importOpen = ref(false)
+    const importIndex = ref(null)
+    const importSlug = ref('')
+    const openImport = () => {
+        importIndex.value = null
+        importSlug.value = ''
+        importOpen.value = true
+    }
+    const openEdit = (index) => {
+        importIndex.value = index
+        importSlug.value = String(sheets.value[index]?.shapeId || '')
+        importOpen.value = true
+    }
+    const shapeSizeText = (sheet) => {
+        const w = Number(String(sheet.width).replace(',', '.'))
+        const h = Number(String(sheet.height).replace(',', '.'))
+        return `${fmtLength(displayToMm(w))} × ${fmtLength(displayToMm(h))}`
+    }
+    // Retirer une tôle importée supprime aussi son enregistrement (jamais une
+    // entrée de « tôles récentes » : leur slug commence par `recent-`).
+    const onRemoveSheet = async (index) => {
+        const target = sheets.value[index]
+        const shapeId = target?.shapeId
+        if (sheets.value.length <= 1 && shapeId) {
+            // removeSheet garde toujours une tôle : l'unique tôle importée est
+            // remplacée par la tôle simple d'usine (même quantité).
+            const dflt = DEFAULT_SHEET[unit.value === 'inch' ? 'inch' : 'mm']
+            updateParams({ sheets: [{ width: dflt.width, height: dflt.height, count: target.count ?? '1' }] })
+        } else {
+            removeSheet(index)
+        }
+        if (!shapeId || String(shapeId).startsWith('recent-')) return
+        try {
+            const { deleteSheet } = await import('~/composables/localSheetsStore')
+            await deleteSheet(String(shapeId))
+        } catch {
+            // l'enregistrement orphelin est inoffensif ; la ligne est déjà retirée
+        }
+    }
 
     const sheets = computed(() => {
         const p = unref(params)
@@ -439,6 +523,12 @@ const spacingBelowKerf = computed(() => {
         & > *:not(:last-child) {
             margin-bottom: 6px;
         }
+        // Les cartes de tôle et les deux entrées en pointillés sont dans la
+        // section : même écart de 6 px qu'avant entre elles.
+        .settings__section > .sheet:not(:last-child),
+        .settings__section > .size__add:not(:last-child) {
+            margin-bottom: 6px;
+        }
 
         &__line {
             display: grid;
@@ -479,6 +569,25 @@ const spacingBelowKerf = computed(() => {
                     background-color: color-mix(in srgb, var(--accent-primary) 5%, transparent);
                 }
             }
+        }
+
+        // Même famille que « + Add sheet type » (classe size__add) : pointillés,
+        // ton secondaire, survol accentué ; une petite icône de dépôt en plus.
+        &__import {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+
+            &:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
+            }
+        }
+        &__importIcon {
+            flex: 0 0 auto;
+            width: 14px;
+            height: 14px;
         }
 
         &__checkbox {
@@ -528,6 +637,17 @@ const spacingBelowKerf = computed(() => {
             color: var(--label-secondary);
             text-transform: uppercase;
             letter-spacing: 0.05em;
+
+            // Nom d'une tôle importée : tel que saisi, jamais en capitales.
+            &--named {
+                min-width: 0;
+                flex: 0 1 auto;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                text-transform: none;
+                letter-spacing: 0;
+            }
         }
 
         &__remove {
@@ -544,6 +664,64 @@ const spacingBelowKerf = computed(() => {
                 &:hover {
                     color: var(--error-text);
                 }
+            }
+        }
+    }
+
+    // La taille et « Edit zones » tiennent sur la même ligne aux largeurs de bureau ;
+    // le retour à la ligne n'arrive que si la colonne devient vraiment étroite.
+    .shape {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px 10px;
+        padding: 0 4px;
+
+        &__badge {
+            flex: 0 0 auto;
+            margin: 0 6px 0 8px;
+            padding: 2px 6px;
+            border-radius: var(--radius-s);
+            background-color: var(--fill-secondary);
+            color: var(--label-secondary);
+            font-size: var(--fs-12);
+            font-weight: 600;
+            white-space: nowrap;
+            margin-right: auto;
+        }
+        &__size {
+            color: var(--label-primary);
+            font-size: var(--fs-13);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+        &__label {
+            margin-right: 4px;
+            color: var(--label-secondary);
+            font-weight: 500;
+        }
+        &__edit {
+            flex: 0 0 auto;
+            margin-left: auto;
+            padding: 4px 8px;
+            border: 1px solid var(--separator-secondary);
+            border-radius: var(--radius);
+            background: transparent;
+            color: var(--accent-primary);
+            font-size: var(--fs-12);
+            font-weight: 600;
+            cursor: pointer;
+
+            @media (hover: hover) {
+                &:hover {
+                    border-color: var(--accent-primary);
+                }
+            }
+            &:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
             }
         }
     }

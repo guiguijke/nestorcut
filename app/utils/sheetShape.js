@@ -286,3 +286,19 @@ export function makeSheetRecord({
         geometryKey: geometryKeyOf(contours, outlineIndex, zones),
     }
 }
+
+/**
+ * Contours mis à l'échelle (facteur strictement positif) autour de l'origine
+ * du dessin : anneaux, aires (× f²) et boîtes. Un facteur inutilisable rend
+ * le tableau d'origine. Sert au réglage « ce fichier est en pouces » : la
+ * lecture est refaite par personne, seule la géométrie déjà lue change.
+ */
+export function scaleContours(contours, factor) {
+    if (!Array.isArray(contours) || !Number.isFinite(factor) || factor <= 0 || factor === 1) return contours
+    return contours.map((c) => ({
+        ...c,
+        ring: c.ring.map(([x, y]) => [x * factor, y * factor]),
+        areaMm2: c.areaMm2 * factor * factor,
+        bbox: c.bbox.map((v) => v * factor),
+    }))
+}

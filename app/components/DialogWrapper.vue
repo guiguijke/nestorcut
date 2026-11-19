@@ -1,7 +1,7 @@
 <template>
     <teleport to="body">
         <div v-if="isModalOpen" class="modal">
-            <div class="modal__background" @click="closeModal"></div>
+            <div :class="['modal__background', { 'modal__background--dim': backdrop === 'dim' }]" @click="closeModal"></div>
             <!-- 3.1.4 (lot 3, M1) : dialogue accessible — role/aria-modal,
                  focus initial dans la boîte, piège de focus Tab/Shift+Tab,
                  restitution au déclencheur à la fermeture. -->
@@ -20,13 +20,43 @@
     </teleport>
 </template>
 
+<script>
+// Verrou de défilement de la page, partagé par toutes les instances : avec
+// deux fenêtres ouvertes, la page ne se libère qu'à la fermeture de la
+// dernière, et retrouve l'overflow qu'elle avait avant la première.
+let scrollLocks = 0
+let savedOverflow = ''
+let savedPaddingRight = ''
+function acquireScrollLock() {
+    if (typeof document === 'undefined') return
+    if (scrollLocks === 0) {
+        const body = document.body
+        savedOverflow = body.style.overflow
+        savedPaddingRight = body.style.paddingRight
+        // La barre de défilement disparaît : on garde sa largeur pour que la page ne saute pas.
+        const bar = window.innerWidth - document.documentElement.clientWidth
+        if (bar > 0) body.style.paddingRight = `${bar}px`
+        body.style.overflow = 'hidden'
+    }
+    scrollLocks++
+}
+function releaseScrollLock() {
+    if (typeof document === 'undefined' || scrollLocks === 0) return
+    scrollLocks--
+    if (scrollLocks === 0) {
+        document.body.style.overflow = savedOverflow
+        document.body.style.paddingRight = savedPaddingRight
+    }
+}
+</script>
+
 <script setup>
 import { iconType } from '~~/constants/icon.constants';
 import { sizeType } from '~~/constants/size.constants';
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { trackEvent } from '~/utils/track';
 
-const { isModalOpen, trackingTag, fullscreen } = defineProps({
+const { isModalOpen, trackingTag, fullscreen, backdrop, lockScroll } = defineProps({
     isModalOpen: {
         type: Boolean,
         default: false,
@@ -38,6 +68,17 @@ const { isModalOpen, trackingTag, fullscreen } = defineProps({
     // U3 passe 2 : dialogue plein ecran a 24 px de marge (espace de
     // resultat). Les autres dialogues gardent la boite centree.
     fullscreen: {
+        type: Boolean,
+        default: false,
+    },
+    // Opt-in : 'dim' = voile sombre translucide (la page reste visible
+    // derrière) ; 'default' = le fond d'origine.
+    backdrop: {
+        type: String,
+        default: 'default',
+    },
+    // Opt-in : fige le défilement de la page tant que la fenêtre est ouverte.
+    lockScroll: {
         type: Boolean,
         default: false,
     },
@@ -73,6 +114,20 @@ const trapTab = (event) => {
     }
 }
 
+// Verrou de défilement : pris à l'ouverture, rendu à la fermeture, quand
+// l'option disparaît et au démontage (une seule fois par instance).
+let holdsLock = false
+watch([() => isModalOpen, () => lockScroll], ([isOpen, lock]) => {
+    const want = Boolean(isOpen && lock)
+    if (want && !holdsLock) {
+        acquireScrollLock()
+        holdsLock = true
+    } else if (!want && holdsLock) {
+        releaseScrollLock()
+        holdsLock = false
+    }
+}, { immediate: true })
+
 watch(() => isModalOpen, async (isOpen) => {
     if (isOpen) {
         if (Boolean(trackingTag)) {
@@ -104,6 +159,10 @@ onMounted(() => {
 
 onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown);
+    if (holdsLock) {
+        releaseScrollLock()
+        holdsLock = false
+    }
 });
 </script>
 
@@ -130,6 +189,16 @@ onUnmounted(() => {
         bottom: 0;
         left: 0;
         background-color: var(--label-tertiary);
+
+        // Opt-in (backdrop="dim") : la page reste lisible derrière un voile
+        // sombre translucide, avec un léger flou là où le navigateur le sait.
+        &--dim {
+            background-color: rgba(15, 23, 42, 0.55);
+
+            @supports (backdrop-filter: blur(1px)) {
+                backdrop-filter: blur(3px);
+            }
+        }
     }
 
     &__body {
