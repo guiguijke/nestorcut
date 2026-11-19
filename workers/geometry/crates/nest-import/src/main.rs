@@ -7,11 +7,16 @@ use std::io::{Read, Write};
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: nest-import-cli <file.dxf|file.svg> [flatten_tol | --canonical]");
+        eprintln!("usage: nest-import-cli <file.dxf|file.svg> [flatten_tol | --canonical | --sheet [flatten_tol]]");
         std::process::exit(2);
     }
     let canonical = args.get(2).is_some_and(|a| a == "--canonical");
-    let tol: f64 = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.01);
+    let sheet = args.get(2).is_some_and(|a| a == "--sheet");
+    let tol: f64 = if sheet {
+        args.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.01)
+    } else {
+        args.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.01)
+    };
     let mut buf = Vec::new();
     match std::fs::File::open(&args[1]).and_then(|mut f| f.read_to_end(&mut buf)) {
         Ok(_) => {}
@@ -19,6 +24,17 @@ fn main() {
             eprintln!("cannot read {}: {e}", args[1]);
             std::process::exit(1);
         }
+    }
+    if sheet {
+        // La tôle : les contours du dessin (nest_import::sheet), JSON sur stdout.
+        match nest_import::sheet::import_sheet_contours(&buf, tol, &nest_import::budget::Limits::unlimited()) {
+            Ok(res) => println!("{}", serde_json::to_string(&res).unwrap()),
+            Err(e) => {
+                eprintln!("sheet import failed: {e}");
+                std::process::exit(1);
+            }
+        }
+        return;
     }
     if canonical {
         // Les octets DXF canoniques, ceux que le navigateur stocke et dont

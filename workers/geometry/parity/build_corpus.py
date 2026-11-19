@@ -765,6 +765,112 @@ def main_svg():
     print(f"svg corpus -> {SVG_OUT} ({len(os.listdir(SVG_OUT))} files)")
 
 
+# ------------------------------------------------------------------ tôles
+# Dessins publics synthétiques pour le lecteur de tôle (import de contours,
+# nest-import::sheet). Écrits dans corpus_sheets/ — un dossier à part : aucun
+# harnais de parité ne le balaie (ils lisent corpus_extra, corpus_svg, golden).
+# Mode : build_corpus.py tole
+
+
+SHEETS_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_sheets")
+
+
+def main_sheets():
+    os.makedirs(SHEETS_OUT, exist_ok=True)
+
+    def save_sheet(doc, name):
+        doc.saveas(os.path.join(SHEETS_OUT, name))
+
+    def poly(msp, pts):
+        msp.add_lwpolyline(pts, close=True)
+
+    # Disque de 1000 mm de diamètre.
+    doc = new_doc()
+    doc.modelspace().add_circle((500, 500), 500)
+    save_sheet(doc, "disc_1000.dxf")
+
+    # Le même disque avec un trou concentrique (couronne).
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_circle((500, 500), 500)
+    msp.add_circle((500, 500), 150)
+    save_sheet(doc, "ring_1000_300.dxf")
+
+    # Chute en L : 1200 x 800 avec une encoche de 600 x 400.
+    doc = new_doc()
+    poly(doc.modelspace(), [(0, 0), (1200, 0), (1200, 400), (600, 400), (600, 800), (0, 800)])
+    save_sheet(doc, "offcut_L.dxf")
+
+    # Plaque 2000 x 1000 avec six formes fermées, dont un cercle qui en contient un plus petit.
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (2000, 0), (2000, 1000), (0, 1000)])
+    msp.add_circle((300, 300), 100)
+    msp.add_circle((800, 300), 150)
+    msp.add_circle((800, 300), 50)  # dans le cercle précédent
+    msp.add_circle((1500, 700), 120)
+    poly(msp, [(200, 700), (500, 700), (500, 900), (200, 900)])
+    poly(msp, [(1000, 650), (1200, 650), (1200, 850), (1000, 850)])
+    poly(msp, [(1600, 100), (1900, 100), (1750, 350)])
+    save_sheet(doc, "decor_zones.dxf")
+
+    # Disque de diamètre 20 pouces ($INSUNITS = 1).
+    doc = new_doc(1)
+    doc.modelspace().add_circle((10, 10), 10)
+    save_sheet(doc, "inches_disc.dxf")
+
+    # Cartouche : rectangle 1500 x 1000, texte, cote, traits ouverts, petit rectangle 40 x 15.
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (1500, 0), (1500, 1000), (0, 1000)])
+    msp.add_text("TITLE BLOCK", height=20).set_placement((100, 900))
+    try:
+        msp.add_linear_dim(base=(0, -60), p1=(0, 0), p2=(1500, 0)).render()
+    except Exception as exc:  # la cote est un plus : le dessin reste valable sans
+        print(f"cote non écrite ({exc})")
+    msp.add_line((100, 100), (400, 100))
+    msp.add_line((100, 200), (400, 250))
+    msp.add_line((500, 100), (500, 300))
+    msp.add_lwpolyline([(700, 200), (800, 300), (900, 200)])
+    poly(msp, [(1440, 960), (1480, 960), (1480, 975), (1440, 975)])
+    save_sheet(doc, "title_block.dxf")
+
+    # Murs partagés : deux carrés qui partagent un bord, deux cercles qui se recouvrent.
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (1000, 0), (1000, 500), (0, 500)])
+    poly(msp, [(100, 100), (200, 100), (200, 200), (100, 200)])
+    poly(msp, [(200, 100), (300, 100), (300, 200), (200, 200)])
+    msp.add_circle((600, 250), 80)
+    msp.add_circle((680, 250), 80)
+    save_sheet(doc, "touching.dxf")
+
+    # Ponts et sommets partagés : le cycle de la plaque repasse par un sommet ou
+    # un trait ; il doit sortir en anneau simple de pleine aire.
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (100, 0), (100, 100), (0, 100)])
+    poly(msp, [(40, 40), (60, 40), (60, 60), (40, 60)])
+    msp.add_line((50, 60), (50, 100))
+    save_sheet(doc, "bridge.dxf")
+
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (100, 0), (100, 100), (0, 100)])
+    poly(msp, [(50, 0), (70, 20), (50, 40), (30, 20)])
+    save_sheet(doc, "diamond_touch.dxf")
+
+    doc = new_doc()
+    msp = doc.modelspace()
+    poly(msp, [(0, 0), (100, 0), (100, 100), (0, 100)])
+    poly(msp, [(10, 40), (30, 40), (30, 60), (10, 60)])
+    poly(msp, [(60, 40), (80, 40), (80, 60), (60, 60)])
+    msp.add_line((30, 50), (60, 50))
+    save_sheet(doc, "two_shapes_bridge.dxf")
+
+    print(f"tôles -> {SHEETS_OUT} ({len(os.listdir(SHEETS_OUT))} files)")
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["coupe"]:
         main_cut_cases()
@@ -774,6 +880,8 @@ if __name__ == "__main__":
         main_open_line()
     elif sys.argv[1:] == ["anneaux"]:
         main_degenerate_rings()
+    elif sys.argv[1:] == ["tole"]:
+        main_sheets()
     else:
         main()
         main_svg()

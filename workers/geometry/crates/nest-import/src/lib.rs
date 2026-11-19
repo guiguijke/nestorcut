@@ -10,6 +10,7 @@ pub mod attach;
 pub mod budget;
 pub mod dxf;
 pub mod findings;
+pub mod sheet;
 #[cfg(feature = "svg")]
 pub mod svg;
 pub mod units;

@@ -243,6 +243,39 @@ export function import_file_limited(bytes, tol, max_entities, time_budget_ms) {
 }
 
 /**
+ * import_sheet_limited(bytes, tol, max_entities, time_budget_ms) -> JSON
+ * `{status:"ok"|"refused", ...}` : la TÔLE importée d'un DXF — tous les
+ * contours (anneau extérieur de chaque face bornée du dessin), sans le
+ * nettoyage de l'import de pièces. Mêmes bornes et même refus « trop lourd »
+ * que `import_file_limited` ; u32 pour le budget (piège #16b).
+ * @param {Uint8Array} bytes
+ * @param {number} tol
+ * @param {number} max_entities
+ * @param {number} time_budget_ms
+ * @returns {string}
+ */
+export function import_sheet_limited(bytes, tol, max_entities, time_budget_ms) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.import_sheet_limited(ptr0, len0, tol, max_entities, time_budget_ms);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * import_svg(bytes, tol) -> JSON ImportResult.
  * @param {Uint8Array} bytes
  * @param {number} tol

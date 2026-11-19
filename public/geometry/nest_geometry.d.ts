@@ -64,6 +64,15 @@ export function import_file(bytes: Uint8Array, tol: number): string;
 export function import_file_limited(bytes: Uint8Array, tol: number, max_entities: number, time_budget_ms: number): string;
 
 /**
+ * import_sheet_limited(bytes, tol, max_entities, time_budget_ms) -> JSON
+ * `{status:"ok"|"refused", ...}` : la TÔLE importée d'un DXF — tous les
+ * contours (anneau extérieur de chaque face bornée du dessin), sans le
+ * nettoyage de l'import de pièces. Mêmes bornes et même refus « trop lourd »
+ * que `import_file_limited` ; u32 pour le budget (piège #16b).
+ */
+export function import_sheet_limited(bytes: Uint8Array, tol: number, max_entities: number, time_budget_ms: number): string;
+
+/**
  * import_svg(bytes, tol) -> JSON ImportResult.
  */
 export function import_svg(bytes: Uint8Array, tol: number): string;
@@ -99,6 +108,7 @@ export interface InitOutput {
     readonly export_svg_sheet: (a: number, b: number) => [number, number, number, number];
     readonly import_file: (a: number, b: number, c: number) => [number, number, number, number];
     readonly import_file_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly import_sheet_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly import_svg: (a: number, b: number, c: number) => [number, number, number, number];
     readonly open_holes: (a: number, b: number) => [number, number, number, number];
     readonly pinwheel_capacity: (a: number, b: number) => [number, number, number, number];

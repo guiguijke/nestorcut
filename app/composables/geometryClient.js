@@ -85,6 +85,28 @@ export async function geoImportFile(bytes, tol = 0.01, limits = {}) {
     if (r.status === 'refused') return { refusal: r.refusal, message: r.message }
     return r.result
 }
+
+/**
+ * Tôle importée d'un DXF : rend `{ contours, sourceUnits, entityCount,
+ * warnings, openPaths, skippedEntities }` (un contour = anneau extérieur
+ * fermé anti-horaire en mm dans le repère du DXF, `depth`, `parent`,
+ * `areaMm2`, `bbox`), `{ refusal, message }` quand une borne refuse le
+ * fichier (même forme que `geoImportFile`), `{ ok: false, error }` quand le
+ * worker ou le wasm échoue. Mêmes bornes que l'import de pièces.
+ */
+export async function geoImportSheet(bytes, opts = {}) {
+    const r = parse(
+        await call('import_sheet_limited', {
+            bytes: Array.from(bytes),
+            tol: opts.tol ?? 0.01,
+            maxEntities: opts.maxEntities ?? IMPORT_MAX_ENTITIES,
+            timeBudgetMs: opts.timeBudgetMs ?? IMPORT_TIME_BUDGET_MS,
+        }),
+    )
+    if (!r || r.ok === false) return r
+    if (r.status === 'refused') return { refusal: r.refusal, message: r.message }
+    return r.result
+}
 export async function geoOpenHoles(outer, holes, spaceMm) {
     return parse(await call('open_holes', { json: JSON.stringify({ outer, holes, space_mm: spaceMm }) }))
 }

@@ -44,6 +44,23 @@ pub fn import_file_limited(
         .map_err(|e| JsError::new(&format!("{e}")))
 }
 
+/// import_sheet_limited(bytes, tol, max_entities, time_budget_ms) -> JSON
+/// `{status:"ok"|"refused", ...}` : la TÔLE importée d'un DXF — tous les
+/// contours (anneau extérieur de chaque face bornée du dessin), sans le
+/// nettoyage de l'import de pièces. Mêmes bornes et même refus « trop lourd »
+/// que `import_file_limited` ; u32 pour le budget (piège #16b).
+#[wasm_bindgen]
+pub fn import_sheet_limited(
+    bytes: &[u8],
+    tol: f64,
+    max_entities: usize,
+    time_budget_ms: u32,
+) -> Result<String, JsError> {
+    let limits = nest_import::budget::Limits { max_entities, time_budget_ms: time_budget_ms as u64 };
+    nest_import::sheet::guarded_sheet_json(bytes, tol, &limits)
+        .map_err(|e| JsError::new(&format!("{e}")))
+}
+
 /// import_svg(bytes, tol) -> JSON ImportResult.
 #[wasm_bindgen]
 pub fn import_svg(bytes: &[u8], tol: f64) -> Result<String, JsError> {

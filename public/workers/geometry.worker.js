@@ -9,11 +9,12 @@
  * en Array) et pinwheel_capacity (json string) — l'import 100 % client.
  * Lot E1 : + canonical_dxf_scaled (mise à l'échelle du dessin complet) et
  * canonical_dxf_part (le DXF d'UNE pièce, par ses handles) — l'« import
- * avancé ». Le worker importe des symboles NOMMÉS : toute op ajoutée ici
+ * avancé ». + import_sheet_limited (tôle importée d'un DXF : les contours du
+ * dessin, mêmes bornes que import_file_limited). Le worker importe des symboles NOMMÉS : toute op ajoutée ici
  * exige le rebuild du bundle DANS LA MÊME PR (piège AGENTS #33b).
  */
 import init, {
-    import_file, import_file_limited, open_holes, export_svg_sheet, compute_report,
+    import_file, import_file_limited, import_sheet_limited, open_holes, export_svg_sheet, compute_report,
     export_dxf_sheet,
     canonical_dxf, canonical_dxf_scaled, canonical_dxf_part, pinwheel_capacity,
 } from '/geometry/nest_geometry.js'
@@ -36,6 +37,17 @@ self.onmessage = async (event) => {
                 // Rend un JSON {status:"ok"|"refused", …} — un refus n'est
                 // pas une exception, il porte le nombre d'entités.
                 result = import_file_limited(
+                    new Uint8Array(args.bytes),
+                    args.tol ?? 0.01,
+                    args.maxEntities,
+                    args.timeBudgetMs,
+                )
+                break
+            case 'import_sheet_limited':
+                // Tôle importée : tous les contours du DXF (aucun nettoyage de
+                // pièce). Même enveloppe {status:"ok"|"refused", …} que
+                // import_file_limited, mêmes bornes.
+                result = import_sheet_limited(
                     new Uint8Array(args.bytes),
                     args.tol ?? 0.01,
                     args.maxEntities,
