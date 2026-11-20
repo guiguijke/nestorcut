@@ -29,6 +29,7 @@ import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 import { ZONE_CANCELLED } from './structureClient'
 import { serverRefusalCode } from '~/utils/failureReason'
 import { liveShapeFields, withLiveShapes } from '~~/app/utils/sheetDraw.js'
+import { liveFormatFields } from '~~/app/utils/liveSheetFormats.js'
 
 /**
  * Pass structurel navigateur (miroir de core/structure.py + intégration
@@ -525,6 +526,16 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // J-085 : l'instance réduite est réindexée — les frames live du moteur
     // portent les ids réduits, la vue live (itemMap) les ids d'origine.
     const idMap = payload?.meta?.idMap
+    // Tôle importée avec PLUSIEURS formats : une frame du moteur donne le RANG
+    // de chaque tôle, pas son format (bpp/mod.rs::layout_event), et l'ordre des
+    // rangs n'est pas celui des formats (vu : le moteur ouvre la plus petite
+    // tôle d'abord). Sans le format, la vue dessinait des rectangles jusqu'à
+    // l'image finale. On le DÉDUIT des pièces posées (dans quel contour elles
+    // tiennent, zones comprises, stock respecté) : `binFormats` et la boîte de
+    // chaque rang partent avec la frame, comme sur la frame finale. Choix
+    // gardé stable d'une frame à l'autre, par walk. Job à un seul format ou
+    // sans tôle importée : rien n'est ajouté, la frame est celle d'avant.
+    const formatHints = new Map()
     const liveHandler = !onLive
         ? undefined
         : (evt) => {
@@ -534,6 +545,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
               const decorated = decorateLiveLayout({ ...evt, items: remapped }, payload)
               onLive({
                   ...decorated,
+                  ...liveFormatFields(payload, decorated?.items, formatHints, evt?.worker ?? 0),
                   // Tôle importée : contour + zones (chemins prêts à dessiner,
                   // par format) pour la vue live ; {} pour un job rectangulaire.
                   // Reste dans le navigateur : jamais envoyé, jamais stocké.

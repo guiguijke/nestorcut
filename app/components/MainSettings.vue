@@ -240,6 +240,13 @@
     import { holesDisabledHintVisible } from '~/utils/holesHint'
     import { DEMO_MAX_DIRECTIONS, DEMO_PROJECT_SLUG, DEMO_WALK_CHOICES, resolveDemoWalks } from '~~/shared/constants/demo.constants'
     import { displayDirectionArrow } from '~/utils/sheetView'
+    import {
+        ROT_PRESETS,
+        effectiveRotationCount,
+        initialOtherMode,
+        pickRotationSegment,
+        rotationSegment,
+    } from '~/utils/rotationChoice'
 
     const { t } = useLocale()
     const { unit, unitLabel, enabled: unitsEnabled, fmtLength, displayToMm } = useUnit()
@@ -408,24 +415,25 @@
             active: localDirections.value.includes(value),
         }))
     )
-    const ROT_PRESETS = [1, 2, 4, 8]
     const rotationSegOptions = computed(() => [
         ...ROT_PRESETS.map((n) => ({ value: n, label: String(n) })),
         { value: 'other', label: t('settings.rotation.other') },
     ])
+    // « Autre » reste choisi tant que l'utilisateur y est : sinon taper « 1 »
+    // (début de « 12 ») bascule sur le préréglage 1 et ferme le champ.
+    const rotationOther = ref(initialOtherMode(unref(params).rotationCount))
+    watch(
+        () => unref(params).rotationCount,
+        (raw) => {
+            if (initialOtherMode(raw)) rotationOther.value = true
+        }
+    )
     const rotationSeg = computed({
-        get() {
-            const n = Math.min(360, Math.max(1, Math.floor(Number(unref(params).rotationCount) || 4)))
-            return ROT_PRESETS.includes(n) ? n : 'other'
-        },
+        get: () => rotationSegment(unref(params).rotationCount, rotationOther.value),
         set(v) {
-            if (v === 'other') {
-                const cur = Math.floor(Number(unref(params).rotationCount) || 4)
-                if (!ROT_PRESETS.includes(cur)) return
-                updateParams({ rotationCount: 3 })
-            } else {
-                updateParams({ rotationCount: v })
-            }
+            const pick = pickRotationSegment(v, unref(params).rotationCount, rotationOther.value)
+            rotationOther.value = pick.otherMode
+            if (pick.count !== undefined) updateParams({ rotationCount: pick.count })
         },
     })
     const directionsHint = computed(() =>
@@ -449,7 +457,7 @@
     // Preview the angles that the current rotation count produces, so the user
     // understands what "N rotations" means (e.g. 8 -> 0°, 45°, 90°, ... 315°).
     const rotationHint = computed(() => {
-        const n = Math.min(360, Math.max(1, Math.floor(Number(unref(params).rotationCount) || 4)))
+        const n = effectiveRotationCount(unref(params).rotationCount)
         if (n === 1) return t('settings.noRotation')
         const step = 360 / n
         const angles = Array.from({ length: n }, (_, i) => Math.round(i * step))

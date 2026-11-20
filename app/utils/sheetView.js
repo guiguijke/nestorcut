@@ -7,8 +7,19 @@
  * origin + arrows make that mapping explicit.
  */
 
+/**
+ * Écart relatif sous lequel deux côtés comptent pour égaux : 0,1 % (1 mm sur
+ * 1000). Un disque importé d'un DXF mesure 999,99 × 999,995 mm (polygone
+ * inscrit) : il n'est pas « portrait ». Bien au-dessus du bruit de
+ * polygonisation (écart ~5e-6 relatif), bien en dessous d'un vrai format
+ * (la plus fine tôle rectangulaire courante diffère de plusieurs %).
+ */
+export const SQUARE_SIDE_TOLERANCE = 0.001
+
 export function isSheetPortrait(width, height) {
-    return Number(height) > Number(width) + 1e-6
+    const W = Number(width)
+    const H = Number(height)
+    return H - W > Math.abs(W) * SQUARE_SIDE_TOLERANCE + 1e-6
 }
 
 export function sheetDisplaySize(width, height) {

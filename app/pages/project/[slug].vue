@@ -107,45 +107,61 @@
                         @click="openStageResult"
                     />
                 </div>
-                <div v-else class="stage__idle">
-                    <svg
-                        :viewBox="idleViewBox"
-                        class="stage__sheet"
-                        preserveAspectRatio="xMidYMid meet"
-                    >
-                        <g :transform="idleTransform">
-                            <!-- Tôle importée : le vrai contour et les zones interdites
-                                 (lus dans IndexedDB, jamais envoyés) à la place du
-                                 rectangle de la boîte. -->
-                            <g
-                                v-if="idleShape"
-                                data-testid="idle-shape"
-                                :transform="`scale(${idleSheet.w / idleShape.w} ${idleSheet.h / idleShape.h})`"
+                <div v-else class="stage__idle" :class="{ 'stage__idle--multi': idlePanes.panes.length > 1 }">
+                    <!-- Un panneau par type de tôle déclaré (même disposition que la vue
+                         live : livePaneLayout). Une seule tôle : rendu inchangé. -->
+                    <div class="stage__panes">
+                        <div
+                            v-for="(pane, i) in idlePanes.panes"
+                            :key="pane.index"
+                            class="stage__pane"
+                            :style="idlePanes.panes.length > 1 ? { '--pane-w': pane.viewW } : undefined"
+                            data-testid="idle-pane"
+                        >
+                            <svg
+                                :viewBox="`0 0 ${pane.viewW} ${pane.viewH}`"
+                                class="stage__sheet"
+                                :style="idlePanes.panes.length > 1 ? { aspectRatio: `${pane.viewW} / ${pane.viewH}` } : undefined"
+                                preserveAspectRatio="xMidYMid meet"
                             >
-                                <path :d="idleShape.outline" class="stage__sheet-bg" fill-rule="evenodd" vector-effect="non-scaling-stroke" />
-                                <path
-                                    v-if="idleShape.zones"
-                                    :d="idleShape.zones"
-                                    :fill="ZONE_RED"
-                                    fill-opacity="0.25"
-                                    :stroke="ZONE_RED"
-                                    stroke-width="1.2"
-                                    fill-rule="evenodd"
-                                    vector-effect="non-scaling-stroke"
-                                />
-                            </g>
-                            <rect
-                                v-else
-                                x="0"
-                                y="0"
-                                :width="idleSheet.w"
-                                :height="idleSheet.h"
-                                class="stage__sheet-bg"
-                            />
-                        </g>
-                        <SheetAxes :width="idleSheet.w" :height="idleSheet.h" />
-                    </svg>
-                    <p class="stage__dims">{{ idleSheet.w }} × {{ idleSheet.h }} {{ unitLabel }}</p>
+                                <g :transform="pane.landscape">
+                                    <!-- Tôle importée : le vrai contour et les zones interdites
+                                         (lus dans IndexedDB, jamais envoyés) à la place du
+                                         rectangle de la boîte. -->
+                                    <g
+                                        v-if="idleShapes[pane.shapeId]"
+                                        data-testid="idle-shape"
+                                        :transform="`scale(${pane.w / idleShapes[pane.shapeId].w} ${pane.h / idleShapes[pane.shapeId].h})`"
+                                    >
+                                        <path :d="idleShapes[pane.shapeId].outline" class="stage__sheet-bg" fill-rule="evenodd" vector-effect="non-scaling-stroke" />
+                                        <path
+                                            v-if="idleShapes[pane.shapeId].zones"
+                                            :d="idleShapes[pane.shapeId].zones"
+                                            :fill="ZONE_RED"
+                                            fill-opacity="0.25"
+                                            :stroke="ZONE_RED"
+                                            stroke-width="1.2"
+                                            fill-rule="evenodd"
+                                            vector-effect="non-scaling-stroke"
+                                        />
+                                    </g>
+                                    <rect
+                                        v-else
+                                        x="0"
+                                        y="0"
+                                        :width="pane.w"
+                                        :height="pane.h"
+                                        class="stage__sheet-bg"
+                                    />
+                                </g>
+                                <SheetAxes v-if="i === 0" :width="pane.w" :height="pane.h" />
+                            </svg>
+                            <p class="stage__dims" :title="pane.label">{{ pane.label }}</p>
+                        </div>
+                        <p v-if="idlePanes.truncated" class="stage__dims stage__more" data-testid="idle-more">
+                            + {{ idlePanes.truncated }}
+                        </p>
+                    </div>
                 </div>
                 <!-- C01 (audit UX 2026-09-05) : un calcul en cours (notamment
                      NAVIGATEUR — awaiting_local n'était reconnu nulle part
@@ -250,7 +266,7 @@ import {
     DEMO_SHEETS,
     DEMO_SPACE_MM,
 } from "~~/shared/constants/demo.constants";
-import { sheetDisplaySize, sheetLandscapeTransform } from "~/utils/sheetView";
+import { idlePaneModel } from "~/utils/idlePanes";
 import { ZONE_RED, shapeToDrawPaths } from "~/utils/sheetDraw";
 import { engineBinShape } from "~~/app/utils/sheetShape";
 import { PRIVACY_CHIP_KEY, PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
@@ -263,7 +279,7 @@ definePageMeta({
 const { t, tp, fmtPercent, fmtNumber } = useLocale()
 // Part dims arrive in canonical mm; sheet params are display-unit strings —
 // displayToMm normalizes them for the fit check.
-const { unit, unitLabel, fmtLengthValue, displayToMm } = useUnit()
+const { unit, unitLabel, fmtLength, fmtLengthValue, displayToMm } = useUnit()
 // P5 / F5 : capturé en setup (contexte Nuxt). Passé au fetch du projet
 // pendant le SSR — sans ça getProject 401 → /home.
 const projectReqHeaders = useRequestHeaders(['cookie'])
@@ -837,18 +853,19 @@ const statusLine = computed(() => {
 // au post-pass du résultat final) — le dire tant que le réglage est actif.
 const holesFillNote = computed(() => unref(params)?.fillHoles !== false);
 
+// Première tôle (vignette du résultat serveur, qui n'en montre qu'une).
 const idleSheet = computed(() => {
     const s = unref(currentSheets)[0] || { width: 1000, height: 2000 }
     const w = Number(String(s.width).replace(',', '.')) || 1000
     const h = Number(String(s.height).replace(',', '.')) || 2000
     return { w, h }
 });
-const idleViewBox = computed(() => {
-    const { viewW, viewH } = sheetDisplaySize(idleSheet.value.w, idleSheet.value.h)
-    return `0 0 ${viewW} ${viewH}`
-});
-const idleTransform = computed(() =>
-    sheetLandscapeTransform(idleSheet.value.w, idleSheet.value.h)
+// Scène au repos : un panneau par type de tôle (quantité > 0), taille et
+// libellé arrondis comme la ligne des réglages (fmtLength, unité d'affichage).
+const idlePanes = computed(() =>
+    idlePaneModel(unref(currentSheets), {
+        formatSize: (w, h) => `${fmtLength(displayToMm(w))} × ${fmtLength(displayToMm(h))}`,
+    })
 );
 
 const projectFiles = computed(() => {
@@ -883,25 +900,32 @@ const currentSheets = computed(() => {
     // Legacy params shape (before multi-sheet).
     return [{ width: p.widthPlate ?? 0, height: p.heightPlate ?? 0 }];
 })
-// J2 : tôle importée au repos — la forme vient du navigateur (IndexedDB), pas
+// J2 : tôles importées au repos — la forme vient du navigateur (IndexedDB), pas
 // des réglages (qui ne portent que shapeId, nom et boîte). Illisible ou absente :
-// la scène garde son rectangle.
-const idleShape = ref(null);
+// le panneau garde son rectangle. Une entrée par shapeId des panneaux affichés.
+const idleShapes = ref({});
 watch(
-    () => unref(currentSheets)[0]?.shapeId ?? null,
-    async (id) => {
-        idleShape.value = null;
-        if (!id || !import.meta.client) return;
-        try {
-            const { getSheet } = await import("~/composables/localSheetsStore");
-            const record = await getSheet(id);
-            if (!record || unref(currentSheets)[0]?.shapeId !== id) return;
-            const shape = engineBinShape(record);
-            const paths = shapeToDrawPaths(shape, shape.heightMm);
-            idleShape.value = paths ? { w: shape.widthMm, h: shape.heightMm, ...paths } : null;
-        } catch {
-            idleShape.value = null;
+    () => idlePanes.value.panes.map((p) => p.shapeId || "").join("|"),
+    async (key) => {
+        const ids = [...new Set(key.split("|").filter(Boolean))];
+        idleShapes.value = {};
+        if (!ids.length || !import.meta.client) return;
+        const { getSheet } = await import("~/composables/localSheetsStore");
+        const loaded = {};
+        for (const id of ids) {
+            try {
+                const record = await getSheet(id);
+                if (!record) continue;
+                const shape = engineBinShape(record);
+                const paths = shapeToDrawPaths(shape, shape.heightMm);
+                if (paths) loaded[id] = { w: shape.widthMm, h: shape.heightMm, ...paths };
+            } catch {
+                // illisible : rectangle
+            }
         }
+        // Obsolète si la liste des tôles a changé pendant la lecture.
+        const now = [...new Set(idlePanes.value.panes.map((p) => p.shapeId).filter(Boolean))];
+        if (now.length === ids.length && now.every((id) => ids.includes(id))) idleShapes.value = loaded;
     },
     { immediate: true }
 );
@@ -1387,6 +1411,50 @@ const startsNest = () => {
         }
     }
 
+    &__panes {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 12px;
+        width: 100%;
+    }
+
+    &__pane {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        width: 100%;
+    }
+
+    // Plusieurs tôles : colonnes proportionnelles à la largeur affichée (même
+    // échelle pour toutes) ; sur téléphone elles passent à la ligne, deux par ligne.
+    &__idle--multi &__pane {
+        flex: var(--pane-w) 1 0;
+        width: auto;
+    }
+
+    &__idle--multi &__sheet {
+        min-height: 0;
+        max-height: none;
+    }
+
+    &__more {
+        flex: none;
+        align-self: center;
+    }
+
+    @media (max-width: 640px) {
+        &__idle--multi &__panes {
+            flex-wrap: wrap;
+        }
+
+        &__idle--multi &__pane {
+            flex: 1 1 42%;
+        }
+    }
+
     &__sheet {
         width: 100%;
         min-height: 280px;
@@ -1411,6 +1479,10 @@ const startsNest = () => {
 
     &__dims {
         margin: 0;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-size: var(--fs-12);
         color: var(--label-tertiary);
         font-variant-numeric: tabular-nums;

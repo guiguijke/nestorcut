@@ -110,3 +110,26 @@ describe('livePaneLayout — vue live BPP, une tôle par panneau', () => {
         expect(pl.panes[1].dx).toBeGreaterThan(pl.panes[0].dx)
     })
 })
+
+describe("tôle presque carrée (disque importé d'un DXF)", () => {
+    it("999,99 × 999,995 n'est pas portrait : affichage non pivoté, axes classiques", () => {
+        expect(isSheetPortrait(999.99, 999.995)).toBe(false)
+        expect(sheetLandscapeTransform(999.99, 999.995)).toBe('')
+        expect(displayDirectionArrow('left', 999.99, 999.995)).toBe('←')
+        const ax = sheetAxesDisplay(999.99, 999.995)
+        expect(ax.xTo.x).toBeGreaterThan(ax.origin.x)
+        expect(ax.yTo.y).toBeLessThan(ax.origin.y)
+    })
+
+    it('la tolérance est de 0,1 % : 1000 × 1001 carré, 1000 × 1002 portrait', () => {
+        expect(isSheetPortrait(1000, 1001)).toBe(false)
+        expect(isSheetPortrait(1000, 1002)).toBe(true)
+    })
+
+    it('un vrai portrait et un vrai carré se comportent comme avant', () => {
+        expect(isSheetPortrait(1000, 2000)).toBe(true)
+        expect(isSheetPortrait(1000, 1000)).toBe(false)
+        expect(isSheetPortrait(2000, 1000)).toBe(false)
+    })
+})
+
