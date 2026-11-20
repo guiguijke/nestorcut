@@ -2,6 +2,9 @@
 //!  - entités SOURCE copiées par handle, groupées par fichier, ordre de
 //!    placement préservé, transformées (rotate→translate→scale unité),
 //!  - calques source chargés + BIN_BOUNDARY (5) + OUT_SHAPE (1),
+//!  - tôle IMPORTÉE (option « tracer le contour » active) : le vrai contour
+//!    remplace le rectangle sur BIN_BOUNDARY, chaque zone interdite est une
+//!    polyligne fermée sur le calque FORBIDDEN_ZONE (couleur 6),
 //!  - $ACADVER AC1027 (mesuré : ezdxf.new() par défaut, J-071),
 //!    $INSUNITS/$MEASUREMENT cohérents (units.rs), pleine précision.
 //! Lisible par ezdxf ET par le dxf_parser de l'app (mêmes codes de groupes).
@@ -205,7 +208,90 @@ fn finite_pt(p: [f64; 2]) -> bool {
     p[0].is_finite() && p[1].is_finite()
 }
 
-/// Sources : file_slug -> (entities, blocks). Construit le DXF de tôle.
+/// Calque des zones interdites d'une tôle importée, et sa couleur (6 =
+/// magenta : distincte du bleu 5 de BIN_BOUNDARY, du rouge 1 d'OUT_SHAPE et
+/// du 7 des calques source). Un opérateur FAO le masque ou l'exclut par son nom.
+pub const FORBIDDEN_LAYER: &str = "FORBIDDEN_ZONE";
+const FORBIDDEN_COLOR: i32 = 6;
+
+/// Forme d'une tôle importée, en mm, repère de la tôle (boîte englobante du
+/// contour en (0,0), y vers le haut) : anneaux FERMÉS (premier point répété
+/// en dernier), tels que le moteur les a reçus.
+///
+/// Une coordonnée arrive en nombre JSON OU en chaîne : le lecteur de nombres de
+/// serde_json (sans `float_roundtrip`) peut se tromper d'un ULP, et l'activer
+/// changerait la lecture des poses de tous les autres jobs. Le navigateur envoie
+/// donc les anneaux en chaînes (`String(x)`, représentation la plus courte), lues
+/// ici par `str::parse::<f64>`, exacte : le DXF porte les anneaux au bit près.
+#[derive(serde::Deserialize, Clone, Debug)]
+pub struct BinShape {
+    pub outer: Vec<[Coord; 2]>,
+    #[serde(default)]
+    pub inner: Vec<Vec<[Coord; 2]>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Coord(pub f64);
+
+impl From<f64> for Coord {
+    fn from(v: f64) -> Self {
+        Coord(v)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Coord {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            Num(f64),
+            Text(String),
+        }
+        match Raw::deserialize(d)? {
+            Raw::Num(v) => Ok(Coord(v)),
+            Raw::Text(t) => t
+                .trim()
+                .parse::<f64>()
+                .map(Coord)
+                .map_err(|_| serde::de::Error::custom("coordonnée illisible")),
+        }
+    }
+}
+
+fn pts(ring: &[[Coord; 2]]) -> Vec<[f64; 2]> {
+    ring.iter().map(|p| [p[0].0, p[1].0]).collect()
+}
+
+/// Sommets d'un anneau sans le point de fermeture répété ; None si l'anneau
+/// n'est pas dessinable (moins de 3 sommets distincts, coordonnée non finie).
+fn ring_vertices(ring: &[[Coord; 2]]) -> Option<Vec<[f64; 2]>> {
+    let mut v = pts(ring);
+    if v.len() >= 2 && v[0] == v[v.len() - 1] {
+        v.pop();
+    }
+    if v.len() < 3 || v.iter().any(|p| !finite_pt(*p)) {
+        return None;
+    }
+    Some(v)
+}
+
+/// Polyligne fermée sur `layer` — mêmes attributs que le rectangle BIN_BOUNDARY.
+fn closed_polyline(body: &mut String, hid: &mut u64, layer: &str, pts: &[[f64; 2]], unit_scale: f64) {
+    grp(body, 0, "LWPOLYLINE");
+    grp(body, 5, &next_handle(hid));
+    grp(body, 100, "AcDbEntity");
+    grp(body, 8, layer);
+    grp(body, 100, "AcDbPolyline");
+    int_grp(body, 90, pts.len() as i32);
+    int_grp(body, 70, 1);
+    for p in pts {
+        num(body, 10, p[0] * unit_scale);
+        num(body, 20, p[1] * unit_scale);
+    }
+}
+
+/// Sources : file_slug -> (entities, blocks). Construit le DXF de tôle
+/// (tôle rectangulaire : aucune forme).
 pub fn build_part_dxf(
     sources: &HashMap<String, (Vec<Entity>, Vec<entities::Block>)>,
     transforms: &[Placement],
@@ -214,6 +300,26 @@ pub fn build_part_dxf(
     bin_width: Option<f64>,
     bin_height: Option<f64>,
     output_unit: &str,
+) -> String {
+    build_part_dxf_shaped(
+        sources, transforms, add_out_shape, space, bin_width, bin_height, output_unit, None,
+    )
+}
+
+/// Comme `build_part_dxf`, avec la forme d'une tôle importée. La forme n'est
+/// dessinée QUE si `add_out_shape` est vrai (l'option « tracer le contour de
+/// la tôle ») ; option coupée ou forme illisible : sortie identique à
+/// `build_part_dxf`, octet pour octet. Les pièces ne dépendent jamais de la forme.
+#[allow(clippy::too_many_arguments)]
+pub fn build_part_dxf_shaped(
+    sources: &HashMap<String, (Vec<Entity>, Vec<entities::Block>)>,
+    transforms: &[Placement],
+    add_out_shape: bool,
+    space: f64,
+    bin_width: Option<f64>,
+    bin_height: Option<f64>,
+    output_unit: &str,
+    bin_shape: Option<&BinShape>,
 ) -> String {
     let (unit_scale, insunits, measurement) = output_scale_and_headers(output_unit);
 
@@ -272,8 +378,30 @@ pub fn build_part_dxf(
         }
     }
 
+    // Forme de tôle importée (décision du propriétaire, 20/11) : dès que le
+    // contour est lisible, il remplace TOUJOURS le rectangle sur BIN_BOUNDARY,
+    // option cochée ou non — le rectangle englobant d'un disque n'est pas la
+    // tôle — et les zones interdites sont toujours sur leur calque. Contour
+    // illisible ou tôle rectangulaire : le rectangle d'avant, inchangé.
+    let outline = bin_shape.and_then(|b| ring_vertices(&b.outer).map(|v| (v, b)));
+    let shape_drawn = outline.is_some();
+
     // BIN_BOUNDARY.
-    if let (Some(bw), Some(bh)) = (bin_width, bin_height) {
+    if let Some((verts, shape)) = outline {
+        if !layers.iter().any(|(n, _)| n == "BIN_BOUNDARY") {
+            layers.push(("BIN_BOUNDARY".into(), 5));
+        }
+        closed_polyline(&mut body, &mut hid, "BIN_BOUNDARY", &verts, unit_scale);
+        // Zones interdites : exactement les anneaux reçus par le moteur.
+        for zone in &shape.inner {
+            if let Some(zv) = ring_vertices(zone) {
+                if !layers.iter().any(|(n, _)| n == FORBIDDEN_LAYER) {
+                    layers.push((FORBIDDEN_LAYER.into(), FORBIDDEN_COLOR));
+                }
+                closed_polyline(&mut body, &mut hid, FORBIDDEN_LAYER, &zv, unit_scale);
+            }
+        }
+    } else if let (Some(bw), Some(bh)) = (bin_width, bin_height) {
         if !layers.iter().any(|(n, _)| n == "BIN_BOUNDARY") {
             layers.push(("BIN_BOUNDARY".into(), 5));
         }
@@ -290,8 +418,10 @@ pub fn build_part_dxf(
         }
     }
 
-    // OUT_SHAPE.
-    if add_out_shape {
+    // OUT_SHAPE : cadre rectangulaire autour des pièces posées. Jamais sur une
+    // tôle importée (décision du propriétaire, 20/11) : il peut traverser une
+    // zone interdite ou sortir du métal, et un opérateur peut le découper.
+    if add_out_shape && !shape_drawn {
         if let Some(bb) = out_bbox {
             if !layers.iter().any(|(n, _)| n == "OUT_SHAPE") {
                 layers.push(("OUT_SHAPE".into(), 1));

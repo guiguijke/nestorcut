@@ -201,7 +201,7 @@ export default {
     "settings.rotations": "Rotações",
     "settings.steps": "passos",
     "settings.addOutShape": "Desenhar contorno da chapa na exportação",
-    "settings.addOutShapeHint": "Adiciona o retângulo da chapa ao DXF para a máquina ver o limite do material.",
+    "settings.addOutShapeHint": "Adiciona ao DXF uma moldura à volta das peças colocadas (camada OUT_SHAPE). O contorno da chapa é sempre desenhado na camada BIN_BOUNDARY. Numa chapa importada esta moldura não é desenhada: o ficheiro tem sempre o contorno real e as zonas proibidas na camada FORBIDDEN_ZONE.",
     "settings.fillHoles": "Aninhar nos furos",
     "settings.fillHolesHint": "Quando ativado, peças menores podem ser colocadas dentro dos recortes de peças com furos. Desative para manter os recortes vazios.",
     "demo.badge": "Demo",

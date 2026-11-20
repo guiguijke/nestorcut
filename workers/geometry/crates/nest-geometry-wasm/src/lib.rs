@@ -211,6 +211,9 @@ struct DxfSheetSpec {
     bin_height: Option<f64>,
     #[serde(default = "mm_default")]
     output_unit: String,
+    /// Tôle importée : contour + zones interdites (mm). Absent = rectangle.
+    #[serde(default)]
+    bin_shape: Option<nest_export::BinShape>,
 }
 
 fn mm_default() -> String {
@@ -229,7 +232,7 @@ pub fn export_dxf(source: &[u8], json: &str) -> Result<String, JsError> {
     for p in t.iter_mut() {
         p.file_slug = "src".into();
     }
-    Ok(nest_export::build_part_dxf(
+    Ok(nest_export::build_part_dxf_shaped(
         &sources,
         &t,
         i.add_out_shape,
@@ -237,6 +240,7 @@ pub fn export_dxf(source: &[u8], json: &str) -> Result<String, JsError> {
         i.bin_width,
         i.bin_height,
         &i.output_unit,
+        i.bin_shape.as_ref(),
     ))
 }
 
@@ -261,7 +265,7 @@ pub fn export_dxf_sheet(
             .map_err(|e| JsError::new(&format!("parsing source {slug}: {e}")))?;
         map.insert(slug.clone(), (doc.entities, doc.blocks));
     }
-    Ok(nest_export::build_part_dxf(
+    Ok(nest_export::build_part_dxf_shaped(
         &map,
         &i.transforms,
         i.add_out_shape,
@@ -269,5 +273,6 @@ pub fn export_dxf_sheet(
         i.bin_width,
         i.bin_height,
         &i.output_unit,
+        i.bin_shape.as_ref(),
     ))
 }

@@ -207,7 +207,7 @@ export default {
     "settings.rotations": "Drehungen",
     "settings.steps": "Schritte",
     "settings.addOutShape": "Blechkontur im Export zeichnen",
-    "settings.addOutShapeHint": "Fügt das Rechteck des Blechs zur DXF hinzu, damit die Maschine die Materialgrenze sieht.",
+    "settings.addOutShapeHint": "Fügt der DXF einen Rahmen um die platzierten Teile hinzu (Ebene OUT_SHAPE). Die Blechkontur selbst liegt immer auf der Ebene BIN_BOUNDARY. Bei einem importierten Blech wird dieser Rahmen nicht gezeichnet: Die Datei enthält immer die echte Kontur und die Sperrzonen auf der Ebene FORBIDDEN_ZONE.",
     "settings.fillHoles": "In Löcher verschachteln",
     "settings.fillHolesHint": "Wenn aktiviert, können kleinere Teile in die Innenausschnitte von Teilen mit Löchern gelegt werden. Deaktivieren, um Ausschnitte frei zu lassen.",
     "demo.badge": "Demo",

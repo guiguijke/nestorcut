@@ -1792,6 +1792,12 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 containers.push({
                     bin_width: binWidth,
                     bin_height: binHeight,
+                    // Tôle importée seulement : le FORMAT de la tôle (index dans
+                    // instance.bins), pour que le DXF livré retrouve SON contour
+                    // et ses zones (`binShapeForDxf`). Jamais un anneau ici ;
+                    // absent d'un format rectangle et d'un job sans tôle importée
+                    // (container inchangé).
+                    ...(reportShapes?.[sheets.length]?.shape ? { container_id: containerId } : {}),
                     transforms,
                     // J4 : nichage de la tôle, ALIGNÉ index par index sur
                     // `transforms` (donc sur `layout.placed_items`). Champ
@@ -2039,6 +2045,38 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
     return out
 }
 
+/** Forme (contour + zones interdites, mm) à tracer dans le DXF d'une tôle :
+ * celle du FORMAT `container.container_id`, seulement si ce format est une
+ * tôle importée (`shapedSheets`). `null` sinon (format rectangle, container
+ * sans format, forme illisible) : le DXF garde alors son rectangle d'avant. */
+export function binShapeForDxf(payload, container) {
+    const id = container?.container_id
+    if (!Number.isInteger(id)) return null
+    const shaped = payload?.shapedSheets
+    const bins = payload?.instance?.bins
+    if (!Array.isArray(shaped) || !shaped.length || !Array.isArray(bins)) return null
+    const bin = bins[id]
+    if (!bin || !shaped.some((s) => s.id === bin.id)) return null
+    const data = bin.shape?.data
+    if (!Array.isArray(data?.outer) || data.outer.length < 4) return null
+    return { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+}
+
+/** Clé `bin_shape` du spec wasm (ou rien). Les anneaux partent en CHAÎNES
+ * (`String(x)` = représentation la plus courte) : le lecteur de nombres JSON du
+ * wasm peut se tromper d'un ULP, la lecture d'une chaîne est exacte — le DXF
+ * porte les anneaux que le moteur a reçus, au bit près. */
+function binShapeSpec(shape) {
+    if (!shape) return {}
+    // Une coordonnée non finie ferait jeter le lecteur du wasm, et le fichier
+    // de la tôle disparaîtrait sans un mot : pas de forme, le rectangle reste.
+    const finite = (r) => Array.isArray(r)
+        && r.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    if (!finite(shape.outer) || !shape.inner.every(finite)) return {}
+    const ring = (r) => r.map((p) => [String(p[0]), String(p[1])])
+    return { bin_shape: { outer: ring(shape.outer), inner: shape.inner.map(ring) } }
+}
+
 /**
  * DXF COMBINÉ d'une tôle — jumeau de build_part (core/main.py) : UN fichier
  * par tôle (container), toutes sources confondues, entités copiées PAR
@@ -2073,6 +2111,12 @@ export async function buildSheetDxf(jobSlug, layoutIndex, container, payload, so
             bin_width: container.bin_width,
             bin_height: container.bin_height,
             output_unit: outputUnit,
+            // Tôle importée (décision du propriétaire, 20/11) : le vrai contour
+            // remplace TOUJOURS le rectangle, les zones interdites ont leur
+            // calque, option cochée ou non ; le cadre autour des pièces n'est
+            // alors jamais tracé (le wasm le saute). Le DXF d'un job sans tôle
+            // importée ne reçoit AUCUNE clé de plus.
+            ...binShapeSpec(binShapeForDxf(payload, container)),
         })
         if (typeof dxf !== 'string') return null
         return {

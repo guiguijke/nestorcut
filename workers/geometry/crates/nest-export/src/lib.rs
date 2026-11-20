@@ -11,5 +11,5 @@ pub mod transform;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-pub use dxf_writer::build_part_dxf;
+pub use dxf_writer::{build_part_dxf, build_part_dxf_shaped, BinShape, Coord};
 pub use transform::Placement;

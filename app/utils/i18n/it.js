@@ -204,7 +204,7 @@ export default {
     "settings.rotations": "Rotazioni",
     "settings.steps": "passi",
     "settings.addOutShape": "Disegna il contorno della lamiera all'esportazione",
-    "settings.addOutShapeHint": "Aggiunge il rettangolo della lamiera al DXF, così la macchina vede il limite del materiale.",
+    "settings.addOutShapeHint": "Aggiunge al DXF una cornice attorno ai pezzi posizionati (livello OUT_SHAPE). Il contorno della lamiera è sempre disegnato sul livello BIN_BOUNDARY. Su una lamiera importata questa cornice non viene disegnata: il file contiene sempre il contorno reale e le zone vietate sul livello FORBIDDEN_ZONE.",
     "settings.fillHoles": "Annida nei fori",
     "settings.fillHolesHint": "Quando attivo, i pezzi più piccoli possono essere collocati dentro i ritagli interni dei pezzi forati. Disattivalo per tenere i ritagli vuoti.",
     "demo.badge": "Demo",

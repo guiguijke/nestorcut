@@ -220,7 +220,7 @@ export default {
     'settings.rotations': 'Rotations',
     'settings.steps': 'pas',
     'settings.addOutShape': 'Tracer le contour de la tôle',
-    'settings.addOutShapeHint': 'Ajoute le rectangle de la tôle au DXF pour que la machine voie le stock.',
+    'settings.addOutShapeHint': "Ajoute au DXF un cadre autour des pièces posées (calque OUT_SHAPE). Le contour de la tôle, lui, est toujours tracé sur le calque BIN_BOUNDARY. Sur une tôle importée, ce cadre n'est pas tracé : le fichier porte toujours son vrai contour, et ses zones interdites sur le calque FORBIDDEN_ZONE.",
     'settings.fillHoles': 'Imbriquer dans les trous',
     'settings.fillHolesHint': "Quand c'est activé, de petites pièces peuvent être placées dans les découpes des pièces trouées. Désactivez pour laisser les découpes vides.",
     'demo.badge': 'Démo',

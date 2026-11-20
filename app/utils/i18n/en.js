@@ -221,7 +221,7 @@ export default {
     'settings.rotations': 'Rotations',
     'settings.steps': 'steps',
     'settings.addOutShape': 'Draw sheet outline on export',
-    'settings.addOutShapeHint': 'Adds the sheet rectangle to the DXF so the machine sees the stock boundary.',
+    'settings.addOutShapeHint': "Adds a frame around the placed parts to the DXF (OUT_SHAPE layer). The sheet itself is always drawn on the BIN_BOUNDARY layer. On an imported sheet this frame is not drawn: the file always carries the true outline, and the forbidden zones on the FORBIDDEN_ZONE layer.",
     'settings.fillHoles': 'Nest parts inside holes',
     'settings.fillHolesHint': 'When enabled, smaller parts can be placed inside the cutouts of holed parts. Disable to keep cutouts empty.',
     'demo.badge': 'Demo',

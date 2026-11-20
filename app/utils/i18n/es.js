@@ -209,7 +209,7 @@ export default {
     "settings.rotations": "Rotaciones",
     "settings.steps": "pasos",
     "settings.addOutShape": "Dibujar el contorno de la chapa en la exportación",
-    "settings.addOutShapeHint": "Añade el rectángulo de la chapa al DXF para que la máquina vea el límite del material.",
+    "settings.addOutShapeHint": "Añade al DXF un marco alrededor de las piezas colocadas (capa OUT_SHAPE). El contorno de la chapa siempre se dibuja en la capa BIN_BOUNDARY. En una chapa importada este marco no se dibuja: el archivo lleva siempre su contorno real y sus zonas prohibidas en la capa FORBIDDEN_ZONE.",
     "settings.fillHoles": "Anidar en los agujeros",
     "settings.fillHolesHint": "Cuando está activado, las piezas pequeñas pueden colocarse dentro de los recortes internos de las piezas con agujeros. Desactívalo para mantener los recortes vacíos.",
     "demo.badge": "Demo",
