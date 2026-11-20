@@ -4,6 +4,80 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.17
+
+*FR*
+
+- Nouveau : tôle importée d'un DXF. Dans un projet « Cet appareil », le bouton « Importer une tôle (DXF) » lit le contour d'une tôle de forme quelconque : disque, chute, plaque à encoches. L'imbrication reste à l'intérieur du vrai contour. Cercles, arcs, ellipses, courbes et polylignes à arcs sont lus.
+- Zones interdites : dans la fenêtre d'import, chaque contour intérieur du dessin se clique pour devenir une zone interdite (trou déjà découpé, défaut, emplacement d'une bride). Aucune pièce n'y est posée. Rien n'est interdit tant que vous ne l'avez pas choisi, et les zones se modifient ensuite depuis la ligne de la tôle.
+- Reprendre une chute : le fichier de coupe d'une tôle importée s'importe à son tour comme tôle. Les pièces déjà découpées y apparaissent comme contours intérieurs et s'interdisent en un clic ; le calcul suivant ne pose rien dessus.
+- Résultat d'une tôle importée : l'aperçu, la vignette de la liste des résultats et la vue pendant le calcul dessinent le vrai contour, avec les zones interdites en rouge. La densité est mesurée sur la surface réelle de la tôle. Un contrôle « Zones interdites libres » s'ajoute aux contrôles existants, et la chute rectangulaire n'est plus annoncée pour ces tôles.
+- Fichier de coupe d'une tôle importée : le vrai contour est sur le calque BIN_BOUNDARY et les zones interdites sur le calque FORBIDDEN_ZONE, à exclure de la découpe dans votre logiciel de pilotage. Le zéro reste le coin bas-gauche du rectangle qui entoure la tôle. Le cadre autour des pièces (calque OUT_SHAPE) n'est pas tracé sur ces tôles.
+- La forme de la tôle reste dans votre navigateur, comme vos pièces : elle n'est pas envoyée.
+- Offre Free : vous importez la tôle, marquez les zones, imbriquez, et voyez l'aperçu, les contrôles et la densité. Les fichiers de coupe de ces calculs (DXF, ZIP, .job SheetCam) et la vue DXF demandent l'offre Unlimited ; reprendre une chute passe par le fichier de coupe téléchargé, donc par Unlimited.
+- Calcul avec deux formats de tôle : pendant le calcul, les pièces de la plus grande tôle ne sont plus rognées à l'écran, et l'image finale dessine chaque tôle à sa taille.
+- Option « Tracer le contour de la tôle » : son texte d'aide dit maintenant ce qu'elle fait : ajouter un cadre autour des pièces posées (calque OUT_SHAPE). Le contour de la tôle est toujours dans le fichier.
+
+*EN*
+
+- New: sheet imported from a DXF. In a "This device" project, the "Import a sheet (DXF)" button reads the outline of a sheet of any shape: disc, offcut, plate with notches. The nesting stays inside the true outline. Circles, arcs, ellipses, curves and polylines with arcs are read.
+- Forbidden zones: in the import window, each inner outline of the drawing can be clicked to become a forbidden zone (hole already cut, defect, clamp position). No part is placed on it. Nothing is forbidden until you choose it, and the zones can be edited afterwards from the sheet's row.
+- Reusing an offcut: the cutting file of an imported sheet can itself be imported as a sheet. The parts already cut appear there as inner outlines and are forbidden with one click; the next nesting places nothing on them.
+- Result on an imported sheet: the preview, the thumbnail in the results list and the view during the nesting draw the true outline, with the forbidden zones in red. The density is measured on the real surface of the sheet. A "Forbidden zones clear" check is added to the existing checks, and the rectangular offcut is no longer shown for these sheets.
+- Cutting file of an imported sheet: the true outline is on the BIN_BOUNDARY layer and the forbidden zones on the FORBIDDEN_ZONE layer, to be excluded from cutting in your machine software. The zero stays at the bottom-left corner of the rectangle around the sheet. The frame around the parts (OUT_SHAPE layer) is not drawn on these sheets.
+- The shape of the sheet stays in your browser, like your parts: it is not sent.
+- Free plan: you import the sheet, mark the zones, nest, and see the preview, the checks and the density. The cutting files of these nestings (DXF, ZIP, SheetCam .job) and the DXF view require the Unlimited plan; reusing an offcut goes through the downloaded cutting file, so it needs Unlimited.
+- Nesting with two sheet formats: during the nesting, the parts of the larger sheet are no longer cropped on screen, and the final image draws each sheet at its own size.
+- "Draw sheet outline on export" option: its help text now says what it does: it adds a frame around the placed parts (OUT_SHAPE layer). The sheet outline is always in the file.
+
+*PT*
+
+- Novo: chapa importada de um DXF. Num projeto «Este dispositivo», o botão «Importar uma chapa (DXF)» lê o contorno de uma chapa de qualquer forma: disco, retalho, placa com entalhes. O aninhamento fica dentro do contorno real. Círculos, arcos, elipses, curvas e polilinhas com arcos são lidos.
+- Zonas proibidas: na janela de importação, cada contorno interior do desenho pode ser clicado para virar uma zona proibida (furo já cortado, defeito, posição de uma garra). Nenhuma peça é colocada nela. Nada é proibido enquanto você não escolher, e as zonas podem ser editadas depois a partir da linha da chapa.
+- Reaproveitar um retalho: o arquivo de corte de uma chapa importada pode ser importado, por sua vez, como chapa. As peças já cortadas aparecem nele como contornos interiores e se proíbem com um clique; o cálculo seguinte não coloca nada sobre elas.
+- Resultado de uma chapa importada: a pré-visualização, a miniatura na lista de resultados e a vista durante o cálculo desenham o contorno real, com as zonas proibidas em vermelho. A densidade é medida sobre a superfície real da chapa. Uma verificação «Zonas proibidas livres» se soma às verificações existentes, e o retalho retangular deixa de ser anunciado para essas chapas.
+- Arquivo de corte de uma chapa importada: o contorno real fica na camada BIN_BOUNDARY e as zonas proibidas na camada FORBIDDEN_ZONE, a excluir do corte no seu software de comando. O zero continua no canto inferior esquerdo do retângulo que envolve a chapa. A moldura em volta das peças (camada OUT_SHAPE) não é desenhada nessas chapas.
+- A forma da chapa fica no seu navegador, como as suas peças: não é enviada.
+- Plano Free: você importa a chapa, marca as zonas, faz o aninhamento e vê a pré-visualização, as verificações e a densidade. Os arquivos de corte desses cálculos (DXF, ZIP, .job SheetCam) e a vista DXF exigem o plano Unlimited; reaproveitar um retalho passa pelo arquivo de corte baixado, portanto exige o Unlimited.
+- Cálculo com dois formatos de chapa: durante o cálculo, as peças da chapa maior deixam de ser cortadas na tela, e a imagem final desenha cada chapa no seu tamanho.
+- Opção «Desenhar contorno da chapa na exportação»: o texto de ajuda agora diz o que ela faz: adiciona uma moldura em volta das peças colocadas (camada OUT_SHAPE). O contorno da chapa está sempre no arquivo.
+
+*IT*
+
+- Novità: lamiera importata da un DXF. In un progetto «Questo dispositivo», il pulsante «Importa una lamiera (DXF)» legge il contorno di una lamiera di forma qualsiasi: disco, ritaglio, piastra con intagli. Il nesting resta dentro il contorno reale. Cerchi, archi, ellissi, curve e polilinee ad archi vengono letti.
+- Zone vietate: nella finestra di importazione, ogni contorno interno del disegno si può cliccare per diventare una zona vietata (foro già tagliato, difetto, posizione di una staffa). Nessun pezzo vi viene posato. Nulla è vietato finché non lo scegli, e le zone si modificano poi dalla riga della lamiera.
+- Riprendere un ritaglio: il file di taglio di una lamiera importata si importa a sua volta come lamiera. I pezzi già tagliati vi compaiono come contorni interni e si possono vietare con un clic; il calcolo successivo non vi posa nulla.
+- Risultato di una lamiera importata: l'anteprima, la miniatura nell'elenco dei risultati e la vista durante il calcolo disegnano il contorno reale, con le zone vietate in rosso. La densità è misurata sulla superficie reale della lamiera. Un controllo «Zone vietate libere» si aggiunge ai controlli esistenti, e il ritaglio rettangolare non viene più annunciato per queste lamiere.
+- File di taglio di una lamiera importata: il contorno reale è sul livello BIN_BOUNDARY e le zone vietate sul livello FORBIDDEN_ZONE, da escludere dal taglio nel tuo software di comando. Lo zero resta nell'angolo in basso a sinistra del rettangolo che racchiude la lamiera. La cornice attorno ai pezzi (livello OUT_SHAPE) non viene disegnata su queste lamiere.
+- La forma della lamiera resta nel tuo browser, come i tuoi pezzi: non viene inviata.
+- Piano Free: importi la lamiera, segni le zone, fai il nesting e vedi l'anteprima, i controlli e la densità. I file di taglio di questi calcoli (DXF, ZIP, .job SheetCam) e la vista DXF richiedono il piano Unlimited; riprendere un ritaglio passa dal file di taglio scaricato, quindi richiede Unlimited.
+- Calcolo con due formati di lamiera: durante il calcolo, i pezzi della lamiera più grande non vengono più tagliati sullo schermo, e l'immagine finale disegna ogni lamiera alla sua dimensione.
+- Opzione «Disegna il contorno della lamiera all'esportazione»: il suo testo di aiuto ora dice cosa fa: aggiunge una cornice attorno ai pezzi posizionati (livello OUT_SHAPE). Il contorno della lamiera è sempre nel file.
+
+*DE*
+
+- Neu: aus einer DXF-Datei importiertes Blech. In einem Projekt „Dieses Gerät“ liest die Schaltfläche „Blech importieren (DXF)“ die Kontur eines Blechs beliebiger Form: Scheibe, Restblech, Platte mit Aussparungen. Die Verschachtelung bleibt innerhalb der echten Kontur. Kreise, Bögen, Ellipsen, Kurven und Polylinien mit Bögen werden gelesen.
+- Gesperrte Zonen: Im Importfenster lässt sich jede Innenkontur der Zeichnung anklicken und wird zur gesperrten Zone (bereits geschnittenes Loch, Fehlstelle, Position einer Spannpratze). Es wird kein Teil darauf gelegt. Nichts ist gesperrt, solange Sie es nicht gewählt haben, und die Zonen lassen sich danach über die Zeile des Blechs ändern.
+- Restblech weiterverwenden: Die Schnittdatei eines importierten Blechs lässt sich ihrerseits als Blech importieren. Die bereits geschnittenen Teile erscheinen darin als Innenkonturen und werden mit einem Klick gesperrt; die nächste Berechnung legt nichts darauf.
+- Ergebnis eines importierten Blechs: Die Vorschau, die Miniaturansicht in der Ergebnisliste und die Ansicht während der Berechnung zeichnen die echte Kontur, mit den gesperrten Zonen in Rot. Die Dichte wird auf der tatsächlichen Fläche des Blechs gemessen. Eine Prüfung „Gesperrte Zonen frei“ kommt zu den bestehenden Prüfungen hinzu, und das rechteckige Restblech wird für diese Bleche nicht mehr angezeigt.
+- Schnittdatei eines importierten Blechs: Die echte Kontur liegt auf der Ebene BIN_BOUNDARY und die gesperrten Zonen auf der Ebene FORBIDDEN_ZONE; beide schließen Sie in Ihrer Maschinensoftware vom Schneiden aus. Der Nullpunkt bleibt die untere linke Ecke des Rechtecks um das Blech. Der Rahmen um die Teile (Ebene OUT_SHAPE) wird auf diesen Blechen nicht gezeichnet.
+- Die Form des Blechs bleibt in Ihrem Browser, wie Ihre Teile: Sie wird nicht gesendet.
+- Free-Plan: Sie importieren das Blech, markieren die Zonen, verschachteln und sehen die Vorschau, die Prüfungen und die Dichte. Die Schnittdateien dieser Berechnungen (DXF, ZIP, SheetCam-.job) und die DXF-Ansicht erfordern den Unlimited-Plan; ein Restblech weiterzuverwenden geht über die heruntergeladene Schnittdatei und erfordert daher Unlimited.
+- Berechnung mit zwei Blechformaten: Während der Berechnung werden die Teile des größeren Blechs auf dem Bildschirm nicht mehr abgeschnitten, und das Endbild zeichnet jedes Blech in seiner Größe.
+- Option „Blechkontur im Export zeichnen“: Der Hilfetext sagt jetzt, was sie tut: Sie fügt einen Rahmen um die platzierten Teile hinzu (Ebene OUT_SHAPE). Die Blechkontur ist immer in der Datei.
+
+*ES*
+
+- Novedad: chapa importada de un DXF. En un proyecto «Este dispositivo», el botón «Importar una chapa (DXF)» lee el contorno de una chapa de cualquier forma: disco, sobrante, placa con muescas. El anidado se queda dentro del contorno real. Se leen círculos, arcos, elipses, curvas y polilíneas con arcos.
+- Zonas prohibidas: en la ventana de importación, cada contorno interior del dibujo se puede pulsar para convertirse en una zona prohibida (agujero ya cortado, defecto, posición de una brida). No se coloca ninguna pieza en ella. Nada está prohibido hasta que lo elijas, y las zonas se modifican después desde la fila de la chapa.
+- Reutilizar un sobrante: el archivo de corte de una chapa importada se puede importar a su vez como chapa. Las piezas ya cortadas aparecen en él como contornos interiores y se prohíben con un clic; el cálculo siguiente no coloca nada sobre ellas.
+- Resultado de una chapa importada: la vista previa, la miniatura de la lista de resultados y la vista durante el cálculo dibujan el contorno real, con las zonas prohibidas en rojo. La densidad se mide sobre la superficie real de la chapa. Una comprobación «Zonas prohibidas libres» se suma a las existentes, y el sobrante rectangular ya no se anuncia para estas chapas.
+- Archivo de corte de una chapa importada: el contorno real está en la capa BIN_BOUNDARY y las zonas prohibidas en la capa FORBIDDEN_ZONE, que debes excluir del corte en tu software de control. El cero sigue en la esquina inferior izquierda del rectángulo que rodea la chapa. El marco alrededor de las piezas (capa OUT_SHAPE) no se dibuja en estas chapas.
+- La forma de la chapa se queda en tu navegador, como tus piezas: no se envía.
+- Plan Free: importas la chapa, marcas las zonas, haces el anidado y ves la vista previa, las comprobaciones y la densidad. Los archivos de corte de estos cálculos (DXF, ZIP, .job de SheetCam) y la vista DXF requieren el plan Unlimited; reutilizar un sobrante pasa por el archivo de corte descargado, por lo que requiere Unlimited.
+- Cálculo con dos formatos de chapa: durante el cálculo, las piezas de la chapa más grande ya no se recortan en pantalla, y la imagen final dibuja cada chapa a su tamaño.
+- Opción «Dibujar el contorno de la chapa en la exportación»: su texto de ayuda ahora dice lo que hace: añade un marco alrededor de las piezas colocadas (capa OUT_SHAPE). El contorno de la chapa está siempre en el archivo.
+
 ## V0.9.16
 
 *FR*

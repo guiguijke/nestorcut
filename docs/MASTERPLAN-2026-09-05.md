@@ -179,6 +179,15 @@ brossé), miroir autorisé ou non (matière à face). Le moteur gère déjà
 les rotations par item et les rotations restreintes par classe —
 extension naturelle des params + pré-contrôle.
 
+**État 20/11 [local — non déployé]** : la tôle importée d'un DXF (contour
+quelconque, zones interdites cliquables, projet « Cet appareil ») est codée
+sur la branche `feat/tole-importee` (V0.9.17 préparée) : l'imbrication, le
+rapport, l'affichage et le DXF livré suivent le vrai contour. Restent hors de
+ce lot : marge par bord, sens du grain, miroir. Offre Free (décision du
+propriétaire du 20/11) : import, imbrication, aperçu et contrôles ouverts ;
+tout fichier de découpe d'un job à tôle importée (DXF, ZIP, .job) demande
+Unlimited. Pièges : AGENTS 66, 63.
+
 Effort : ~1-2 semaines.
 
 ### 3.5 Réserve d'amorce + point de départ — le pont CAM

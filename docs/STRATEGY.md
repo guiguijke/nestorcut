@@ -51,6 +51,14 @@ Correspondance des noms (le code n'est pas renommé à ce stade) :
   [prod]. Le verrou est serveur pour un calcul sur nos machines,
   d'interface pour un calcul dans le navigateur (même précédent que l'export
   du rapport, §3).
+- **Tôle importée d'un DXF** (contour de forme quelconque + zones interdites
+  cliquables, projet « Cet appareil » seulement ; imbrication, rapport,
+  affichage et DXF livré suivent le vrai contour ; la forme ne quitte pas le
+  navigateur). Import, imbrication et résultat ouverts en Free, téléchargement
+  des fichiers de découpe réservé à Unlimited (décision propriétaire du 20/11 :
+  tout fichier de découpe d'un job à tôle importée, DXF, ZIP et .job, demande
+  Unlimited ; reprendre une chute passe par ce fichier) [local 2026-11-20 — branche `feat/tole-importee`, non
+  déployé, V0.9.17 préparée ; AGENTS piège 66].
 - Calcul **navigateur uniquement** (Mode Local forcé : solve WASM
   mono-walk, résultats 100 % navigateur, refund à l'échec) [prod, PR#33-38 —
   flag ON 2026-08-08].

@@ -116,7 +116,10 @@ premier/dernier < tol → Polygon sinon LineString.
 - DXF résultat (main.py:240-310) : **entités d'origine** copiées via xref.Loader
   (couches/couleurs intactes, P6), transformées par placement (rotation+translation
   exactes) ; BIN_BOUNDARY (couche 5 bleu) toujours ; OUT_SHAPE (couche 1 rouge)
-  si demandé ; échelle export mm→unité (`output_scale_and_headers` : inch =
+  si demandé (chemin serveur et tôle rectangulaire ; sur une tôle importée,
+  navigateur seulement, BIN_BOUNDARY porte le vrai contour, les zones
+  interdites sont sur FORBIDDEN_ZONE (couleur 6) et OUT_SHAPE n'est jamais
+  tracé : AGENTS piège 66) ; échelle export mm→unité (`output_scale_and_headers` : inch =
   ×1/25.4 exact, $INSUNITS=1, $MEASUREMENT=0 ; sinon $INSUNITS=4, $MEASUREMENT=1).
 - `svg_colored.build_colored_sheet_svg` : rendu couleur par pièce,
   `translate(x, H−y) scale(1,−1) rotate(θ)` (D-COL-5, flip obligatoire),

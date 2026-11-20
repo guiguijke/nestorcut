@@ -61,7 +61,9 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
   d'une tôle, ET (`stock === 1` OU directions = `['left']` seulement) —
   un stock déclaré 100 + –X coché doit rester SPP (sinon BPP « rangées »,
   pas une bande). Sinon BPP (recuit simulé maison sur la séquence +
-  constructif `HoleFillEvaluator`, minimise le nombre de tôles).
+  constructif `HoleFillEvaluator`, minimise le nombre de tôles). Une tôle
+  importée d'un DXF (piège 66) force toujours BPP : la tôle n'y est plus un
+  rectangle (`localPayloadBuilder.js:1105`).
 - **Qualité = 8 walks partout (D-PAY-12)** : `n_workers` BPP = `QUALITY_WALKS`
   ; `RAYON_NUM_THREADS` = vcores du tier (1 / 4 / 8). Le navigateur fait
   la même chose (`walks=8`, `concurrency` = tier).
@@ -1177,6 +1179,26 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
       EN SILENCE. Le job est retrouvé par le slug lu dans le nom (index
       `slug`), jamais par un `$or` sur `dxf_files` (aucun index, déclenchable
       à 180/min).
+    - **Exception : tôle importée d'un DXF (décision du 20/11, V0.9.17).**
+      Pour un compte verrouillé (plafond fini), un résultat qui porte une
+      tôle importée a un plafond de 0 : `effectiveSheetCap`
+      (`shared/constants/sheetDownload.constants.js`), et `isSheetFileAllowed`
+      refuse tout à plafond ≤ 0, même un nom illisible (sinon la règle D2
+      le laisserait passer). La décision est prise DANS le point
+      d'étranglement `app/composables/localDownloads.js` (`capFor`), pour
+      qu'un appelant ne puisse pas l'oublier. Le signal se lit dans le
+      résultat STOCKÉ, jamais dans les réglages du projet ni dans la fiche de
+      la tôle (une tôle supprimée ou un projet rouvert restent verrouillés) :
+      champs du rapport (`report.totals.shapedSheetCount > 0`, une ligne
+      `shaped: true`, ou `shapedSheets` / `shapeVerified`, seuls présents
+      quand le rapport a échoué : `alternativesHoldImportedSheet`,
+      `app/utils/sheetDownloadGate.js`) OU format de la dernière frame
+      (`liveLayout.binFormats`, `recordHoldsImportedSheet`, écrit seulement
+      pour un job à tôle importée). Sans le second signal, un rapport en
+      échec rouvrait les 2 premières tôles. Verrou d'INTERFACE, projets locaux
+      seulement, contournable comme J-057. Verrou :
+      `app/tests/importedSheetLock.test.js`.
+
     - **Client** : `sheetDownloadState(user, { paidPlansDisabled, projectSlug })`
       — l'appelant passe TOUJOURS les deux (les défauts verrouillent la démo
       et K en silence). Les `.job` sont jugés sur LEURS noms (`jobGate`), pas
@@ -1236,6 +1258,70 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     garde la sémantique réelle de `$push`. Verrou :
     `server/tests/googleLoginSession.test.js`.
 
+66. **Tôle importée d'un DXF : la tôle n'est plus un rectangle, et chaque
+    étage qui la supposait rectangulaire doit le savoir (branche
+    `feat/tole-importee`, 20/11, non livré).** Projet « Cet appareil »
+    seulement : contour + zones interdites, calcul, rapport, affichage et DXF
+    livré suivent le vrai contour. Règles, avec la raison :
+    - **Lecteur de tôle ≠ import de pièces** (`nest-import/src/sheet.rs`) :
+      tous les contours fermés avec leur profondeur, sans nettoyage. Une
+      polyligne à bulges est lue en VRAIS arcs pour une tôle (`sheet.rs:12-19` :
+      la corde de l'import de pièces, D-IMP-8, ferait un disque d'aire nulle et
+      un arc rentrant plus grand que le métal) ; une SPLINE fermée périodique
+      est ramenée à son domaine de nœuds valides ICI seulement
+      (`spline_on_valid_domain`, `sheet.rs:417` : le code partagé aplatit tout
+      l'intervalle et plante une pointe à l'origine) ; une SPLINE à points
+      d'ajustement seuls est COMPTÉE écartée (`sheet.rs:620`), jamais lue.
+    - **Le contour ne quitte jamais le navigateur.** Seul un `shapeId` opaque
+      part au serveur (`files.js:234`), refusé hors projet local et pour la
+      démo (`nest.post.js:206-221`, `imported_sheet_not_local`, format
+      `SHEET_SHAPE_ID` ligne 19). Les tôles vivent dans leur PROPRE base
+      IndexedDB `nestorcut-sheets` (`localSheetsStore.js:7-12`) : monter la
+      version de `nestorcut-local` serait bloqué tant qu'un ancien onglet la
+      tient ouverte. Dossier absent = job arrêté AVANT calcul
+      (`sheet_shape_missing`, `localPayloadBuilder.js:725`), jamais un repli sur
+      la boîte (poser des pièces sur du vide).
+    - **Calcul** : toujours le chemin multi-tôles BPP (`localPayloadBuilder.js:
+      1105`). `finish_partial_sheet` éteint partout : builder (ligne 1297),
+      walks (`localPool.js:140`), fusion (`localPool.js:889`), mono-walk
+      (`localCompute.js:96`) — il refait la dernière tôle dans son rectangle
+      englobant. Passes faites pour un rectangle SAUTÉES pour tout le job :
+      alternative grille (`finalizeLocal.js:73`), bandes résiduelles et le
+      hole-fill qui les suit (`localBridge.js:1763`). Le hole-fill de la fin est,
+      lui, conscient des zones (`localBridge.js:1078-1093` : hors contour ou à
+      moins de l'espacement d'une zone = pose refusée, contact à espacement 0
+      compris). Dans une frame LIVE, `bin` est un RANG de tôle, pas un format
+      (`localBridge.js:1505-1517`) : pas de hole-fill live avec plusieurs
+      formats, densité live sans chiffre plutôt que fausse (ligne 1549).
+    - **Rapport** (`nest-report/src/lib.rs`) : contour réel avec arêtes, aire
+      UTILE (contour − zones) pour la densité, `offcut` null (`lib.rs:68-90`),
+      recouvrement et distance aux zones (la distance entre dans l'écart minimal
+      jugé par `applySpacingMargin`, `lib.rs:421-428`), forme illisible = « non
+      vérifié » jamais vert (`lib.rs:586-596`, piège 60). Une alternative hors
+      contour ou sur une zone est ÉCARTÉE comme un recouvrement mesuré
+      (`finalizeLocal.js:205-225`, piège 56b).
+    - **Affichage** : le SVG du résultat reçoit la forme en JS APRÈS le wasm
+      (`withSheetShapeSvg`, `sheetDraw.js:110`, appelé `localBridge.js:1823` ;
+      le SVG du wasm reste inchangé octet pour octet) et la garde avec le
+      résultat. Vue live : un clip par panneau (`LiveNestingView.vue`), la boîte
+      de chaque tôle dans la frame finale (`finalizeLocal.js:44-57`).
+    - **DXF livré** (`nest-export/src/dxf_writer.rs:380-440`) : `BIN_BOUNDARY`
+      toujours écrit ; pour une tôle importée TOUJOURS le vrai contour (option
+      cochée ou non), zones toujours sur `FORBIDDEN_ZONE`, jamais `OUT_SHAPE`
+      (cadre rectangulaire : il pourrait être découpé hors du métal). Les
+      anneaux partent au wasm en TEXTE (`binShapeSpec`, `localBridge.js:2065` :
+      le lecteur de nombres JSON se trompe d'un ULP, le DXF doit porter les
+      anneaux du moteur au bit près).
+    - **Téléchargement Free d'un job à tôle importée** : voir piège 63 et le
+      lot de la sortie. Décision du propriétaire du 20/11 : en Free on
+      importe, on imbrique et on voit ; les fichiers de découpe d'un job à
+      tôle importée (DXF, ZIP, .job) demandent Unlimited (piège 63).
+    Verrous : `sheetShape`, `sheetImportModel`, `localSheetsStore`,
+    `filesSheetShapeId`, `localShapedSheet`, `localShapedPasses`,
+    `localShapedHoleFill`, `shapedReport`, `sheetDraw` (`app/tests/`) ;
+    `shapedSheetServer` (`server/tests/`) ; `nest-import/tests/sheet_contours.rs`,
+    `nest-export/tests/bin_shape.rs`, `nest-report/src/shaped_tests.rs`.
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :
@@ -1274,7 +1360,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (708 au 2026-09-13)
+npx vitest run                                             # app+server (2 046 au 20/11)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 101 au 18/11 (aussi dans la CI ; lit workers/geometry)
