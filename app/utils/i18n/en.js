@@ -455,10 +455,10 @@ export default {
     'localCompute.queued': 'waiting for a free slot (parallel nesting is a Pro feature)',
     'localCompute.runningLocal': 'Optimizing on this device — your files never leave this browser.',
     'localCompute.error': 'Local compute failed. The nesting was refunded — please try again.',
-    'localMode.allInvalid': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please retry in server mode.',
+    'localMode.allInvalid': 'Every layout option was rejected by physical validation (measured overlaps, a part outside the outline or on a forbidden zone). The nesting was refunded — please retry in server mode.',
     // AF6 (L3-bis) : projet « cet appareil » — le mode serveur n'existe
     // pas pour ces fichiers.
-    'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps). The nesting was refunded — please try again; if it keeps happening, change the spacing or the allowed rotations, or contact support.',
+    'localMode.allInvalidLocal': 'Every layout option was rejected by physical validation (measured overlaps, a part outside the outline or on a forbidden zone). The nesting was refunded — please try again; if it keeps happening, change the spacing or the allowed rotations, or contact support.',
     'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
@@ -550,6 +550,9 @@ export default {
     'report.postPass': 'Post-pass: {n} moved{rb}{e}',
     'report.notVerified': 'Not verified',
     'report.duplicates': '{n} duplicate poses',
+    'report.zoneClear': 'Forbidden zones clear',
+    'report.zoneHit.one': '{n} part on a forbidden zone',
+    'report.zoneHit.other': '{n} parts on a forbidden zone',
     'report.unplaced': '{n} parts not placed (tight stock)',
     'report.outsideBy': 'Parts outside the sheet by {v} {unit}',
     'report.finish.left': 'Last sheet: −X band, front {before} → {after} {unit}',

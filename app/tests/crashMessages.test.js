@@ -47,3 +47,17 @@ describe('messages d’arrêt à cause inconnue', () => {
         }
     })
 })
+
+describe('J5 : « toutes les options rejetées » est vrai pour les trois raisons', () => {
+    // chevauchement mesuré, pièce hors du contour, pièce sur une zone interdite
+    const OUTSIDE = { en: /outside the outline/i, fr: /hors du contour/i, de: /außerhalb der Kontur/i, es: /fuera del contorno/i, it: /fuori dal contorno/i, pt: /fora do contorno/i }
+    const ZONE = { en: /forbidden zone/i, fr: /zone interdite/i, de: /Sperrzone/i, es: /zona prohibida/i, it: /zona vietata/i, pt: /zona proibida/i }
+    it('les deux clés nomment le contour et la zone, dans les 6 langues', () => {
+        for (const [name, dict] of Object.entries(DICTS)) {
+            for (const key of ['localMode.allInvalid', 'localMode.allInvalidLocal']) {
+                expect(dict[key], `${name}:${key} (contour)`).toMatch(OUTSIDE[name])
+                expect(dict[key], `${name}:${key} (zone)`).toMatch(ZONE[name])
+            }
+        }
+    })
+})

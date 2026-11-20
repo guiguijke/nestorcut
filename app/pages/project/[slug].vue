@@ -114,7 +114,28 @@
                         preserveAspectRatio="xMidYMid meet"
                     >
                         <g :transform="idleTransform">
+                            <!-- Tôle importée : le vrai contour et les zones interdites
+                                 (lus dans IndexedDB, jamais envoyés) à la place du
+                                 rectangle de la boîte. -->
+                            <g
+                                v-if="idleShape"
+                                data-testid="idle-shape"
+                                :transform="`scale(${idleSheet.w / idleShape.w} ${idleSheet.h / idleShape.h})`"
+                            >
+                                <path :d="idleShape.outline" class="stage__sheet-bg" fill-rule="evenodd" vector-effect="non-scaling-stroke" />
+                                <path
+                                    v-if="idleShape.zones"
+                                    :d="idleShape.zones"
+                                    :fill="ZONE_RED"
+                                    fill-opacity="0.25"
+                                    :stroke="ZONE_RED"
+                                    stroke-width="1.2"
+                                    fill-rule="evenodd"
+                                    vector-effect="non-scaling-stroke"
+                                />
+                            </g>
                             <rect
+                                v-else
                                 x="0"
                                 y="0"
                                 :width="idleSheet.w"
@@ -225,6 +246,8 @@ import {
     DEMO_SPACE_MM,
 } from "~~/shared/constants/demo.constants";
 import { sheetDisplaySize, sheetLandscapeTransform } from "~/utils/sheetView";
+import { ZONE_RED, shapeToDrawPaths } from "~/utils/sheetDraw";
+import { engineBinShape } from "~~/app/utils/sheetShape";
 import { PRIVACY_CHIP_KEY, PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
 
 definePageMeta({
@@ -855,6 +878,28 @@ const currentSheets = computed(() => {
     // Legacy params shape (before multi-sheet).
     return [{ width: p.widthPlate ?? 0, height: p.heightPlate ?? 0 }];
 })
+// J2 : tôle importée au repos — la forme vient du navigateur (IndexedDB), pas
+// des réglages (qui ne portent que shapeId, nom et boîte). Illisible ou absente :
+// la scène garde son rectangle.
+const idleShape = ref(null);
+watch(
+    () => unref(currentSheets)[0]?.shapeId ?? null,
+    async (id) => {
+        idleShape.value = null;
+        if (!id || !import.meta.client) return;
+        try {
+            const { getSheet } = await import("~/composables/localSheetsStore");
+            const record = await getSheet(id);
+            if (!record || unref(currentSheets)[0]?.shapeId !== id) return;
+            const shape = engineBinShape(record);
+            const paths = shapeToDrawPaths(shape, shape.heightMm);
+            idleShape.value = paths ? { w: shape.widthMm, h: shape.heightMm, ...paths } : null;
+        } catch {
+            idleShape.value = null;
+        }
+    },
+    { immediate: true }
+);
 // A part fits if it fits inside at least one sheet type, in either orientation.
 const sizesIsAvailable = computed(() => {
     const { width: partWidth, height: partHeight } = unref(biggestPartSizes);

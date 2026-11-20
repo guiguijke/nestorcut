@@ -51,6 +51,14 @@ describe('whyFirstKind — la justification du rang 0 est vraie (AA1)', () => {
         ])).toBe('grid')
     })
 
+    it('aucune chute mesurée (tôle importée : null / 0) → null, jamais « plus grande chute »', () => {
+        expect(whyFirstKind([{ offcut: null }, { offcut: null }])).toBeNull()
+        expect(whyFirstKind([{}, {}, {}])).toBeNull()
+        expect(whyFirstKind([alt(0), alt(0)])).toBeNull()
+        // une chute mesurée quelque part : la règle d'avant reste vraie
+        expect(whyFirstKind([{ offcut: null }, alt(500)])).toBe('grid')
+    })
+
     it('une seule option → null (pas de justification)', () => {
         expect(whyFirstKind([alt(500)])).toBeNull()
         expect(whyFirstKind(null)).toBeNull()

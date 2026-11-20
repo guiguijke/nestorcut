@@ -443,10 +443,10 @@ export default {
     "localCompute.queued": "en attente d'un slot libre (le nesting parallèle est une fonction Pro)",
     'localCompute.runningLocal': "Optimisation sur cet appareil — vos fichiers ne quittent jamais ce navigateur.",
     'localCompute.error': "Le calcul local a échoué. L'imbrication a été remboursée — réessayez.",
-    'localMode.allInvalid': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez en mode serveur.",
+    'localMode.allInvalid': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés, pièce hors du contour ou sur une zone interdite). L'imbrication a été remboursée — réessayez en mode serveur.",
     // AF6 (L3-bis) : projet « cet appareil » — le mode serveur n'existe
     // pas pour ces fichiers.
-    'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés). L'imbrication a été remboursée — réessayez ; si cela se reproduit, modifiez l'espacement ou les rotations autorisées, ou contactez le support.",
+    'localMode.allInvalidLocal': "Toutes les options ont été rejetées par la validation physique (chevauchements mesurés, pièce hors du contour ou sur une zone interdite). L'imbrication a été remboursée — réessayez ; si cela se reproduit, modifiez l'espacement ou les rotations autorisées, ou contactez le support.",
     'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
@@ -535,6 +535,9 @@ export default {
     'report.postPass': 'Post-pass : {n} déplacées{rb}{e}',
     'report.notVerified': 'Non vérifié',
     'report.duplicates': '{n} poses dupliquées',
+    'report.zoneClear': 'Zones interdites libres',
+    'report.zoneHit.one': '{n} pièce sur une zone interdite',
+    'report.zoneHit.other': '{n} pièces sur une zone interdite',
     'report.unplaced': '{n} pièces non placées (stock serré)',
     'report.outsideBy': 'Pièces hors tôle de {v} {unit}',
     'report.finish.left': 'Dernière tôle : bande −X, front {before} → {after} {unit}',

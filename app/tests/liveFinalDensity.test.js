@@ -35,3 +35,35 @@ describe('buildLiveLayout : densité', () => {
         expect(decorateLiveLayout(none, bpp).density).toBeNull()
     })
 })
+
+// Image finale de la page projet : chaque tôle à SA taille. Avec la seule
+// boîte du premier format, une tôle 800 x 800 placée après une 500 x 500 était
+// dessinée en 500 x 500 et ses pièces coupées.
+describe('buildLiveLayout : boîte de chaque tôle', () => {
+    const rect = (w, h) => ({ shape: { type: 'polygon', data: { outer: [[0, 0], [w, 0], [w, h], [0, h], [0, 0]] } } })
+    const pose = { item_id: 0, transformation: { rotation: 0, translation: [10, 10] } }
+
+    it('deux formats rectangulaires : une boîte par tôle, dans l\'ordre des tôles', () => {
+        const payload = { problem: 'bpp', instance: { bins: [rect(500, 500), rect(800, 800)] } }
+        const alt = { solution: { layouts: [
+            { container_id: 1, placed_items: [pose] },
+            { container_id: 0, placed_items: [pose] },
+            { container_id: 1, placed_items: [pose] },
+        ] } }
+        const live = buildLiveLayout({ problem: 'bpp' }, payload, alt, 0.5)
+        expect(live.sheets).toEqual([[800, 800], [500, 500], [800, 800]])
+        // Pas de forme à dessiner : aucun champ de tôle importée.
+        expect(live.binFormats).toBeUndefined()
+    })
+
+    it('un seul format : frame inchangée, une seule boîte', () => {
+        const payload = { problem: 'bpp', instance: { bins: [rect(1000, 2000)] } }
+        const alt = { solution: { layouts: [
+            { container_id: 0, placed_items: [pose] },
+            { container_id: 0, placed_items: [pose] },
+        ] } }
+        const live = buildLiveLayout({ problem: 'bpp' }, payload, alt, 0.5)
+        expect(live.sheets).toEqual([[1000, 2000]])
+        expect(live.binFormats).toBeUndefined()
+    })
+})

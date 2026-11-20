@@ -66,22 +66,44 @@
                 class="live__sheet"
                 preserveAspectRatio="xMidYMid meet"
             >
-                <defs>
-                    <!-- clipPathUnits=userSpaceOnUse : le rect est lu dans
-                         l'espace local de CHAQUE groupe référençant — un
-                         seul rect sert tous les panneaux. -->
-                    <clipPath :id="clipId">
-                        <rect x="0" y="0" :width="sheet[0]" :height="sheet[1]" />
-                    </clipPath>
-                </defs>
                 <g
                     v-for="pane in mainPanes.panes"
                     :key="pane.bin"
                     :transform="`translate(${pane.dx} 0)`"
                 >
                     <g :transform="pane.landscape">
-                        <rect x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
-                        <g :clip-path="`url(#${clipId})`">
+                        <!-- Un rectangle de découpe PAR panneau, à la taille de SA
+                             tôle : un seul rectangle à la taille de la première
+                             tôle rognait les pièces de toute tôle plus grande
+                             (formats mélangés). -->
+                        <defs>
+                            <clipPath :id="paneClipId('m', pane.bin)">
+                                <rect x="0" y="0" :width="pane.w" :height="pane.h" />
+                            </clipPath>
+                        </defs>
+                        <!-- Tôle importée : vrai contour (le reste de la boîte n'est
+                             pas de la tôle) + zones interdites rouges, SOUS les
+                             pièces. Format du rang inconnu : rectangle. -->
+                        <template v-if="mainPaneShapes.get(pane.bin)">
+                            <path :d="mainPaneShapes.get(pane.bin).outline" class="live__sheet-bg" fill-rule="evenodd" />
+                            <g v-if="mainPaneShapes.get(pane.bin).zones" data-testid="live-zones">
+                                <defs>
+                                    <pattern
+                                        :id="hatchId('m', pane.bin)"
+                                        patternUnits="userSpaceOnUse"
+                                        :width="liveHatchPitch(pane)"
+                                        :height="liveHatchPitch(pane)"
+                                        patternTransform="rotate(45)"
+                                    >
+                                        <line x1="0" y1="0" x2="0" :y2="liveHatchPitch(pane)" :stroke="ZONE_RED" :stroke-width="liveHatchPitch(pane) * 0.12" />
+                                    </pattern>
+                                </defs>
+                                <path :d="mainPaneShapes.get(pane.bin).zones" :fill="ZONE_RED" fill-opacity="0.18" fill-rule="evenodd" />
+                                <path :d="mainPaneShapes.get(pane.bin).zones" :fill="`url(#${hatchId('m', pane.bin)})`" :stroke="ZONE_RED" stroke-width="1.2" fill-rule="evenodd" />
+                            </g>
+                        </template>
+                        <rect v-else x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
+                        <g :clip-path="`url(#${paneClipId('m', pane.bin)})`">
                             <!-- Lot J8-b : la pièce ET ses amorces vivent dans
                                  le MÊME groupe transformé — translate(x, H−y)
                                  scale(1,-1) rotate(θ), jamais une autre
@@ -155,8 +177,25 @@
                             :transform="`translate(${pane.dx} 0)`"
                         >
                             <g :transform="pane.landscape">
-                                <rect x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
-                                <g :clip-path="`url(#${clipId})`">
+                                <template v-if="card.paneShapes.get(pane.bin)">
+                                    <path :d="card.paneShapes.get(pane.bin).outline" class="live__sheet-bg" fill-rule="evenodd" />
+                                    <path
+                                        v-if="card.paneShapes.get(pane.bin).zones"
+                                        :d="card.paneShapes.get(pane.bin).zones"
+                                        :fill="ZONE_RED"
+                                        fill-opacity="0.3"
+                                        :stroke="ZONE_RED"
+                                        stroke-width="1.2"
+                                        fill-rule="evenodd"
+                                    />
+                                </template>
+                                <rect v-else x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
+                                <defs>
+                                    <clipPath :id="paneClipId(card.cls, pane.bin)">
+                                        <rect x="0" y="0" :width="pane.w" :height="pane.h" />
+                                    </clipPath>
+                                </defs>
+                                <g :clip-path="`url(#${paneClipId(card.cls, pane.bin)})`">
                                     <g
                                         v-for="(item, i) in card.paneItems.get(pane.bin) || []"
                                         :key="i"
@@ -218,6 +257,7 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
 import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity } from '~/utils/liveJob';
 import { formatElapsed } from '~/utils/elapsedFormat';
+import { ZONE_RED, livePaneShape, liveHatchId, liveHatchPitch } from '~/utils/sheetDraw';
 
 const props = defineProps({
     result: { type: Object, required: true },
@@ -595,6 +635,22 @@ function itemsByPane(panes, items) {
 const mainPanes = computed(() => paneLayoutFor(best.value, mainItems.value));
 const mainItemsByBin = computed(() => itemsByPane(mainPanes.value, mainItems.value));
 
+// Tôle importée : forme à dessiner par panneau (rang de tôle -> { outline,
+// zones }). Un rang dont le format n'est pas connu n'y figure pas : il garde
+// son rectangle plutôt qu'une forme fausse.
+function shapesByPane(frame, panes) {
+    const map = new Map();
+    for (const pane of panes.panes) {
+        const shape = livePaneShape(frame, pane);
+        if (shape) map.set(pane.bin, shape);
+    }
+    return map;
+}
+const mainPaneShapes = computed(() => shapesByPane(best.value, mainPanes.value));
+const paneClipId = (cardKey, bin) => `${clipId}-${String(cardKey).replace(/[^a-zA-Z0-9_-]/g, '')}-${bin}`;
+const hatchViewId = `live-${clipId}`;
+const hatchId = (cardKey, bin) => liveHatchId(hatchViewId, cardKey, bin);
+
 // Zoom onto the used region in DISPLAY space. Axes stay in frame (origin
 // is always included). Export geometry is unchanged.
 const viewBox = computed(() => {
@@ -666,6 +722,7 @@ const classCards = computed(() => {
             items,
             panes,
             paneItems: itemsByPane(panes, items),
+            paneShapes: shapesByPane(champ, panes),
         };
     });
 });

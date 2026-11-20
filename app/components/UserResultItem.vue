@@ -446,7 +446,7 @@ const resultTitle = computed(() => {
     // Plan 2026-09-05 §1.2c : un résultat unfit (hors tôle mesuré) est
     // étiqueté « ne tient pas » — jamais « Results · 1 sheet ».
     const r0 = props.result?.alternatives?.[0]?.report
-    if (r0 && (r0.insideSheet === false || r0.overlapFree === false
+    if (r0 && (r0.insideSheet === false || r0.overlapFree === false || r0.zoneClear === false
         || (r0.duplicatePoses || 0) > 0)) {
         return t('results.unfit')
     }

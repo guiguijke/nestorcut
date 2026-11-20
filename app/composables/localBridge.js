@@ -17,6 +17,7 @@
  * en string pour les maps JS (l'instance les porte en nombre).
  */
 import { geoExportSvgSheet, geoComputeReport, geoExportDxfSheet } from './geometryClient'
+import { withSheetShapeSvg, shortHash } from '~~/app/utils/sheetDraw.js'
 import { ringCentroid } from './structureClient'
 
 const degToRad = (deg) => (deg * Math.PI) / 180
@@ -1030,6 +1031,52 @@ export function sheetShapesForLayouts(payload, layouts, binIds = null) {
     })
 }
 
+/** Formes de tôle pour le RAPPORT (contrôles sur le vrai contour), alignées
+ * index par index sur `layouts`. Rend `null` pour un job sans tôle importée
+ * (le rapport garde alors exactement son chemin d'avant), sinon, par layout :
+ * `null` (format rectangle), `{ shape: { outer, inner } }` (tôle importée) ou
+ * `{ unresolved: true }` quand la forme d'un format importé est introuvable
+ * (bins absents, `container_id` hors de la liste, contour illisible) : le
+ * rapport dit alors « non vérifié », il ne retombe pas sur la boîte (piège
+ * #60). Les anneaux ne servent QU'au calcul navigateur : ils ne sont jamais
+ * recopiés dans le rapport ni dans les containers livrés. */
+export function reportSheetShapes(payload, layouts) {
+    const shaped = payload?.shapedSheets
+    if (!Array.isArray(shaped) || !shaped.length) return null
+    const ids = new Set(shaped.map((s) => s.id))
+    const bins = payload?.instance?.bins
+    return (layouts || []).map((l) => {
+        if (!Array.isArray(bins) || !bins.length) return { unresolved: true }
+        const bin = bins[l.container_id ?? 0]
+        if (!bin) return { unresolved: true }
+        if (!ids.has(bin.id)) return null
+        const data = bin.shape?.data
+        if (!Array.isArray(data?.outer) || data.outer.length < 4) return { unresolved: true }
+        return { shape: { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] } }
+    })
+}
+
+/** Une forme introuvable (`reportSheetShapes`) ne laisse JAMAIS un badge vert :
+ * « dans la tôle » et « zones libres » passent à null, l'état à « non
+ * vérifié ». Le rapport entier manquant (calcul en échec) sur un job à tôle
+ * importée devient un rapport « non vérifié » plutôt qu'une absence muette. */
+export function markUnresolvedShapes(report, shapes) {
+    if (!Array.isArray(shapes)) return report
+    const unresolved = shapes.some((s) => s?.unresolved)
+    if (!report || report.error) {
+        return {
+            per_sheet: [],
+            totals: null,
+            verify: { insideSheet: null, zoneClear: null, shapeVerified: false, verifyStatus: 'skipped' },
+        }
+    }
+    if (!unresolved || !report.verify) return report
+    Object.assign(report.verify, {
+        insideSheet: null, zoneClear: null, shapeVerified: false, verifyStatus: 'skipped',
+    })
+    return report
+}
+
 /** Une pose candidate viole-t-elle la forme de SA tôle importée ? Hors du
  * contour, ou à moins de l'espacement d'une zone interdite. Le contact avec
  * une zone est REFUSÉ même à espacement 0 (distance 0 = refus) : plus strict
@@ -1495,7 +1542,14 @@ export function decorateLiveLayout(evt, payload) {
         const h = dims[0]?.[1] || 0
         const sameFormat = dims.every(([a, b]) => a === w && b === h)
         const nSheets = isBpp ? Math.max(1, usedBins.size || 1) : 1
-        const sheetArea = (!isBpp || sameFormat) ? w * h * nSheets : 0
+        let sheetArea = (!isBpp || sameFormat) ? w * h * nSheets : 0
+        // Tôle importée : la densité se mesure sur l'aire UTILE (contour moins
+        // zones), pas sur la boîte. Un seul format : toutes les tôles la
+        // portent ; plusieurs : l'aire est inconnue, aucun chiffre.
+        if (shapedLive) {
+            const usable = Number(payload.shapedSheets[0]?.usableAreaMm2) || 0
+            sheetArea = oneFormat && usable > 0 ? usable * nSheets : 0
+        }
         // Une seule définition partout : aire des pièces / aire des tôles,
         // celle du résultat. Pas de repli sur la densité du moteur (pièces
         // sur bande utilisée, autre échelle) : sans tôle connue, pas de chiffre.
@@ -1728,6 +1782,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             }
             const containers = []
             const sheets = []
+            // Tôle importée : forme (contour + zones) de chaque layout, pour le
+            // rapport seulement. null = job rectangulaire, chemin inchangé.
+            const reportShapes = reportSheetShapes(payload, layouts)
             for (const layout of layouts) {
                 const containerId = layout.container_id ?? 0
                 const [binWidth, binHeight] = sheetDims(payload, containerId)
@@ -1757,17 +1814,42 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     bin_width: binWidth,
                     bin_height: binHeight,
                 })
-                sheets.push(typeof svg === 'string' ? svg : null)
+                // Tôle importée : le contour vrai et les zones interdites
+                // remplacent le rectangle (aperçu couleur, gardé avec le
+                // résultat dans le navigateur). Forme absente/illisible ou
+                // format rectangulaire : le SVG reste celui du bundle, octet
+                // pour octet.
+                // L'empreinte (ids de hachure uniques d'un résultat à l'autre)
+                // n'est calculée que s'il y a une forme à dessiner.
+                const sheetShape = reportShapes?.[sheets.length]?.shape || null
+                const drawn = typeof svg === 'string'
+                    ? withSheetShapeSvg(svg, sheetShape, binWidth, binHeight, sheets.length, sheetShape ? shortHash(svg) : '')
+                    : null
+                sheets.push(drawn)
             }
             // Le rapport mesure les contours simplifiés posés à l'espacement
             // INTERNE ; on le lui donne tel quel (wasm inchangé), puis on
             // retranche la marge : l'écart annoncé est une borne sur les
             // vraies courbes, jugée contre le DEMANDÉ.
-            const report = await geoComputeReport({
+            // La forme voyage dans une COPIE des containers (calcul wasm local) :
+            // `containers`, qui part au DXF et au résultat, ne porte jamais un anneau.
+            const reportContainers = reportShapes
+                ? containers.map((c, i) => {
+                    if (reportShapes[i]?.shape) return { ...c, shape: reportShapes[i].shape }
+                    // Forme introuvable (piège 60) : un contour VIDE met la tôle sur
+                    // le chemin « illisible » du rapport (chute null, dans la tôle
+                    // null, non vérifié) au lieu d'une chute rectangle et d'une
+                    // densité de boîte présentées comme mesurées.
+                    if (reportShapes[i]?.unresolved) return { ...c, shape: { outer: [], inner: [] } }
+                    return c
+                })
+                : containers
+            const report0 = await geoComputeReport({
                 items: reportItems,
-                containers,
+                containers: reportContainers,
                 space,
             })
+            const report = markUnresolvedShapes(report0, reportShapes)
             applySpacingMargin(report, space - requestedSpace, requestedSpace)
             applyTrueAreasToReport(report, containers, partsById)
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout

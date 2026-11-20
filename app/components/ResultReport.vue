@@ -191,6 +191,13 @@
                                 <td role="cell" :data-label="t('report.sheet.num')">{{ s.index + 1 }}</td>
                                 <td role="cell" class="report__cell-sheet" :data-label="t('report.sheet.format')">
                                     <span class="report__dims">{{ sheetDims(s.widthMm, s.heightMm) }}</span>
+                                    <!-- Tôle importée : la boîte est la TAILLE, pas l'aire ;
+                                         l'étiquette le dit (aires utiles dans les colonnes). -->
+                                    <span
+                                        v-if="s.shaped"
+                                        class="report__badge report__badge--block"
+                                        data-testid="report-row-shaped"
+                                    >{{ t('settings.sheetShape.badge') }}</span>
                                     <!-- Volet etroit : « Utilise » et « Libre »
                                          ne sont pas perdus, ils passent en
                                          ligne secondaire sous le format. -->

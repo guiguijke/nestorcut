@@ -3,6 +3,7 @@
 //! Dual-cible (natif + wasm). Parité valeurs contre goldens Python (J-072).
 
 pub mod geom;
+pub mod shape;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
@@ -25,11 +26,15 @@ pub struct Transform {
     pub y: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Container {
     pub bin_width: f64,
     pub bin_height: f64,
     pub transforms: Vec<Transform>,
+    /// Tôle importée (contour + zones interdites), repère de la tôle. ADDITIF :
+    /// absent = tôle rectangulaire, chemin d'avant strictement inchangé.
+    #[serde(default)]
+    pub shape: Option<shape::SheetShape>,
 }
 
 fn rotate_translate(ring: &[Pt], angle: f64, x: f64, y: f64) -> Vec<Pt> {
@@ -56,12 +61,21 @@ fn round(v: f64, p: i32) -> f64 {
 }
 
 /// per_sheet_metrics — comptabilité matière mesurée par tôle.
+///
+/// Tôle importée (`shape`) : `sheetAreaMm2` est l'aire UTILE (contour moins
+/// zones interdites), jamais la boîte englobante, qui reste la TAILLE
+/// (`widthMm` x `heightMm`) ; la chute rectangle n'a pas de sens sur une tôle
+/// courbe : `offcut` reste null et le scan n'est pas lancé.
 pub fn per_sheet_metrics(containers: &[Container], items: &[Item]) -> Vec<serde_json::Value> {
     let by_id: std::collections::HashMap<&str, &Item> =
         items.iter().map(|i| (i.id.as_str(), i)).collect();
     let mut sheets = Vec::new();
     for (index, c) in containers.iter().enumerate() {
-        let sheet_area = c.bin_width * c.bin_height;
+        let ready = c.shape.as_ref().and_then(|s| s.ready());
+        let sheet_area = match &ready {
+            Some(r) => r.usable_area(),
+            None => c.bin_width * c.bin_height,
+        };
         let mut parts_area = 0.0;
         let mut part_count = 0;
         for t in &c.transforms {
@@ -71,8 +85,12 @@ pub fn per_sheet_metrics(containers: &[Container], items: &[Item]) -> Vec<serde_
                 part_count += 1;
             }
         }
-        let offcut = largest_empty_rectangle(&[c.clone()], items);
-        sheets.push(serde_json::json!({
+        let offcut = if c.shape.is_some() {
+            None
+        } else {
+            largest_empty_rectangle(&[c.clone()], items)
+        };
+        let mut row = serde_json::json!({
             "index": index,
             "widthMm": round(c.bin_width, 3),
             "heightMm": round(c.bin_height, 3),
@@ -82,7 +100,16 @@ pub fn per_sheet_metrics(containers: &[Container], items: &[Item]) -> Vec<serde_
             "densityPct": if sheet_area > 0.0 { Some(round(parts_area / sheet_area * 100.0, 1)) } else { None },
             "partCount": part_count,
             "offcut": enrich_offcut(offcut.as_ref()),
-        }));
+        });
+        if c.shape.is_some() {
+            // Champs ADDITIFS, présents seulement pour une tôle importée.
+            row["shaped"] = serde_json::json!(true);
+            if let Some(r) = &ready {
+                row["outlineAreaMm2"] = serde_json::json!(round(r.outline_area(), 1));
+                row["zonesAreaMm2"] = serde_json::json!(round(r.zones_area(), 1));
+            }
+        }
+        sheets.push(row);
     }
     sheets
 }
@@ -91,25 +118,49 @@ pub fn per_sheet_metrics(containers: &[Container], items: &[Item]) -> Vec<serde_
 pub fn report_totals(sheets: &[serde_json::Value]) -> serde_json::Value {
     let sheet_area: f64 = sheets.iter().map(|s| s["sheetAreaMm2"].as_f64().unwrap_or(0.0)).sum();
     let parts_area: f64 = sheets.iter().map(|s| s["partsAreaMm2"].as_f64().unwrap_or(0.0)).sum();
-    let mut formats: Vec<(f64, f64, i64)> = Vec::new();
+    // (largeur, hauteur, nombre, importée, aires) : une tôle importée ne se
+    // confond pas avec un rectangle de même boîte, ni avec une autre forme de
+    // même boîte (aires contour, zones et utile : trois signatures de la forme).
+    let mut formats: Vec<(f64, f64, i64, bool, [f64; 3])> = Vec::new();
     for s in sheets {
         let w = s["widthMm"].as_f64().unwrap_or(0.0);
         let h = s["heightMm"].as_f64().unwrap_or(0.0);
-        if let Some(e) = formats.iter_mut().find(|e| e.0 == w && e.1 == h) {
+        let shaped = s["shaped"].as_bool().unwrap_or(false);
+        let sig = if shaped {
+            [
+                s["outlineAreaMm2"].as_f64().unwrap_or(-1.0),
+                s["zonesAreaMm2"].as_f64().unwrap_or(-1.0),
+                s["sheetAreaMm2"].as_f64().unwrap_or(-1.0),
+            ]
+        } else {
+            [0.0; 3]
+        };
+        if let Some(e) = formats.iter_mut().find(|e| e.0 == w && e.1 == h && e.3 == shaped && e.4 == sig) {
             e.2 += 1;
         } else {
-            formats.push((w, h, 1));
+            formats.push((w, h, 1, shaped, sig));
         }
     }
     formats.sort_by(|a, b| (b.0 * b.1).partial_cmp(&(a.0 * a.1)).unwrap());
-    serde_json::json!({
+    let shaped_count = sheets.iter().filter(|s| s["shaped"].as_bool().unwrap_or(false)).count();
+    let mut totals = serde_json::json!({
         "sheetCount": sheets.len(),
-        "formats": formats.iter().map(|(w, h, n)| serde_json::json!({"widthMm": w, "heightMm": h, "count": n})).collect::<Vec<_>>(),
+        "formats": formats.iter().map(|(w, h, n, shaped, _sig)| {
+            let mut f = serde_json::json!({"widthMm": w, "heightMm": h, "count": n});
+            if *shaped {
+                f["shaped"] = serde_json::json!(true);
+            }
+            f
+        }).collect::<Vec<_>>(),
         "sheetAreaMm2": round(sheet_area, 1),
         "partsAreaMm2": round(parts_area, 1),
         "freeAreaMm2": round((sheet_area - parts_area).max(0.0), 1),
         "densityPct": if sheet_area > 0.0 { Some(round(parts_area / sheet_area * 100.0, 1)) } else { None },
-    })
+    });
+    if shaped_count > 0 {
+        totals["shapedSheetCount"] = serde_json::json!(shaped_count);
+    }
+    totals
 }
 
 /// compute_used_sheet_share.
@@ -120,6 +171,8 @@ pub fn compute_used_sheet_share(containers: &[Container], items: &[Item]) -> Opt
     let mut sheet_total = 0.0;
     for c in containers {
         bbox_total += used_bbox_area(c, &by_id);
+        // Clé de tri : la boîte de la tôle (jumeau JS usedSheetShareOf). Sur
+        // l'aire utile, la part saturerait à 1 sur une tôle courbe.
         sheet_total += c.bin_width * c.bin_height;
     }
     if sheet_total <= 0.0 {
@@ -319,6 +372,12 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
     let mut holes_filled = 0i64;
     let mut holes_total = 0i64;
     let mut duplicate_poses = 0i64;
+    // Tôle importée : contrôles sur la vraie forme (additifs, absents d'un job
+    // à tôles rectangulaires — le rapport rendu y est identique octet pour octet).
+    let mut shaped_sheets = 0i64;
+    let mut shape_unready = false;
+    let mut zones_total = 0i64;
+    let mut shape_sum = shape::ShapeChecks::default();
     // Broadphase : les paires plus loin que space+1 mm ne peuvent être le
     // minimum (ni violer l'espacement) — on ne paie ring_distance que sur
     // les candidates bbox (A3/D12, miroir du STRtree Python).
@@ -332,14 +391,54 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                 placed_polys.push(placed(item, t));
             }
         }
-        for (o, _h) in &placed_polys {
-            let b = geom::ring_bounds(o);
-            if b[0] < -INSIDE_EPS
-                || b[1] < -INSIDE_EPS
-                || b[2] > sw + INSIDE_EPS
-                || b[3] > sh + INSIDE_EPS
-            {
+        // Forme de la tôle : un contour inexploitable ne se rabat pas sur la
+        // boîte en silence (piège 60) — le rapport dit « non vérifié ».
+        let ready = match &c.shape {
+            Some(sp) => {
+                shaped_sheets += 1;
+                let r = sp.ready();
+                if r.is_none() {
+                    shape_unready = true;
+                }
+                r
+            }
+            None => None,
+        };
+        if let Some(r) = &ready {
+            // La boîte englobante ne dit rien d'une tôle courbe : le contrôle
+            // porte sur le contour réel et sur les zones interdites.
+            let ck = shape::check_sheet(&placed_polys, r, OVERLAP_EPS_MM2);
+            zones_total += r.zones.len() as i64;
+            shape_sum.parts_outside += ck.parts_outside;
+            shape_sum.zone_violations += ck.zone_violations;
+            shape_sum.zone_overlap_area += ck.zone_overlap_area;
+            if let Some(g) = ck.min_outline_gap {
+                shape_sum.min_outline_gap = Some(shape_sum.min_outline_gap.map_or(g, |m| m.min(g)));
+                if g < smallest_gap {
+                    smallest_gap = g;
+                }
+            }
+            if let Some(g) = ck.min_zone_gap {
+                shape_sum.min_zone_gap = Some(shape_sum.min_zone_gap.map_or(g, |m| m.min(g)));
+                // La zone interdite compte dans l'écart minimal comme le contour :
+                // applySpacingMargin la juge contre l'espacement demandé.
+                if g < smallest_gap {
+                    smallest_gap = g;
+                }
+            }
+            if ck.parts_outside > 0 {
                 inside_sheet = false;
+            }
+        } else {
+            for (o, _h) in &placed_polys {
+                let b = geom::ring_bounds(o);
+                if b[0] < -INSIDE_EPS
+                    || b[1] < -INSIDE_EPS
+                    || b[2] > sw + INSIDE_EPS
+                    || b[3] > sh + INSIDE_EPS
+                {
+                    inside_sheet = false;
+                }
             }
         }
         holes_total += placed_polys.iter().map(|(_o, h)| h.len() as i64).sum::<i64>();
@@ -368,9 +467,13 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&a, &b| bounds[a][0].partial_cmp(&bounds[b][0]).unwrap());
         for i in 0..n {
-            let gap_edge = ring_to_sheet_edge_dist(&placed_polys[i].0, sw, sh);
-            if gap_edge < smallest_gap {
-                smallest_gap = gap_edge;
+            // Tôle importée : l'écart au bord est celui du contour réel, déjà
+            // compté plus haut (l'écart à la boîte serait un faux bord).
+            if ready.is_none() {
+                let gap_edge = ring_to_sheet_edge_dist(&placed_polys[i].0, sw, sh);
+                if gap_edge < smallest_gap {
+                    smallest_gap = gap_edge;
+                }
             }
             let reach = bounds[i][2] + search_r;
             for &j in &order {
@@ -463,6 +566,33 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
         report["smallestGapMm"] = serde_json::json!(round(smallest_gap, 3));
         report["overlapFree"] = serde_json::json!(overlap_free);
         report["spacingOk"] = serde_json::json!(smallest_gap >= (space - 0.01));
+    }
+    if shaped_sheets > 0 {
+        // Champs ADDITIFS (piège 19b) : seules les tôles importées les portent.
+        report["shapedSheets"] = serde_json::json!(shaped_sheets);
+        report["shapeVerified"] = serde_json::json!(!shape_unready);
+        report["partsOutsideOutline"] = serde_json::json!(shape_sum.parts_outside);
+        report["minDistToOutlineMm"] = match shape_sum.min_outline_gap {
+            Some(g) => serde_json::json!(round(g, 3)),
+            None => serde_json::Value::Null,
+        };
+        report["zonesChecked"] = serde_json::json!(zones_total);
+        report["zoneViolations"] = serde_json::json!(shape_sum.zone_violations);
+        report["zoneOverlapAreaMm2"] = serde_json::json!(round(shape_sum.zone_overlap_area, 3));
+        report["minDistToZoneMm"] = match shape_sum.min_zone_gap {
+            Some(g) => serde_json::json!(round(g, 3)),
+            None => serde_json::Value::Null,
+        };
+        report["zoneClear"] = if shape_unready || zones_total == 0 {
+            serde_json::Value::Null
+        } else {
+            serde_json::json!(shape_sum.zone_violations == 0)
+        };
+        if shape_unready {
+            // Jamais vert sur une forme qu'on n'a pas pu lire.
+            report["insideSheet"] = serde_json::Value::Null;
+            report["verifyStatus"] = serde_json::json!("skipped");
+        }
     }
     report
 }
@@ -631,6 +761,9 @@ fn overlap_area(a: &(Vec<Pt>, Vec<Vec<Pt>>), b: &(Vec<Pt>, Vec<Vec<Pt>>)) -> f64
 }
 
 #[cfg(test)]
+mod shaped_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -656,6 +789,7 @@ mod tests {
             bin_width: 100.0,
             bin_height: 100.0,
             transforms: vec![Transform { item_id: "a".into(), angle: 0.0, x: 0.0, y: 0.0 }],
+            ..Default::default()
         };
         let sheets = per_sheet_metrics(&[c], &items);
         assert_eq!(sheets[0]["partsAreaMm2"], serde_json::json!(100.0));
@@ -674,6 +808,7 @@ mod tests {
             bin_width: 100.0,
             bin_height: 100.0,
             transforms: vec![Transform { item_id: "a".into(), angle: 0.0, x: 0.0, y: 0.0 }],
+            ..Default::default()
         };
         let share = compute_used_sheet_share(&[c.clone()], &items).unwrap();
         assert!((share - 0.01).abs() < 1e-9, "share={share}");
@@ -712,6 +847,7 @@ mod tests {
                 Transform { item_id: "host".into(), angle: 0.0, x: 10.0, y: 10.0 },
                 Transform { item_id: "filler".into(), angle: 0.0, x: 50.0, y: 50.0 },
             ],
+            ..Default::default()
         };
         let r = verify_layout(&[c], &items, 2.0);
         assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
@@ -746,6 +882,7 @@ mod tests {
                 // Centré dans le trou mais plus grand que lui → déborde.
                 Transform { item_id: "big".into(), angle: 0.0, x: 20.0, y: 20.0 },
             ],
+            ..Default::default()
         };
         let r = verify_layout(&[c], &items, 2.0);
         assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
@@ -776,7 +913,7 @@ mod tests {
         // Doublon : même pièce re-posée sur la case (2,2) → distance 0,
         // recouvrement 100 %.
         transforms.push(Transform { item_id: "a".into(), angle: 0.0, x: 2.0, y: 2.0 });
-        let c = Container { bin_width: 1000.0, bin_height: 700.0, transforms };
+        let c = Container { bin_width: 1000.0, bin_height: 700.0, transforms, ..Default::default() };
         let r = verify_layout(&[c], &items, 2.0);
         assert_eq!(r["verifyStatus"], serde_json::json!("measured"), "{r}");
         assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
@@ -805,7 +942,7 @@ mod tests {
                 });
             }
         }
-        let c = Container { bin_width: 1000.0, bin_height: 700.0, transforms };
+        let c = Container { bin_width: 1000.0, bin_height: 700.0, transforms, ..Default::default() };
         let r = verify_layout(&[c], &items, 2.0);
         assert_eq!(r["verifyStatus"], serde_json::json!("measured"), "{r}");
         assert_eq!(r["smallestGapMm"], serde_json::json!(2.0), "{r}");
@@ -856,6 +993,7 @@ mod tests {
                 Transform { item_id: "host".into(), angle: 0.0, x: 20.0, y: 20.0 },
                 Transform { item_id: other.id.clone(), angle: 0.0, x: 20.0, y: 20.0 },
             ],
+            ..Default::default()
         };
         verify_layout(&[c], &[l_hole_host(), other], 2.0)
     }
@@ -902,6 +1040,7 @@ mod tests {
                 Transform { item_id: other.id.clone(), angle: 0.0, x: 20.0, y: 20.0 },
                 Transform { item_id: "host".into(), angle: 0.0, x: 20.0, y: 20.0 },
             ],
+            ..Default::default()
         };
         let r = verify_layout(&[c], &[l_hole_host(), other], 2.0);
         assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
@@ -937,6 +1076,7 @@ mod tests {
                 Transform { item_id: a.id.clone(), angle: 0.0, x: 50.0, y: 50.0 },
                 Transform { item_id: b.id.clone(), angle: 0.0, x: 50.0, y: 50.0 },
             ],
+            ..Default::default()
         };
         verify_layout(&[c], &[a, b], space)
     }

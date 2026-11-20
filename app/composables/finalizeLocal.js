@@ -40,6 +40,21 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
         used_height: bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null,
         bins: layouts.length,
         sheets: [[w, h]],
+        // Tôle importée : le format de CHAQUE tôle de la frame finale (le
+        // rang n'est pas le format) et sa boîte, pour que la vue live dessine
+        // à chacune SA forme. Absent pour un job rectangulaire (frame inchangée).
+        ...(Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
+            ? {
+                binFormats: layouts.map((l) => l.container_id ?? 0),
+                sheets: layouts.map((l) => sheetDims(payload, l.container_id ?? 0)),
+            }
+            // Plusieurs formats rectangulaires : la boîte de CHAQUE tôle aussi.
+            // Avec la seule boîte du premier format, l'image finale dessinait
+            // toutes les tôles à sa taille et coupait les pièces des plus
+            // grandes (défaut ancien). Un seul format : frame inchangée.
+            : (payload?.instance?.bins?.length || 0) > 1
+                ? { sheets: layouts.map((l) => sheetDims(payload, l.container_id ?? 0)) }
+                : {}),
         isSpp: (result?.problem || payload?.problem) === 'spp',
         items,
     }
@@ -187,6 +202,27 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
                 return
             }
             const verify = art?.report?.verify
+            // Tôle importée : une pose hors du VRAI contour ou sur une zone
+            // interdite se traite comme un recouvrement mesuré (piège #56b) :
+            // l'option est écartée et tracée, jamais livrée. Les champs
+            // n'existent que pour un job à tôle importée (additifs) ; un job
+            // rectangulaire garde son chemin d'avant, `insideSheet` compris.
+            const outsideOutline = Number(verify?.partsOutsideOutline) || 0
+            const zoneHits = Number(verify?.zoneViolations) || 0
+            if (outsideOutline > 0 || zoneHits > 0) {
+                localDiscarded.push({
+                    reason: outsideOutline > 0 ? 'outside_outline' : 'forbidden_zone',
+                    strategy,
+                    verification: {
+                        partsOutsideOutline: outsideOutline,
+                        zoneViolations: zoneHits,
+                        zoneOverlapAreaMm2: verify.zoneOverlapAreaMm2 ?? null,
+                        minDistToOutlineMm: verify.minDistToOutlineMm ?? null,
+                        minDistToZoneMm: verify.minDistToZoneMm ?? null,
+                    },
+                })
+                return
+            }
             if (verify && (verify.overlapFree === false || (verify.duplicatePoses || 0) > 0)) {
                 localDiscarded.push({
                     reason: 'overlap',

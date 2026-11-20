@@ -25,6 +25,26 @@ export function nbspDims(w, h, unit) {
  */
 export function showSheetOffcutColumn(sheets, headOffcut) {
     const list = Array.isArray(sheets) ? sheets : []
+    // Tôle importée : pas de chute rectangle (choix propriétaire) — une colonne
+    // où aucune tôle n'en a une ne dit rien.
+    if (list.length && list.every((s) => s?.shaped)) return false
     if (list.length > 1) return true
     return !headOffcut && list.some((s) => s?.offcut)
+}
+
+/**
+ * Pastille « zones interdites » d'une tôle importée : verte quand aucune pièce
+ * n'y touche, rouge avec le compte des pièces fautives sinon. `null` quand le
+ * rapport n'a pas de verdict de zone (job sans tôle importée, tôle sans zone,
+ * forme non vérifiée) : aucune pastille plutôt qu'un vert à vide.
+ * @param {object|null} report — le rapport de l'alternative (verify étalé)
+ * @param {(k: string) => string} t — traduction simple
+ * @param {(k: string, n: number) => string} tp — traduction avec pluriel
+ */
+export function zoneBadge(report, t, tp) {
+    if (report?.zoneClear == null) return null
+    return {
+        ok: report.zoneClear,
+        label: report.zoneClear ? t('report.zoneClear') : tp('report.zoneHit', report.zoneViolations || 1),
+    }
 }

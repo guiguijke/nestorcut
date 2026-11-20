@@ -48,6 +48,7 @@
 import { composeThinPartsLine } from '~/composables/importFindings'
 import { filesStore } from '~/composables/files'
 import { altDensityPctOf, whyFirstKind } from '~/utils/resultQuality'
+import { zoneBadge } from '~/utils/reportLayout'
 import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
@@ -190,7 +191,7 @@ const isHaveError = computed(() => {
 const activeVerdict = computed(() => {
     const r = unref(activeReport)
     if (!r) return 'valid'
-    if (r.insideSheet === false || r.overlapFree === false
+    if (r.insideSheet === false || r.overlapFree === false || r.zoneClear === false
         || (r.duplicatePoses || 0) > 0) return 'unfit'
     if ((r.unplaced || 0) > 0) return 'partial'
     if (r.verifyStatus === 'skipped') return 'unverified'
@@ -388,8 +389,10 @@ const activeReportOffcut = computed(() => {
 const materialFormats = computed(() => {
     const totals = unref(reportTotals)
     if (!totals || !Array.isArray(totals.formats)) return ''
+    // Tôle importée : la boîte reste la TAILLE, l'étiquette dit que ce n'est
+    // pas un rectangle (l'aire à commander est l'aire utile, pas la boîte).
     return totals.formats
-        .map((f) => `${f.count} × ${fmtLength(f.widthMm)} × ${fmtLength(f.heightMm)}`)
+        .map((f) => `${f.count} × ${fmtLength(f.widthMm)} × ${fmtLength(f.heightMm)}${f.shaped ? ` (${t('settings.sheetShape.badge')})` : ''}`)
         .join(' + ')
 })
 
@@ -429,7 +432,7 @@ const buildReportText = () => {
         lines.push(t('report.text.sheetLine', {
             i: s.index + 1,
             w: fmtLength(s.widthMm),
-            h: fmtLength(s.heightMm),
+            h: fmtLength(s.heightMm) + (s.shaped ? ` (${t('settings.sheetShape.badge')})` : ''),
             n: s.partCount,
             used: fmtArea(s.partsAreaMm2),
             free: fmtArea(s.freeAreaMm2),
@@ -543,6 +546,10 @@ const reportBadges = computed(() => {
     const badges = []
     if (r.overlapFree != null) badges.push({ ok: r.overlapFree, label: t('report.overlapFree') })
     if (r.insideSheet != null) badges.push({ ok: r.insideSheet, label: t('report.insideSheet') })
+    // Tôle importée : aucune pièce sur une zone interdite (vert) ou le compte
+    // des pièces fautives (rouge). Absent d'un job sans zone interdite.
+    const zoneB = zoneBadge(r, t, tp)
+    if (zoneB) badges.push(zoneB)
     if (r.smallestGapMm != null && r.smallestGapMm < 0) {
         // §1.2c : un gap NÉGATIF est un dépassement hors tôle, pas un
         // espacement — libellé dédié, jamais « Gap ≥ −4 mm ».
@@ -744,6 +751,7 @@ const whyFirstLine = computed(() => {
     if (!alts || alts.length < 2 || unref(isHaveError)) return null
     if (unref(activeAlt) !== 0) return null
     const kind = whyFirstKind(alts)
+    if (!kind) return null
     return kind === 'offcut' ? t('result.whyFirst') : t('result.whyFirstGrid')
 })
 const activePart = ref(0)

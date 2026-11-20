@@ -28,6 +28,7 @@ import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 // structurel reste en import dynamique (lazy).
 import { ZONE_CANCELLED } from './structureClient'
 import { serverRefusalCode } from '~/utils/failureReason'
+import { liveShapeFields, withLiveShapes } from '~~/app/utils/sheetDraw.js'
 
 /**
  * Pass structurel navigateur (miroir de core/structure.py + intégration
@@ -533,6 +534,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
               const decorated = decorateLiveLayout({ ...evt, items: remapped }, payload)
               onLive({
                   ...decorated,
+                  // Tôle importée : contour + zones (chemins prêts à dessiner,
+                  // par format) pour la vue live ; {} pour un job rectangulaire.
+                  // Reste dans le navigateur : jamais envoyé, jamais stocké.
+                  ...liveShapeFields(payload),
                   // J-090 : la vue puise itemMap dans la frame quand le job est
                   // 100 % client (pas d'itemMap sur le doc serveur).
                   itemMap: itemMap || evt?.itemMap,
@@ -918,5 +923,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             ...(partialUnfit ? { unfit: partialUnfit } : {}),
         },
     })
-    return { ok: true, alternatives, liveLayout, itemMap, discarded: localDiscarded }
+    // J1 : la révélation finale dessine chaque tôle avec SA forme (la frame
+    // enregistrée dans le record, elle, ne porte aucun chemin de forme).
+    return { ok: true, alternatives, liveLayout: withLiveShapes(liveLayout, payload), itemMap, discarded: localDiscarded }
 }

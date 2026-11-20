@@ -26,5 +26,8 @@ export function whyFirstKind(alts, { toleranceMm2 = 1 } = {}) {
     const area = (a) => a?.offcut?.area ?? a?.offcut?.areaMm2 ?? 0
     const best = area(alts[0])
     const otherMax = Math.max(...alts.slice(1).map(area))
+    // Aucune chute mesurée nulle part (tôle importée : chute null) : « la plus
+    // grande chute propre » serait faux — pas de justification (piège 60).
+    if (!(best > 0) && !(otherMax > 0)) return null
     return best >= otherMax - toleranceMm2 ? 'offcut' : 'grid'
 }
