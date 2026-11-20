@@ -11,9 +11,28 @@
  * Ouvert par défaut (Infinity) pour ne pas casser les appelants hérités ; le
  * test statique de localDownloads.test.js exige que CHAQUE appelant de l'app
  * le passe. Aucun composable Nuxt ici : le module est testé en node.
+ *
+ * Essai Free d'une tôle importée (20/11) : si le record porte une tôle
+ * importée (rapport stocké, `alternativesHoldImportedSheet`) et que le
+ * plafond reçu est FINI (compte verrouillé), le plafond tombe à 0 : aucun
+ * fichier de coupe du job (DXF, ZIP, .job) n'est livré, quels que soient les
+ * numéros de tôle. C'est un verrou d'INTERFACE sur un projet local : les
+ * fichiers vivent dans le navigateur (IndexedDB), un utilisateur outillé peut
+ * le contourner, comme le verrou des 2 premières tôles (AGENTS #63, J-057).
+ * Il vit ICI, au point d'étranglement, pour qu'un appelant qui oublie la
+ * règle ne livre pas tout ; un compte ouvert (Infinity) n'est pas touché.
  */
 import { zipSync, strToU8 } from 'fflate'
-import { isSheetFileAllowed } from '~~/shared/constants/sheetDownload.constants'
+import { effectiveSheetCap, isSheetFileAllowed } from '~~/shared/constants/sheetDownload.constants'
+import { alternativesHoldImportedSheet, recordHoldsImportedSheet } from '~/utils/sheetDownloadGate'
+
+// Deux signaux : le rapport stocké, ET la frame finale du record (binFormats)
+// qui survit à un rapport en échec.
+const capFor = (record, maxSheet) =>
+    effectiveSheetCap(
+        maxSheet,
+        alternativesHoldImportedSheet(record?.alternatives) || recordHoldsImportedSheet(record),
+    )
 
 function download(blob, filename) {
     const url = URL.createObjectURL(blob)
@@ -34,7 +53,7 @@ export function downloadLocalDxf(record, altId = 0, sheetIndex = 0, { maxSheet =
     const alt = (record?.alternatives || [])[altId]
     const dxf = alt?.dxfs?.[sheetIndex]
     if (!dxf?.content) throw new Error('dxf_unavailable')
-    if (!isSheetFileAllowed(dxf.fileName, maxSheet)) throw new Error('sheet_locked')
+    if (!isSheetFileAllowed(dxf.fileName, capFor(record, maxSheet))) throw new Error('sheet_locked')
     download(text(dxf.content, 'image/vnd.dxf'), dxf.fileName || `${record.slug}.dxf`)
 }
 
@@ -45,11 +64,13 @@ export function downloadLocalDxf(record, altId = 0, sheetIndex = 0, { maxSheet =
  * `nesting-{slug}-sheets-1-{maxSheet}.zip` (même nom que la route serveur). */
 export function downloadLocalZip(record, filename = null, { maxSheet = Infinity } = {}) {
     const best = (record?.alternatives || [])[0]
+    const cap = capFor(record, maxSheet)
+    if (cap <= 0) throw new Error('sheet_locked')
     const files = {}
     let skipped = 0
     for (const dxf of best?.dxfs || []) {
         if (!dxf?.content) continue
-        if (!isSheetFileAllowed(dxf.fileName, maxSheet)) {
+        if (!isSheetFileAllowed(dxf.fileName, cap)) {
             skipped++
             continue
         }
@@ -62,7 +83,7 @@ export function downloadLocalZip(record, filename = null, { maxSheet = Infinity 
     }
     const zipped = zipSync(data, { level: 6 })
     const defaultName = skipped > 0
-        ? `nesting-${record.slug}-sheets-1-${maxSheet}.zip`
+        ? `nesting-${record.slug}-sheets-1-${cap}.zip`
         : `nesting-${record.slug}.zip`
     download(new Blob([zipped], { type: 'application/zip' }), filename || defaultName)
 }
@@ -83,7 +104,7 @@ export function downloadLocalJob(record, altId = 0, sheetIndex = 0, { maxSheet =
     const job = alt?.jobs?.[sheetIndex]
     if (!job?.bytes) throw new Error('job_unavailable')
     const name = job.fileName || `${record.slug}_tole${sheetIndex + 1}.job`
-    if (!isSheetFileAllowed(name, maxSheet)) throw new Error('sheet_locked')
+    if (!isSheetFileAllowed(name, capFor(record, maxSheet))) throw new Error('sheet_locked')
     const bytes = job.bytes instanceof Uint8Array ? job.bytes : new Uint8Array(job.bytes)
     download(new Blob([bytes], { type: 'application/octet-stream' }), name)
 }
@@ -101,11 +122,13 @@ export function downloadLocalJob(record, altId = 0, sheetIndex = 0, { maxSheet =
 export function downloadLocalJobs(record, altId = 0, { maxSheet = Infinity } = {}) {
     const jobs = (record?.alternatives || [])[altId]?.jobs || []
     if (!jobs.length) throw new Error('job_unavailable')
+    const cap = capFor(record, maxSheet)
+    if (cap <= 0) throw new Error('sheet_locked')
     let k = 0
     for (const job of jobs) {
         if (!job?.bytes) continue
         const name = job.fileName || `${record.slug}_tole${k + 1}.job`
-        if (!isSheetFileAllowed(name, maxSheet)) continue
+        if (!isSheetFileAllowed(name, cap)) continue
         const bytes = job.bytes instanceof Uint8Array ? job.bytes : new Uint8Array(job.bytes)
         // Étalés de ~300 ms : les navigateurs bloquent les rafales de
         // téléchargements — le premier partirait, les suivants non.

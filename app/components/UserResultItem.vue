@@ -130,9 +130,9 @@
                      (D18) : l'événement est tracé avec ses données. -->
                 <MainButton
                     v-if="showUnlock"
-                    :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockShort')"
-                    :aria-label="t('results.unlockSheets', { n: gate.total })"
-                    :title="t('results.unlockSheets', { n: gate.total })"
+                    :label="checkoutChecking ? t('sub.return.activating') : t(gate.importedLock ? 'results.unlockImportedShort' : 'results.unlockShort')"
+                    :aria-label="gate.importedLock ? t('results.importedLocked') : t('results.unlockSheets', { n: gate.total })"
+                    :title="gate.importedLock ? t('results.importedLocked') : t('results.unlockSheets', { n: gate.total })"
                     :icon="iconType.lock"
                     :isDisable="checkoutChecking"
                     :size="sizeType.s"
@@ -142,6 +142,10 @@
                     @click="onUnlock"
                 />
             </div>
+            <!-- Essai Free d'une tôle importée (20/11) : la raison, en clair. -->
+            <p v-if="showUnlock && gate.importedLock" class="result__imported-lock" data-testid="result-imported-lock">
+                {{ t('results.importedLocked') }}
+            </p>
             <UiButton
                 variant="ghost"
                 class="result__area"
@@ -163,7 +167,7 @@ import { degradedNoteKey, failureReasonKey } from '~/utils/failureReason';
 import { computed, onMounted, ref } from "vue";
 import { iconType } from '~~/constants/icon.constants'
 import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
-import { altLayoutCount, altSheetNames, lockedSheetsTrackData, sheetGateModel } from '~/utils/sheetDownloadGate'
+import { altLayoutCount, altSheetNames, lockedSheetsTrackData, resultHasImportedSheet, sheetGateModel } from '~/utils/sheetDownloadGate'
 import { relativeTimeParts } from '~/utils/relativeTime'
 
 const props = defineProps({
@@ -226,8 +230,9 @@ const downloadState = computed(() => sheetDownloadState(unref(userData), {
     paidPlansDisabled: config.public.paidPlansDisabled,
     projectSlug: props.result?.projectSlug ?? null,
 }))
+// Essai Free d'une tôle importée (20/11) : lu dans le rapport stocké du résultat.
 const gate = computed(() => sheetGateModel(altSheetNames(props.result, 0), unref(downloadState),
-    altLayoutCount(props.result, 0)))
+    altLayoutCount(props.result, 0), { importedSheet: resultHasImportedSheet(props.result) }))
 // D17 : retour de Checkout en cours de vérification — « Débloquer » inactif.
 const checkoutReturnState = useCheckoutReturnState()
 const checkoutChecking = computed(() => unref(checkoutReturnState) === 'checking')
@@ -256,6 +261,7 @@ const onUnlock = () => {
         lockedSheets: {
             total: g.total,
             cap: g.cap,
+            importedSheet: g.importedLock === true,
             resultSlug: props.result?.slug,
             projectSlug: props.result?.projectSlug ?? null,
         },
@@ -285,10 +291,15 @@ const downloadUrl = computed(() => {
 // D27 : libellé court visible quand le verrou s'applique (colonne de 260 px),
 // libellé complet en aria-label/title ; sinon libellés inchangés.
 const downloadButtonText = computed(() => {
+    // Tôle importée : le bouton garde son libellé (cadenas), pas de « tôles 1–2 ».
+    if (gate.value.importedLock) return isMultiSheet.value ? t('results.downloadAll') : t('results.download')
     if (gate.value.anyLocked) return t('results.downloadFirstSheetsShort', { n: gate.value.cap })
     return isMultiSheet.value ? t('results.downloadAll') : t('results.download');
 });
 const downloadButtonAttrs = computed(() => {
+    if (gate.value.importedLock) {
+        return { icon: iconType.lock, 'aria-label': t('results.importedLocked'), title: t('results.importedLocked') }
+    }
     if (!gate.value.anyLocked) return {}
     const full = t('results.downloadFirstSheets', { n: gate.value.cap })
     return { 'aria-label': full, title: full }
@@ -650,7 +661,8 @@ const onDownload = () => {
     }
 
     // D-PRV-10 : mention « expiré » des résultats purgés (24 h).
-    &__expired {
+    &__expired,
+    &__imported-lock {
         margin-top: 4px;
         font-size: var(--fs-12);
         color: var(--label-secondary);

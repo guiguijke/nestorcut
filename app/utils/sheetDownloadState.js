@@ -37,3 +37,10 @@ export function freeDownloadNoteVisible(state, sheetsNeeded) {
     const n = Number(sheetsNeeded)
     return Number.isFinite(n) && n > FREE_DOWNLOAD_SHEET_CAP
 }
+
+/** Essai Free d'une tôle importée (20/11) : true si le compte est verrouillé
+ * ET que le projet (ou le résultat) porte une tôle importée — alors le
+ * calcul et l'aperçu restent ouverts, seul l'export demande Unlimited. */
+export function importedSheetLockVisible(state, hasImportedSheet) {
+    return state === 'locked' && Boolean(hasImportedSheet)
+}

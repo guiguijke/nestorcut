@@ -173,7 +173,7 @@
                     <MainButton
                         v-if="sheetUnlockOffered"
                         class="modal__part-download"
-                        :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockSheets', { n: viewGate.total })"
+                        :label="checkoutChecking ? t('sub.return.activating') : t(viewGate.importedLock ? 'results.unlockImported' : 'results.unlockSheets', { n: viewGate.total })"
                         :icon="iconType.lock"
                         :isDisable="checkoutChecking"
                         :size="sizeType.s"

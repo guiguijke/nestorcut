@@ -215,6 +215,11 @@
             <p v-if="ctaFreeNote && !capacityPanel" class="atelier__cta-hint" data-testid="free-download-note">
                 {{ ctaFreeNote }}
             </p>
+            <!-- Tôle importée, compte Free : le calcul et l'aperçu sont
+                 ouverts, l'export demande Unlimited — dit avant de lancer. -->
+            <p v-if="ctaImportedNote && !capacityPanel" class="atelier__cta-hint" data-testid="imported-sheet-note">
+                {{ ctaImportedNote }}
+            </p>
         </div>
     </div>
 </template>
@@ -226,7 +231,7 @@ import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { safetyPatchForTargetMm } from "~/utils/spacingParams";
 import { capacityPanelModel } from "~/utils/capacityPanel";
 import { hasPaidAccess } from "~/utils/entitlementUi";
-import { freeDownloadNoteVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
+import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB } from "~~/shared/constants/payment.constants";
 import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
 import { computeSpacingMargin } from "~/composables/localPayloadBuilder";
@@ -999,8 +1004,19 @@ const downloadState = computed(() => sheetDownloadState(unref(downloadUser), {
 const freeDownloadNoteText = computed(() =>
     t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP }));
 // Sous le bouton Nest : pré-vol (tôles nécessaires estimées avant le calcul).
+// Essai Free d'une tôle importée (20/11) : annoncé AVANT le calcul. La tôle
+// importée porte un shapeId dans les réglages du projet ; sa note remplace
+// celle des « 2 premières tôles » (qui ne dirait pas la vérité : ici aucun
+// fichier n'est livré).
+// Seulement une tôle importée qui SERVIRA : une quantité 0 est écartée du
+// payload (localPayloadBuilder.js:1143-1145, pas de shapedSheets, donc pas de
+// verrou à la sortie) — le job est ordinaire, aucune note.
+const projectHasImportedSheet = computed(() => unref(currentSheets).some((s) => Boolean(s?.shapeId) && Number(s?.count) > 0));
+const ctaImportedNote = computed(() =>
+    importedSheetLockVisible(unref(downloadState), unref(projectHasImportedSheet))
+        ? t('nest.importedSheetNote') : '');
 const ctaFreeNote = computed(() =>
-    freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
+    !unref(ctaImportedNote) && freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
         ? unref(freeDownloadNoteText) : '');
 // Pas de note Free dans le panneau de refus : rien n'est calculé ni livré, la
 // limite de téléchargement ne concerne pas ce refus.

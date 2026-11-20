@@ -12,6 +12,10 @@ import { normalizeCheckoutSource } from './checkoutReturn'
  */
 export function contextMessage(context) {
     if (!context || context.source !== 'locked_sheets') return null
+    // Tôle importée : en Free aucun fichier de coupe n'est livré, la phrase
+    // « vous téléchargez les {cap} premières » serait fausse. Phrase dédiée,
+    // sans condition sur le nombre de tôles (même un job à 1 tôle est verrouillé).
+    if (context.lockedSheets?.importedSheet === true) return { key: 'results.importedLocked', params: {} }
     const total = Number(context.lockedSheets?.total)
     const cap = Number(context.lockedSheets?.cap)
     if (!Number.isFinite(total) || !Number.isFinite(cap) || total <= cap) return null

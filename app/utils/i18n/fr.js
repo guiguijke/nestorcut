@@ -272,6 +272,7 @@ export default {
     // Lot V1 (02/11) : information Free avant le calcul (sans bouton) —
     // un compte verrouillé télécharge les premières tôles seulement.
     'nest.capacity.freeDownloadNote': "Avec l'offre Free, vous téléchargez les {cap} premières tôles ; Unlimited les débloque toutes.",
+    'nest.importedSheetNote': "Tôle importée : l'imbrication et l'aperçu sont à essayer gratuitement ; le téléchargement des fichiers de coupe fait partie d'Unlimited.",
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': "Expiré (purge 24 h)",
     'file.quantity': 'Quantité pour {name}',
@@ -669,6 +670,9 @@ export default {
     'results.downloadFirstSheets': 'Télécharger les {n} premières tôles',
     'results.downloadFirstSheetsShort': 'Tôles 1–{n}',
     'results.unlockShort': 'Tout débloquer',
+    'results.importedLocked': "Ce travail utilise une tôle importée : le téléchargement de ses fichiers de coupe fait partie d'Unlimited. L'imbrication, l'aperçu et le rapport restent à essayer gratuitement.",
+    'results.unlockImported': 'Débloquer les téléchargements avec Unlimited',
+    'results.unlockImportedShort': 'Unlimited',
     'result.nestingReport': "Rapport de nesting",
 
     'result.option': 'Option {n}',
@@ -1023,6 +1027,7 @@ export default {
     'sheetImport.short.all': "Toutes interdites",
     'sheetImport.short.invert': "Inverser",
     'sheetImport.cancel': "Annuler",
+    'sheetImport.trialNote': "Vous pouvez essayer cette tôle avec l'offre Free : imbriquez et voyez le résultat. Le téléchargement des fichiers de coupe fait partie d'Unlimited.",
     'sheetImport.saving': "Enregistrement…",
     'sheetImport.confirm.none': "Utiliser cette tôle — aucune zone interdite",
     'sheetImport.confirm.some.one': "Utiliser cette tôle — {n} zone interdite",

@@ -18,8 +18,19 @@ export function sheetNumberFromFileName(name) {
     return Number.isSafeInteger(n) && n >= 1 ? n : null
 }
 
-/** true si le fichier est téléchargeable avec ce plafond (Infinity = tout). */
+/** true si le fichier est téléchargeable avec ce plafond (Infinity = tout).
+ * Plafond 0 (tôle importée, compte Free) : RIEN n'est livré, pas même un nom
+ * illisible (sinon un fichier sans numéro passerait par la règle D2). */
 export function isSheetFileAllowed(name, maxSheet) {
+    if (typeof maxSheet === 'number' && maxSheet <= 0) return false
     const n = sheetNumberFromFileName(name)
     return n == null || n <= maxSheet
+}
+
+/** Plafond effectif d'un résultat : un compte verrouillé (plafond fini) qui
+ * télécharge un résultat portant une tôle importée n'obtient AUCUN fichier
+ * (0) ; un compte ouvert (Infinity) ou un résultat sans tôle importée garde
+ * le plafond reçu, à l'identique. */
+export function effectiveSheetCap(maxSheet, hasImportedSheet) {
+    return hasImportedSheet && Number.isFinite(maxSheet) ? 0 : maxSheet
 }

@@ -353,9 +353,14 @@
                      trackingTag (D18) : l'orchestrateur trace l'événement
                      avec ses données. Désactivé pendant la vérification d'un
                      retour de paiement (D17). -->
+                <p
+                    v-if="unlockOffered && importedLock"
+                    class="report__imported-lock"
+                    data-testid="report-imported-lock"
+                >{{ t('results.importedLocked') }}</p>
                 <MainButton
                     v-if="unlockOffered"
-                    :label="checkoutChecking ? t('sub.return.activating') : t('results.unlockSheets', { n: unlockTotal })"
+                    :label="checkoutChecking ? t('sub.return.activating') : (importedLock ? importedUnlockLabel : t('results.unlockSheets', { n: unlockTotal }))"
                     :icon="iconType.lock"
                     :isDisable="checkoutChecking"
                     :size="sizeType.s"
@@ -381,7 +386,8 @@
                 <NewBadge feature="job-download-primary" />
                 <MainButton
                     v-if="isLocal && resultModalData.hasJobs && resultModalData.isMultiSheet"
-                    :label="jobGate.anyLocked ? t('jobImport.downloadFirstJobs', { n: jobGate.cap }) : t('jobImport.downloadAllJobs')"
+                    :label="jobGate.anyLocked && !importedLock ? t('jobImport.downloadFirstJobs', { n: jobGate.cap }) : t('jobImport.downloadAllJobs')"
+                    :icon="importedLock ? iconType.lock : undefined"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="themeType.primary"
@@ -391,6 +397,7 @@
                 <MainButton
                     v-if="isLocal && resultModalData.hasJobs && !resultModalData.isMultiSheet"
                     :label="t('jobImport.downloadJob')"
+                    :icon="importedLock ? iconType.lock : undefined"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="themeType.primary"
@@ -399,7 +406,8 @@
                 />
                 <MainButton
                     v-if="resultModalData.isMultiSheet && isLocal"
-                    :label="downloadGate.anyLocked
+                    :icon="importedLock ? iconType.lock : undefined"
+                    :label="downloadGate.anyLocked && !importedLock
                         ? t('results.downloadFirstSheets', { n: downloadGate.cap })
                         : t(resultModalData.hasJobs ? 'results.downloadAllDxf' : 'results.downloadAll')"
                     :isDisable="isHaveError || isUnfit"
@@ -422,6 +430,7 @@
                 <MainButton
                     v-if="!resultModalData.isMultiSheet && isLocal"
                     :label="t(resultModalData.hasJobs ? 'results.downloadDxf' : 'results.download')"
+                    :icon="importedLock ? iconType.lock : undefined"
                     :isDisable="isHaveError || isUnfit"
                     :size="sizeType.s"
                     :theme="resultModalData.hasJobs ? themeType.secondary : themeType.primary"
@@ -511,6 +520,9 @@ const EMPTY_GATE = { anyLocked: false, cap: 0, total: 0 }
 const downloadGate = computed(() => props.d.downloadGate || EMPTY_GATE)
 const jobGate = computed(() => props.d.jobGate || EMPTY_GATE)
 const unlockOffered = computed(() => Boolean(props.d.unlockOffered))
+// Essai Free d'une tôle importée (20/11) : cadenas sur chaque export, phrase dite.
+const importedLock = computed(() => Boolean(props.d.importedLock))
+const importedUnlockLabel = computed(() => t('results.unlockImported'))
 const unlockTotal = computed(() => props.d.unlockTotal)
 const checkoutChecking = computed(() => Boolean(props.d.checkoutChecking))
 const freeDownloadNote = computed(() => props.d.freeDownloadNote || '')
@@ -584,6 +596,14 @@ defineExpose({ reportEl })
     }
 
     /* U3 passe 3 : etat de placement — badge, aligne a gauche. */
+    // Essai Free d'une tôle importée : la phrase prend toute la rangée d'actions.
+    &__imported-lock {
+        flex: 1 1 100%;
+        margin: 0;
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
+    }
+
     &__state {
         display: flex;
         align-items: center;

@@ -274,6 +274,7 @@ export default {
     // Lot V1 (02/11) : information Free avant le calcul (sans bouton) —
     // un compte verrouillé télécharge les premières tôles seulement.
     'nest.capacity.freeDownloadNote': 'On the Free plan, you download the first {cap} sheets; Unlimited unlocks them all.',
+    'nest.importedSheetNote': 'Imported sheet: nesting and preview are free to try. Downloading the cut files is part of Unlimited.',
     // Purge 24 h (D-PRV-10) : états « expiré » (la phrase live est privacy.status.*).
     'results.expired': 'Expired (24 h purge)',
     'file.quantity': 'Quantity for {name}',
@@ -692,6 +693,9 @@ export default {
     'results.downloadFirstSheets': 'Download the first {n} sheets',
     'results.downloadFirstSheetsShort': 'Sheets 1–{n}',
     'results.unlockShort': 'Unlock all',
+    'results.importedLocked': 'This job uses an imported sheet: downloading its cut files is part of Unlimited. Nesting, preview and report stay free to try.',
+    'results.unlockImported': 'Unlock downloads with Unlimited',
+    'results.unlockImportedShort': 'Unlimited',
     'result.nestingReport': 'Nesting report',
 
     'result.option': 'Option {n}',
@@ -1046,6 +1050,7 @@ export default {
     'sheetImport.short.all': 'Forbid all',
     'sheetImport.short.invert': 'Invert',
     'sheetImport.cancel': 'Cancel',
+    'sheetImport.trialNote': 'You can try this sheet on the Free plan: nest it and see the result. Downloading the cut files is part of Unlimited.',
     'sheetImport.saving': 'Saving…',
     'sheetImport.confirm.none': 'Use this sheet — no forbidden zone',
     'sheetImport.confirm.some.one': 'Use this sheet — {n} forbidden zone',

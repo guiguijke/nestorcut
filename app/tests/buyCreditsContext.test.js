@@ -105,3 +105,23 @@ describe('checkoutErrorCode', () => {
         expect(checkoutErrorCode({ data: { statusMessage: 'email_not_verified' } })).toBe('error')
     })
 })
+
+describe('contextMessage, tôle importée (F2)', () => {
+    it('job importé : phrase vraie (aucun téléchargement en Free), même à 1 ou 3 tôles', () => {
+        for (const total of [1, 3, 5]) {
+            expect(contextMessage(lockedContext({ total, importedSheet: true }))).toEqual({
+                key: 'results.importedLocked',
+                params: {},
+            })
+        }
+    })
+    it('importedSheet absent ou faux : la phrase des tôles d’avant', () => {
+        expect(contextMessage(lockedContext({ importedSheet: false }))).toEqual({
+            key: 'sub.ctx.lockedSheets',
+            params: { n: 5, cap: 2 },
+        })
+    })
+    it('importedSheet sur une autre source : aucune phrase', () => {
+        expect(contextMessage({ source: 'quota', lockedSheets: { importedSheet: true } })).toBeNull()
+    })
+})

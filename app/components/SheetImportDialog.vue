@@ -235,6 +235,7 @@
             </div>
 
             <footer v-if="step === 'review'" class="sid__foot">
+                <p v-if="importedExportNote" class="sid__trial" data-testid="sheet-import-trial-note">{{ importedExportNote }}</p>
                 <p v-if="saveError" class="sid__error sid__error--foot" role="alert" data-testid="sheet-import-save-error">{{ saveError }}</p>
                 <div class="sid__actions">
                     <MainButton
@@ -283,6 +284,7 @@ import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import { filesStore } from '~/composables/files'
 import { ringBbox, scaleContours } from '~/utils/sheetShape'
 import { trackEvent } from '~/utils/track'
+import { importedSheetLockVisible, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
     ERROR_KEYS, INCH_FACTOR, MAX_NAME_LENGTH, MIN_ZONE_PX,
     baseName, buildRecord, buildSheetView, cleanName, confirmLabel, defaultSheetName,
@@ -410,6 +412,20 @@ const zoneLabels = computed(() => {
 })
 
 const nameInvalid = computed(() => nameTouched.value && cleanName(name.value) === '')
+// Essai Free (20/11) : une ligne avant de confirmer — importer, placer et
+// voir est ouvert, l'export des fichiers de coupe demande Unlimited. Même
+// palier que la page projet (useNuxtData('user') prime ; K et démo explicites).
+const { data: userData } = useNuxtData('user')
+const runtimeConfig = useRuntimeConfig()
+const route = useRoute()
+const importedExportNote = computed(() =>
+    importedSheetLockVisible(
+        sheetDownloadState(unref(userData), {
+            paidPlansDisabled: runtimeConfig.public.paidPlansDisabled,
+            projectSlug: route.params.slug ?? null,
+        }),
+        true,
+    ) ? t('sheetImport.trialNote') : '')
 const canConfirm = computed(() => step.value === 'review' && !saving.value && cleanName(name.value) !== '')
 const confirmText = computed(() => {
     if (saving.value) return t('sheetImport.saving')
@@ -755,6 +771,15 @@ const confirm = async () => {
         small { color: var(--text-2); font-size: var(--fs-12); }
 
         &--foot { flex: 1 1 100%; }
+    }
+
+    // Essai Free : une ligne d'information, sur toute la largeur du pied.
+    &__trial {
+        flex: 1 1 100%;
+        margin: 0;
+        font-size: var(--fs-12);
+        line-height: var(--lh-text);
+        color: var(--text-2);
     }
 
     &__body {

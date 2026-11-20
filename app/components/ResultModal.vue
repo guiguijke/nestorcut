@@ -66,6 +66,7 @@ import {
     altLayoutCount,
     altSheetNames,
     lockedSheetsTrackData,
+    resultHasImportedSheet,
     sheetGateModel,
 } from '~/utils/sheetDownloadGate'
 import { isOnJobProject } from '~/utils/resultNav'
@@ -775,17 +776,27 @@ const downloadState = computed(() => sheetDownloadState(unref(userData), {
     paidPlansDisabled: config.public.paidPlansDisabled,
     projectSlug: unref(resultModalData)?.projectSlug ?? null,
 }))
+// Essai Free d'une tôle importée (20/11) : lu dans le rapport STOCKÉ du
+// résultat (resultHasImportedSheet), pas dans les réglages du projet. Compte
+// verrouillé + tôle importée : tout le job est verrouillé (gate.importedLock),
+// aperçu couleur, rapport et densité restent visibles.
+const hasImportedSheet = computed(() => resultHasImportedSheet(unref(resultModalData)))
+const importedOpts = computed(() => ({ importedSheet: unref(hasImportedSheet) }))
 const downloadGate = computed(() => sheetGateModel(
     altSheetNames(unref(resultModalData), 0),
     unref(downloadState),
     altLayoutCount(unref(resultModalData), 0),
+    unref(importedOpts),
 ))
-const jobGate = computed(() => sheetGateModel(altJobNames(unref(resultModalData), 0), unref(downloadState)))
+const jobGate = computed(() => sheetGateModel(
+    altJobNames(unref(resultModalData), 0), unref(downloadState), null, unref(importedOpts)))
 const viewGate = computed(() => sheetGateModel(
     altSheetNames(unref(resultModalData), unref(activeAlt)),
     unref(downloadState),
     altLayoutCount(unref(resultModalData), unref(activeAlt)),
+    unref(importedOpts),
 ))
+const importedLock = computed(() => unref(downloadGate).importedLock || unref(jobGate).importedLock)
 const currentSheetLocked = computed(() => Boolean(unref(viewGate).locked[unref(activePart)]))
 // D25 : pas de vente sur un résultat inutilisable (même condition que les
 // boutons de téléchargement) — le verrou, lui, reste en place. Un résultat
@@ -824,8 +835,10 @@ const failureDetail = computed(() => failureDetailText(
     unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
 ))
 // D26 : information Free avant de relancer un calcul de plus de 2 tôles.
+// Tôle importée reconnue sur le résultat : aucun fichier n'est livré en Free,
+// « les 2 premières tôles » serait faux, la note est retirée (comme la page).
 const freeDownloadNote = computed(() =>
-    (freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
+    (!unref(hasImportedSheet) && freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
         ? t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP })
         : ''))
 
@@ -842,6 +855,7 @@ const onUnlockSheets = (surface) => {
         lockedSheets: {
             total: gate.total,
             cap: gate.cap,
+            importedSheet: gate.importedLock === true,
             resultSlug: unref(resultModalData)?.slug,
             projectSlug: unref(resultModalData)?.projectSlug ?? null,
         },
@@ -918,6 +932,7 @@ const bundle = computed(() => ({
     // O2 (02/11) : verrou des tôles (§3.13).
     downloadGate: unref(downloadGate),
     jobGate: unref(jobGate),
+    importedLock: unref(importedLock),
     viewGate: unref(viewGate),
     currentSheetLocked: unref(currentSheetLocked),
     usable: unref(usable),

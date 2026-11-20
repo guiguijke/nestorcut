@@ -9,7 +9,7 @@
  * module ne le recalcule jamais.
  */
 import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
-import { isSheetFileAllowed } from '~~/shared/constants/sheetDownload.constants'
+import { effectiveSheetCap, isSheetFileAllowed } from '~~/shared/constants/sheetDownload.constants'
 import { maxDownloadableSheet } from './sheetDownloadState'
 
 /** Dernier segment d'une URL serveur (/api/files/result/dxf/<nom>), décodé
@@ -26,6 +26,46 @@ export function fileNameFromUrl(value) {
     } catch {
         return segment
     }
+}
+
+/** Une liste d'alternatives (record local ou résultat) porte-t-elle une tôle
+ * importée ? Lu dans le RAPPORT STOCKÉ du résultat — report.totals.
+ * shapedSheetCount > 0 ou une ligne de tôle `shaped: true` (nest-report) —,
+ * jamais dans les réglages du projet ni dans la fiche de la tôle : un résultat
+ * rouvert plus tard, ou dont la tôle a été supprimée, reste verrouillé. Un
+ * ancien résultat sans ces champs vaut false (règle d'aujourd'hui, 2 tôles). */
+export function alternativesHoldImportedSheet(alternatives) {
+    if (!Array.isArray(alternatives)) return false
+    return alternatives.some((alt) => {
+        const report = alt?.report
+        if (!report || typeof report !== 'object') return false
+        if (Number(report.totals?.shapedSheetCount) > 0) return true
+        if (Array.isArray(report.sheets) && report.sheets.some((s) => s?.shaped === true)) return true
+        // Rapport de calcul en échec (markUnresolvedShapes : totals null, aucune
+        // tôle) : les champs de vérification, écrits SEULEMENT pour un job à
+        // tôle importée (nest-report lib.rs:570-573, localBridge.js:1070 et
+        // toServerShapeAlternatives qui les recopie à plat), disent la même chose.
+        if (Number(report.shapedSheets) > 0) return true
+        return typeof report.shapeVerified === 'boolean'
+    })
+}
+
+/** La frame finale du record (finalizeLocal.js buildLiveLayout) porte
+ * `binFormats` pour tout job à tôle importée, même quand le rapport a échoué :
+ * second signal, lu sur le record et non sur le rapport. Un ancien record, ou
+ * un job rectangulaire (frame inchangée), n'a pas ce champ. */
+export function recordHoldsImportedSheet(record) {
+    return Array.isArray(record?.liveLayout?.binFormats)
+}
+
+/** Même lecture sur un résultat (forme resultcontroller ou hydratée) : ses
+ * alternatives, puis celles de son record local, puis la frame finale du
+ * record (hydrateLocalItem recopie le record entier dans `localRecord`). */
+export function resultHasImportedSheet(result) {
+    if (!result) return false
+    return alternativesHoldImportedSheet(result.alternatives)
+        || alternativesHoldImportedSheet(result.localRecord?.alternatives)
+        || recordHoldsImportedSheet(result.localRecord)
 }
 
 const altAt = (list, altIndex) => (Array.isArray(list) ? list[altIndex] : undefined)
@@ -75,19 +115,24 @@ export function altLayoutCount(result, altIndex = 0) {
  *   locked[i] = !isSheetFileAllowed(names[i], maxSheet) ;
  *   total = max(layoutCount || 0, names.length) ; cap = FREE_DOWNLOAD_SHEET_CAP.
  */
-export function sheetGateModel(names, state, layoutCount = null) {
+export function sheetGateModel(names, state, layoutCount = null, { importedSheet = false } = {}) {
     const list = Array.isArray(names) ? names : []
-    const maxSheet = maxDownloadableSheet(state)
+    // Tôle importée + compte verrouillé : plafond 0, toutes les tôles (et tous
+    // les .job) sont verrouillés, y compris sur un nom illisible.
+    const importedLock = importedSheet && state === 'locked'
+    const maxSheet = effectiveSheetCap(maxDownloadableSheet(state), importedLock)
     const locked = list.map((n) => !isSheetFileAllowed(n, maxSheet))
     const lockedCount = locked.filter(Boolean).length
+    const total = Math.max(Number(layoutCount) || 0, list.length)
     return {
         state,
         cap: FREE_DOWNLOAD_SHEET_CAP,
         maxSheet,
-        total: Math.max(Number(layoutCount) || 0, list.length),
+        total,
         locked,
         lockedCount,
-        anyLocked: lockedCount > 0,
+        anyLocked: lockedCount > 0 || (importedLock && total > 0),
+        importedLock,
     }
 }
 
@@ -96,6 +141,7 @@ export function sheetGateModel(names, state, layoutCount = null) {
  *     compute: isLocal ? 'browser' : 'server' } */
 export function lockedSheetsTrackData(surface, gate, isLocal) {
     return {
+        ...(gate?.importedLock ? { reason: 'imported_sheet' } : {}),
         surface: String(surface),
         sheets: String(gate?.total ?? 0),
         cap: String(gate?.cap ?? FREE_DOWNLOAD_SHEET_CAP),
