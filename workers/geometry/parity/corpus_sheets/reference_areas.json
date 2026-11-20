@@ -1,0 +1,104 @@
+{
+  "stadium_arcs": [
+    {
+      "depth": 1,
+      "label": "stadium",
+      "area_mm2": 642743.3388230815,
+      "method": "analytic"
+    }
+  ],
+  "ellipse_plate": [
+    {
+      "depth": 1,
+      "label": "outer ellipse",
+      "area_mm2": 471238.89803846896,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "inner ellipse",
+      "area_mm2": 35342.917352885175,
+      "method": "analytic"
+    }
+  ],
+  "blob_spline": [
+    {
+      "depth": 1,
+      "label": "kidney spline",
+      "area_mm2": 685852.3077244826,
+      "method": "ezdxf flattening 1e-4"
+    },
+    {
+      "depth": 2,
+      "label": "circle r80",
+      "area_mm2": 20106.192982974677,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "small spline",
+      "area_mm2": 11404.530958083109,
+      "method": "ezdxf flattening 1e-4"
+    }
+  ],
+  "bulge_disc": [
+    {
+      "depth": 1,
+      "label": "disc d800",
+      "area_mm2": 502654.8245743669,
+      "method": "analytic"
+    }
+  ],
+  "bulge_plate": [
+    {
+      "depth": 1,
+      "label": "plate",
+      "area_mm2": 578798.2297150258,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "slot",
+      "area_mm2": 20827.433388230813,
+      "method": "analytic"
+    }
+  ],
+  "fancy_mix": [
+    {
+      "depth": 1,
+      "label": "outline",
+      "area_mm2": 397569.98775465135,
+      "method": "ezdxf flattening 1e-4"
+    },
+    {
+      "depth": 2,
+      "label": "slot",
+      "area_mm2": 7256.6370614359175,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "circle r40",
+      "area_mm2": 5026.548245743669,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "half disc r50",
+      "area_mm2": 3926.9908169872415,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "square 60",
+      "area_mm2": 3600,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "triangle",
+      "area_mm2": 1800.0,
+      "method": "analytic"
+    }
+  ]
+}

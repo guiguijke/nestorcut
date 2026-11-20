@@ -769,7 +769,7 @@ def main_svg():
 # Dessins publics synthétiques pour le lecteur de tôle (import de contours,
 # nest-import::sheet). Écrits dans corpus_sheets/ — un dossier à part : aucun
 # harnais de parité ne le balaie (ils lisent corpus_extra, corpus_svg, golden).
-# Mode : build_corpus.py tole
+# Mode : build_corpus.py tole (les courbes : tole_courbes, plus bas)
 
 
 SHEETS_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_sheets")
@@ -871,6 +871,197 @@ def main_sheets():
     print(f"tôles -> {SHEETS_OUT} ({len(os.listdir(SHEETS_OUT))} files)")
 
 
+# ------------------------------------------------------- tôles à courbes
+# Tôles dont le contour est fait de courbes : arcs, ellipses, splines, polylignes
+# à bulges. Les aires de référence sont ANALYTIQUES quand la forme l'est (disque,
+# stade, ellipse, plaque arrondie), et celles d'une spline sont l'aire de la même
+# entité aplatie par ezdxf à 1e-4. Elles sont imprimées et écrites dans
+# corpus_sheets/reference_areas.json (rangées comme le lecteur : profondeur, puis
+# aire décroissante). Mode : build_corpus.py tole_courbes (n'écrit QUE ces fichiers).
+
+
+def main_sheets_curved():
+    import json
+
+    from ezdxf import path as ezpath
+    from ezdxf.math import global_bspline_interpolation
+
+    os.makedirs(SHEETS_OUT, exist_ok=True)
+    refs = {}
+
+    def poly_area(pts):
+        a = 0.0
+        for i in range(len(pts)):
+            x1, y1 = pts[i][0], pts[i][1]
+            x2, y2 = pts[(i + 1) % len(pts)][0], pts[(i + 1) % len(pts)][1]
+            a += x1 * y2 - x2 * y1
+        return abs(a) / 2.0
+
+    def flat_area(entities):
+        # Aire de la chaîne d'entités aplatie par ezdxf à 1e-4 (bout à bout).
+        pts = []
+        for e in entities:
+            pts.extend(list(ezpath.make_path(e).flattening(1e-4)))
+        return poly_area(pts)
+
+    def record(name, rows):
+        rows = sorted(rows, key=lambda r: (r[0], -r[2]))
+        refs[name] = [
+            {"depth": d, "label": lab, "area_mm2": a, "method": m} for d, lab, a, m in rows
+        ]
+        for d, lab, a, m in rows:
+            print(f"  {name:16s} depth {d} {lab:18s} {a:14.4f} mm2  ({m})")
+
+    def save_new(doc, name):
+        doc.saveas(os.path.join(SHEETS_OUT, name))
+
+    def fit_spline(msp, pts, closed):
+        # Spline clampée par interpolation globale de degré 3 ; fermée = le
+        # premier point rejoué à la fin (les deux bouts coïncident).
+        pts = list(pts) + ([pts[0]] if closed else [])
+        bs = global_bspline_interpolation(pts, degree=3)
+        e = msp.add_open_spline(
+            control_points=list(bs.control_points), degree=3, knots=list(bs.knots())
+        )
+        if closed:
+            e.closed = True
+        return e
+
+    def slot(msp, x1, x2, y, r):
+        # Trou oblong : deux demi-cercles (bulge 1) aux extrémités, sens anti-horaire.
+        msp.add_lwpolyline(
+            [(x1, y - r, 0, 0, 0), (x2, y - r, 0, 0, 1.0), (x2, y + r, 0, 0, 0), (x1, y + r, 0, 0, 1.0)],
+            format="xyseb",
+            close=True,
+        )
+        return (x2 - x1) * 2 * r + math.pi * r * r
+
+    # Stade : deux LINE et deux ARC, 1200 x 600.
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_line((300, 0), (900, 0))
+    msp.add_arc((900, 300), 300, -90, 90)
+    msp.add_line((900, 600), (300, 600))
+    msp.add_arc((300, 300), 300, 90, 270)
+    save_new(doc, "stadium_arcs.dxf")
+    record("stadium_arcs", [(1, "stadium", 600 * 600 + math.pi * 300 * 300, "analytic")])
+
+    # Plaque elliptique 1000 x 600 avec une ellipse 300 x 150 tournée de 30 degrés.
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_ellipse((500, 300), major_axis=(500, 0), ratio=0.6)
+    c30, s30 = math.cos(math.radians(30)), math.sin(math.radians(30))
+    msp.add_ellipse((500, 300), major_axis=(150 * c30, 150 * s30), ratio=0.5)
+    save_new(doc, "ellipse_plate.dxf")
+    record(
+        "ellipse_plate",
+        [
+            (1, "outer ellipse", math.pi * 500 * 300, "analytic"),
+            (2, "inner ellipse", math.pi * 150 * 75, "analytic"),
+        ],
+    )
+
+    # Forme libre (haricot) : une SPLINE fermée d'environ 1200 x 800, avec un
+    # cercle et une petite SPLINE fermée à l'intérieur.
+    doc = new_doc()
+    msp = doc.modelspace()
+    kidney = []
+    for i in range(16):
+        t = 2 * math.pi * i / 16
+        dent = 1 - 0.4 * math.exp(-(((t - 1.25 * math.pi) / 0.45) ** 2))
+        kidney.append((600 + 590 * math.cos(t), 400 + 390 * math.sin(t) * dent))
+    outer = fit_spline(msp, kidney, True)
+    msp.add_circle((380, 470), 80)
+    small = []
+    for i in range(10):
+        t = 2 * math.pi * i / 10
+        rr = 60 * (1 + 0.25 * math.cos(3 * t))
+        small.append((800 + rr * math.cos(t), 450 + rr * math.sin(t)))
+    inner = fit_spline(msp, small, True)
+    save_new(doc, "blob_spline.dxf")
+    record(
+        "blob_spline",
+        [
+            (1, "kidney spline", flat_area([outer]), "ezdxf flattening 1e-4"),
+            (2, "circle r80", math.pi * 80 * 80, "analytic"),
+            (2, "small spline", flat_area([inner]), "ezdxf flattening 1e-4"),
+        ],
+    )
+
+    # Disque de diamètre 800 : polyligne fermée de deux sommets, bulge 1 partout.
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(100, 500, 0, 0, 1.0), (900, 500, 0, 0, 1.0)], format="xyseb", close=True)
+    save_new(doc, "bulge_disc.dxf")
+    record("bulge_disc", [(1, "disc d800", math.pi * 400 * 400, "analytic")])
+
+    # Plaque 1000 x 600 à coins arrondis (bulges convexes, rayon 80), encoche
+    # semi-circulaire RENTRANTE de rayon 100 en haut (bulge de signe opposé), et
+    # un trou oblong à deux bouts bulge 1.
+    doc = new_doc()
+    msp = doc.modelspace()
+    k = math.tan(math.pi / 8)  # bulge d'un quart de cercle
+    msp.add_lwpolyline(
+        [
+            (80, 0, 0, 0, 0),
+            (920, 0, 0, 0, k),
+            (1000, 80, 0, 0, 0),
+            (1000, 520, 0, 0, k),
+            (920, 600, 0, 0, 0),
+            (600, 600, 0, 0, -1.0),
+            (400, 600, 0, 0, 0),
+            (80, 600, 0, 0, k),
+            (0, 520, 0, 0, 0),
+            (0, 80, 0, 0, k),
+        ],
+        format="xyseb",
+        close=True,
+    )
+    slot_area = slot(msp, 350, 650, 300, 30)
+    save_new(doc, "bulge_plate.dxf")
+    plate = 1000 * 600 - 4 * 80 * 80 * (1 - math.pi / 4) - math.pi * 100 * 100 / 2
+    record(
+        "bulge_plate",
+        [(1, "plate", plate, "analytic"), (2, "slot", slot_area, "analytic")],
+    )
+
+    # Contour mixte LINE + ARC + SPLINE bout à bout, motif intérieur de cinq
+    # formes fermées dont deux à bulges.
+    doc = new_doc()
+    msp = doc.modelspace()
+    chain = [
+        msp.add_line((0, 0), (800, 0)),
+        msp.add_arc((800, 150), 150, -90, 90),
+        msp.add_line((800, 300), (700, 300)),
+        fit_spline(msp, [(700, 300), (620, 440), (500, 520), (380, 500), (280, 440), (200, 500)], False),
+        msp.add_line((200, 500), (100, 500)),
+        msp.add_arc((100, 400), 100, 90, 180),
+        msp.add_line((0, 400), (0, 0)),
+    ]
+    msp.add_circle((150, 150), 40)
+    fancy_slot = slot(msp, 300, 450, 120, 20)
+    msp.add_lwpolyline([(550, 150, 0, 0, 1.0), (650, 150, 0, 0, 0)], format="xyseb", close=True)
+    msp.add_lwpolyline([(400, 300), (460, 300), (460, 360), (400, 360)], close=True)
+    msp.add_lwpolyline([(600, 300), (660, 300), (630, 360)], close=True)
+    save_new(doc, "fancy_mix.dxf")
+    record(
+        "fancy_mix",
+        [
+            (1, "outline", flat_area(chain), "ezdxf flattening 1e-4"),
+            (2, "circle r40", math.pi * 40 * 40, "analytic"),
+            (2, "slot", fancy_slot, "analytic"),
+            (2, "half disc r50", math.pi * 50 * 50 / 2, "analytic"),
+            (2, "square 60", 60 * 60, "analytic"),
+            (2, "triangle", 60 * 60 / 2, "analytic"),
+        ],
+    )
+
+    with open(os.path.join(SHEETS_OUT, "reference_areas.json"), "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(refs, fh, indent=2)
+        fh.write("\n")
+    print(f"tôles courbes -> {SHEETS_OUT}")
+
+
 if __name__ == "__main__":
     if sys.argv[1:] == ["coupe"]:
         main_cut_cases()
@@ -882,6 +1073,9 @@ if __name__ == "__main__":
         main_degenerate_rings()
     elif sys.argv[1:] == ["tole"]:
         main_sheets()
+        main_sheets_curved()
+    elif sys.argv[1:] == ["tole_courbes"]:
+        main_sheets_curved()
     else:
         main()
         main_svg()

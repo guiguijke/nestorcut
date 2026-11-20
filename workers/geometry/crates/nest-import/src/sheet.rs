@@ -9,6 +9,16 @@
 //! W, réduction des sommets, ergots — n'est PAS appliqué ici : un petit trou
 //! d'une tôle est une zone interdite possible, il doit survivre.
 //!
+//! Différence avec l'import de pièces : une polyligne à ARCS (bulge) est lue
+//! avec ses arcs. L'import de pièces garde la corde (D-IMP-8, parité avec le
+//! pipeline Python) ; pour une tôle c'est faux et parfois dangereux — un
+//! disque exporté en polyligne fermée de deux sommets à bulge 1 n'aurait aucune
+//! aire, un contour arrondi perdrait ses courbes, et un arc rentrant lu en
+//! corde ferait la tôle PLUS GRANDE que le métal réel. Chaque segment à bulge
+//! est donc aplati comme une entité ARC (même règle de flèche, sommets SUR
+//! l'arc : polygone inscrit pour un arc convexe), ses extrémités restant
+//! exactement les sommets de la polyligne.
+//!
 //! Un contour est l'anneau extérieur d'UNE face bornée de l'arrangement plan
 //! des traits. La polygonisation par « face de gauche » rend, pour chaque face
 //! bornée, un cycle d'aire POSITIVE (sens anti-horaire) ; les trous d'une face
@@ -25,6 +35,8 @@
 
 use crate::assemble::{self, Pt};
 use crate::budget::{Deadline, Expired, Limits};
+use crate::dxf::entities::Entity;
+use crate::dxf::flatten::{flatten_primitive, Primitive};
 use crate::{dxf, ImportError, TooHeavy};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -282,6 +294,109 @@ pub fn contours_of_edges(
     Ok((out, open_paths))
 }
 
+/// Arc d'un segment à bulge : (centre, angle de début, angle de fin en degrés,
+/// rayon), toujours dans le sens trigonométrique (jumeau de `bulge_to_arc` de
+/// la décomposition, AGENTS #1 : le rayon SIGNÉ place le centre, et un bulge
+/// négatif échange début et fin). Transcendantes par `libm` (AGENTS #14b).
+fn bulge_arc(a: Pt, b: Pt, bulge: f64) -> (Pt, f64, f64, f64) {
+    let angle = |p: Pt, q: Pt| libm::atan2(q[1] - p[1], q[0] - p[0]);
+    let chord = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let r = chord * (1.0 + bulge * bulge) / 4.0 / bulge;
+    let t = angle(a, b) + (std::f64::consts::FRAC_PI_2 - libm::atan(bulge) * 2.0);
+    let c = [a[0] + libm::cos(t) * r, a[1] + libm::sin(t) * r];
+    let (start, end) = if bulge < 0.0 { (b, a) } else { (a, b) };
+    (c, angle(c, start).to_degrees(), angle(c, end).to_degrees(), r.abs())
+}
+
+/// Sommets d'un segment `a` -> `b` à bulge, sans `a`, avec `b` : sur l'arc vrai,
+/// aplati comme une entité ARC à la tolérance `tol`, les deux extrémités remises
+/// EXACTEMENT sur les sommets de la polyligne (les segments voisins se joignent
+/// sans écart). Un segment sans arc exploitable (bulge nul ou non fini, corde
+/// nulle, flèche négligeable, rayon sous la tolérance) reste sa corde.
+fn bulge_segment(a: Pt, b: Pt, bulge: f64, tol: f64, out: &mut Vec<Pt>) {
+    let chord = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+    let usable = bulge.is_finite()
+        && bulge != 0.0
+        && chord.is_finite()
+        && chord > 0.0
+        && bulge.abs() * chord / 2.0 > 1e-9;
+    if usable {
+        let (center, start_angle, end_angle, radius) = bulge_arc(a, b, bulge);
+        let arc = Primitive::Arc {
+            center,
+            radius,
+            start_angle,
+            end_angle,
+            handle: String::new(),
+            layer: String::new(),
+        };
+        let mut pts = flatten_primitive(&arc, tol);
+        if pts.len() >= 2 && pts.iter().all(|p| p[0].is_finite() && p[1].is_finite()) {
+            if bulge < 0.0 {
+                pts.reverse();
+            }
+            let last = pts.len() - 1;
+            pts[0] = a;
+            pts[last] = b;
+            out.extend_from_slice(&pts[1..]);
+            return;
+        }
+    }
+    out.push(b);
+}
+
+/// Une polyligne à arcs devient la polyligne de ses sommets aplatis (le segment
+/// de fermeture compte : son bulge est celui du dernier sommet ; une fermée de
+/// deux sommets à bulge 1 donne le disque). Sans bulge, ou moins de deux
+/// sommets : la projection habituelle.
+fn polyline_primitive(
+    points: &[[f64; 2]],
+    bulges: &[f64],
+    closed: bool,
+    handle: &str,
+    layer: &str,
+    tol: f64,
+) -> Primitive {
+    let n = points.len();
+    let tol = tol.max(0.001);
+    if n < 2 || !bulges.iter().any(|b| *b != 0.0) {
+        return Primitive::Polyline {
+            points: points.to_vec(),
+            closed,
+            handle: handle.to_string(),
+            layer: layer.to_string(),
+        };
+    }
+    let segments = if closed { n } else { n - 1 };
+    let mut out: Vec<Pt> = Vec::with_capacity(n + 8);
+    out.push(points[0]);
+    for i in 0..segments {
+        let bulge = bulges.get(i).copied().unwrap_or(0.0);
+        bulge_segment(points[i], points[(i + 1) % n], bulge, tol, &mut out);
+    }
+    // Fermée : le dernier sommet EST le premier (le contour se ferme de lui-même).
+    Primitive::Polyline {
+        points: out,
+        closed: false,
+        handle: handle.to_string(),
+        layer: layer.to_string(),
+    }
+}
+
+/// Projection d'une entité en primitive, pour une TÔLE : comme
+/// `decompose::primitive_of`, sauf les polylignes à bulges (voir l'en-tête).
+fn sheet_primitive(e: &Entity, tol: f64) -> Primitive {
+    match e {
+        Entity::LwPolyline(p) => {
+            polyline_primitive(&p.points, &p.bulges, p.closed, &p.common.handle, &p.common.layer, tol)
+        }
+        Entity::Polyline(p) => {
+            polyline_primitive(&p.points, &p.bulges, p.closed, &p.common.handle, &p.common.layer, tol)
+        }
+        other => dxf::decompose::primitive_of(other),
+    }
+}
+
 /// Lit une tôle DXF sous les bornes données. Un document qui n'est pas un DXF
 /// (SVG) est une erreur : une tôle importée est un dessin DXF.
 pub fn import_sheet_contours(
@@ -297,7 +412,10 @@ pub fn import_sheet_contours(
     }
     let dl = Deadline::new(limits.time_budget_ms);
     let doc = dxf::Document::parse(bytes)?;
-    let (entities, mut warnings, stats) = dxf::flattened_modelspace_bounded(
+    // Les mêmes entités canoniques que `flattened_modelspace_bounded` (blocs
+    // résolus, échelles et miroirs appliqués, unités en mm), mais lues ici avec
+    // leurs bulges au lieu de la projection sans arcs de l'import de pièces.
+    let (flat, mut warnings, stats) = dxf::canonical::canonical_entities_stats_bounded(
         &doc,
         limits.expansion_ceiling(),
         crate::budget::MAX_INSERT_DEPTH,
@@ -316,13 +434,14 @@ pub fn import_sheet_contours(
             crate::too_many_entities(o.entities, true, limits, &dl)
         }
     })?;
+    let entities: Vec<Primitive> = flat.iter().map(|e| sheet_primitive(e, flatten_tol)).collect();
     let count = entities.len();
     if count > limits.max_entities {
         return Err(crate::too_many_entities(count, false, limits, &dl));
     }
     let model_has_matter = stats.skipped.keys().any(|k| crate::findings::is_material(k))
         || entities.iter().any(|p| match p {
-            dxf::flatten::Primitive::Unsupported(kind) => crate::findings::is_material(kind),
+            Primitive::Unsupported(kind) => crate::findings::is_material(kind),
             _ => true,
         });
     if stats.paper_space_skipped > 0 && !model_has_matter {
@@ -337,7 +456,7 @@ pub fn import_sheet_contours(
     }
     let nested_unsupported = entities
         .iter()
-        .filter(|p| matches!(p, dxf::flatten::Primitive::Unsupported(_)))
+        .filter(|p| matches!(p, Primitive::Unsupported(_)))
         .count();
     let skipped_entities =
         stats.skipped.values().sum::<usize>() + nested_unsupported + stats.paper_space_skipped;

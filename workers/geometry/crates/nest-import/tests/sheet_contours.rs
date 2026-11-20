@@ -481,3 +481,305 @@ fn an_expired_deadline_is_a_refusal_not_a_wrong_result() {
     let (c, _) = contours_of_edges(&edges, &Deadline::unlimited()).unwrap();
     assert_eq!(c.len(), 200);
 }
+
+// ---------------------------------------------------------------------------
+// Tôles à courbes : arcs, ellipses, splines et polylignes à bulges. Les
+// références viennent de `corpus_sheets/reference_areas.json` (analytiques, ou
+// aire de la même spline aplatie par ezdxf à 1e-4), écrites par
+// `build_corpus.py tole_courbes`.
+// ---------------------------------------------------------------------------
+
+struct RefContour {
+    depth: usize,
+    label: String,
+    area: f64,
+}
+
+fn reference(name: &str) -> Vec<RefContour> {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../parity/corpus_sheets/reference_areas.json");
+    let text = std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()));
+    let v: serde_json::Value = serde_json::from_str(&text).expect("reference_areas.json");
+    v[name]
+        .as_array()
+        .unwrap_or_else(|| panic!("pas de référence pour {name}"))
+        .iter()
+        .map(|r| RefContour {
+            depth: r["depth"].as_u64().unwrap() as usize,
+            label: r["label"].as_str().unwrap().to_string(),
+            area: r["area_mm2"].as_f64().unwrap(),
+        })
+        .collect()
+}
+
+/// Deux segments non adjacents ne se croisent jamais (anneau simple au sens
+/// strict, pas seulement sans sommet répété).
+fn assert_no_crossings(r: &SheetResult, what: &str) {
+    fn orient(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> f64 {
+        (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    }
+    for (k, c) in r.contours.iter().enumerate() {
+        let n = c.ring.len() - 1;
+        for i in 0..n {
+            for j in i + 2..n {
+                if i == 0 && j == n - 1 {
+                    continue;
+                }
+                let (a, b, p, q) = (c.ring[i], c.ring[i + 1], c.ring[j], c.ring[j + 1]);
+                let d1 = orient(a, b, p);
+                let d2 = orient(a, b, q);
+                let d3 = orient(p, q, a);
+                let d4 = orient(p, q, b);
+                assert!(
+                    !(d1 * d2 < 0.0 && d3 * d4 < 0.0),
+                    "{what}: contour {k} se croise entre les segments {i} et {j}"
+                );
+            }
+        }
+    }
+}
+
+fn areas(r: &SheetResult) -> Vec<(usize, f64)> {
+    r.contours.iter().map(|c| (c.depth, c.area_mm2)).collect()
+}
+
+/// Le contour a la structure et les aires de la référence (à 0,1 %) ; `convex`
+/// = tous les contours sont convexes : un polygone inscrit n'est JAMAIS au-dessus.
+fn check_against_reference(name: &str, convex: bool) -> SheetResult {
+    let r = sheet(&format!("{name}.dxf"));
+    let want = reference(name);
+    assert_eq!(r.contours.len(), want.len(), "{name}: nombre de contours, trouvé {:?}", areas(&r));
+    for (k, (c, w)) in r.contours.iter().zip(&want).enumerate() {
+        assert_eq!(c.depth, w.depth, "{name}: profondeur du contour {k} ({})", w.label);
+        assert!(
+            rel(c.area_mm2, w.area) < 1e-3,
+            "{name}: contour {k} ({}) aire {} contre {} (écart {:.4} %)",
+            w.label,
+            c.area_mm2,
+            w.area,
+            100.0 * rel(c.area_mm2, w.area)
+        );
+        if convex {
+            assert!(
+                c.area_mm2 <= w.area,
+                "{name}: contour {k} ({}) au-dessus de la forme convexe : {} > {}",
+                w.label,
+                c.area_mm2,
+                w.area
+            );
+        }
+    }
+    assert_eq!(r.open_paths, 0, "{name}: aucun trait ouvert attendu");
+    assert_eq!(r.skipped_entities, 0);
+    assert_simple_and_canonical(&r, name);
+    assert_no_crossings(&r, name);
+    r
+}
+
+#[test]
+fn a_stadium_of_lines_and_arcs_is_one_convex_contour() {
+    let r = check_against_reference("stadium_arcs", true);
+    assert_eq!((r.contours[0].depth, r.contours[0].parent), (1, None));
+    let b = r.contours[0].bbox;
+    for (got, want) in b.iter().zip([0.0, 0.0, 1200.0, 600.0]) {
+        assert!((got - want).abs() < 0.05, "bbox {b:?}");
+    }
+}
+
+#[test]
+fn nested_ellipses_are_two_convex_contours() {
+    let r = check_against_reference("ellipse_plate", true);
+    assert_eq!((r.contours[0].depth, r.contours[0].parent), (1, None));
+    assert_eq!((r.contours[1].depth, r.contours[1].parent), (2, Some(0)));
+}
+
+#[test]
+fn a_free_form_spline_keeps_its_two_inner_shapes() {
+    let r = check_against_reference("blob_spline", false);
+    assert_eq!((r.contours[0].depth, r.contours[0].parent), (1, None));
+    for k in [1, 2] {
+        assert_eq!((r.contours[k].depth, r.contours[k].parent), (2, Some(0)));
+    }
+    let b = r.contours[0].bbox;
+    assert!(b[2] - b[0] > 1150.0 && b[3] - b[1] > 750.0, "haricot d'environ 1200 x 800 : {b:?}");
+}
+
+#[test]
+fn a_disc_drawn_as_a_two_vertex_polyline_with_bulge_one_is_a_disc() {
+    let r = check_against_reference("bulge_disc", true);
+    let c = &r.contours[0];
+    let exact = PI * 400.0 * 400.0;
+    assert!(rel(c.area_mm2, exact) < 1e-3, "aire {} contre {exact}", c.area_mm2);
+    assert_eq!(c.bbox.map(|v| v.round()), [100.0, 100.0, 900.0, 900.0]);
+    // Les sommets sont SUR le cercle vrai (polygone inscrit), pas sur une corde.
+    for p in &c.ring {
+        let d = ((p[0] - 500.0).powi(2) + (p[1] - 500.0).powi(2)).sqrt();
+        assert!((d - 400.0).abs() < 1e-3, "sommet {p:?} à {d} du centre");
+    }
+}
+
+/// Le même contour sans ses bulges : la lecture par cordes de l'import de pièces.
+fn bulge_plate_without_bulges() -> String {
+    let pts = [
+        [80.0, 0.0],
+        [920.0, 0.0],
+        [1000.0, 80.0],
+        [1000.0, 520.0],
+        [920.0, 600.0],
+        [600.0, 600.0],
+        [400.0, 600.0],
+        [80.0, 600.0],
+        [0.0, 520.0],
+        [0.0, 80.0],
+    ];
+    poly(&pts)
+}
+
+#[test]
+fn a_rounded_plate_with_an_inward_notch_loses_the_notch_area() {
+    let r = check_against_reference("bulge_plate", false);
+    let (plate, slot) = (&r.contours[0], &r.contours[1]);
+    assert_eq!((plate.depth, plate.parent), (1, None));
+    assert_eq!((slot.depth, slot.parent), (2, Some(0)));
+    assert_eq!(plate.bbox, [0.0, 0.0, 1000.0, 600.0]);
+
+    // Différence avec la lecture par cordes : le demi-disque de l'encoche en
+    // MOINS, les quatre segments circulaires des coins en PLUS.
+    let chorded = sheet_of(&dxf_of(&bulge_plate_without_bulges()));
+    assert_eq!(chorded.contours.len(), 1);
+    let corner_segment = 80.0_f64 * 80.0 * (PI / 4.0 - 0.5);
+    let expected_gap = PI * 100.0 * 100.0 / 2.0 - 4.0 * corner_segment;
+    let gap = chorded.contours[0].area_mm2 - plate.area_mm2;
+    assert!(
+        (gap - expected_gap).abs() < 0.002 * expected_gap,
+        "écart avec la corde {gap}, attendu {expected_gap}"
+    );
+    assert!(chorded.contours[0].area_mm2 > plate.area_mm2, "la corde agrandit la tôle");
+
+    // Tout sommet de l'encoche est sur le cercle vrai (centre (500,600), r = 100).
+    let mut on_notch = 0;
+    for p in &plate.ring {
+        if p[1] < 599.999 && p[1] > 499.0 && p[0] > 399.0 && p[0] < 601.0 {
+            let d = ((p[0] - 500.0).powi(2) + (p[1] - 600.0).powi(2)).sqrt();
+            assert!((d - 100.0).abs() < 1e-3, "sommet d'encoche {p:?} à {d} du centre");
+            on_notch += 1;
+        }
+    }
+    assert!(on_notch >= 8, "encoche trop pauvre : {on_notch} sommets");
+    // Les coins sont des quarts de cercle de rayon 80 : sommets sur les cercles.
+    for (cx, cy) in [(80.0, 80.0), (920.0, 80.0), (920.0, 520.0), (80.0, 520.0)] {
+        let near: Vec<&[f64; 2]> = plate
+            .ring
+            .iter()
+            .filter(|p| {
+                ((p[0] - cx).powi(2) + (p[1] - cy).powi(2)).sqrt() < 81.0
+                    && (p[0] - cx).abs() > 1e-3
+                    && (p[1] - cy).abs() > 1e-3
+            })
+            .collect();
+        assert!(near.len() >= 2, "coin ({cx},{cy}) sans arc");
+        for p in near {
+            let d = ((p[0] - cx).powi(2) + (p[1] - cy).powi(2)).sqrt();
+            assert!((d - 80.0).abs() < 1e-3, "sommet de coin {p:?} à {d}");
+        }
+    }
+}
+
+#[test]
+fn a_mixed_outline_of_lines_arcs_and_a_spline_with_a_bulge_pattern() {
+    let r = check_against_reference("fancy_mix", false);
+    assert_eq!((r.contours[0].depth, r.contours[0].parent), (1, None));
+    for c in &r.contours[1..] {
+        assert_eq!((c.depth, c.parent), (2, Some(0)));
+    }
+    assert_eq!(r.contours.len(), 6, "contour + cinq formes du motif");
+}
+
+// --- bulges sous INSERT, échelle, miroir et OCS ---
+
+fn bulge_poly(pts: &[([f64; 2], f64)], extra: &str) -> String {
+    let mut s = format!("0\nLWPOLYLINE\n90\n{}\n70\n1\n{extra}", pts.len());
+    for (p, b) in pts {
+        s.push_str(&format!("10\n{}\n20\n{}\n42\n{}\n", p[0], p[1], b));
+    }
+    s
+}
+
+fn block_with(body: &str, insert: &str) -> Vec<u8> {
+    format!(
+        "0\nSECTION\n2\nBLOCKS\n0\nBLOCK\n2\nB\n10\n0\n20\n0\n{body}0\nENDBLK\n0\nENDSEC\n\
+         0\nSECTION\n2\nENTITIES\n0\nINSERT\n2\nB\n10\n0\n20\n0\n{insert}0\nENDSEC\n0\nEOF\n"
+    )
+    .into_bytes()
+}
+
+/// Rectangle 200 x 100 avec une encoche rentrante de rayon 50 en haut.
+fn notched_rect() -> Vec<([f64; 2], f64)> {
+    vec![
+        ([0.0, 0.0], 0.0),
+        ([200.0, 0.0], 0.0),
+        ([200.0, 100.0], 0.0),
+        ([150.0, 100.0], -1.0),
+        ([50.0, 100.0], 0.0),
+        ([0.0, 100.0], 0.0),
+    ]
+}
+
+#[test]
+fn bulges_survive_scale_mirror_and_blocks() {
+    let notch = 20_000.0 - PI * 50.0 * 50.0 / 2.0;
+    // Dans un bloc inséré à l'échelle 2 (similitude) : aire x 4.
+    let r = sheet_of(&block_with(&bulge_poly(&notched_rect(), ""), "41\n2\n42\n2\n"));
+    assert_eq!(r.contours.len(), 1);
+    assert!(rel(r.contours[0].area_mm2, 4.0 * notch) < 1e-3, "x2 : {}", r.contours[0].area_mm2);
+    // Miroir en x : l'encoche reste rentrante (le signe du bulge suit le plan).
+    let r = sheet_of(&block_with(&bulge_poly(&notched_rect(), ""), "41\n-1\n"));
+    assert_eq!(r.contours.len(), 1);
+    assert!(rel(r.contours[0].area_mm2, notch) < 1e-3, "miroir : {}", r.contours[0].area_mm2);
+    assert_eq!(r.contours[0].bbox.map(|v| v.round()), [-200.0, 0.0, 0.0, 100.0]);
+    // Échelle non uniforme (3, 1) : la polyligne à arcs est décomposée en LINE et
+    // ELLIPSE ; l'encoche (demi-ellipse 150 x 50) reste rentrante. Aire = 3 x aire.
+    let r = sheet_of(&block_with(&bulge_poly(&notched_rect(), ""), "41\n3\n"));
+    assert_eq!(r.contours.len(), 1);
+    assert!(rel(r.contours[0].area_mm2, 3.0 * notch) < 2e-3, "3x1 : {}", r.contours[0].area_mm2);
+    // Disque (deux sommets, bulge 1) sous échelle non uniforme : ellipse 200 x 100.
+    let disc = bulge_poly(&[([0.0, 0.0], 1.0), ([100.0, 0.0], 1.0)], "");
+    let r = sheet_of(&block_with(&disc, "41\n2\n"));
+    assert_eq!(r.contours.len(), 1);
+    assert!(rel(r.contours[0].area_mm2, 2.0 * PI * 50.0 * 50.0) < 2e-3, "{}", r.contours[0].area_mm2);
+}
+
+#[test]
+fn a_bulge_polyline_in_an_ocs_with_a_negative_normal_keeps_its_notch() {
+    // Normale -Z : x -> -x. L'aire est celle de l'encoche rentrante, pas du bossage.
+    let body = bulge_poly(&notched_rect(), "210\n0\n220\n0\n230\n-1\n");
+    let r = sheet_of(&dxf_of(&body));
+    assert_eq!(r.contours.len(), 1);
+    let notch = 20_000.0 - PI * 50.0 * 50.0 / 2.0;
+    assert!(rel(r.contours[0].area_mm2, notch) < 1e-3, "{}", r.contours[0].area_mm2);
+    assert_eq!(r.contours[0].bbox.map(|v| v.round()), [-200.0, 0.0, 0.0, 100.0]);
+}
+
+#[test]
+fn an_open_bulge_polyline_closed_by_a_line_is_a_half_disc() {
+    // Demi-cercle par un bulge négatif, refermé par une LINE.
+    let body = format!(
+        "0\nLWPOLYLINE\n90\n2\n70\n0\n10\n0\n20\n0\n42\n-1\n10\n100\n20\n0\n{}",
+        line([100.0, 0.0], [0.0, 0.0])
+    );
+    let r = sheet_of(&dxf_of(&body));
+    assert_eq!(r.contours.len(), 1);
+    assert!(rel(r.contours[0].area_mm2, PI * 50.0 * 50.0 / 2.0) < 1e-3, "{}", r.contours[0].area_mm2);
+    // Bulge négatif de (0,0) vers (100,0) : l'arc passe au-dessus (y > 0).
+    assert!(r.contours[0].bbox[3] > 49.0 && r.contours[0].bbox[1] > -1e-9, "{:?}", r.contours[0].bbox);
+}
+
+#[test]
+fn a_straight_polyline_and_a_zero_bulge_polyline_read_alike() {
+    let straight = sheet_of(&dxf_of(&poly(&PLATE)));
+    let zero = sheet_of(&dxf_of(&bulge_poly(
+        &PLATE.iter().map(|p| (*p, 0.0)).collect::<Vec<_>>(),
+        "",
+    )));
+    assert_eq!(straight.contours[0].ring, zero.contours[0].ring);
+}
