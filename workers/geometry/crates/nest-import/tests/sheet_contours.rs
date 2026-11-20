@@ -493,6 +493,8 @@ struct RefContour {
     depth: usize,
     label: String,
     area: f64,
+    /// Boîte de la courbe de référence (ezdxf), quand le JSON la porte.
+    bbox: Option<[f64; 4]>,
 }
 
 fn reference(name: &str) -> Vec<RefContour> {
@@ -508,6 +510,9 @@ fn reference(name: &str) -> Vec<RefContour> {
             depth: r["depth"].as_u64().unwrap() as usize,
             label: r["label"].as_str().unwrap().to_string(),
             area: r["area_mm2"].as_f64().unwrap(),
+            bbox: r["bbox"]
+                .as_array()
+                .map(|b| [0, 1, 2, 3].map(|i| b[i].as_f64().unwrap())),
         })
         .collect()
 }
@@ -782,4 +787,74 @@ fn a_straight_polyline_and_a_zero_bulge_polyline_read_alike() {
         "",
     )));
     assert_eq!(straight.contours[0].ring, zero.contours[0].ring);
+}
+
+// ---------------------------------------------------------------------------
+// SPLINE aux formes rares : points d'ajustement seuls (retirée en silence par
+// le lecteur partagé), fermée périodique (nœuds non bloqués), rationnelle.
+// Références : `build_corpus.py tole_courbes` (courbe d'ezdxf sur son domaine
+// valide, ou forme analytique).
+// ---------------------------------------------------------------------------
+
+fn has_skipped_spline_warning(r: &SheetResult) -> bool {
+    r.warnings.iter().any(|w| w.contains("skipped entity SPLINE"))
+}
+
+#[test]
+fn a_fit_point_only_closed_spline_is_reported_not_dropped_in_silence() {
+    // Le lecteur partagé retire cette SPLINE (aucun nœud ni point de contrôle) :
+    // la tôle n'a plus que le disque, et doit le DIRE.
+    let r = sheet("spline_fit_closed.dxf");
+    assert_eq!(r.contours.len(), 1, "seul le disque : {:?}", areas(&r));
+    assert!(rel(r.contours[0].area_mm2, PI * 80.0 * 80.0) < 1e-3);
+    assert_eq!(r.skipped_entities, 1, "la SPLINE à points d'ajustement est comptée");
+    assert!(has_skipped_spline_warning(&r), "avertissement attendu : {:?}", r.warnings);
+}
+
+#[test]
+fn a_fit_point_only_spline_with_tangents_closing_a_rectangle_is_reported() {
+    let r = sheet("spline_fit_open_tangents.dxf");
+    assert_eq!(r.contours.len(), 1, "le rectangle reste ouvert : {:?}", areas(&r));
+    assert_eq!(r.skipped_entities, 1);
+    assert!(has_skipped_spline_warning(&r), "avertissement attendu : {:?}", r.warnings);
+}
+
+/// Boîte du contour 0 égale à celle de la courbe d'ezdxf, à la tolérance
+/// d'aplatissement près (polygone inscrit : jamais plus large).
+fn assert_bbox_of_reference(r: &SheetResult, name: &str) {
+    let want = reference(name)[0].bbox.expect("bbox de référence");
+    let b = r.contours[0].bbox;
+    for k in 0..4 {
+        assert!((b[k] - want[k]).abs() < 0.02, "{name}: bbox {b:?} contre {want:?}");
+    }
+}
+
+#[test]
+fn a_periodic_closed_spline_is_cut_to_its_valid_knot_domain() {
+    // Nœuds uniformes non bloqués : sans ramener la courbe à [nœuds[3], nœuds[11]]
+    // la tôle part vers l'origine (aire 646 902 au lieu de 687 333, boîte à 0,0).
+    let r = check_against_reference("spline_periodic_closed", false);
+    assert_bbox_of_reference(&r, "spline_periodic_closed");
+    assert_eq!(r.contours[1].parent, Some(0));
+}
+
+#[test]
+fn a_periodic_rational_spline_is_cut_to_its_valid_knot_domain() {
+    let r = check_against_reference("spline_periodic_rational", false);
+    assert_bbox_of_reference(&r, "spline_periodic_rational");
+}
+
+#[test]
+fn a_closed_rational_clamped_spline_follows_the_weights() {
+    let r = check_against_reference("spline_closed_rational", false);
+    assert_bbox_of_reference(&r, "spline_closed_rational");
+}
+
+#[test]
+fn a_rational_nurbs_circle_has_its_vertices_on_the_true_circle() {
+    let r = check_against_reference("spline_rational_circle", true);
+    for p in &r.contours[0].ring {
+        let d = ((p[0] - 400.0).powi(2) + (p[1] - 400.0).powi(2)).sqrt();
+        assert!((d - 300.0).abs() < 1e-3, "sommet {p:?} à {d} du centre");
+    }
 }

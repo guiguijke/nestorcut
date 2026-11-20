@@ -14,6 +14,10 @@ import {
     resolveDemoWalks,
 } from '../../../../shared/constants/demo.constants'
 
+// Forme exacte des slugs de tôle importée (newSheetSlug, app/utils/
+// sheetImportModel.js) : « sheet-<horodatage base 36>-<6 caractères base 36> ».
+const SHEET_SHAPE_ID = /^sheet-[0-9a-z]{1,12}-[0-9a-z]{6}$/
+
 const concurrentLimitError = (activeJobs) =>
     createError({
         statusCode: 409,
@@ -192,6 +196,31 @@ export default defineEventHandler(async (event) => {
             statusMessage: 'Please provide at least one valid sheet (width, height, count).',
         })
 
+    // Identifiant d'une tôle importée (DXF) : une tôle à forme n'existe que
+    // dans un projet « cet appareil » (la forme reste dans le navigateur).
+    // Sur la démo ou un projet serveur il n'y a aucun dossier de forme à
+    // retrouver : le refuser vaut mieux que d'imbriquer dans un rectangle
+    // complet une tôle qui ne l'est pas. Un identifiant mal formé est REFUSÉ
+    // plutôt qu'écarté : l'écarter ferait nicher dans le rectangle englobant,
+    // c'est-à-dire sur du vide, sans rien dire à l'utilisateur.
+    const checkedShapeId = (raw) => {
+        if (isDemo || !project.local) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'imported_sheet_not_local',
+                data: { reason: 'imported_sheet_not_local' },
+            })
+        }
+        if (typeof raw !== 'string' || !SHEET_SHAPE_ID.test(raw)) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'invalid_sheet_shape_id',
+                data: { reason: 'invalid_sheet_shape_id' },
+            })
+        }
+        return raw
+    }
+
     // Multi-sheet: the client sends params.sheets (list of sheet types with
     // their own dimensions and stock). Legacy clients send a single
     // width/height/sheetCount — normalized to the same shape. Demo nestings
@@ -205,6 +234,11 @@ export default defineEventHandler(async (event) => {
                 width: Number(sheet.width),
                 height: Number(sheet.height),
                 count: Math.floor(Number(sheet.count)),
+                // Tôle importée d'un DXF : SEUL son identifiant opaque (le slug
+                // du dossier IndexedDB du navigateur) peut arriver ici, jamais
+                // un nom ni une forme. Absent pour une tôle rectangulaire : la
+                // clé n'existe même pas, le document reste ce qu'il était.
+                ...(sheet.shapeId != null ? { shapeId: checkedShapeId(sheet.shapeId) } : {}),
             }))
             .filter(isValidSheet)
             .slice(0, 10)

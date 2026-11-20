@@ -46,6 +46,27 @@ export function sheetUsableArea(width, height, space) {
     return Math.max(0, (Number(width) - s) * (Number(height) - s))
 }
 
+/**
+ * Aire utilisable d'un format, à l'espacement s. Rectangle : (L - s)(H - s),
+ * inchangé. Tôle importée (`usableAreaMm2` + `perimeterMm` : contour moins
+ * zones interdites, et la longueur de tous leurs bords) : même idée — chaque
+ * bord perd s/2 de largeur de métal.
+ */
+function isShapedFormat(sh) {
+    return sh != null && sh.usableAreaMm2 !== undefined && sh.usableAreaMm2 !== null
+}
+
+function formatUsableArea(sh, s) {
+    // Une tôle importée ne retombe JAMAIS sur sa boîte englobante : aire
+    // utile nulle, négative ou non finie = aucune capacité.
+    if (isShapedFormat(sh)) {
+        const shaped = Number(sh.usableAreaMm2)
+        if (!Number.isFinite(shaped) || shaped <= 0) return 0
+        return Math.max(0, shaped - (Number(sh?.perimeterMm) || 0) * s / 2)
+    }
+    return sheetUsableArea(sh?.width, sh?.height, s)
+}
+
 function bboxGridCapacity(part, width, height, space) {
     const coords = (part && part.coords) || []
     if (coords.length < 3) return 0
@@ -78,18 +99,22 @@ function bboxGridCapacity(part, width, height, space) {
 // ratio statistique ne refuse jamais un carré 8×8 exact dans sa tôle).
 function constructiveFit(parts, sheets, space) {
     if (!parts?.length || !sheets?.length) return false
+    // Une tôle importée n'est pas un rectangle : la grille de boîtes ne
+    // prouve rien sur elle, elle ne compte ni en capacité ni en stock.
+    const rect = sheets.filter((sh) => !isShapedFormat(sh))
+    if (!rect.length) return false
     let sheetsNeeded = 0
     for (const p of parts) {
         const count = Math.trunc(Number(p?.count) || 0)
         if (count <= 0) continue
         let bestCap = 0
-        for (const sh of sheets) {
+        for (const sh of rect) {
             bestCap = Math.max(bestCap, bboxGridCapacity(p, sh?.width, sh?.height, space))
         }
         if (bestCap <= 0) return false
         sheetsNeeded += Math.ceil(count / bestCap)
     }
-    const stock = sheets.reduce(
+    const stock = rect.reduce(
         (n, sh) => n + (Math.trunc(Number(sh?.count) || 1)), 0)
     return sheetsNeeded <= stock
 }
@@ -107,7 +132,7 @@ export function capacityReport(parts, sheets, space) {
     let stock = 0
     for (const sh of sheets || []) {
         const n = Math.trunc(Number(sh?.count) || 1)
-        totalUsable += sheetUsableArea(sh?.width, sh?.height, s) * n
+        totalUsable += formatUsableArea(sh, s) * n
         stock += n
     }
     if (totalInflated <= 0 || totalUsable <= 0) return null
@@ -132,7 +157,7 @@ export function capacityReport(parts, sheets, space) {
         }
         let den = 0
         for (const sh of sheets || []) {
-            den += sheetUsableArea(sh?.width, sh?.height, sp)
+            den += formatUsableArea(sh, sp)
                 * (Math.trunc(Number(sh?.count) || 1))
         }
         return den > 0 ? num / den : Infinity

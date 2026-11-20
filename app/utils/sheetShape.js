@@ -302,3 +302,62 @@ export function scaleContours(contours, factor) {
         bbox: c.bbox.map((v) => v * factor),
     }))
 }
+
+// ---------------------------------------------------------------------------
+// Tôle importée -> conteneur du moteur (calcul dans le navigateur)
+// ---------------------------------------------------------------------------
+
+function ringPerimeter(ring) {
+    let sum = 0
+    for (let i = 1; i < ring.length; i++) {
+        sum += Math.hypot(ring[i][0] - ring[i - 1][0], ring[i][1] - ring[i - 1][1])
+    }
+    return sum
+}
+
+/** Anneau translaté de (dx, dy), fermé (premier point répété), ou null s'il est dégénéré. */
+function translatedClosedRing(ring, dx, dy) {
+    if (!Array.isArray(ring)) return null
+    const pts = ring.map(([x, y]) => [x - dx, y - dy])
+    const closed = pts.length > 1
+        && pts[0][0] === pts[pts.length - 1][0]
+        && pts[0][1] === pts[pts.length - 1][1]
+    const open = closed ? pts.slice(0, -1) : pts
+    if (new Set(open.map(([x, y]) => `${x},${y}`)).size < 3) return null
+    if (ringArea(open) <= 1e-9) return null
+    return [...open, open[0]]
+}
+
+/**
+ * Conteneur moteur d'une tôle importée : contour + zones interdites
+ * normalisées, translatés pour que la boîte du CONTOUR commence en (0, 0)
+ * (le reste de l'application suppose une tôle qui couvre 0..largeur,
+ * 0..hauteur), anneaux fermés comme ceux du rectangle de buildBin. Un anneau
+ * de zone dégénéré après translation est abandonné ; un contour inutilisable
+ * lève sheet_shape_missing. `usableAreaMm2` = aire du contour moins celle des
+ * zones gardées ; `perimeterMm` = contour + zones (pour la capacité).
+ */
+export function engineBinShape(record) {
+    const { outer, holes } = engineRings(record)
+    const box = ringBbox(outer)
+    if (!box) throw new Error('sheet_shape_missing')
+    const [dx, dy] = box
+    const outerRing = translatedClosedRing(outer, dx, dy)
+    if (!outerRing) throw new Error('sheet_shape_missing')
+    const inner = holes.map((r) => translatedClosedRing(r, dx, dy)).filter(Boolean)
+    const widthMm = box[2] - box[0]
+    const heightMm = box[3] - box[1]
+    const usableAreaMm2 = Math.max(
+        0, ringArea(outerRing) - inner.reduce((sum, r) => sum + ringArea(r), 0),
+    )
+    // Zones interdites qui couvrent toute la tôle : rien n'y entre, aucun
+    // calcul ne doit partir (coût nul/infini plus bas, capacité en repli boîte).
+    if (!(usableAreaMm2 > 0)) throw new Error('sheet_shape_missing')
+    const perimeterMm = ringPerimeter(outerRing) + inner.reduce((sum, r) => sum + ringPerimeter(r), 0)
+    return { outer: outerRing, inner, widthMm, heightMm, usableAreaMm2, perimeterMm }
+}
+
+/** Vrai si le payload moteur porte au moins un conteneur issu d'une tôle importée. */
+export function payloadHasShapedSheet(payload) {
+    return Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length > 0
+}

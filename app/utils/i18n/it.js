@@ -276,6 +276,7 @@ export default {
     "privacy.status.cloud": "Scarica il tuo DXF — sorgenti e risultati vengono eliminati dopo 24 h.",
     "privacy.status.vault": "I file sono cifrati dalla nostra parte. Senza il tuo file chiave, nessuno può leggerli — noi compresi, fuori da una sessione di lavoro.",
     "localImport.missingGeometry": "Questi pezzi sono nell'altro browser. Reimportali qui — nulla è stato inviato a noi.",
+    "localImport.missingSheetShape": "La lamiera importata di questo calcolo è nell'altro browser. Importala di nuovo qui — nulla è stato inviato a noi.",
     "localImport.dwgRejected": "I file DWG vengono convertiti sui nostri server — scegli \"I nostri server\" per questo file.",
     "localImport.unsupportedType": "Tipo di file non supportato — solo DXF o SVG su questo dispositivo.",
     "localImport.parseError": "Questo file non è stato letto nel browser — prova con \"I nostri server\".",

@@ -383,6 +383,114 @@ fn polyline_primitive(
     }
 }
 
+/// Insère une fois le nœud `u` dans une B-spline de degré `p` (Boehm, The NURBS
+/// Book A5.1) ; `span` est l'indice tel que `knots[span] <= u <= knots[span+1]`
+/// et `knots[span] < knots[span+1]`. Points en coordonnées homogènes.
+fn insert_knot(p: usize, knots: &mut Vec<f64>, ctrl: &mut Vec<[f64; 3]>, u: f64, span: usize) {
+    let n = ctrl.len();
+    let mut q: Vec<[f64; 3]> = Vec::with_capacity(n + 1);
+    for i in 0..=n {
+        if i + p <= span {
+            q.push(ctrl[i]);
+        } else if i > span {
+            q.push(ctrl[i - 1]);
+        } else {
+            let a = (u - knots[i]) / (knots[i + p] - knots[i]);
+            let (c, d) = (ctrl[i], ctrl[i - 1]);
+            q.push([a * c[0] + (1.0 - a) * d[0], a * c[1] + (1.0 - a) * d[1], a * c[2] + (1.0 - a) * d[2]]);
+        }
+    }
+    knots.insert(span + 1, u);
+    *ctrl = q;
+}
+
+/// Une SPLINE aux nœuds NON bloqués (fermée périodique : nœuds uniformes, points
+/// de contrôle rejoués en fin) n'est une courbe que sur son domaine valide
+/// `[nœuds[degré], nœuds[nb de points]]` ; hors de lui les fonctions de base sont
+/// incomplètes et la courbe file vers l'origine. Le code partagé aplatit TOUT
+/// l'intervalle des nœuds (jumeau d'ezdxf), ce qui fait une pointe de la tôle à
+/// l'origine. Ici la courbe est ramenée à son domaine par insertion de nœuds
+/// (même courbe, nœuds bloqués aux deux bouts) ; une spline déjà bloquée, ou
+/// dont le vecteur de nœuds est incohérent, est rendue telle quelle.
+/// Rend (nœuds, points de contrôle, poids) ; poids vides si la spline est non
+/// rationnelle.
+fn spline_on_valid_domain(
+    degree: i32,
+    knots: &[f64],
+    control: &[[f64; 2]],
+    weights: &[f64],
+) -> Option<(Vec<f64>, Vec<[f64; 2]>, Vec<f64>)> {
+    if !(1..=25).contains(&degree) {
+        return None;
+    }
+    let p = degree as usize;
+    let n = control.len();
+    if n < p + 1 || knots.len() != n + p + 1 {
+        return None;
+    }
+    let finite = knots.iter().all(|k| k.is_finite())
+        && control.iter().all(|c| c[0].is_finite() && c[1].is_finite())
+        && weights.iter().all(|w| w.is_finite());
+    if !finite || knots.windows(2).any(|w| w[0] > w[1]) {
+        return None;
+    }
+    let (a, b) = (knots[p], knots[n]);
+    let clamped = knots[..=p].iter().all(|&k| k == a) && knots[n..].iter().all(|&k| k == b);
+    if clamped || !(a < b) {
+        return None;
+    }
+    let rational = weights.len() >= n;
+    let mut ks = knots.to_vec();
+    let mut cs: Vec<[f64; 3]> = control
+        .iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let w = if rational { weights[i] } else { 1.0 };
+            [c[0] * w, c[1] * w, w]
+        })
+        .collect();
+    // Début : nœud `a` porté à la multiplicité p + 1.
+    loop {
+        let m = ks.iter().filter(|&&k| k == a).count();
+        if m >= p + 1 {
+            break;
+        }
+        let span = ks.iter().rposition(|&k| k == a)?;
+        if span + 1 >= ks.len() || span >= cs.len() {
+            return None;
+        }
+        insert_knot(p, &mut ks, &mut cs, a, span);
+    }
+    // Fin : nœud `b` porté à la multiplicité p + 1.
+    loop {
+        let m = ks.iter().filter(|&&k| k == b).count();
+        if m >= p + 1 {
+            break;
+        }
+        let span = ks.iter().position(|&k| k == b)?.checked_sub(1)?;
+        if ks[span] >= b {
+            return None;
+        }
+        insert_knot(p, &mut ks, &mut cs, b, span);
+    }
+    let s = ks.iter().position(|&k| k == a)?;
+    let e = ks.iter().position(|&k| k == b)?;
+    if e < s + p + 1 || e > cs.len() {
+        return None;
+    }
+    let knots_out = ks[s..e + p + 1].to_vec();
+    let cs = &cs[s..e];
+    if knots_out.len() != cs.len() + p + 1 {
+        return None;
+    }
+    let control_out: Vec<[f64; 2]> = cs
+        .iter()
+        .map(|c| if rational { [c[0] / c[2], c[1] / c[2]] } else { [c[0], c[1]] })
+        .collect();
+    let weights_out = if rational { cs.iter().map(|c| c[2]).collect() } else { Vec::new() };
+    Some((knots_out, control_out, weights_out))
+}
+
 /// Projection d'une entité en primitive, pour une TÔLE : comme
 /// `decompose::primitive_of`, sauf les polylignes à bulges (voir l'en-tête).
 fn sheet_primitive(e: &Entity, tol: f64) -> Primitive {
@@ -393,8 +501,77 @@ fn sheet_primitive(e: &Entity, tol: f64) -> Primitive {
         Entity::Polyline(p) => {
             polyline_primitive(&p.points, &p.bulges, p.closed, &p.common.handle, &p.common.layer, tol)
         }
+        Entity::Spline(sp) => match spline_on_valid_domain(sp.degree, &sp.knots, &sp.control, &sp.weights) {
+            Some((knots, control, weights)) => Primitive::Spline {
+                degree: sp.degree,
+                knots,
+                control,
+                weights,
+                handle: sp.common.handle.clone(),
+                layer: sp.common.layer.clone(),
+            },
+            None => dxf::decompose::primitive_of(e),
+        },
         other => dxf::decompose::primitive_of(other),
     }
+}
+
+/// Nombre de SPLINE que le lecteur DXF partagé a retirées SANS le dire : il
+/// applique la règle d'ezdxf.recover (nœuds < points de contrôle + degré + 1 →
+/// l'entité est supprimée, `dxf/mod.rs` `with_recover_drops`) et ne lit pas les
+/// points d'ajustement (groupes 11/21 : `dxf/entities.rs`, lecture de SPLINE).
+/// Une SPLINE ne portant que des points d'ajustement (aucun point de contrôle ni
+/// nœud) disparaît donc avant l'entité canonique, sans compte ni avertissement
+/// — pour une tôle, un contour manquant en silence. Le code partagé ne se
+/// touche pas (l'import de pièces reste identique) : on recompte ici les SPLINE
+/// du texte (ENTITIES hors espace papier, et tous les blocs) et on retranche
+/// celles que le document a gardées. DXF texte seulement, comme le lecteur.
+fn silently_dropped_splines(bytes: &[u8], doc: &dxf::Document) -> usize {
+    let text = String::from_utf8_lossy(bytes);
+    let mut lines = text.lines();
+    let mut section = String::new();
+    let mut after_section = false;
+    let mut spline = false;
+    let mut paper = false;
+    let mut raw = 0usize;
+    let close = |spline: &mut bool, paper: &mut bool, section: &str, raw: &mut usize| {
+        if *spline && !(*paper && section == "ENTITIES") {
+            *raw += 1;
+        }
+        *spline = false;
+        *paper = false;
+    };
+    while let Some(code_line) = lines.next() {
+        let value = lines.next().unwrap_or("").trim();
+        let code: i32 = code_line.trim().parse().unwrap_or(-1);
+        match code {
+            0 => {
+                close(&mut spline, &mut paper, &section, &mut raw);
+                after_section = value == "SECTION";
+                if value == "ENDSEC" {
+                    section.clear();
+                } else if value == "SPLINE" && (section == "ENTITIES" || section == "BLOCKS") {
+                    spline = true;
+                }
+            }
+            2 if after_section => {
+                section = value.to_string();
+                after_section = false;
+            }
+            67 if spline => {
+                paper = value.parse::<f64>().map(|v| v != 0.0).unwrap_or(false);
+            }
+            _ => {}
+        }
+    }
+    close(&mut spline, &mut paper, &section, &mut raw);
+    let kept = doc
+        .entities
+        .iter()
+        .chain(doc.blocks.iter().flat_map(|b| b.entities.iter()))
+        .filter(|e| matches!(e, Entity::Spline(_)))
+        .count();
+    raw.saturating_sub(kept)
 }
 
 /// Lit une tôle DXF sous les bornes données. Un document qui n'est pas un DXF
@@ -435,6 +612,14 @@ pub fn import_sheet_contours(
         }
     })?;
     let entities: Vec<Primitive> = flat.iter().map(|e| sheet_primitive(e, flatten_tol)).collect();
+    // SPLINE retirées en silence par le lecteur partagé : comptées comme non
+    // lues et signalées, une par une, comme les autres entités écartées.
+    let dropped_splines = silently_dropped_splines(bytes, &doc);
+    for _ in 0..dropped_splines {
+        warnings.push(
+            "skipped entity SPLINE (no control points or knots, e.g. fit points only)".to_string(),
+        );
+    }
     let count = entities.len();
     if count > limits.max_entities {
         return Err(crate::too_many_entities(count, false, limits, &dl));
@@ -459,7 +644,10 @@ pub fn import_sheet_contours(
         .filter(|p| matches!(p, Primitive::Unsupported(_)))
         .count();
     let skipped_entities =
-        stats.skipped.values().sum::<usize>() + nested_unsupported + stats.paper_space_skipped;
+        stats.skipped.values().sum::<usize>()
+            + nested_unsupported
+            + stats.paper_space_skipped
+            + dropped_splines;
     let (lw, w2, entity_count) =
         assemble::collect_linework_until(&entities, flatten_tol, &dl)
             .map_err(|e| crate::out_of_time(count, limits, e))?;

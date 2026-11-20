@@ -85,6 +85,9 @@
 // pourquoi la maison exige des images a HEAD avant tout banc.
 
 import { partWithReserve } from '~~/shared/sheetcamReserve.js'
+// Tôle importée d'un DXF : géométrie pure (aucune dépendance), même règle
+// d'alias que ci-dessus.
+import { engineBinShape } from '~~/app/utils/sheetShape.js'
 
 /**
  * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
@@ -633,7 +636,22 @@ function buildItem(id, demand, points, allowedOrientations) {
     }
 }
 
-function buildBin(binId, stock, width, height) {
+function buildBin(binId, stock, width, height, shaped = null) {
+    // Tôle importée : contour + zones interdites (anneaux fermés, boîte du
+    // contour en (0,0)). `inner` n'existe que s'il y a au moins une zone.
+    if (shaped) {
+        return {
+            id: binId,
+            cost: 1,
+            stock,
+            shape: {
+                type: 'polygon',
+                data: shaped.inner.length
+                    ? { outer: shaped.outer, inner: shaped.inner }
+                    : { outer: shaped.outer },
+            },
+        }
+    }
     return {
         id: binId,
         cost: 1,
@@ -702,6 +720,35 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         count: Math.trunc(Number(s.count)),
     }))
     if (!sheets.length) throw new Error('buildLocalPayload: params.sheets requis (au moins une tôle)')
+    // Tôle importée d'un DXF (shapeId = slug du dossier local) : sa forme est
+    // relue du navigateur. Un dossier absent arrête le job AVANT tout calcul
+    // (sheet_shape_missing) : nicher dans le rectangle englobant, ce serait
+    // poser des pièces sur du vide. Pour un job sans shapeId, RIEN de ce bloc
+    // ne s'exécute et `sheets` reste exactement ce qu'il était.
+    const shapeIds = (params.sheets || []).map((s) => (typeof s?.shapeId === 'string' && s.shapeId ? s.shapeId : null))
+    const hasShaped = shapeIds.some(Boolean)
+    if (hasShaped) {
+        const loaded = new Map()
+        for (const id of new Set(shapeIds.filter(Boolean))) {
+            let record = null
+            try {
+                record = typeof deps.getSheetRecord === 'function' ? await deps.getSheetRecord(id) : null
+            } catch {
+                record = null
+            }
+            if (!record) throw new Error('sheet_shape_missing')
+            loaded.set(id, engineBinShape(record))
+        }
+        shapeIds.forEach((id, i) => {
+            if (!id) return
+            const shaped = loaded.get(id)
+            // La boîte du contour fait foi (largeur/hauteur affichées = arrondis
+            // d'unité) : les gardes « la pièce tient dans la tôle » la lisent.
+            sheets[i].width = shaped.widthMm
+            sheets[i].height = shaped.heightMm
+            sheets[i].shaped = shaped
+        })
+    }
     const name = params.name || 'nest2d'
 
     // Profil navigateur (valeurs de l'appelant ; défauts documentés).
@@ -1023,7 +1070,18 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     const { capacityReport, inflatedArea } = await import('./capacityClient')
     const cap = capacityReport(
         inputItems.map((it) => ({ coords: it.coords, count: it.count || 0 })),
-        sheets, space)
+        hasShaped
+            ? sheets.map((s) => (s.shaped
+                ? {
+                    width: s.width,
+                    height: s.height,
+                    count: s.count,
+                    usableAreaMm2: s.shaped.usableAreaMm2,
+                    perimeterMm: s.shaped.perimeterMm,
+                }
+                : s))
+            : sheets,
+        space)
     // Plan 2026-09-05 §1.2a (défense navigateur) : refus AVANT le calcul
     // — quelques millisecondes au lieu de 4 min de wasm, aucune pose
     // invalide, les trois leviers partent avec l'erreur (local-fail →
@@ -1044,7 +1102,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     }
     const totalInflated = inputItems.reduce(
         (n, it) => n + inflatedArea(it, space) * (it.count || 0), 0)
-    let isSpp = sheets.length === 1
+    // Tôle importée : TOUJOURS le chemin multi-tôles (BPP), même à une seule
+    // tôle de stock 1 — la bande SPP est un rectangle, elle ne sait pas
+    // éviter une zone interdite ni suivre un contour.
+    let isSpp = !hasShaped
+        && sheets.length === 1
         && totalPartArea > 0
         && totalInflated <= sheetArea * SPP_MAX_AREA_RATIO
         && (totalStock === 1 || leftOnly)
@@ -1067,6 +1129,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
 
     let instance
     let containerMapBack = null
+    let shapedSheets = null
     let maxStripWidth
     if (isSpp) {
         instance = { name, items: jaguarItems, strip_height: sheets[0].height }
@@ -1083,14 +1146,29 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // V11 (vérif 2026-09-04) : coût ∝ surface (round(aire/aire_min × 100)),
         // miroir main.py — min(cost, loss) à l'ouverture choisit la plus
         // petite tôle qui admet l'item.
-        const minArea = Math.min(...nonEmpty.map((s) => Number(s.width) * Number(s.height)))
+        // Tôle importée : l'aire UTILE (contour moins zones interdites) fait le
+        // coût, comme width × height pour un rectangle.
+        const binArea = (s) => (s.shaped ? s.shaped.usableAreaMm2 : Number(s.width) * Number(s.height))
+        // Aire utile d'une tôle importée nulle ou non finie : aucun coût
+        // fini n'existe (division par zéro) — arrêt avant tout moteur.
+        if (nonEmpty.some((s) => s.shaped && !(Number.isFinite(binArea(s)) && binArea(s) > 0))) {
+            throw new Error('sheet_shape_missing')
+        }
+        const minArea = Math.min(...nonEmpty.map(binArea))
         instance = {
             name,
             items: jaguarItems,
             bins: nonEmpty.map((s, i) => ({
-                ...buildBin(i, s.count, s.width, s.height),
-                cost: Math.max(1, Math.round((Number(s.width) * Number(s.height)) / minArea * 100)),
+                ...buildBin(i, s.count, s.width, s.height, s.shaped || null),
+                cost: Math.max(1, Math.round(binArea(s) / minArea * 100)),
             })),
+        }
+        if (hasShaped) {
+            shapedSheets = nonEmpty
+                .map((s, i) => (s.shaped
+                    ? { id: i, usableAreaMm2: s.shaped.usableAreaMm2, perimeterMm: s.shaped.perimeterMm }
+                    : null))
+                .filter(Boolean)
         }
         containerMapBack = nonEmpty.length !== sheets.length
             ? nonEmpty.map((s, eid) => [eid, s.formatId])
@@ -1212,6 +1290,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     }
     if (isSpp) engineConfig.max_strip_width = maxStripWidth
     if (directions) engineConfig.biases = directions
+    // Tôle importée : la finition de la tôle partielle (bpp/mod.rs::
+    // finish_partial_sheet) refait la dernière tôle en bande dans son
+    // RECTANGLE englobant — hors contour, dans les zones interdites. Éteinte
+    // ici ; localPool la garde éteinte pour les walks ET pour la fusion.
+    if (hasShaped) engineConfig.finish_partial_sheet = false
     // §19.3 : indexé par l'id de l'instance RÉSOLUE. Si la réduction J-085
     // a réindexé (meta.idMap : nouvel id → id d'origine), les clés suivent
     // — sinon un trou serait gardé sur la mauvaise pièce (piège #3b).
@@ -1277,6 +1360,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         fillHoles: Boolean(fillHoles),
         outputUnit,
         addOutShape,
+        // Tôle importée : quels conteneurs (id moteur) ne sont pas des
+        // rectangles. ADDITIF — la clé n'existe pas pour un job rectangulaire.
+        // Les passes qui posent ou déplacent des pièces en croyant la tôle
+        // pleine (grille, bandes résiduelles) la lisent pour s'abstenir.
+        ...(shapedSheets?.length ? { shapedSheets } : {}),
         // Lot J4 — constats de réserve d'amorce. ADDITIF et vide pour tout
         // job sans `.job` : le champ n'existe même pas, donc rien ne change
         // pour les jobs ordinaires ni pour les anciens résultats relus.

@@ -1056,6 +1056,125 @@ def main_sheets_curved():
         ],
     )
 
+    # --- Splines à formes rares (tôle) ---------------------------------------
+    # Références : la courbe d'ezdxf (BSpline.point) échantillonnée densément sur
+    # son DOMAINE VALIDE [nœuds[degré], nœuds[nb de points]] (poids compris).
+    import numpy as np
+    from ezdxf.math import closed_uniform_bspline
+
+    def true_ring(e):
+        t = e.construction_tool()
+        k = list(t.knots())
+        ts = np.linspace(k[t.degree], k[len(t.control_points)], 20001)
+        return [(v.x, v.y) for v in (t.point(x) for x in ts)]
+
+    def ring_bbox(ring):
+        xs = [q[0] for q in ring]
+        ys = [q[1] for q in ring]
+        return [min(xs), min(ys), max(xs), max(ys)]
+
+    def add_bbox(name, idx, ring):
+        refs[name][idx]["bbox"] = ring_bbox(ring)
+
+    spline_cps = [(0, 0), (400, -200), (800, 0), (1000, 300), (800, 600), (400, 800), (0, 600), (-200, 300)]
+    spline_w = [1, 2, 1, 0.5, 1, 3, 1, 0.7]
+
+    # SPLINE fermée à points d'AJUSTEMENT seuls (aucun point de contrôle) + un
+    # disque : le lecteur partagé la retire sans rien dire. La tôle doit en rendre
+    # compte (skippedEntities, avertissement) ; seul le disque est un contour.
+    doc = new_doc()
+    msp = doc.modelspace()
+    fit_closed = msp.add_spline(
+        [(0, 0), (400, -60), (800, 0), (900, 300), (800, 600), (400, 700), (0, 600), (-80, 300)]
+    )
+    fit_closed.closed = True
+    msp.add_circle((400, 300), 80)
+    save_new(doc, "spline_fit_closed.dxf")
+    record("spline_fit_closed", [(1, "disc r80 (fit spline dropped)", math.pi * 80 * 80, "analytic")])
+
+    # Même chose, spline OUVERTE à tangentes de départ et d'arrivée, refermée par
+    # trois LINE : le contour est un rectangle fermé par une courbe qui manque.
+    doc = new_doc()
+    msp = doc.modelspace()
+    ft = msp.add_spline([(0, 0), (300, -100), (700, -60), (900, 200)])
+    ft.dxf.start_tangent = (1, -0.5, 0)
+    ft.dxf.end_tangent = (0.3, 1, 0)
+    msp.add_line((900, 200), (900, 500))
+    msp.add_line((900, 500), (0, 500))
+    msp.add_line((0, 500), (0, 0))
+    msp.add_circle((450, 250), 60)
+    save_new(doc, "spline_fit_open_tangents.dxf")
+    record("spline_fit_open_tangents", [(1, "disc r60 (fit spline dropped)", math.pi * 60 * 60, "analytic")])
+
+    # SPLINE fermée PÉRIODIQUE (nœuds uniformes non bloqués, 3 points rejoués) :
+    # la courbe n'existe que sur [nœuds[3], nœuds[11]].
+    doc = new_doc()
+    msp = doc.modelspace()
+    per = msp.add_spline()
+    per.apply_construction_tool(closed_uniform_bspline(spline_cps, order=4))
+    per.closed = True
+    msp.add_circle((400, 300), 60)
+    save_new(doc, "spline_periodic_closed.dxf")
+    ring = true_ring(per)
+    record(
+        "spline_periodic_closed",
+        [(1, "periodic spline", poly_area(ring), "ezdxf point, valid domain"),
+         (2, "circle r60", math.pi * 60 * 60, "analytic")],
+    )
+    add_bbox("spline_periodic_closed", 0, ring)
+
+    # Périodique ET rationnelle (poids non uniformes).
+    doc = new_doc()
+    msp = doc.modelspace()
+    perr = msp.add_spline()
+    perr.apply_construction_tool(closed_uniform_bspline(spline_cps, order=4))
+    perr.dxf.flags = perr.dxf.flags | 1 | 2 | 4
+    perr.weights = [spline_w[i % 8] for i in range(len(perr.control_points))]
+    msp.add_circle((400, 300), 60)
+    save_new(doc, "spline_periodic_rational.dxf")
+    ring = true_ring(perr)
+    record(
+        "spline_periodic_rational",
+        [(1, "periodic rational", poly_area(ring), "ezdxf point, valid domain"),
+         (2, "circle r60", math.pi * 60 * 60, "analytic")],
+    )
+    add_bbox("spline_periodic_rational", 0, ring)
+
+    # Fermée rationnelle à nœuds bloqués (premier point rejoué à la fin).
+    doc = new_doc()
+    msp = doc.modelspace()
+    cr = msp.add_rational_spline(spline_cps + [spline_cps[0]], spline_w + [spline_w[0]], degree=3)
+    cr.closed = True
+    msp.add_circle((400, 300), 60)
+    save_new(doc, "spline_closed_rational.dxf")
+    ring = true_ring(cr)
+    record(
+        "spline_closed_rational",
+        [(1, "closed rational", poly_area(ring), "ezdxf point, valid domain"),
+         (2, "circle r60", math.pi * 60 * 60, "analytic")],
+    )
+    add_bbox("spline_closed_rational", 0, ring)
+
+    # Cercle de rayon 300 en NURBS (degré 2, poids sqrt(2)/2) : forme analytique.
+    s2 = math.sqrt(2) / 2
+    rr_ = 300
+    cp = [(rr_, 0), (rr_, rr_), (0, rr_), (-rr_, rr_), (-rr_, 0), (-rr_, -rr_), (0, -rr_), (rr_, -rr_), (rr_, 0)]
+    doc = new_doc()
+    msp = doc.modelspace()
+    msp.add_rational_spline(
+        [(400 + x, 400 + y) for x, y in cp],
+        [1, s2, 1, s2, 1, s2, 1, s2, 1],
+        degree=2,
+        knots=[0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
+    )
+    msp.add_circle((400, 400), 50)
+    save_new(doc, "spline_rational_circle.dxf")
+    record(
+        "spline_rational_circle",
+        [(1, "nurbs circle r300", math.pi * 300 * 300, "analytic"),
+         (2, "circle r50", math.pi * 50 * 50, "analytic")],
+    )
+
     with open(os.path.join(SHEETS_OUT, "reference_areas.json"), "w", encoding="utf-8", newline="\n") as fh:
         json.dump(refs, fh, indent=2)
         fh.write("\n")

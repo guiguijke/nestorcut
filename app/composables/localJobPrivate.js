@@ -45,6 +45,10 @@ async function buildGridAlternative(jobSlug, payload, result, { onZone, concurre
     const instance = payload?.instance || {}
     const items = instance.items || []
     if (!items.length || Array.isArray(instance.bins)) return null
+    // Tôle importée : toujours BPP (donc déjà écartée ci-dessus) ; garde
+    // explicite pour qu'un payload SPP à tôle à forme n'obtienne jamais de
+    // grille rectangulaire.
+    if (Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length) return null
     const sheetW = Number(payload?.engineConfig?.max_strip_width) || 0
     const sheetH = Number(instance.strip_height) || 0
     if (sheetW <= 0 || sheetH <= 0) return null
@@ -372,6 +376,12 @@ async function buildClientPayload(meta) {
         {
             openHoles: (coords, holes, spaceMm) => geoOpenHoles(coords, holes, spaceMm),
             pinwheelCapacity: (ring, coords, spaceMm, allowed) => geoPinwheelCapacity(ring, coords, spaceMm, allowed),
+            // Tôle importée : la forme se relit dans le navigateur (jamais du
+            // serveur). Importé seulement si un shapeId est présent.
+            getSheetRecord: async (slug) => {
+                const { getSheet } = await import('./localSheetsStore')
+                return getSheet(slug)
+            },
         },
     )
     // Lot J4 — de quoi réécrire un `.job` SheetCam à la fin du solve : le
@@ -471,6 +481,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const tooLarge = e?.__tooLarge || null
             const spacingTooLarge = e?.__spacingTooLarge || null
             const errorCode = e?.message === 'local_geometry_missing' ? 'geometry_missing'
+                : e?.message === 'sheet_shape_missing' ? 'sheet_shape_missing'
                 : isCapacity ? 'capacity_exceeded'
                 : tooLarge ? 'part_too_large'
                 : spacingTooLarge ? 'spacing_too_large'
@@ -723,11 +734,20 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const { userMaxSpacing } = await import('./localPayloadBuilder')
             const inst = payload?.instance || {}
             const sheets = Array.isArray(inst.bins)
-                ? inst.bins.map((b) => {
+                ? inst.bins.map((b, bi) => {
                     const outer = b.shape?.data?.outer || []
                     let w = 0, h = 0
                     for (const [x, y] of outer) { w = Math.max(w, x); h = Math.max(h, y) }
-                    return { width: w, height: h, count: Number(b.stock) || 1 }
+                    // Tôle importée : l'aire utile, pas la boîte.
+                    const shaped = (payload?.shapedSheets || []).find((s) => s.id === bi)
+                    return {
+                        width: w,
+                        height: h,
+                        count: Number(b.stock) || 1,
+                        ...(shaped
+                            ? { usableAreaMm2: shaped.usableAreaMm2, perimeterMm: shaped.perimeterMm }
+                            : {}),
+                    }
                 })
                 : [{ width: sheetWidth, height: sheetHeight, count: 1 }]
             const spaceMm = Number(payload?.engineConfig?.min_item_separation) || 0

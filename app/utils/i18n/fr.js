@@ -300,6 +300,7 @@ export default {
     'privacy.status.cloud': "Téléchargez vos DXF — sources et résultats sont effacés après 24 h.",
     'privacy.status.vault': "Fichiers chiffrés chez nous. Sans le fichier-clé, personne ne peut les lire — y compris nous, hors session de travail.",
     'localImport.missingGeometry': "Ces pièces sont dans l'autre navigateur. Réimportez-les ici — rien n'a été envoyé chez nous.",
+    'localImport.missingSheetShape': "La tôle importée de ce calcul est dans l'autre navigateur. Réimportez-la ici — rien n'a été envoyé chez nous.",
     'localImport.dwgRejected': "Les fichiers DWG sont convertis sur nos serveurs — choisis « Nos serveurs » pour ce fichier.",
     'localImport.unsupportedType': "Type de fichier non supporté — DXF ou SVG uniquement sur cet appareil.",
     'localImport.parseError': "Ce fichier n'a pas pu être analysé dans le navigateur — essayez « Nos serveurs ».",

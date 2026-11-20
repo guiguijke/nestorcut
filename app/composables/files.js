@@ -228,6 +228,10 @@ function createFilesState() {
                         width: toMm(sheet.width),
                         height: toMm(sheet.height),
                         count: Number(sheet.count),
+                        // Tôle importée d'un DXF : l'identifiant opaque (slug du
+                        // dossier local) et RIEN d'autre — ni son nom, ni sa
+                        // forme, qui restent dans le navigateur.
+                        ...(sheet.shapeId ? { shapeId: String(sheet.shapeId) } : {}),
                     })),
                     // Legacy mirror of the first sheet — older workers/APIs only
                     // understand width/height/sheetCount.

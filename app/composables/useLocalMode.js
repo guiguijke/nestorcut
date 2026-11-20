@@ -66,6 +66,8 @@ export function useLocalMode(projectSlug) {
         }
         // J-090 : géométrie d'un projet local absente de CE navigateur.
         if (err === 'geometry_missing') return t('localImport.missingGeometry')
+        // Tôle importée absente de CE navigateur (ou inutilisable : aire utile nulle).
+        if (err === 'sheet_shape_missing') return t('localImport.missingSheetShape')
         // Lot A1 (audit P3-4) : pièce/bloc trop grand pour toute tôle
         // déclarée à cet espacement — le message NOMME le fichier et son
         // étendue mesurée, comme item_geometry nomme sa pièce. Jamais le

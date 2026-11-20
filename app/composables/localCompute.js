@@ -90,7 +90,12 @@ export function runInWorker(jobSlug, payload, { onLive } = {}) {
         getWorker().postMessage({
             jobSlug,
             instance: payload.instance,
-            engineConfig: payload.engineConfig,
+            // Tôle importée : finition de tôle partielle éteinte aussi sur ce
+            // chemin mono-walk (le builder l'a déjà éteinte ; garde si un
+            // payload arrive d'ailleurs). Inchangé pour un job rectangulaire.
+            engineConfig: Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
+                ? { ...payload.engineConfig, finish_partial_sheet: false }
+                : payload.engineConfig,
             seed: payload.engineConfig?.prng_seed ?? '0',
             live: Boolean(onLive),
         })

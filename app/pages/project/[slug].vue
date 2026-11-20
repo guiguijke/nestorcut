@@ -474,6 +474,7 @@ watch(
             ? (p.error === 'memory_cap' ? 'memory_cap'
               : p.error === 'entity_limit' ? 'entity_limit'
               : p.error === 'geometry_missing' ? 'geometry_missing'
+              : p.error === 'sheet_shape_missing' ? 'sheet_shape_missing'
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
               : p.error === 'item_geometry' ? 'item_geometry'

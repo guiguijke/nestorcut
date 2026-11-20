@@ -878,7 +878,18 @@ function postMerge(jobSlug, pool, payload) {
             // parse EngineConfig du merge exige un u64 — et le passer en
             // number le mangle. Le merge ne cherche pas (la seed ne sert
             // qu'aux walks, déjà joués) : placeholder 0 documenté.
-            engineConfig: { ...payload?.engineConfig, prng_seed: 0 },
+            engineConfig: {
+                ...payload?.engineConfig,
+                prng_seed: 0,
+                // Tôle importée : la finition de la tôle partielle repackerait
+                // dans le rectangle englobant (hors contour, dans les zones
+                // interdites). Le builder l'éteint déjà ; on la garde éteinte
+                // ici aussi, pour qu'aucun payload venu d'ailleurs ne la
+                // rallume à la fusion. Absent pour un job rectangulaire.
+                ...(Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
+                    ? { finish_partial_sheet: false }
+                    : {}),
+            },
             runs,
             biases: payload?.engineConfig?.biases || [],
             n_alternatives: payload?.engineConfig?.n_alternatives,

@@ -376,7 +376,7 @@ describe('files.js — tôle importée', () => {
         expect(store.getters.params.sheets.map((s) => s.shapeId)).toEqual([undefined, undefined])
     })
 
-    it('corps POST /nest : sheets = { width, height, count } exactement, aucune fuite de shapeId/nom/géométrie', async () => {
+    it('corps POST /nest : { width, height, count } + shapeId (chaîne courte) pour la tôle importée ; jamais de nom ni de géométrie', async () => {
         store.actions.addSheetFromShape(record())
         store.actions.updateSheet(1, { count: '2' })
         await store.actions.nest('p')
@@ -386,12 +386,14 @@ describe('files.js — tôle importée', () => {
         const body = JSON.parse(text)
         expect(body.params.sheets).toEqual([
             { width: 1000, height: 2000, count: 1 },
-            { width: 123.5, height: 60, count: 2 },
+            { width: 123.5, height: 60, count: 2, shapeId: 'shape-1' },
         ])
-        for (const sheet of body.params.sheets) {
-            expect(Object.keys(sheet).sort()).toEqual(['count', 'height', 'width'])
-        }
-        for (const leak of ['shape-1', 'Disque 100', 'shapeId', 'contours', 'forbidden', 'ring', 'geometryKey']) {
+        // La tôle ordinaire n'a toujours que trois clés ; l'importée en a une de plus, et une seule.
+        expect(Object.keys(body.params.sheets[0]).sort()).toEqual(['count', 'height', 'width'])
+        expect(Object.keys(body.params.sheets[1]).sort()).toEqual(['count', 'height', 'shapeId', 'width'])
+        expect(typeof body.params.sheets[1].shapeId).toBe('string')
+        expect(body.params.sheets[1].shapeId.length).toBeLessThanOrEqual(64)
+        for (const leak of ['Disque 100', 'contours', 'forbidden', 'ring', 'geometryKey']) {
             expect(text).not.toContain(leak)
         }
     })

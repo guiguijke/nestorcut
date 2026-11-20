@@ -100,5 +100,95 @@
       "area_mm2": 1800.0,
       "method": "analytic"
     }
+  ],
+  "spline_fit_closed": [
+    {
+      "depth": 1,
+      "label": "disc r80 (fit spline dropped)",
+      "area_mm2": 20106.192982974677,
+      "method": "analytic"
+    }
+  ],
+  "spline_fit_open_tangents": [
+    {
+      "depth": 1,
+      "label": "disc r60 (fit spline dropped)",
+      "area_mm2": 11309.733552923255,
+      "method": "analytic"
+    }
+  ],
+  "spline_periodic_closed": [
+    {
+      "depth": 1,
+      "label": "periodic spline",
+      "area_mm2": 687333.322133329,
+      "method": "ezdxf point, valid domain",
+      "bbox": [
+        -133.33333333333331,
+        -133.33333333333331,
+        933.3333333333333,
+        733.3333333333333
+      ]
+    },
+    {
+      "depth": 2,
+      "label": "circle r60",
+      "area_mm2": 11309.733552923255,
+      "method": "analytic"
+    }
+  ],
+  "spline_periodic_rational": [
+    {
+      "depth": 1,
+      "label": "periodic rational",
+      "area_mm2": 684005.2052925681,
+      "method": "ezdxf point, valid domain",
+      "bbox": [
+        -116.66666666666667,
+        -160.0,
+        900.0,
+        771.4285714285714
+      ]
+    },
+    {
+      "depth": 2,
+      "label": "circle r60",
+      "area_mm2": 11309.733552923255,
+      "method": "analytic"
+    }
+  ],
+  "spline_closed_rational": [
+    {
+      "depth": 1,
+      "label": "closed rational",
+      "area_mm2": 671637.5785639234,
+      "method": "ezdxf point, valid domain",
+      "bbox": [
+        -85.20535301428184,
+        -149.00928560549147,
+        899.9999977497625,
+        771.4285703265812
+      ]
+    },
+    {
+      "depth": 2,
+      "label": "circle r60",
+      "area_mm2": 11309.733552923255,
+      "method": "analytic"
+    }
+  ],
+  "spline_rational_circle": [
+    {
+      "depth": 1,
+      "label": "nurbs circle r300",
+      "area_mm2": 282743.3388230814,
+      "method": "analytic"
+    },
+    {
+      "depth": 2,
+      "label": "circle r50",
+      "area_mm2": 7853.981633974483,
+      "method": "analytic"
+    }
   ]
 }

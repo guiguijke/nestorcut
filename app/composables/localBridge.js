@@ -658,7 +658,7 @@ export function expandPacks(parts, packs, layouts) {
  * Mutate les transforms des layouts ; déterministe. Miroir de holefill.py.
  * Validation = promesse exacte du moteur (piège #3) : marge `space` à la
  * paroi du trou et entre fillers (l'inflation ±space/2 des deux côtés). */
-export function applyHoleFill(parts, layouts, space, postPass = null) {
+export function applyHoleFill(parts, layouts, space, postPass = null, sheetShapes = null) {
     // D3 (audit 2026-09-03) : garde non-quart-de-tour — rotateRing traite
     // tout angle non multiple de 90 comme 270 : la validation comparerait
     // des anneaux FAUX et accepterait des poses chevauchantes.
@@ -702,7 +702,9 @@ export function applyHoleFill(parts, layouts, space, postPass = null) {
             rotation: pi.transformation?.rotation ?? 0,
             translation: [...(pi.transformation?.translation || [0, 0])],
         }))
-        const { recovered: got, moved } = _fillOneSheetHoles(layout, byId, margin, deadline)
+        const { recovered: got, moved } = _fillOneSheetHoles(
+            layout, byId, margin, deadline, sheetShapes?.[layouts.indexOf(layout)] || null,
+        )
         if (!got) continue
         const entries = []
         for (const pi of layout.placed_items || []) {
@@ -1005,7 +1007,49 @@ function _sheetViolations(entries, margin, movedIdx = null) {
     return { under, duplicates }
 }
 
-function _fillOneSheetHoles(layout, byId, margin, deadline) {
+/** Tôle importée : formes (contour + zones interdites) des layouts, ALIGNÉES
+ * index par index sur `layouts` (l'identité d'une tôle est son index dans
+ * layouts[], pièges #51/#52 ; son FORMAT est `container_id` = index dans
+ * `instance.bins`, comme `sheetDims` ; `binIds` = ids moteur des layouts d'une
+ * frame live, qui n'en portent pas). `null` pour un job sans tôle importée
+ * (le post-pass garde alors exactement son chemin d'avant) ; une entrée
+ * `null` pour un layout dont le bin est un rectangle. */
+export function sheetShapesForLayouts(payload, layouts, binIds = null) {
+    const shaped = payload?.shapedSheets
+    if (!Array.isArray(shaped) || !shaped.length) return null
+    const ids = new Set(shaped.map((s) => s.id))
+    const bins = payload?.instance?.bins
+    if (!Array.isArray(bins) || !bins.length) return null
+    return (layouts || []).map((l, i) => {
+        // Frame live : les layouts n'ont pas de container_id, l'id moteur du
+        // bin est dans `binIds` (même ordre que layouts).
+        const bin = bins[binIds?.[i] ?? l.container_id ?? 0] || bins[0]
+        const data = bin?.shape?.data
+        if (!bin || !ids.has(bin.id) || !Array.isArray(data?.outer)) return null
+        return { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+    })
+}
+
+/** Une pose candidate viole-t-elle la forme de SA tôle importée ? Hors du
+ * contour, ou à moins de l'espacement d'une zone interdite. Le contact avec
+ * une zone est REFUSÉ même à espacement 0 (distance 0 = refus) : plus strict
+ * que le contact pièce à pièce du piège #57, voulu, une zone interdite n'est
+ * jamais frôlée par un déplacement d'après-calcul. Distance exacte
+ * arête↔arête et containment dans les deux sens (piège #55). */
+function _violatesSheetShape(candMat, shape, margin) {
+    if (!shape) return false
+    if (!candMat.outer.every((v) => _pin(v, shape.outer))) return true
+    const lim = Math.max(0, margin - PAIR_SLACK_MM)
+    const bb = _bbOf(candMat.outer)
+    for (const zone of shape.inner) {
+        if (lim > 0 && _bbGap(bb, _bbOf(zone)) >= lim) continue
+        const d = _materialDist(candMat, { outer: zone, holes: [] }, margin > 0 ? lim : 1e-9)
+        if (margin > 0 ? d < lim : d <= 0) return true
+    }
+    return false
+}
+
+function _fillOneSheetHoles(layout, byId, margin, deadline, shape = null) {
     const entries = [] // {item, pi, poly}
     for (const pi of layout.placed_items || []) {
         const item = byId.get(String(pi.item_id))
@@ -1059,6 +1103,7 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
         if (!item) return false
         const candMat = _placedMaterial(item, pose.rot, pose.lx, pose.ly)
         return !_conflictsWithSheet(candMat, entries, null, margin, index)
+            && !_violatesSheetShape(candMat, shape, margin)
     })
     for (const h of holes) {
         if (!free.length) break
@@ -1098,9 +1143,9 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
                 // contre un trou vide : deux d'entre elles peuvent être
                 // compatibles avec le trou et incompatibles entre elles dès
                 // que la première est posée.
-                if (_conflictsWithSheet(
-                    _placedMaterial(e.item, pose.rot, pose.lx, pose.ly), entries, e, margin, index,
-                )) continue
+                const poseMat = _placedMaterial(e.item, pose.rot, pose.lx, pose.ly)
+                if (_conflictsWithSheet(poseMat, entries, e, margin, index)
+                    || _violatesSheetShape(poseMat, shape, margin)) continue
                 pool.shift()
                 e.pi.transformation.rotation = pose.rot
                 e.pi.transformation.translation = [pose.lx, pose.ly]
@@ -1131,10 +1176,9 @@ function _fillOneSheetHoles(layout, byId, margin, deadline) {
             if (polys.some((q) => _polyPolyDist(cand, q) < margin)) { ok = false; break }
             // §17.3 : et contre la TÔLE — les membres du pool sont exclus,
             // ils sont justement ceux qu'on déplace.
-            if (_conflictsWithSheet(
-                _placedMaterial(pool[i].item, PINWHEEL[i], c[0], c[1]),
-                entries, null, margin, index, new Set(pool),
-            )) {
+            const wheelMat = _placedMaterial(pool[i].item, PINWHEEL[i], c[0], c[1])
+            if (_conflictsWithSheet(wheelMat, entries, null, margin, index, new Set(pool))
+                || _violatesSheetShape(wheelMat, shape, margin)) {
                 ok = false
                 break
             }
@@ -1413,8 +1457,19 @@ export function decorateLiveLayout(evt, payload) {
         // fillHoles=false (promesse UI « keep cutouts empty ») : pas de
         // post-pass de déplacement des fillers vers les trous — le serveur
         // gate déjà le sien via has_holes (main.py). D7 : gate hasHoles.
-        if (holesGateOpen(payload, parts)) {
-            holesFilled += applyHoleFill(parts, layouts, space) || 0
+        // Tôle importée : dans une frame live, `bin` est le RANG de la tôle
+        // (bpp/mod.rs::layout_event énumère les layouts), pas son format — on
+        // ne sait donc pas quelle forme porte une tôle dès qu'il y a deux
+        // formats. Un seul format : toutes les tôles ont SA forme. Plusieurs
+        // formats : pas de hole-fill sur l'aperçu (le résultat final, lui,
+        // connaît le format de chaque tôle par container_id).
+        const shapedLive = Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length > 0
+        const oneFormat = (payload?.instance?.bins?.length || 0) === 1
+        if (holesGateOpen(payload, parts) && (!shapedLive || oneFormat)) {
+            const liveShapes = shapedLive
+                ? sheetShapesForLayouts(payload, layouts, layouts.map(() => 0))
+                : null
+            holesFilled += applyHoleFill(parts, layouts, space, null, liveShapes) || 0
         }
         const items = _layoutsToLiveItems(layouts, bins, isBpp)
         const byId = new Map(parts.map((p) => [String(p.id), p]))
@@ -1600,7 +1655,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             let holeFillMs = 0
             if (!selfContained && holesGateOpen(payload, parts)) {
                 const t0 = Date.now()
-                holeFillRecovered = applyHoleFill(parts, layouts, space, holeFillDiag)
+                holeFillRecovered = applyHoleFill(
+                    parts, layouts, space, holeFillDiag, sheetShapesForLayouts(payload, layouts),
+                )
                 holeFillMs = Date.now() - t0
             }
             const partsById0 = new Map(parts.map((p2) => [String(p2.id), p2]))
@@ -1646,7 +1703,12 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             // derrière elle (miroir main.py).
             const finishKept = (alt.finish && alt.finish.kept) || null
             if (finishKept === 'spp') postPass.finishKept = 'spp'
-            if (!selfContained && !alt.structural && finishKept !== 'spp'
+            // Tôle importée : les bandes résiduelles (et le hole-fill qui les
+            // suit) découpent des rectangles dans la boîte de la tôle comme si
+            // elle était pleine — elles déplaceraient des pièces hors du
+            // contour ou dans une zone interdite. Sautées pour tout le job.
+            const shapedJob = Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length > 0
+            if (!selfContained && !alt.structural && finishKept !== 'spp' && !shapedJob
                 && ((payload?.problem || 'spp') !== 'spp' || layouts.length >= 2)) {
                 fillResidualBands(parts, layouts, space, payload, postPass)
                 // A13 (audit 2026-09-03) : le pass résidiel déplace des

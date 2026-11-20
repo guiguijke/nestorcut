@@ -53,6 +53,12 @@ async function appendBppGrid(result, payload) {
     if ((result?.problem || payload?.problem) === 'spp') return null
     const inst = payload?.instance || {}
     if (!Array.isArray(inst.bins) || !inst.bins.length) return null
+    // Tôle importée : la grille structurelle pave des RECTANGLES de la tôle
+    // (largeur × hauteur de la boîte) — elle poserait des pièces hors du
+    // contour et dans les zones interdites. Pas d'alternative grille.
+    if (Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length) {
+        return { built: false, skipped: 'shaped_sheet' }
+    }
     const { buildGridLayoutsMulti } = await import('./structureMultiClient')
     const { geoPinwheelCapacity } = await import('./geometryClient')
     const parts = payload?.parts || []

@@ -58,7 +58,19 @@ export default defineEventHandler(async (event) => {
                 rotations: f.rotations || null,
             })),
             params: {
-                sheets: Array.isArray(p.sheets) ? p.sheets : null,
+                // Liste blanche : dimensions, stock et, pour une tôle importée,
+                // son identifiant opaque (chaîne courte). Jamais un nom, jamais
+                // une forme, même si un document plus ancien en portait.
+                sheets: Array.isArray(p.sheets)
+                    ? p.sheets.map((s) => ({
+                        width: s?.width,
+                        height: s?.height,
+                        count: s?.count,
+                        ...(typeof s?.shapeId === 'string' && s.shapeId.length <= 64
+                            ? { shapeId: s.shapeId }
+                            : {}),
+                    }))
+                    : null,
                 width: p.width ?? null,
                 height: p.height ?? null,
                 sheetCount: p.sheetCount ?? null,
