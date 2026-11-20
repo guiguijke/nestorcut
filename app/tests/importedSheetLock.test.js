@@ -7,7 +7,7 @@ import {
     resultHasImportedSheet,
     sheetGateModel,
 } from '../utils/sheetDownloadGate'
-import { importedSheetLockVisible, sheetDownloadState } from '../utils/sheetDownloadState'
+import { importedSheetLockVisible, relaunchFreeNoteKind, sheetDownloadState } from '../utils/sheetDownloadState'
 import { effectiveSheetCap, isSheetFileAllowed } from '../../shared/constants/sheetDownload.constants'
 import {
     downloadLocalDxf,
@@ -206,7 +206,7 @@ describe('verrou lisible à l’écran et chaînes', () => {
         const read2 = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
         expect(read2('../components/UserResultItem.vue')).toContain('importedSheet: g.importedLock === true')
         expect(read2('../components/ResultModal.vue')).toContain('importedSheet: gate.importedLock === true')
-        expect(read2('../components/ResultModal.vue')).toContain('!unref(hasImportedSheet) && freeDownloadNoteVisible(')
+        expect(read2('../components/ResultModal.vue')).toContain('resultImported: unref(hasImportedSheet)')
         const page = read2('../pages/project/[slug].vue')
         expect(page).toContain('Boolean(s?.shapeId) && Number(s?.count) > 0')
         expect(page).toContain('v-if="ctaImportedNote && !capacityPanel"')
@@ -237,5 +237,32 @@ describe('verrou lisible à l’écran et chaînes', () => {
     })
     it('fr : jamais d’espace simple avant : ; ? !', () => {
         for (const k of KEYS) expect(/ [:;?!]/.test(fr[k])).toBe(false)
+    })
+})
+
+// Règle du propriétaire (20/11) : 2 tôles rectangulaires en Free ; les
+// fichiers d'un calcul à tôle importée sont pour les comptes payants. La note
+// d'avant relance doit dire l'une ou l'autre, jamais la fausse.
+describe('note Free avant de relancer un calcul', () => {
+    it('compte ouvert : aucune note', () => {
+        expect(relaunchFreeNoteKind('enabled', { sheetsNeeded: 9, projectImported: true })).toBeNull()
+    })
+    it('tôles rectangulaires : la note des 2 premières tôles, au-delà du plafond seulement', () => {
+        expect(relaunchFreeNoteKind('locked', { sheetsNeeded: 3 })).toBe('first_sheets')
+        expect(relaunchFreeNoteKind('locked', { sheetsNeeded: 2 })).toBeNull()
+        expect(relaunchFreeNoteKind('locked', {})).toBeNull()
+    })
+    it('refus de capacité sur un projet à tôle importée : la note « tôle importée », jamais « les 2 premières »', () => {
+        expect(relaunchFreeNoteKind('locked', { sheetsNeeded: 3, projectImported: true })).toBe('imported')
+        expect(relaunchFreeNoteKind('locked', { sheetsNeeded: 1, projectImported: true })).toBe('imported')
+    })
+    it('tôle importée déjà dite par le verrou du résultat : pas de seconde note', () => {
+        expect(relaunchFreeNoteKind('locked', { sheetsNeeded: 3, resultImported: true, projectImported: true })).toBeNull()
+    })
+    it('la fenêtre de résultat lit les réglages actuels du projet du job', () => {
+        const src = readFileSync(fileURLToPath(new URL('../components/ResultModal.vue', import.meta.url)), 'utf8')
+        expect(src).toContain('relaunchFreeNoteKind(unref(downloadState)')
+        expect(src).toContain('projectImported: unref(projectHasImportedSheet)')
+        expect(src).toContain("if (kind === 'imported') return t('nest.importedSheetNote')")
     })
 })

@@ -60,7 +60,7 @@ import { onMounted, nextTick } from 'vue'
 import { reportExportState } from '~/utils/reportExport'
 import { capacityPanelModel } from '~/utils/capacityPanel'
 import { flagOn } from '~/utils/runtimeFlag'
-import { freeDownloadNoteVisible, maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
+import { maxDownloadableSheet, relaunchFreeNoteKind, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
     altJobNames,
     altLayoutCount,
@@ -834,13 +834,28 @@ const failureDetail = computed(() => failureDetailText(
     (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocal), params: params || null }),
     unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
 ))
-// D26 : information Free avant de relancer un calcul de plus de 2 tôles.
-// Tôle importée reconnue sur le résultat : aucun fichier n'est livré en Free,
-// « les 2 premières tôles » serait faux, la note est retirée (comme la page).
-const freeDownloadNote = computed(() =>
-    (!unref(hasImportedSheet) && freeDownloadNoteVisible(unref(downloadState), unref(capacityPanel)?.levers?.sheetsNeeded)
-        ? t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP })
-        : ''))
+// D26 : information Free avant de relancer un calcul. La règle (propriétaire,
+// 20/11) : en Free, les 2 premières tôles d'un calcul à tôles rectangulaires ;
+// les fichiers d'un calcul à tôle importée sont pour les comptes payants.
+//  - tôle importée reconnue sur le résultat : la phrase du verrou le dit déjà,
+//    pas de seconde note ;
+//  - refus de capacité (ni rapport ni frame : le résultat ne dit rien) : la
+//    relance partira des réglages ACTUELS du projet — s'ils portent une tôle
+//    importée qui servira, c'est la note « tôle importée », jamais « les 2
+//    premières tôles » ;
+//  - sinon la note des 2 premières tôles, comme avant.
+const projectHasImportedSheet = computed(() => unref(onJobProject)
+    && (filesStore.getters.params?.sheets || []).some((s) => Boolean(s?.shapeId) && Number(s?.count) > 0))
+const freeDownloadNote = computed(() => {
+    const kind = relaunchFreeNoteKind(unref(downloadState), {
+        sheetsNeeded: unref(capacityPanel)?.levers?.sheetsNeeded,
+        resultImported: unref(hasImportedSheet),
+        projectImported: unref(projectHasImportedSheet),
+    })
+    if (kind === 'imported') return t('nest.importedSheetNote')
+    if (kind === 'first_sheets') return t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP })
+    return ''
+})
 
 const onUnlockSheets = (surface) => {
     if (unref(checkoutChecking)) return

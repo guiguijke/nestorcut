@@ -44,3 +44,20 @@ export function freeDownloadNoteVisible(state, sheetsNeeded) {
 export function importedSheetLockVisible(state, hasImportedSheet) {
     return state === 'locked' && Boolean(hasImportedSheet)
 }
+
+/** Note Free montrée avant de RELANCER un calcul depuis un résultat (D26).
+ * Règle du propriétaire (20/11) : en Free, les 2 premières tôles d'un calcul à
+ * tôles rectangulaires ; les fichiers d'un calcul à tôle importée sont pour
+ * les comptes payants.
+ *  - compte ouvert : aucune note ;
+ *  - tôle importée reconnue SUR le résultat : la phrase du verrou le dit déjà,
+ *    aucune seconde note ;
+ *  - sinon, si le projet qui sera relancé porte une tôle importée qui servira
+ *    (cas du refus de capacité, qui n'a ni rapport ni frame) : 'imported' ;
+ *  - sinon 'first_sheets' si le calcul demande plus de tôles que le plafond. */
+export function relaunchFreeNoteKind(state, { sheetsNeeded, resultImported = false, projectImported = false } = {}) {
+    if (state !== 'locked') return null
+    if (resultImported) return null
+    if (projectImported) return 'imported'
+    return freeDownloadNoteVisible(state, sheetsNeeded) ? 'first_sheets' : null
+}
