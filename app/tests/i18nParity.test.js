@@ -44,6 +44,18 @@ const identicalAllowed = (v) => {
     return IDENTICAL_OK.some((w) => s === w || s.startsWith(w + ' ') || s.startsWith(w + ' —') || s.startsWith(w + ' :'))
 }
 
+describe('dictionnaires : caractères', () => {
+    it('aucun caractère de contrôle dans une valeur', () => {
+        const bad = []
+        for (const [lang, dict] of Object.entries(DICTS)) {
+            for (const [key, value] of Object.entries(dict)) {
+                if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(String(value))) bad.push(`${lang}:${key}`)
+            }
+        }
+        expect(bad).toEqual([])
+    })
+})
+
 describe('L0 — parité des clés de langue', () => {
     it('chaque clé de la référence existe dans chaque langue livrée', () => {
         const ref = Object.keys(DICTS[DEFAULT_LOCALE])
