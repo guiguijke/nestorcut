@@ -4,6 +4,44 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.18
+
+*FR*
+
+- Offre Unlimited accordée, ou payée dans un autre onglet, pendant que la page est ouverte : la page s'en rend compte quand vous y revenez, ou quand vous cliquez sur un téléchargement verrouillé. Avant, il fallait la recharger.
+- Petite tôle : le repère X/Y dessiné dans un coin suit la taille de la tôle. Sur une tôle de moins de 700 mm, il pouvait couvrir des pièces.
+- Projets « Cet appareil » : l'écran dit maintenant que les pièces et les résultats, gardés dans votre navigateur seulement, peuvent être perdus une fois le navigateur fermé, et sont effacés si vous vous déconnectez. Téléchargez ce que vous voulez garder.
+
+*EN*
+
+- Unlimited plan granted, or paid in another tab, while the page is open: the page notices when you come back to it, or when you click a locked download. Before, you had to reload it.
+- Small sheet: the X/Y marker drawn in a corner now follows the size of the sheet. On a sheet under 700 mm, it could cover parts.
+- "This device" projects: the screen now says that parts and results, kept in your browser only, may be lost once the browser is closed, and are erased if you log out. Download what you want to keep.
+
+*PT*
+
+- Plano Unlimited concedido, ou pago em outra aba, enquanto a página está aberta: a página percebe quando você volta a ela, ou quando você clica em um download bloqueado. Antes, era preciso recarregá-la.
+- Chapa pequena: a marca X/Y desenhada em um canto agora acompanha o tamanho da chapa. Em uma chapa com menos de 700 mm, ela podia cobrir peças.
+- Projetos «Este dispositivo»: a tela agora diz que as peças e os resultados, guardados apenas no seu navegador, podem ser perdidos depois que o navegador é fechado, e são apagados se você sair da conta. Baixe o que quiser guardar.
+
+*IT*
+
+- Piano Unlimited concesso, o pagato in un'altra scheda, mentre la pagina è aperta: la pagina se ne accorge quando ci torni, o quando clicchi su un download bloccato. Prima bisognava ricaricarla.
+- Lamiera piccola: il riferimento X/Y disegnato in un angolo ora segue la dimensione della lamiera. Su una lamiera sotto i 700 mm, poteva coprire dei pezzi.
+- Progetti «Questo dispositivo»: lo schermo dice ora che i pezzi e i risultati, conservati solo nel tuo browser, possono andare persi una volta chiuso il browser, e si cancellano se esci dal tuo account. Scarica ciò che vuoi conservare.
+
+*DE*
+
+- Unlimited-Plan gewährt oder in einem anderen Tab bezahlt, während die Seite geöffnet ist: Die Seite bemerkt es, wenn Sie zu ihr zurückkehren oder wenn Sie auf einen gesperrten Download klicken. Früher musste man sie neu laden.
+- Kleines Blech: Die in einer Ecke gezeichnete X/Y-Markierung folgt jetzt der Größe des Blechs. Auf einem Blech unter 700 mm konnte sie Teile überdecken.
+- Projekte „Dieses Gerät“: Der Bildschirm sagt jetzt, dass Teile und Ergebnisse, die nur in Ihrem Browser liegen, nach dem Schließen des Browsers verloren gehen können und beim Abmelden gelöscht werden. Laden Sie herunter, was Sie behalten möchten.
+
+*ES*
+
+- Plan Unlimited concedido, o pagado en otra pestaña, mientras la página está abierta: la página lo detecta cuando vuelves a ella, o cuando pulsas una descarga bloqueada. Antes, había que recargarla.
+- Chapa pequeña: la marca X/Y dibujada en una esquina ahora sigue el tamaño de la chapa. En una chapa de menos de 700 mm, podía tapar piezas.
+- Proyectos «Este dispositivo»: la pantalla dice ahora que las piezas y los resultados, guardados solo en tu navegador, pueden perderse al cerrar el navegador, y se borran si cierras sesión. Descarga lo que quieras conservar.
+
 ## V0.9.17
 
 *FR*
@@ -17,6 +55,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Offre Free : vous importez la tôle, marquez les zones, imbriquez, et voyez l'aperçu, les contrôles et la densité. Les fichiers de coupe de ces calculs (DXF, ZIP, .job SheetCam) et la vue DXF demandent l'offre Unlimited ; reprendre une chute passe par le fichier de coupe téléchargé, donc par Unlimited.
 - Calcul avec deux formats de tôle : pendant le calcul, les pièces de la plus grande tôle ne sont plus rognées à l'écran, et l'image finale dessine chaque tôle à sa taille.
 - Option « Tracer le contour de la tôle » : son texte d'aide dit maintenant ce qu'elle fait : ajouter un cadre autour des pièces posées (calque OUT_SHAPE). Le contour de la tôle est toujours dans le fichier.
+- Rotations, « Autre » : vous pouvez taper un nombre à plusieurs chiffres, par exemple 12. Avant, le champ disparaissait dès le premier chiffre.
+- Avant le calcul, la vue dessine toutes les tôles déclarées, chacune avec sa forme et à la même échelle, et non plus la première seulement.
+- Une tôle presque carrée, un disque par exemple, n'est plus affichée tournée d'un quart de tour.
 
 *EN*
 
@@ -29,6 +70,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Free plan: you import the sheet, mark the zones, nest, and see the preview, the checks and the density. The cutting files of these nestings (DXF, ZIP, SheetCam .job) and the DXF view require the Unlimited plan; reusing an offcut goes through the downloaded cutting file, so it needs Unlimited.
 - Nesting with two sheet formats: during the nesting, the parts of the larger sheet are no longer cropped on screen, and the final image draws each sheet at its own size.
 - "Draw sheet outline on export" option: its help text now says what it does: it adds a frame around the placed parts (OUT_SHAPE layer). The sheet outline is always in the file.
+- Rotations, "Other": you can type a number with several digits, 12 for example. Before, the field disappeared after the first digit.
+- Before the nesting, the view draws every declared sheet, each with its shape and at the same scale, instead of the first one only.
+- A nearly square sheet, a disc for example, is no longer displayed turned by a quarter turn.
 
 *PT*
 
@@ -41,6 +85,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Plano Free: você importa a chapa, marca as zonas, faz o aninhamento e vê a pré-visualização, as verificações e a densidade. Os arquivos de corte desses cálculos (DXF, ZIP, .job SheetCam) e a vista DXF exigem o plano Unlimited; reaproveitar um retalho passa pelo arquivo de corte baixado, portanto exige o Unlimited.
 - Cálculo com dois formatos de chapa: durante o cálculo, as peças da chapa maior deixam de ser cortadas na tela, e a imagem final desenha cada chapa no seu tamanho.
 - Opção «Desenhar contorno da chapa na exportação»: o texto de ajuda agora diz o que ela faz: adiciona uma moldura em volta das peças colocadas (camada OUT_SHAPE). O contorno da chapa está sempre no arquivo.
+- Rotações, «Outro»: você pode digitar um número com vários dígitos, por exemplo 12. Antes, o campo desaparecia logo após o primeiro dígito.
+- Antes do cálculo, a vista desenha todas as chapas declaradas, cada uma com a sua forma e na mesma escala, e não mais só a primeira.
+- Uma chapa quase quadrada, um disco por exemplo, não é mais exibida girada em um quarto de volta.
 
 *IT*
 
@@ -53,6 +100,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Piano Free: importi la lamiera, segni le zone, fai il nesting e vedi l'anteprima, i controlli e la densità. I file di taglio di questi calcoli (DXF, ZIP, .job SheetCam) e la vista DXF richiedono il piano Unlimited; riprendere un ritaglio passa dal file di taglio scaricato, quindi richiede Unlimited.
 - Calcolo con due formati di lamiera: durante il calcolo, i pezzi della lamiera più grande non vengono più tagliati sullo schermo, e l'immagine finale disegna ogni lamiera alla sua dimensione.
 - Opzione «Disegna il contorno della lamiera all'esportazione»: il suo testo di aiuto ora dice cosa fa: aggiunge una cornice attorno ai pezzi posizionati (livello OUT_SHAPE). Il contorno della lamiera è sempre nel file.
+- Rotazioni, «Altro»: puoi digitare un numero a più cifre, per esempio 12. Prima il campo spariva già alla prima cifra.
+- Prima del calcolo, la vista disegna tutte le lamiere dichiarate, ciascuna con la sua forma e nella stessa scala, e non più solo la prima.
+- Una lamiera quasi quadrata, un disco per esempio, non viene più mostrata ruotata di un quarto di giro.
 
 *DE*
 
@@ -65,6 +115,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Free-Plan: Sie importieren das Blech, markieren die Zonen, verschachteln und sehen die Vorschau, die Prüfungen und die Dichte. Die Schnittdateien dieser Berechnungen (DXF, ZIP, SheetCam-.job) und die DXF-Ansicht erfordern den Unlimited-Plan; ein Restblech weiterzuverwenden geht über die heruntergeladene Schnittdatei und erfordert daher Unlimited.
 - Berechnung mit zwei Blechformaten: Während der Berechnung werden die Teile des größeren Blechs auf dem Bildschirm nicht mehr abgeschnitten, und das Endbild zeichnet jedes Blech in seiner Größe.
 - Option „Blechkontur im Export zeichnen“: Der Hilfetext sagt jetzt, was sie tut: Sie fügt einen Rahmen um die platzierten Teile hinzu (Ebene OUT_SHAPE). Die Blechkontur ist immer in der Datei.
+- Rotationen, „Andere“: Sie können eine mehrstellige Zahl eingeben, zum Beispiel 12. Früher verschwand das Feld schon nach der ersten Ziffer.
+- Vor der Berechnung zeichnet die Ansicht alle angegebenen Bleche, jedes mit seiner Form und im selben Maßstab, nicht mehr nur das erste.
+- Ein fast quadratisches Blech, zum Beispiel eine Scheibe, wird nicht mehr um eine Vierteldrehung gedreht angezeigt.
 
 *ES*
 
@@ -77,6 +130,9 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - Plan Free: importas la chapa, marcas las zonas, haces el anidado y ves la vista previa, las comprobaciones y la densidad. Los archivos de corte de estos cálculos (DXF, ZIP, .job de SheetCam) y la vista DXF requieren el plan Unlimited; reutilizar un sobrante pasa por el archivo de corte descargado, por lo que requiere Unlimited.
 - Cálculo con dos formatos de chapa: durante el cálculo, las piezas de la chapa más grande ya no se recortan en pantalla, y la imagen final dibuja cada chapa a su tamaño.
 - Opción «Dibujar el contorno de la chapa en la exportación»: su texto de ayuda ahora dice lo que hace: añade un marco alrededor de las piezas colocadas (capa OUT_SHAPE). El contorno de la chapa está siempre en el archivo.
+- Rotaciones, «Otra»: puedes escribir un número de varias cifras, por ejemplo 12. Antes, el campo desaparecía tras la primera cifra.
+- Antes del cálculo, la vista dibuja todas las chapas declaradas, cada una con su forma y a la misma escala, y no solo la primera.
+- Una chapa casi cuadrada, un disco por ejemplo, ya no se muestra girada un cuarto de vuelta.
 
 ## V0.9.16
 
