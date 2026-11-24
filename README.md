@@ -26,8 +26,8 @@ License below) — if you want to nest parts, use the hosted service.
 
 - **True-shape nesting engine (Rust)** — separation/compaction with
   simulated annealing and multi-start parallelism (jagua-rs + sparrow)
-- **DXF, SVG & DWG import** — content-signature detection, all conversions
-  run in our own containers
+- **DXF, SVG & DWG import** — content-signature detection; DXF and SVG are read
+  in the browser, only DWG is converted on the server (in our own container)
 - **Hole nesting** — small parts nested inside larger parts' cutouts
 - **Canonical grid alternative** — for rectangular-part jobs: exact
   lattice + successive filled zones + analytic small-part tiling,
@@ -45,7 +45,7 @@ License below) — if you want to nest parts, use the hosted service.
 
 Nuxt 4 (frontend + API) · MongoDB (GridFS) · Python workers · Rust nesting
 engine (native + WebAssembly, in-browser mode included). Architecture:
-`docs/ARCHITECTURE.md` — internal notes for contributors live in `AGENTS.md`.
+`AGENTS.md` §1, which also holds the internal notes for contributors.
 
 ## Credits
 

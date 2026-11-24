@@ -51,7 +51,7 @@ const ROUNDS = Number(option('--rounds', 15))
 // laisse le temps d'écrire l'état avant le rendu suivant.
 const SETTLE_MS = 500
 
-const DXF_DIR = new URL('../docs/cam-validation/', import.meta.url)
+const DXF_DIR = new URL('../workers/geometry/parity/cam-validation/', import.meta.url)
 const DXF = ['_src_simple.dxf', '_src_holed.dxf', '_src_multi.dxf'].map((f) => readFileSync(fileURLToPath(new URL(f, DXF_DIR))))
 const FILE_STEMS = { A: ['Plate', 'Bracket', 'Flange'], B: ['Plate'] }
 

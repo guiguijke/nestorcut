@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * QA import — lot B (docs/PLAN-IMPORT-2026-09-09.md §3) : coureur WASM.
+ * QA import — lot B (PLAN-IMPORT-2026-09-09.md (coffre privé) §3) : coureur WASM.
  *
  * Charge le bundle géométrie du CHEMIN NAVIGATEUR (public/geometry/, produit
  * par workers/geometry/build-wasm.sh, cible wasm-bindgen `web`) et appelle
@@ -34,7 +34,7 @@
  *                                   [--ids <ids.json>] [--quiet]
  *   node scripts/qa-import-wasm.mjs --one <file> --id <id> [--tol 0.01]   (mode enfant)
  *
- * Défauts : --in .testparts  --out docs/qa/import-2026-09-09/wasm
+ * Défauts : --in .testparts  --out .testparts/qa/import-2026-09-09/wasm
  * `--ids` : JSON { "Piece_Trou.DXF": "c07", ... } (nom de fichier -> id du
  * corpus du lot A) ; sans lui, l'id = basename slugifié.
  */
@@ -454,7 +454,7 @@ async function main() {
 
     const inPath = path.resolve(args.in && args.in !== true ? String(args.in) : path.join(ROOT, '.testparts'))
     const outDir = path.resolve(
-        args.out && args.out !== true ? String(args.out) : path.join(ROOT, 'docs', 'qa', 'import-2026-09-09', 'wasm'),
+        args.out && args.out !== true ? String(args.out) : path.join(ROOT, '.testparts', 'qa', 'import-2026-09-09', 'wasm'),
     )
     const timeoutMs = args.timeout && args.timeout !== true ? Number(args.timeout) : 120000
     const quiet = Boolean(args.quiet)

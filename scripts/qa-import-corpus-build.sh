@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Lot A (docs/PLAN-IMPORT-2026-09-09.md §3) — assemblage du corpus d'import.
+# Lot A (PLAN-IMPORT-2026-09-09.md (coffre privé) §3) — assemblage du corpus d'import.
 #
 # Rassemble dans .testparts/corpus/ (gitignoré) les DXF déjà présents sur la
 # machine ou dans les images docker. AUCUN téléchargement. Idempotent.
 # Les fichiers sont nommés <id>__<nom d'origine> : l'id est le préfixe avant
 # le double underscore, le nom d'origine est conservé pour la traçabilité.
 #
-# Sources (voir docs/qa/import-2026-09-09/corpus.md pour provenance/licence) :
+# Sources (voir la note corpus.md du coffre privé pour provenance/licence) :
 #   - .testparts/                       (fichiers du propriétaire)
 #   - C:/Users/.../Projects/SmartTHC    (fichiers du propriétaire)
-#   - docs/cam-validation/              (dépôt, exports NestorCut)
+#   - workers/geometry/parity/cam-validation/              (dépôt, exports NestorCut)
 #   - server/seed/demo/                 (dépôt, corpus de la démo, généré ezdxf)
 #   - workers/geometry/parity/corpus_extra/ (dépôt, fixtures ezdxf synthétiques)
 #   - image docker nest2d-file-processing-worker:dev,
@@ -40,7 +40,7 @@ put "$SMARTTHC/Top Face Marking Final.dxf" "Top_Face_Marking_Final.dxf"
 for f in _src_simple _src_holed _src_multi \
          cam_1_piece_simple cam_2_piece_trous \
          cam_3_multi_rotations_mm cam_4_multi_rotations_inch; do
-  put "$REPO/docs/cam-validation/$f.dxf"
+  put "$REPO/workers/geometry/parity/cam-validation/$f.dxf"
 done
 
 # --- corpus de la démo produit (24 pièces de tôlerie marine)

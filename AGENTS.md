@@ -4,37 +4,26 @@ Guide de l'architecture et **liste des pièges** rencontrés (avec leur règle).
 Objectif : ne jamais refaire ces erreurs. Lis la section Pièges avant de
 toucher au moteur, au worker Python ou au visualizer.
 
-> **Specs (mémoire des décisions) : le dossier `specs/` (gitignored, local)
-> fait foi pour le QUOI et le POURQUOI** — formats d'import, moteur,
-> couleurs, démo, monétisation, vie privée, et le journal chronologique
-> `specs/90-decisions.md`. **Avant de modifier un comportement tranché,
-> vérifie la spec correspondante** ; toute nouvelle décision (ou infirmation
-> d'une ancienne) y est ajoutée avec date et statut — jamais de retour en
-> arrière silencieux. AGENTS.md (ce fichier) reste la référence des pièges
-> techniques ; les specs restent la référence des décisions.
+> **Mémoire des décisions : le coffre Obsidian privé du propriétaire fait foi
+> pour le QUOI et le POURQUOI.** Décisions, spécifications produit, plans,
+> procédures et audits ne sont plus dans ce dépôt. Les commentaires du code
+> qui citent `specs/…` ou `docs/…` désignent des notes de ce coffre (mêmes
+> noms de fichier, conservés comme alias). **Avant de modifier un
+> comportement tranché, demande au propriétaire ou lis la note du coffre** ;
+> ne recrée jamais de plan, de rapport ou d'audit sous `docs/` ou `specs/`.
+> Ce fichier reste la référence des pièges techniques.
 >
-> **Stratégie produit (commitée) : `docs/STRATEGY.md`** — tiers
-> Free/Unlimited/Pro, spectre privacy, rapport matière, codes promo,
-> roadmap 2 phases, avec marqueurs `[prod]` / `[spéc]` / `[conditionnel]`
-> (jamais `[prod]` sur du non-livré). Promesses privacy exactes :
-> `specs/THREAT-MODEL.md` (privé, gitignoré). Posture sécu /
-> pentest : `specs/CYBERSECURITY.md` (privé).
->
-> **Pilotage consolidé : `docs/MASTERPLAN-2026-09-05.md`** (recentré le
-> 2026-09-06) — position : **la référence du nesting dans le navigateur**
-> (pas un CAM ; DXF entrant, DXF sortant, rien ne quitte la machine),
-> règle de tri de tout chantier (§0 : chemin navigateur principal, toute
-> fonction livrée d'abord dessus, un seul code, preuve publique), état des
-> lots, features ordonnées, séquenciation T0-T5, registre des décisions
-> owner, forme des instructions à l'implémenteur (§8). **Mis à jour à
-> chaque grande étape accomplie** — y faire référence avant d'ouvrir un
-> chantier. Carte de tous les documents : `docs/README.md` (vivants à la
-> racine, cycles clos dans `docs/archive/<cycle>/`).
+> **Boussole produit** : la référence du nesting dans le navigateur (pas un
+> CAM : ni G-code ni parcours d'outil ; DXF entrant, DXF sortant, rien ne
+> quitte la machine) ; tout chantier passe d'abord par le chemin navigateur ;
+> un seul code pour tous les chemins. Le dépôt ne garde que
+> `docs/dwg-license.md` et `docs/encryption-premium.spec.md` (voir
+> `docs/README.md`).
 
 ## 1. Architecture
 
-Cartographie complète (topologie, flux, frontières, CI/CD) :
-**`docs/ARCHITECTURE.md`** — référence à jour (2026-08-30).
+Cartographie complète (topologie, flux, frontières, CI/CD) : la note
+`ARCHITECTURE.md` (coffre privé), dont ce chapitre est le résumé tenu à jour.
 
 ```
 app/ (Nuxt 4, UI)  ──► server/ (API Nuxt, entitlement, SSE)  ──► MongoDB
@@ -44,15 +33,15 @@ workers/common         (worker_common: mongo, crypto, worker_loop, tokens)
 workers/nesting/engine (Rust workspace: nest-engine + sparrow vendorisé,
                         jagua-rs = dep crates.io 0.7.2)
 workers/geometry       (workspace Rust dual-target: import/export/métriques
-                        wasm = chemin navigateur, parité PIPELINE-MAP.md)
+                        wasm = chemin navigateur, parité : note PIPELINE-MAP.md, coffre privé)
 admin/                 (back-office Nuxt)
 
-DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
+DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
 - Hetzner CX23 (front + workers + Mongo + Caddy)
 - HOMELAB (serveur maison) : 3 workers nesting « overflow » (tunnel
   WireGuard 100 % Docker, pair dédié, Mongo prod via un proxy WG-only)
   qui consomment la même file — débordement, aucune donnée locale
-  (adresses & procédures : runbook privé specs/infra/, gitignoré)
+  (adresses & procédures : runbook privé, coffre Obsidian)
 - Navigateur : mode THIS DEVICE (moteur wasm, résultats IndexedDB)
 ```
 
@@ -79,7 +68,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
   Noms code ↔ marketing : `free`/`standard`/`privacy` = Free/Unlimited/
   **Pro** (le tier code `privacy` est le Pro « budget moteur max » — le
   vault ZK n'est plus son exclusivité : opt-in tous plans en Phase 1, voir
-  `docs/STRATEGY.md`).
+  STRATEGY.md, coffre privé).
 - **Même qualité pour tous** : arrêt sur plateau partout (BPP : patience
   par walk ; SPP : `PlateauTerminator` sparrow). Le tier ne change que la
   vitesse de délivrance.
@@ -375,7 +364,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     à x unique. Et gardes **granulaires par sous-passe** : une garde
     globale multi-passes jette le travail d'une passe réussie pour la
     régression d'une autre (restore pixel-identical — la cause réelle des
-    « même DXF après plusieurs déploiments » de `docs/archive/2026-08-audits/PACKING-X-100-TROU.md`).
+    « même DXF après plusieurs déploiments » de PACKING-X-100-TROU.md (coffre privé)).
     Un restack accepté sans exiger des colonnes compactes commit des
     layouts troués (métriques de sommets aveugles aux trous internes).
 14e. **La forme des couloirs est un post-pass, pas une métrique solveur** :
@@ -836,7 +825,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     navigateur), aucun worker ne produit de résultat — granter
     `grantedUntil` en base avant le scénario (verrou D-PRV-7 :
     `scripts/validate_vault_dprv7_e2e.sh`).
-35. **Stratégie & tiers : `docs/STRATEGY.md` fait foi** (marqueurs
+35. **Stratégie & tiers : STRATEGY.md (coffre privé) fait foi** (marqueurs
     `[prod]`/`[spéc]`/`[conditionnel]` — ne jamais marquer `[prod]` du
     non-livré). La privacy n'est **jamais une feature payante** : le vault
     ZK est opt-in sur TOUS les plans — le gate `hasPrivacyTier`
@@ -845,7 +834,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     dégradé pour personne (le budget temps est le luxe Pro, pas la qualité
     de base). Toute revendication publique = feature flag vérifié en prod
     avant publication ; les promesses privacy exactes par mode (Local /
-    Serveur / Vault ZK) sont dans `specs/THREAT-MODEL.md` (privé) — ne jamais
+    Serveur / Vault ZK) sont dans THREAT-MODEL.md (coffre privé) — ne jamais
     promettre « nous ne pouvons pas vous lire » en mode serveur.
 36. **Purge GridFS = delete par bucket, jamais un TTL seul** : un index TTL
     sur `<bucket>.files` supprime le doc mais laisse les `.chunks`
@@ -1008,7 +997,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     des DEUX côtés — parité chiffrée moved/AABB JS == Python.
 
 54. **La direction d'un job BPP est un objectif de SOLVEUR, jamais de
-    post-pass (constat 2026-09-09, plan `docs/archive/2026-09-import-eclatement/PLAN-DERNIERE-TOLE-2026-09-09.md`).**
+    post-pass (constat 2026-09-09, plan PLAN-DERNIERE-TOLE-2026-09-09.md, coffre privé).**
     Trois niveaux se cumulaient : (a) le coût du recuit n'a AUCUNE
     direction — `sa.rs::layout_remnant` est la plus grande bande ou L
     libre autour de l'AABB, donc il minimise l'AIRE de l'AABB de la tôle
@@ -1154,7 +1143,7 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
 
 63. **Téléchargement Free = les 2 premières tôles, lues dans le NOM du
     fichier, jamais dans l'index d'un tableau (lot V1, 02/11 ; spec
-    `specs/LOT-V1-TELECHARGEMENT-FREE-2026-11.md`).** Le calcul Free n'a plus
+    LOT-V1-TELECHARGEMENT-FREE-2026-11.md, coffre privé).** Le calcul Free n'a plus
     de plafond (O1) : `MAX_SHEETS_PER_JOB` (1000, 400 `too_many_sheets`) est
     la seule borne, démo comprise. Le verrou porte sur le TÉLÉCHARGEMENT :
     - **Identité de tôle** : `_part_N.dxf` / `_toleN.job`, parseur unique
@@ -1259,8 +1248,8 @@ DÉPLOIEMENT (voir docs/ARCHITECTURE.md §1 pour le schéma) :
     `server/tests/googleLoginSession.test.js`.
 
 66. **Tôle importée d'un DXF : la tôle n'est plus un rectangle, et chaque
-    étage qui la supposait rectangulaire doit le savoir (branche
-    `feat/tole-importee`, 20/11, non livré).** Projet « Cet appareil »
+    étage qui la supposait rectangulaire doit le savoir (livré
+    en V0.9.17, 20/11/2026).** Projet « Cet appareil »
     seulement : contour + zones interdites, calcul, rapport, affichage et DXF
     livré suivent le vrai contour. Règles, avec la raison :
     - **Lecteur de tôle ≠ import de pièces** (`nest-import/src/sheet.rs`) :
@@ -1374,7 +1363,7 @@ de dizaines signale une suite qui ne tourne plus.
 
 Après tout changement moteur : rebuild le wasm dans la MÊME PR (piège
 #33b) ET vider le cache navigateur (piège 14i). Référence complète des
-correctifs 2026-08-28/29 : `docs/archive/2026-08-audits/AUDIT-2026-08-29.md`.
+correctifs 2026-08-28/29 : AUDIT-2026-08-29.md (coffre privé).
 
 **Harnais navigateur (`scripts/qa-*.mjs`, dont `qa-a11y.mjs`)** : ils
 importent `playwright`, qui n'est **PAS** déclaré dans `package.json` —
@@ -1435,7 +1424,7 @@ en le DISANT au rapport, puisque `:latest` du registre ne bougera pas.
 ### Homelab (débordement, constat 2026-09-06)
 
 Les trois workers
-`nestorcut-overflow-worker-{1,2,3}` du homelab (adresse dans le runbook privé `specs/infra/`,
+`nestorcut-overflow-worker-{1,2,3}` du homelab (adresse dans le runbook privé, coffre Obsidian,
 `/containers/nestorcut-overflow`, image `ghcr.io/…/nest2d-nesting-worker:latest`)
 consomment la MÊME file que la prod. **Tout déploiement qui touche
 `workers/nesting` ou le moteur se termine sur le homelab** :
@@ -1479,7 +1468,7 @@ touche le MOTEUR (`workers/nesting/engine`, `public/engine`) :
   les chiffres : le vérifier par `git diff <dernier run>..HEAD -- workers/
   public/engine` comme au lot 3.
 
-Procédure complète : runbook privé `specs/infra/DEPLOY-HETZNER.md`.
+Procédure complète : runbook privé DEPLOY-HETZNER.md (coffre privé).
 
 ### Règle suites moteur (vérif phase A / P9)
 
@@ -1521,6 +1510,6 @@ propre.
 - **Un lot d'interface se rapporte AVEC ses captures, et l'implémenteur les a regardées avant d'écrire « vérifié »** : « N tests verts » ne dit rien d'une carte tronquée, d'un badge absent ou d'une page en deux langues — le rapport liste chaque capture avec une ligne disant ce qu'on y voit (constat J11-bis, 15/09).
 - i18n : `app/utils/i18n.js` (EN+FR, dict plat) ; site marketing :
   `src/i18n/ui.ts` dans le dépôt frère `../nestorcut-website`.
-- Documents : vivants à la racine de `docs/`, cycle clos → `git mv` vers
-  `docs/archive/<année-mois-cycle>/` avec liens réécrits, index
-  `docs/README.md` tenu à jour (rangement du 2026-09-06).
+- Documents : plans, rapports, audits et décisions vivent dans le coffre
+  Obsidian privé du propriétaire, jamais sous `docs/` ni `specs/` ; le dépôt
+  ne garde que `docs/dwg-license.md` et `docs/encryption-premium.spec.md`.

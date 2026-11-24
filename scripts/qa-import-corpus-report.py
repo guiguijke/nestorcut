@@ -1,10 +1,10 @@
-"""Lot A (docs/PLAN-IMPORT-2026-09-09.md §3) — génère corpus.md depuis
+"""Lot A (PLAN-IMPORT-2026-09-09.md (coffre privé) §3) — génère corpus.md depuis
 l'inventaire mesuré par scripts/qa-import-corpus-inventory.py.
 
   python scripts/qa-import-corpus-report.py
 
-Lit   docs/qa/import-2026-09-09/corpus-inventory.json
-Écrit docs/qa/import-2026-09-09/corpus.md
+Lit   .testparts/qa/import-2026-09-09/corpus-inventory.json
+Écrit .testparts/qa/import-2026-09-09/corpus.md
 
 Aucune donnée inventée : les familles sont dérivées des compteurs MESURÉS
 (règles explicitées dans le document produit), la provenance et la licence
@@ -15,7 +15,7 @@ import json
 import os
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-QA = os.path.join(REPO, "docs", "qa", "import-2026-09-09")
+QA = os.path.join(REPO, ".testparts", "qa", "import-2026-09-09")
 INV = os.path.join(QA, "corpus-inventory.json")
 OUT = os.path.join(QA, "corpus.md")
 
@@ -26,7 +26,7 @@ PROVENANCE = [
     (3, 4, "Propriétaire — `Projects/SmartTHC/Premium_Documentation/"
            "SmartTHC Case` (découpe/marquage réels)",
            "Propriétaire, non redistribué"),
-    (5, 11, "Dépôt NestorCut — `docs/cam-validation/` (entrées `_src_*` et "
+    (5, 11, "Dépôt NestorCut — `workers/geometry/parity/cam-validation/` (entrées `_src_*` et "
             "sorties `cam_*` de la validation CAM)", "Projet NestorCut"),
     (12, 35, "Dépôt NestorCut — `server/seed/demo/`, généré par "
              "`scripts/generate_demo_dxf.py` (ezdxf) ; corpus de la démo produit",
@@ -159,7 +159,7 @@ def main():
     A = L.append
     A("# Corpus d'import — lot A (2026-09-09)")
     A("")
-    A("Livrable du lot A de `docs/PLAN-IMPORT-2026-09-09.md` §3. **Rien n'a été")
+    A("Livrable du lot A de PLAN-IMPORT-2026-09-09.md (coffre privé) §3. **Rien n'a été")
     A("téléchargé** : le corpus est constitué de ce qui existait déjà sur la")
     A("machine (dépôt, disque du propriétaire) et dans les images docker.")
     A("")
@@ -241,7 +241,7 @@ def main():
     A("  l'image docker par `scripts/qa-import-corpus-build.sh`.")
     A("")
     A("Ce document ne publie donc que **hash + provenance + licence**, comme")
-    A("l'exige `docs/PLAN-IMPORT-2026-09-09.md` §2.")
+    A("l'exige PLAN-IMPORT-2026-09-09.md (coffre privé) §2.")
     A("")
     A("**Attention** : `.testparts/` n'est PAS dans `.gitignore` (vérifié :")
     A("`git check-ignore` ne le retient pas, `git status` l'affiche en `??`).")
@@ -269,13 +269,13 @@ def main():
     A("")
     A("Un corpus « d'importeur » qui se mesure surtout sur des fichiers qu'il a")
     A("lui-même écrits mesure surtout sa propre boucle. **Zéro fichier client")
-    A("ou prospect** : `specs/import-corpus/` (prévu par le plan §2) n'existe")
+    A("ou prospect** : `.testparts/import-corpus/` (prévu par le plan §2) n'existe")
     A("pas sur cette machine, et les entretiens n'ont laissé aucun DXF ici.")
     A("")
     A("Où en prendre :")
     A("")
     A("- fichiers d'entretien / prospects du propriétaire (hors machine) —")
-    A("  la source la plus utile, à déposer dans `specs/import-corpus/` ;")
+    A("  la source la plus utile, à déposer dans `.testparts/import-corpus/` ;")
     A("- corpus open-source de découpe laser (Thingiverse « laser cut »,")
     A("  Ponoko, dépôts CC0) — **nécessite un téléchargement**, non autorisé")
     A("  dans ce lot ;")

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * QA « moteur × corpus » — lot E0 de docs/PLAN-ECLATEMENT-2026-09-12.md.
+ * QA « moteur × corpus » — lot E0 de PLAN-ECLATEMENT-2026-09-12.md (coffre privé).
  *
  * Question mesurée, une seule : **le moteur accepte-t-il la géométrie de tous
  * les fichiers du corpus à l'import ?** C'est la panne de production du lot
@@ -30,8 +30,8 @@
  *        [--bin <exe>] [--bin-before <exe>] [--space 2] [--budget 2]
  *        [--sheet 3000x1500] [--timeout 60000] [--quiet]
  *
- * Défauts : --in .testparts/corpus + specs/import-corpus
- *           --out $QA_OUT/engine-238 (ou docs/qa/engine-corpus si absent)
+ * Défauts : --in .testparts/corpus + .testparts/import-corpus
+ *           --out $QA_OUT/engine-238 (ou .testparts/qa/engine-corpus si absent)
  */
 
 import { spawnSync } from 'node:child_process'
@@ -270,13 +270,13 @@ async function main() {
     const args = parseArgs(process.argv.slice(2))
     const dirs = args.in.length
         ? args.in.map((d) => path.resolve(ROOT, d))
-        : [path.join(ROOT, '.testparts', 'corpus'), path.join(ROOT, 'specs', 'import-corpus')]
+        : [path.join(ROOT, '.testparts', 'corpus'), path.join(ROOT, '.testparts', 'import-corpus')]
     const outDir = path.resolve(
         args.out && args.out !== true
             ? String(args.out)
             : process.env.QA_OUT
                 ? path.join(process.env.QA_OUT, 'engine-238')
-                : path.join(ROOT, 'docs', 'qa', 'engine-corpus'),
+                : path.join(ROOT, '.testparts', 'qa', 'engine-corpus'),
     )
     const binAfter = String(args.bin && args.bin !== true ? args.bin
         : path.join(ROOT, 'workers', 'nesting', 'engine', 'target', 'release',

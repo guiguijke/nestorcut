@@ -25,8 +25,8 @@ const needFile = (env, neutral) => {
 }
 const ECRIN = needFile('QA_P3_MULTI', '.testparts/qa-p3-multi.dxf')
 const TEMOIN = needFile('QA_P3_TEMOIN', '.testparts/qa-p3-temoin.dxf')
-const DENSE = needFile('QA_P3_DENSE', 'specs/import-corpus/qa-p3-dense.dxf')
-const BIG = needFile('QA_P3_BIG', 'specs/import-corpus/qa-p3-127pieces.dxf')
+const DENSE = needFile('QA_P3_DENSE', '.testparts/import-corpus/qa-p3-dense.dxf')
+const BIG = needFile('QA_P3_BIG', '.testparts/import-corpus/qa-p3-127pieces.dxf')
 const ONLY = process.argv.slice(2)
 
 const logs = []

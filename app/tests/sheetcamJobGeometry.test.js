@@ -405,7 +405,7 @@ describe('J6 — coïncidence géométrie du `.job` ↔ import du DXF (import or
         const dxfDirs = [
             ...dirs,
             path.resolve(__dirname, '../../.testparts/corpus'),
-            path.resolve(__dirname, '../../specs/import-corpus'),
+            path.resolve(__dirname, '../../.testparts/import-corpus'),
             FIX,
         ]
         const findDxf = (name) => {

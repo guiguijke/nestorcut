@@ -40,7 +40,7 @@
    transcendantales du repli sont celles du crate `libm` (règle AGENTS #14b).
    Verrous : `crates/nest-engine/tests/inflate_fallback.rs` (contrôle négatif
    compris) et la fixture de déterminisme `bench/fixtures/e0_volute`.
-   Lot E0 de `docs/archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md`.
+   Lot E0 de PLAN-ECLATEMENT-2026-09-12.md (coffre privé).
 
 4. `src/geometry/shape_modification.rs` + `src/io/import.rs` : le repli du
    point 3 **dit sur quelles pièces il est passé**. `CURRENT_ITEM`
@@ -55,7 +55,7 @@
    pouvoir NOMMER la pièce concernée (sinon le constat est inexploitable).
    Aucun effet sur la géométrie : ce sont deux canaux d'observation, et le
    verrou de déterminisme reste bit-identique.
-   Lot E2 de `docs/archive/2026-09-import-eclatement/PLAN-ECLATEMENT-2026-09-12.md`.
+   Lot E2 de PLAN-ECLATEMENT-2026-09-12.md (coffre privé).
 
 5. **Largeur de la bande : seule la construction du conteneur dit si elle
    existe** (piège AGENTS #2b). Le conteneur d'une bande est DÉFLATÉ de

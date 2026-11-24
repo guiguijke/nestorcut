@@ -2,7 +2,7 @@
 //
 // Pages auditées : auth (connexion), home (accueil), project (page projet
 // après import), modal-desktop et modal-mobile (l'espace de résultat).
-// Chaque page produit docs/qa/ui-pro-2026-09-07/a11y-<page>.json.
+// Chaque page produit .testparts/qa/ui-pro-2026-09-07/a11y-<page>.json.
 //
 // VERROU : 0 violation « serious » ou « critical » — sinon sortie 1.
 // Le même script mesure sur la modale ce qu'axe ne voit pas : focus piégé
@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url'
 
 const BASE = process.env.QA_BASE_URL || 'http://localhost:7100'
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
-const OUT = process.env.QA_A11Y_OUT || path.join(ROOT, 'docs', 'qa', 'ui-pro-2026-09-07')
+const OUT = process.env.QA_A11Y_OUT || path.join(ROOT, '.testparts', 'qa', 'ui-pro-2026-09-07')
 fs.mkdirSync(OUT, { recursive: true })
 
 const TROU = path.join(ROOT, '.testparts', 'Piece_Trou.DXF')

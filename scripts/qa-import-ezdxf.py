@@ -14,7 +14,7 @@ worker_common n'existent pas sur le poste) :
 
     docker run --rm -i \
       -v "//c/…/Nestorcut/.testparts:/data:ro" \
-      -v "//c/…/Nestorcut/docs/qa/import-2026-09-09/ezdxf:/out" \
+      -v "//c/…/Nestorcut/.testparts/qa/import-2026-09-09/ezdxf:/out" \
       nest2d-file-processing-worker:dev \
       python - /data --out /out --version <commit> < scripts/qa-import-ezdxf.py
 

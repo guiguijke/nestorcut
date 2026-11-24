@@ -4,11 +4,13 @@
 
 ## Démarrage rapide
 
-- **Boussole produit** : `docs/MASTERPLAN-2026-09-05.md` §0 — la référence
-  du nesting dans le navigateur. Tout chantier passe la règle de tri du §0
-  avant d'être ouvert ; les instructions à l'implémenteur suivent le §8.
-- **Carte des documents** : `docs/README.md` (vivants à la racine, cycles
-  clos dans `docs/archive/`, QA dans `docs/qa/`).
+- **Boussole produit** : `AGENTS.md` (en-tête) — la référence du nesting
+  dans le navigateur ; chemin navigateur d'abord, un seul code, pas de CAM.
+- **Carte des documents** : plans, décisions, specs et audits sont dans le
+  coffre Obsidian privé du propriétaire (il fait foi pour le QUOI et le
+  POURQUOI) ; le dépôt ne garde que `docs/dwg-license.md` et
+  `docs/encryption-premium.spec.md`. Ne recrée jamais de plan ou rapport
+  sous `docs/` ou `specs/`.
 - **Pièges techniques** : `AGENTS.md` §2, à lire avant de toucher au moteur,
   au worker Python, au miroir JS du post-pass ou au visualizer.
 - **Discipline de mesure** : `assert_images_head.sh` OK avant tout banc ;
@@ -23,5 +25,5 @@
   termine sur le homelab (`assert_overflow_head.py` OK) et régénère les
   benchmarks publics si le moteur a changé.
 - **Rôles** : le propriétaire décide ; l'implémenteur (GLM 5.3 Max) livre
-  un rapport par lot ; le vérificateur rejoue, écrit `PLAN-CORRECTIF-*` ou
-  `FICHE-*`, donne GO / NO-GO ; on déploie après le GO seulement.
+  un rapport par lot (dans le coffre privé) ; le vérificateur rejoue,
+  donne GO / NO-GO ; on déploie après le GO seulement.

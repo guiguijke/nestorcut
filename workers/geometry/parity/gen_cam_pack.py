@@ -23,7 +23,7 @@ import ezdxf
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 CLI = os.path.join(REPO, "workers", "geometry", "target", "release",
                    "nest-export-cli.exe" if os.name == "nt" else "nest-export-cli")
-OUT = os.path.join(REPO, "docs", "cam-validation")
+OUT = os.path.join(REPO, "workers", "geometry", "parity", "cam-validation")
 
 
 def save_source(doc, name):
