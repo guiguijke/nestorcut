@@ -15,10 +15,10 @@ name: promote-latest
 # exister comme tag d'image : il est publié par `build-images.yml`, donc
 # attendre que ce workflow soit `completed` pour le commit visé.
 #
-# Le déploiement reste la même commande côté serveur :
-#   cd /opt/nestorcut && docker compose pull && docker compose up -d
-# (homelab : cd /containers/nestorcut-overflow && docker compose pull &&
-#  docker compose up -d --force-recreate)
+# Le déploiement se fait ensuite par services NOMMÉS, jamais un pull nu :
+#   cd /opt/nestorcut && docker compose pull <services> && docker compose up -d <services>
+# (homelab, workers seulement : docker compose pull <workers> &&
+#  docker compose up -d --force-recreate <workers>)
 
 on:
   workflow_dispatch:
@@ -111,6 +111,6 @@ jobs:
             echo
             echo "Déploiement, côté serveur :"
             echo '```'
-            echo "cd /opt/nestorcut && docker compose pull && docker compose up -d"
+            echo "cd /opt/nestorcut && docker compose pull <services> && docker compose up -d <services>"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

@@ -246,8 +246,9 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
    Verrous : `test_advanced_import.py` (encre tangente attachée + entité
    égarée laissée) ; A/B corpus : 143/148 fichiers identiques, les 5 autres
    changent SEULEMENT en handles. Lot E2. **Reste 704 entités orphelines sur
-   9 fichiers du corpus** (au-delà de `probe_tol`) : non dit à l'utilisateur,
-   à traiter avec la couture des contours.
+   9 fichiers du corpus** (au-delà de `probe_tol`) : annoncées à l'import
+   depuis la V0.9.12 (`import.entitiesUncut`), toujours pas découpées, à
+   traiter avec la couture des contours.
 
 5c. **Un anneau OUVERT fait mentir la validation physique (constat J4,
    13/09).** `nest-report` balaie ses arêtes par `for i in 0..ring.len() - 1` :
@@ -489,7 +490,7 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     moins »), l'offcut est le plus grand rectangle vide GARANTI.
 
 ### Frontend
-20. **Apostrophes françaises dans i18n.js** : utiliser des doubles quotes
+20. **Apostrophes françaises dans `app/utils/i18n/fr.js`** : utiliser des doubles quotes
     pour les chaînes contenant `'` (sinon PARSE_ERROR au build).
 20b. **SVG y-down vs moteur y-up : le flip est OBLIGATOIRE** — tout rendu de
     placements (live view, SVG résultat coloré) doit dessiner avec
@@ -1407,11 +1408,14 @@ ou le homelab devenait un déploiement surprise.
 bouge que par le workflow manuel `promote-latest`** (Actions → Run workflow
 → SHA complet du commit qui a le GO), qui RETAGUE sans reconstruire
 (`docker buildx imagetools create`, donc même digest que le `:<sha>`
-vérifié). Le déploiement redevient, sur les deux machines :
+vérifié). Le déploiement se fait par **services nommés**, jamais un
+`docker compose pull` nu (il recréerait tout ce que l'amont a bougé, base
+comprise, constat du 15/09), après avoir posé l'étiquette de retour arrière :
 
 ```bash
-cd /opt/nestorcut && docker compose pull && docker compose up -d
-cd /containers/nestorcut-overflow && docker compose pull && docker compose up -d --force-recreate
+cd /opt/nestorcut && docker compose pull <services> && docker compose up -d <services>
+# services : app, admin, user-file-processing-worker, nesting-worker
+cd /containers/nestorcut-overflow && docker compose pull <workers> && docker compose up -d --force-recreate <workers>
 ```
 
 Corollaires : `:main` n'a rien à faire dans un `docker-compose.yml` de
@@ -1428,8 +1432,8 @@ Les trois workers
 `/containers/nestorcut-overflow`, image `ghcr.io/…/nest2d-nesting-worker:latest`)
 consomment la MÊME file que la prod. **Tout déploiement qui touche
 `workers/nesting` ou le moteur se termine sur le homelab** :
-`docker compose pull && docker compose up -d --force-recreate` dans
-`/containers/nestorcut-overflow`, puis
+`docker compose pull` puis `up -d --force-recreate` des trois workers (pas du
+conteneur WireGuard) dans `/containers/nestorcut-overflow`, puis
 `python workers/nesting/bench/assert_overflow_head.py` (md5 des fichiers
 clés = HEAD, date du binaire moteur), et `NEST_COMPUTE_TOKENS` aligné avec
 le `.env` Hetzner. Sans cela, une partie des jobs de production est
@@ -1508,7 +1512,7 @@ propre.
   injecté au build peut référencer un commit orphelin (constaté :
   `1972f84`).
 - **Un lot d'interface se rapporte AVEC ses captures, et l'implémenteur les a regardées avant d'écrire « vérifié »** : « N tests verts » ne dit rien d'une carte tronquée, d'un badge absent ou d'une page en deux langues — le rapport liste chaque capture avec une ligne disant ce qu'on y voit (constat J11-bis, 15/09).
-- i18n : `app/utils/i18n.js` (EN+FR, dict plat) ; site marketing :
+- i18n : `app/utils/i18n/<langue>.js` (six langues, dict plat) ; site marketing :
   `src/i18n/ui.ts` dans le dépôt frère `../nestorcut-website`.
 - Documents : plans, rapports, audits et décisions vivent dans le coffre
   Obsidian privé du propriétaire, jamais sous `docs/` ni `specs/` ; le dépôt
