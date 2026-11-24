@@ -120,19 +120,37 @@
             <!-- ───────────── Relire et choisir les zones ───────────── -->
             <div v-else-if="view" class="sid__body sid__body--review">
                 <div class="stage">
+                    <SheetDefectTools
+                        v-model:tool="tool"
+                        :canUndo="canUndo"
+                        :points="draftPoints"
+                        @undo="undo"
+                        @close="drawingRef?.closeContour()"
+                    />
                     <div class="stage__canvas">
                         <SheetImportDrawing
+                            ref="drawingRef"
                             :contours="contours"
                             :view="view"
                             :states="states"
                             :hovered="hovered"
                             :labels="zoneLabels"
+                            :tool="tool"
+                            :drawn="drawn"
+                            :cut="cut"
+                            :cutStale="cutStale"
+                            :hoveredDefect="hoveredDefect"
                             @toggle="onToggle"
                             @hover="hovered = $event"
                             @scale="stageScale = $event"
+                            @add="addDefect"
+                            @draft="draftPoints = $event"
+                            @hoverDefect="hoveredDefect = $event"
                         />
                     </div>
-                    <p class="stage__hint">{{ view.zones.length ? t('sheetImport.review.hint') : t('sheetImport.zones.none') }}</p>
+                    <p class="stage__hint">{{ stageHint }}</p>
+                    <p v-if="cutProblem" class="stage__note stage__note--bad" role="alert" data-testid="defect-message">{{ cutProblem }}</p>
+                    <p v-else class="stage__note" role="status" data-testid="defect-message">{{ cutMessage }}</p>
                 </div>
 
                 <aside class="panel">
@@ -168,7 +186,11 @@
                             </div>
                             <div class="facts__row">
                                 <dt>{{ t('sheetImport.panel.usable') }}</dt>
-                                <dd data-testid="sheet-import-usable">{{ fmtArea(usable, outlineArea) }}</dd>
+                                <dd
+                                    data-testid="sheet-import-usable"
+                                    :class="{ 'facts__pending': usablePending }"
+                                    :title="usablePending ? t('sheetImport.defect.computing') : undefined"
+                                >{{ usableText }}</dd>
                             </div>
                             <div v-if="!fromRecord" class="facts__row">
                                 <dt>{{ t('sheetImport.panel.units') }}</dt>
@@ -192,6 +214,14 @@
                             <li v-for="line in ignored" :key="line.key">{{ tp(line.key, line.n) }}</li>
                         </ul>
                     </div>
+
+                    <SheetDefectList
+                        :drawn="drawn"
+                        :hovered="hoveredDefect"
+                        class="panel__block"
+                        @delete="deleteDefect"
+                        @hover="hoveredDefect = $event"
+                    />
 
                     <div v-if="view.zones.length" class="panel__block panel__block--grow">
                         <div class="zhead">
@@ -282,7 +312,11 @@ import { themeType } from '~~/constants/theme.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import { filesStore } from '~/composables/files'
-import { recordZoneCount, ringBbox, scaleContours } from '~/utils/sheetShape'
+import { bindCut, cutKeyOf, recordZoneCount, ringBbox, scaleContours } from '~/utils/sheetShape'
+import { cutInput, makeDefect, normalizeDrawn, scaleDrawn } from '~/utils/sheetDefects'
+import {
+    canAddDefect, historyPop, historyPush, historyScale, isDrawTool, nextDefectId,
+} from '~/utils/defectDrawing'
 import { trackEvent } from '~/utils/track'
 import { importedSheetLockVisible, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
@@ -324,6 +358,21 @@ const source = shallowRef({ contours: [], sourceUnits: 0, fileName: '', openPath
 const fromRecord = ref(false) // relevé d'un enregistrement gardé : pas de réglage d'unité
 const inchesOn = ref(false)
 const forbidden = ref([])
+// Défauts dessinés à la main (voir utils/sheetDefects.js). Tableaux REMPLACÉS à chaque
+// geste, jamais modifiés en place : shallowRef, et l'historique garde des instantanés.
+const drawn = shallowRef([])
+const history = shallowRef([])
+const tool = ref('pointer') // 'pointer' | 'free' | 'circle' | 'rect'
+const draftPoints = ref(0) // points déjà posés du contour libre en cours
+const hoveredDefect = ref(null)
+const drawingRef = ref(null)
+// La coupe : résultat de geoCutSheet LIÉ à l'état exact qui l'a produit (`forKey`).
+const cut = shallowRef(null)
+const cutInfo = shallowRef(null) // { changed } du dernier calcul abouti
+const cutBusy = ref(false)
+const cutErrorKey = ref('') // le calcul a échoué : clé de message
+const limitKey = ref('') // un ajout a été refusé (plafond de zones) : clé de message
+let cutToken = 0
 const name = ref('')
 const nameTouched = ref(false)
 const hovered = ref(null)
@@ -350,6 +399,97 @@ const widthMm = computed(() => outlineBbox.value[2] - outlineBbox.value[0])
 const heightMm = computed(() => outlineBbox.value[3] - outlineBbox.value[1])
 const outlineArea = computed(() => (view.value ? contours.value[view.value.outlineIndex].areaMm2 : 0))
 const usable = computed(() => usableArea(contours.value, view.value, forbidden.value))
+
+// ------------------------------------------------------------ coupe (défauts)
+// Clé de l'état courant ; la coupe tenue ne vaut que si sa clé est la même.
+const currentKey = computed(() => {
+    if (!view.value || !drawn.value.length) return ''
+    try {
+        return cutKeyOf(contours.value, view.value.outlineIndex, forbidden.value, drawn.value)
+    } catch {
+        return ''
+    }
+})
+const cutMatches = computed(() => Boolean(cut.value) && cut.value.forKey === currentKey.value)
+const cutStale = computed(() => Boolean(cut.value) && !cutMatches.value)
+// Sans défaut, rien à calculer ; avec, il faut la coupe de CET état, sans calcul en cours ni erreur.
+const cutReady = computed(() => !drawn.value.length || (cutMatches.value && !cutBusy.value && !cutErrorKey.value))
+const cutProblem = computed(() => {
+    const key = cutErrorKey.value || limitKey.value
+    return key ? t(key) : ''
+})
+const usablePending = computed(() => drawn.value.length > 0 && !cutErrorKey.value && !(cutMatches.value && !cutBusy.value))
+const usableText = computed(() => {
+    if (drawn.value.length && cutErrorKey.value) return '—'
+    // Pendant un calcul : la dernière valeur connue, atténuée (jamais un faux chiffre « final »).
+    if (drawn.value.length && cut.value) return fmtArea(cut.value.usableArea, outlineArea.value)
+    return fmtArea(usable.value, outlineArea.value)
+})
+const cutMessage = computed(() => {
+    // Contour libre pas fermé : il ne compte pas encore, et l'écran le dit (la
+    // confirmation attend : sinon le défaut serait perdu sans un mot).
+    if (draftPoints.value > 0) return t('sheetImport.defect.unfinished')
+    if (!drawn.value.length) return ''
+    if (!cutMatches.value || cutBusy.value) return t('sheetImport.defect.computing')
+    const c = cut.value
+    if (c.pieces > 1) return t('sheetImport.defect.split', { n: c.pieces, area: fmtArea(c.lostArea, outlineArea.value) })
+    if (cutInfo.value?.changed === false || c.removedArea === 0) return t('sheetImport.defect.noEffect')
+    return ''
+})
+const stageHint = computed(() => {
+    if (isDrawTool(tool.value)) return t(`sheetImport.defect.hint.${tool.value}`)
+    return view.value.zones.length ? t('sheetImport.review.hint') : t('sheetImport.zones.none')
+})
+
+const failCut = (code) => {
+    cut.value = null
+    cutInfo.value = null
+    // Un code inconnu (travailleur absent, délai…) : le message générique de la coupe.
+    const key = importErrorOf(String(code || '')).key
+    cutErrorKey.value = key === ERROR_KEYS.unreadable ? ERROR_KEYS.cut : key
+}
+const recomputeCut = async () => {
+    const token = ++cutToken
+    cutErrorKey.value = ''
+    if (step.value !== 'review' || !view.value || !drawn.value.length) {
+        cut.value = null
+        cutInfo.value = null
+        cutBusy.value = false
+        return
+    }
+    // L'état EXACT de cet appel : la coupe lui est liée, quoi qu'il arrive entre-temps.
+    const snap = { c: contours.value, o: view.value.outlineIndex, f: [...forbidden.value], d: drawn.value }
+    cutBusy.value = true
+    let result
+    try {
+        const input = cutInput(snap.c, snap.o, snap.f, snap.d)
+        const { geoCutSheet } = await import('~/composables/geometryClient')
+        result = await geoCutSheet(input.outer, input.holes, input.defects)
+    } catch (err) {
+        result = { ok: false, error: err instanceof Error ? err.message : '' }
+    }
+    if (token !== cutToken) return // un état plus récent a pris la main
+    cutBusy.value = false
+    if (!result || result.ok === false) {
+        failCut(result?.error)
+        return
+    }
+    try {
+        cut.value = bindCut(result, snap.c, snap.o, snap.f, snap.d)
+        cutInfo.value = { changed: result.changed !== false }
+    } catch (err) {
+        failCut(err instanceof Error ? err.message : '')
+    }
+}
+watch([drawn, forbidden, contours, step], () => { recomputeCut() })
+
+// Réglage « pouces » : les défauts restent au même endroit de la tôle, historique compris.
+// `sync` : tout change d'un bloc, aucun calcul ne voit contours et défauts à deux échelles.
+watch(inchesOn, (on) => {
+    const factor = on ? INCH_FACTOR : 1 / INCH_FACTOR
+    if (drawn.value.length) drawn.value = scaleDrawn(drawn.value, factor)
+    history.value = historyScale(history.value, factor, scaleDrawn)
+}, { flush: 'sync' })
 // Largeur et hauteur : le même arrondi (jamais « 507,8 » à côté de « 507,9 »).
 const dimDecimals = computed(() => pairDecimals(unref(unit), widthMm.value, heightMm.value))
 const fmtDim = (mm) => {
@@ -426,10 +566,12 @@ const importedExportNote = computed(() =>
         }),
         true,
     ) ? t('sheetImport.trialNote') : '')
-const canConfirm = computed(() => step.value === 'review' && !saving.value && cleanName(name.value) !== '')
+const canConfirm = computed(() => step.value === 'review' && !saving.value && cleanName(name.value) !== ''
+    && cutReady.value && draftPoints.value === 0)
 const confirmText = computed(() => {
     if (saving.value) return t('sheetImport.saving')
-    const label = confirmLabel(forbiddenCount.value)
+    // Un défaut est de la matière interdite : il compte avec les zones interdites.
+    const label = confirmLabel(forbiddenCount.value + drawn.value.length)
     return label.plural ? tp(label.plural, label.n) : t(label.key)
 })
 
@@ -486,6 +628,13 @@ const reset = () => {
     saving.value = false
     dragOver.value = false
     hovered.value = null
+    // Les défauts d'abord : le réglage « pouces » qui suit ne doit rien avoir à remettre à l'échelle.
+    drawn.value = []
+    history.value = []
+    tool.value = 'pointer'
+    draftPoints.value = 0
+    hoveredDefect.value = null
+    limitKey.value = ''
     inchesOn.value = false
     forbidden.value = []
     name.value = ''
@@ -502,6 +651,15 @@ const openOnRecord = (record, { edit }) => {
         step.value = 'choose'
         return false
     }
+    // Défauts de l'enregistrement : la coupe est recalculée à l'ouverture (jamais reprise sur parole).
+    let restored
+    try {
+        restored = normalizeDrawn(record.drawn)
+    } catch (err) {
+        error.value = importErrorOf(err)
+        step.value = 'choose'
+        return false
+    }
     source.value = {
         contours: record.contours,
         sourceUnits: record.sourceUnits ?? 0,
@@ -511,6 +669,8 @@ const openOnRecord = (record, { edit }) => {
     }
     fromRecord.value = true
     forbidden.value = Array.isArray(record.forbidden) ? [...record.forbidden] : []
+    drawn.value = restored
+    history.value = []
     name.value = record.name
     nameTouched.value = true
     if (edit) editRecord = record
@@ -593,6 +753,8 @@ const readFile = async (file) => {
         skippedEntities: result.skippedEntities || 0,
     }
     fromRecord.value = false
+    drawn.value = [] // un nouveau fichier : aucun défaut hérité
+    history.value = []
     inchesOn.value = false
     forbidden.value = [] // jamais de zone interdite présumée
     nameTouched.value = false
@@ -609,6 +771,9 @@ const backToChoose = () => {
     step.value = 'choose'
     error.value = null
     saveError.value = ''
+    drawn.value = []
+    history.value = []
+    tool.value = 'pointer'
     loadRecents()
 }
 
@@ -618,12 +783,61 @@ const onToggle = (index) => {
     forbidden.value = toggleZone(contours.value, view.value, forbidden.value, index)
 }
 
+// ----------------------------------------------------------------- défauts
+const canUndo = computed(() => draftPoints.value > 0 || history.value.length > 0)
+
+const pushHistory = () => { history.value = historyPush(history.value, drawn.value) }
+const addDefect = ({ kind, data }) => {
+    if (!canAddDefect(forbiddenCount.value, drawn.value.length)) {
+        limitKey.value = ERROR_KEYS.tooManyZones
+        return
+    }
+    const defect = makeDefect(nextDefectId(drawn.value), kind, data)
+    if (!defect) return
+    limitKey.value = ''
+    pushHistory()
+    drawn.value = [...drawn.value, defect]
+}
+const deleteDefect = (index) => {
+    if (!drawn.value[index]) return
+    limitKey.value = ''
+    hoveredDefect.value = null
+    pushHistory()
+    drawn.value = drawn.value.filter((_, i) => i !== index)
+}
+// Annuler : au milieu d'un contour libre, retire le dernier point ; sinon revient à l'état d'avant.
+const undo = () => {
+    if (draftPoints.value > 0) {
+        drawingRef.value?.popPoint()
+        return
+    }
+    const { history: rest, snapshot } = historyPop(history.value)
+    if (snapshot === null) return
+    limitKey.value = ''
+    hoveredDefect.value = null
+    history.value = rest
+    drawn.value = snapshot
+}
+// Ctrl+Z / Cmd+Z, quand le focus n'est pas dans un champ de texte.
+const isTextTarget = (el) => Boolean(el) && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)
+const onUndoKey = (e) => {
+    if (!props.open || step.value !== 'review') return
+    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey || String(e.key).toLowerCase() !== 'z') return
+    if (isTextTarget(e.target) || !canUndo.value) return
+    e.preventDefault()
+    undo()
+}
+onMounted(() => window.addEventListener('keydown', onUndoKey))
+onBeforeUnmount(() => window.removeEventListener('keydown', onUndoKey))
+
 // --------------------------------------------------------------- validation
 const close = () => emit('update:open', false)
 const onWrapper = (value) => { if (value === false) close() }
 
 const confirm = async () => {
     if (!canConfirm.value || !view.value) return
+    // Jamais une coupe d'un autre état : elle est refusée aussi par buildRecord, mais ici on n'essaie même pas.
+    if (drawn.value.length && !cutMatches.value) return
     saveError.value = ''
     saving.value = true
     const now = new Date().toISOString()
@@ -638,6 +852,8 @@ const confirm = async () => {
         outlineIndex: view.value.outlineIndex,
         forbidden: forbidden.value,
         now: editRecord?.addedAt ?? now,
+        drawn: drawn.value,
+        cut: drawn.value.length ? cut.value : undefined,
     })
     if (buildError) {
         saveError.value = t(buildError)
@@ -661,7 +877,8 @@ const confirm = async () => {
     }
     if (props.replaceIndex != null) actions.replaceSheetShape(props.replaceIndex, record)
     else actions.addSheetFromShape(record)
-    trackEvent('sheet_import_confirm', { zones: String(record.forbidden.length) })
+    // Des nombres seulement (en chaînes) : aucune géométrie ne part.
+    trackEvent('sheet_import_confirm', { zones: String(record.forbidden.length), defects: String(record.drawn?.length ?? 0) })
     saving.value = false
     close()
 }
@@ -973,6 +1190,15 @@ const confirm = async () => {
         color: var(--text-2);
         font-size: var(--fs-13);
     }
+    &__note {
+        margin: 0;
+        min-height: 20px;
+        color: var(--text);
+        font-size: var(--fs-13);
+        font-weight: 600;
+
+        &--bad { color: var(--danger); }
+    }
 }
 
 .panel {
@@ -1050,6 +1276,8 @@ const confirm = async () => {
         }
     }
 }
+
+.facts__pending { opacity: 0.5; }
 
 .notice {
     display: flex;

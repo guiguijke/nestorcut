@@ -37,6 +37,8 @@ const IDENTICAL_OK = [
     'Benchmarks',
     // espagnol (L4) : « Factor » / « factor {v} » SONT l'espagnol.
     'Factor', 'factor {v}',
+    // dessin des défauts (tôle importée) : « Rectangle » EST le mot français.
+    'Rectangle',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()
