@@ -88,6 +88,28 @@ export function livePaneLayout(sheets, bins, max = 6, gapRatio = 0.05) {
 }
 
 /**
+ * Échelle des minima absolus du repère X/Y : 1 pour une tôle dont le plus long
+ * côté affiché fait au moins 700 mm (rendu historique inchangé), puis
+ * proportionnelle en dessous — sur un disque de 153 mm, des minima de 16 mm de
+ * police et 10 mm de retrait couvraient les pièces.
+ */
+export const AXES_FULL_SIZE_MM = 700
+export function axesMinScale(viewW, viewH) {
+    const longest = Math.max(Number(viewW) || 0, Number(viewH) || 0)
+    if (!(longest > 0)) return 1
+    return Math.min(1, longest / AXES_FULL_SIZE_MM)
+}
+
+/** Police, point d'origine et vide de la hampe, en unités du viewBox (mm). */
+export function axesMarkSizes(len, k = 1) {
+    return {
+        font: Math.max(len * 0.22, 16 * k),
+        dot: Math.max(len * 0.032, 5 * k),
+        gap: Math.max(len * 0.08, 8 * k),
+    }
+}
+
+/**
  * Origin + axis tips in DISPLAY coordinates.
  * Landscape (W≥H): origin bottom-left, +X right, +Y up.
  * Portrait rotated: origin top-left, +X down, +Y right (length along the screen).
@@ -100,13 +122,15 @@ export function sheetAxesDisplay(width, height) {
     const { viewW, viewH } = sheetDisplaySize(W, H)
     const short = Math.min(viewW, viewH)
     const len = Math.min(Math.max(short * 0.18, Math.max(viewW, viewH) * 0.055), short * 0.28)
-    const inset = Math.max(short * 0.014, 10)
+    const k = axesMinScale(viewW, viewH)
+    const inset = Math.max(short * 0.014, 10 * k)
     if (isSheetPortrait(W, H)) {
         return {
             origin: { x: inset, y: inset },
             xTo: { x: inset, y: inset + len },
             yTo: { x: inset + len, y: inset },
             len,
+            k,
             viewW,
             viewH,
         }
@@ -116,6 +140,7 @@ export function sheetAxesDisplay(width, height) {
         xTo: { x: inset + len, y: H - inset },
         yTo: { x: inset, y: H - inset - len },
         len,
+        k,
         viewW,
         viewH,
     }

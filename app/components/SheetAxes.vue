@@ -86,7 +86,7 @@
 </template>
 
 <script setup>
-import { axisLabelPos, sheetAxesDisplay } from '~/utils/sheetView'
+import { axesMarkSizes, axisLabelPos, sheetAxesDisplay } from '~/utils/sheetView'
 
 const props = defineProps({
     width: { type: Number, required: true },
@@ -104,9 +104,13 @@ const ids = {
 }
 
 const axes = computed(() => sheetAxesDisplay(props.width, props.height))
-const font = computed(() => Math.max(axes.value.len * 0.22, 16))
-const dot = computed(() => Math.max(axes.value.len * 0.032, 5))
-const gap = computed(() => Math.max(axes.value.len * 0.08, 8))
+// Minima en mm réduits sur une petite tôle (k < 1 sous 700 mm de long côté) :
+// les traits restent en pixels (non-scaling-stroke), seules les marques
+// mesurées en mm changent.
+const marks = computed(() => axesMarkSizes(axes.value.len, axes.value.k))
+const font = computed(() => marks.value.font)
+const dot = computed(() => marks.value.dot)
+const gap = computed(() => marks.value.gap)
 
 const xLabel = computed(() =>
     axisLabelPos(axes.value.origin, axes.value.xTo, axes.value.viewW, axes.value.viewH, font.value),
