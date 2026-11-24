@@ -158,7 +158,10 @@ export function liveShapeTable(payload) {
         const data = bin?.shape?.data
         const size = outlineSize(data?.outer)
         if (!size) return null
-        const paths = shapeToDrawPaths({ outer: data.outer, inner: data.inner }, size[1])
+        // Tôle avec défauts : la taille est celle du moteur (contour original), les
+        // chemins ceux de la forme livrée (coupée).
+        const deliver = shaped.find((s) => s.id === bin.id)?.shape
+        const paths = shapeToDrawPaths(deliver ?? { outer: data.outer, inner: data.inner }, size[1])
         return paths ? { w: size[0], h: size[1], ...paths } : null
     })
     _tables.set(bins, table)

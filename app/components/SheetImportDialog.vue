@@ -282,7 +282,7 @@ import { themeType } from '~~/constants/theme.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import { filesStore } from '~/composables/files'
-import { ringBbox, scaleContours } from '~/utils/sheetShape'
+import { recordZoneCount, ringBbox, scaleContours } from '~/utils/sheetShape'
 import { trackEvent } from '~/utils/track'
 import { importedSheetLockVisible, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
@@ -442,7 +442,7 @@ watch([view, unit, locale], () => {
 // ------------------------------------------------------------ cartes récentes
 const recentSize = (r) => `${fmtLength(r.widthMm)} × ${fmtLength(r.heightMm)}`
 const recentZones = (r) => {
-    const n = Array.isArray(r.forbidden) ? r.forbidden.length : 0
+    const n = recordZoneCount(r)
     return n === 0 ? t('sheetImport.recent.noZones') : tp('sheetImport.recent.zones', n)
 }
 const loadRecents = async () => {

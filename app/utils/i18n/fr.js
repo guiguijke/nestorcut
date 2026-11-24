@@ -1000,6 +1000,8 @@ export default {
     'sheetImport.err.tooManyZones': "Trop de zones interdites. Gardez-en 200 au plus.",
     'sheetImport.err.nameRequired': "Donnez un nom à la tôle.",
     'sheetImport.err.storage': "Votre navigateur n’a pas pu enregistrer cette tôle. Vérifiez que le stockage est autorisé et que la navigation privée est désactivée.",
+    'sheetImport.err.cut': 'Ce défaut n’a pas pu être appliqué à la tôle. Essayez une forme plus simple.',
+    'sheetImport.err.nothingLeft': 'Il ne reste plus de tôle une fois les défauts retirés. Faites-les plus petits.',
     'sheetImport.back': "Choisir un autre fichier",
     'sheetImport.review.hint': "Cliquez une forme pour l’interdire. Rien n’est interdit tant que vous ne choisissez pas.",
     'sheetImport.drawing.label': "Dessin de la tôle",

@@ -14,6 +14,8 @@
  * du parent la couvre déjà).
  */
 
+import { normalizeCut, normalizeDrawn } from './sheetDefects.js'
+
 export const MAX_SHEET_VERTICES = 5000
 export const MAX_SHEET_ZONES = 200
 
@@ -169,10 +171,21 @@ export function describeOutline(contours, outlineIndex) {
     return { kind: 'box', widthMm: maxx - minx, heightMm: maxy - miny }
 }
 
+/**
+ * Indice du contour de tôle d'un ENREGISTREMENT. Un enregistrement avec
+ * défauts dessinés garde `outlineIndex: -1` (pilule empoisonnée : une
+ * ancienne version de l'application, qui lit la même base IndexedDB, refuse
+ * alors la tôle bruyamment au lieu d'ignorer les défauts) et le vrai indice
+ * dans `outlineIndexV2`.
+ */
+export function outlineIndexOf(record) {
+    return Number.isInteger(record?.outlineIndexV2) ? record.outlineIndexV2 : record?.outlineIndex
+}
+
 /** Anneaux pour le moteur : contour de tôle + zones interdites normalisées. */
 export function engineRings(record) {
     const contours = record?.contours
-    const outlineIndex = record?.outlineIndex
+    const outlineIndex = outlineIndexOf(record)
     if (!validIndex(contours, outlineIndex)) return { outer: null, holes: [] }
     const holes = normalizeForbidden(contours, outlineIndex, record.forbidden)
         .map((i) => contours[i].ring)
@@ -217,13 +230,44 @@ function geometryKeyOf(contours, outlineIndex, zones) {
     return `g1-${zones.length}-${fnv1a(text, 0x811c9dc5)}${fnv1a(text, 0x01000193)}`
 }
 
+/** Empreinte `g2-` : celle de `g1-` plus les anneaux des défauts (jamais égale à une `g1-`). */
+function geometryKeyWithDefects(contours, outlineIndex, zones, defects) {
+    const parts = [ringKey(contours[outlineIndex].ring)]
+    parts.push(...zones.map((i) => ringKey(contours[i].ring)).sort())
+    parts.push('D')
+    parts.push(...defects.map((d) => ringKey(d.ring)).sort())
+    const text = parts.join('|')
+    return `g2-${zones.length}-${defects.length}-${fnv1a(text, 0x811c9dc5)}${fnv1a(text, 0x01000193)}`
+}
+
+/**
+ * Empreinte de CE que la coupe découpe : contour, zones et défauts dessinés.
+ * Une coupe est liée à elle (`bindCut`) ; l'enregistrement et le moteur
+ * refusent une coupe calculée pour un autre dessin (un défaut ajouté après la
+ * coupe serait sinon gardé à l'écran et absent du calcul).
+ */
+export function cutKeyOf(contours, outlineIndex, forbidden, drawn) {
+    if (!validIndex(contours, outlineIndex)) throw new Error('sheet_no_outline')
+    return geometryKeyWithDefects(
+        contours, outlineIndex, normalizeForbidden(contours, outlineIndex, forbidden), normalizeDrawn(drawn),
+    )
+}
+
+/**
+ * Résultat de geoCutSheet (`result`) lié à l'entrée EXACTE dont il vient : la
+ * coupe à donner à `buildRecord`/`makeSheetRecord`. Lève sheet_bad_cut.
+ */
+export function bindCut(result, contours, outlineIndex, forbidden, drawn) {
+    return { ...normalizeCut(result), forKey: cutKeyOf(contours, outlineIndex, forbidden, drawn) }
+}
+
 /**
  * Valide un anneau et le rend fermé : sommets [x, y] aux coordonnées finies,
  * au moins 3 sommets distincts. Un anneau donné sans point de fermeture est
  * accepté (le point est ajouté). Rend l'anneau lui-même s'il est déjà fermé.
  * Lève sheet_bad_geometry sinon.
  */
-function closedValidRing(ring) {
+export function closedValidRing(ring) {
     if (!Array.isArray(ring)) throw new Error('sheet_bad_geometry')
     for (const pt of ring) {
         if (!Array.isArray(pt) || pt.length < 2
@@ -245,7 +289,7 @@ function closedValidRing(ring) {
  * ou moins de 3 sommets distincts), sheet_too_many_vertices, sheet_too_many_zones.
  */
 export function makeSheetRecord({
-    id, projectSlug, name, sourceFileName, sourceUnits, contours, outlineIndex, forbidden, addedAt,
+    id, projectSlug, name, sourceFileName, sourceUnits, contours, outlineIndex, forbidden, addedAt, drawn, cut,
 }) {
     if (!validIndex(contours, outlineIndex) || !Array.isArray(contours[outlineIndex]?.ring)) {
         throw new Error('sheet_no_outline')
@@ -262,11 +306,24 @@ export function makeSheetRecord({
         }
     }
     contours = stored
-    const limits = sheetLimits(contours, outlineIndex, zones)
+    // Défauts dessinés : le RÉSULTAT de la coupe est obligatoire (sheet_cut_missing) ;
+    // sans défaut, `cut` est ignoré et l'enregistrement est celui d'avant, champ pour champ.
+    const defects = normalizeDrawn(drawn)
+    let cutShape = null
+    if (defects.length) {
+        if (cut === undefined || cut === null) throw new Error('sheet_cut_missing')
+        const forKey = geometryKeyWithDefects(contours, outlineIndex, zones, defects)
+        // Coupe d'un autre état du dessin : jamais enregistrée.
+        cutShape = { ...normalizeCut(cut), forKey }
+        if (cut.forKey !== forKey) throw new Error('sheet_cut_missing')
+    }
+    const limits = cutShape
+        ? drawnLimits(contours, outlineIndex, zones, defects, cutShape)
+        : sheetLimits(contours, outlineIndex, zones)
     if (limits.reason === 'too_many_vertices') throw new Error('sheet_too_many_vertices')
     if (limits.reason === 'too_many_zones') throw new Error('sheet_too_many_zones')
     const bbox = ringBbox(contours[outlineIndex].ring)
-    return {
+    const base = {
         slug: id,
         kind: 'sheet',
         projectSlug: projectSlug ?? null,
@@ -285,6 +342,40 @@ export function makeSheetRecord({
         vertexCount: limits.vertexCount,
         geometryKey: geometryKeyOf(contours, outlineIndex, zones),
     }
+    if (!cutShape) return base
+    // Cadre, largeur et hauteur restent ceux du contour ORIGINAL ; l'aire est celle de la coupe.
+    return {
+        ...base,
+        outlineIndex: -1,
+        outlineIndexV2: outlineIndex,
+        drawn: defects,
+        cut: cutShape,
+        areaMm2: cutShape.usableArea,
+        geometryKey: cutShape.forKey,
+    }
+}
+
+/** Plafonds d'une tôle coupée : le plus grand des deux dénombrements (original + dangers, coupe). */
+function drawnLimits(contours, outlineIndex, zones, defects, cut) {
+    const sum = (rings) => rings.reduce((n, r) => n + vertexCountOf(r), 0)
+    const vertexCount = Math.max(
+        vertexCountOf(contours[outlineIndex].ring) + sum(cut.hazards),
+        vertexCountOf(cut.outer) + sum(cut.holes),
+    )
+    const zoneCount = Math.max(cut.hazards.length, cut.holes.length, zones.length + defects.length)
+    let reason = null
+    if (vertexCount > MAX_SHEET_VERTICES) reason = 'too_many_vertices'
+    else if (zoneCount > MAX_SHEET_ZONES) reason = 'too_many_zones'
+    return { ok: reason === null, reason, vertexCount, zoneCount }
+}
+
+/** Nombre de zones d'un enregistrement : zones interdites normalisées + défauts dessinés. */
+export function recordZoneCount(record) {
+    const drawnCount = Array.isArray(record?.drawn) ? record.drawn.length : 0
+    const forbidden = Array.isArray(record?.contours)
+        ? normalizeForbidden(record.contours, outlineIndexOf(record), record.forbidden).length
+        : (Array.isArray(record?.forbidden) ? record.forbidden.length : 0)
+    return forbidden + drawnCount
 }
 
 /**
@@ -338,6 +429,7 @@ function translatedClosedRing(ring, dx, dy) {
  * zones gardées ; `perimeterMm` = contour + zones (pour la capacité).
  */
 export function engineBinShape(record) {
+    if (Array.isArray(record?.drawn) && record.drawn.length > 0) return engineBinShapeCut(record)
     const { outer, holes } = engineRings(record)
     const box = ringBbox(outer)
     if (!box) throw new Error('sheet_shape_missing')
@@ -355,6 +447,52 @@ export function engineBinShape(record) {
     if (!(usableAreaMm2 > 0)) throw new Error('sheet_shape_missing')
     const perimeterMm = ringPerimeter(outerRing) + inner.reduce((sum, r) => sum + ringPerimeter(r), 0)
     return { outer: outerRing, inner, widthMm, heightMm, usableAreaMm2, perimeterMm }
+}
+
+/**
+ * Tôle avec défauts dessinés. Le MOTEUR reçoit le contour ORIGINAL et les
+ * dangers (zones, défauts, morceaux perdus) comme trous : un contour entaillé
+ * est mal érodé par le moteur dans 1 à 2 % des cas. Le LIVRÉ (rapport, aires,
+ * DXF, dessins) est la forme COUPÉE (`deliver`). Tout est translaté du même
+ * (dx, dy), ceux du contour original : le cadre ne bouge jamais, largeur et
+ * hauteur restent celles du contour original. Une coupe absente, illisible ou
+ * d'un autre dessin lève sheet_shape_missing, jamais un repli sur la tôle non
+ * coupée.
+ */
+function engineBinShapeCut(record) {
+    let cut
+    try {
+        cut = normalizeCut(record.cut)
+        const key = cutKeyOf(record.contours, outlineIndexOf(record), record.forbidden, record.drawn)
+        // La coupe gardée doit être celle de CE dessin (contour, zones, défauts).
+        if (record.cut.forKey !== key) throw new Error('sheet_bad_cut')
+    } catch {
+        throw new Error('sheet_shape_missing')
+    }
+    const { outer } = engineRings(record)
+    const box = ringBbox(outer)
+    if (!box) throw new Error('sheet_shape_missing')
+    const [dx, dy] = box
+    const outerRing = translatedClosedRing(outer, dx, dy)
+    const deliverOuter = translatedClosedRing(cut.outer, dx, dy)
+    if (!outerRing || !deliverOuter) throw new Error('sheet_shape_missing')
+    const inner = cut.hazards.map((r) => translatedClosedRing(r, dx, dy)).filter(Boolean)
+    const deliverInner = cut.holes.map((r) => translatedClosedRing(r, dx, dy)).filter(Boolean)
+    const perimeterMm = ringPerimeter(deliverOuter) + deliverInner.reduce((sum, r) => sum + ringPerimeter(r), 0)
+    return {
+        outer: outerRing,
+        inner,
+        widthMm: box[2] - box[0],
+        heightMm: box[3] - box[1],
+        usableAreaMm2: cut.usableArea,
+        perimeterMm,
+        deliver: { outer: deliverOuter, inner: deliverInner },
+    }
+}
+
+/** Forme à DESSINER d'un conteneur moteur : la forme coupée si elle existe, sinon celle du moteur. */
+export function displayShape(binShape) {
+    return binShape?.deliver ?? { outer: binShape?.outer, inner: binShape?.inner }
 }
 
 /** Vrai si le payload moteur porte au moins un conteneur issu d'une tôle importée. */

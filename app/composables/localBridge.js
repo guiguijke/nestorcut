@@ -1052,8 +1052,76 @@ export function reportSheetShapes(payload, layouts) {
         if (!ids.has(bin.id)) return null
         const data = bin.shape?.data
         if (!Array.isArray(data?.outer) || data.outer.length < 4) return { unresolved: true }
-        return { shape: { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] } }
+        const engine = { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+        // Défauts dessinés : `bins` porte la forme du MOTEUR (contour original +
+        // dangers) ; la forme LIVRÉE (coupée) est celle des aires, de la densité,
+        // du DXF et des dessins. Une forme livrée illisible n'est JAMAIS remplacée
+        // par celle du moteur (piège #60) : non vérifié.
+        const entry = shaped.find((s) => s.id === bin.id)
+        if (entry && entry.shape !== undefined) {
+            const d = entry.shape
+            if (!Array.isArray(d?.outer) || d.outer.length < 4) return { unresolved: true }
+            return { shape: { outer: d.outer, inner: Array.isArray(d.inner) ? d.inner : [] }, engineShape: engine }
+        }
+        return { shape: engine }
     })
+}
+
+/** Le pire de deux états de vérification. */
+const _worseStatus = (a, b) => (a === 'skipped' || b === 'skipped' ? 'skipped' : (a ?? b ?? 'measured'))
+/** Vrai seulement si les deux le sont ; faux l'emporte sur null ; null si l'un manque. */
+const _bothTrue = (a, b) => {
+    if (a === false || b === false) return false
+    if (a === null || a === undefined || b === null || b === undefined) return null
+    return true
+}
+
+/** Rapport « non vérifié » : la même sortie que `markUnresolvedShapes`. */
+function _unverifiedCopy(report) {
+    return {
+        ...report,
+        verify: {
+            ...report.verify,
+            insideSheet: null, zoneClear: null, shapeVerified: false, verifyStatus: 'skipped',
+        },
+    }
+}
+
+/**
+ * Tôle avec défauts dessinés : le rapport est calculé DEUX fois, sur la forme
+ * livrée (coupée : aires, densité, écart au contour) et sur la forme du moteur
+ * (contour original + dangers : ce que le moteur devait éviter, entailles du
+ * bord comprises). Seul `verify` est fusionné ; le reste vient du rapport livré.
+ * Pure : rend une copie. Un second rapport absent ou en erreur donne « non
+ * vérifié », jamais vert.
+ */
+export function mergeShapeVerify(deliverReport, engineReport) {
+    if (!deliverReport || deliverReport.error || !deliverReport.verify) return deliverReport
+    if (!engineReport || engineReport.error || !engineReport.verify) return _unverifiedCopy(deliverReport)
+    const d = deliverReport.verify
+    const e = engineReport.verify
+    const num = (a, b, pick) => {
+        const xs = [a, b].filter((v) => typeof v === 'number' && Number.isFinite(v))
+        return xs.length ? pick(...xs) : null
+    }
+    return {
+        ...deliverReport,
+        verify: {
+            ...d,
+            insideSheet: _bothTrue(d.insideSheet, e.insideSheet),
+            zoneClear: e.zoneClear,
+            zoneViolations: e.zoneViolations,
+            zonesChecked: e.zonesChecked,
+            zoneOverlapAreaMm2: e.zoneOverlapAreaMm2,
+            minDistToZoneMm: e.minDistToZoneMm,
+            partsOutsideOutline: num(d.partsOutsideOutline, e.partsOutsideOutline, Math.max) ?? d.partsOutsideOutline,
+            smallestGapMm: num(d.smallestGapMm, e.smallestGapMm, Math.min),
+            spacingOk: _bothTrue(d.spacingOk, e.spacingOk),
+            overlapFree: _bothTrue(d.overlapFree, e.overlapFree),
+            shapeVerified: Boolean(d.shapeVerified) && Boolean(e.shapeVerified),
+            verifyStatus: _worseStatus(d.verifyStatus, e.verifyStatus),
+        },
+    }
 }
 
 /** Une forme introuvable (`reportSheetShapes`) ne laisse JAMAIS un badge vert :
@@ -1850,11 +1918,28 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     return c
                 })
                 : containers
-            const report0 = await geoComputeReport({
+            let report0 = await geoComputeReport({
                 items: reportItems,
                 containers: reportContainers,
                 space,
             })
+            // Défauts dessinés : second calcul sur les formes du MOTEUR, fusionné
+            // sur `verify` seulement (avant applySpacingMargin, qui ne passe qu'une fois).
+            if (reportShapes?.some((s) => s?.engineShape)) {
+                let engineReport = null
+                try {
+                    engineReport = await geoComputeReport({
+                        items: reportItems,
+                        containers: reportContainers.map((c, i) => (reportShapes[i]?.engineShape
+                            ? { ...c, shape: reportShapes[i].engineShape }
+                            : c)),
+                        space,
+                    })
+                } catch {
+                    engineReport = null
+                }
+                report0 = mergeShapeVerify(report0, engineReport)
+            }
             const report = markUnresolvedShapes(report0, reportShapes)
             applySpacingMargin(report, space - requestedSpace, requestedSpace)
             applyTrueAreasToReport(report, containers, partsById)
@@ -2057,6 +2142,20 @@ export function binShapeForDxf(payload, container) {
     if (!Array.isArray(shaped) || !shaped.length || !Array.isArray(bins)) return null
     const bin = bins[id]
     if (!bin || !shaped.some((s) => s.id === bin.id)) return null
+    // Défauts dessinés : le DXF livré porte la forme COUPÉE. Illisible, on ne
+    // retombe NI sur le rectangle NI sur la forme du moteur (une tôle non coupée
+    // livrée en silence) : on lève, `buildSheetDxf` renvoie alors « pas de DXF »
+    // (le rapport et l'aperçu survivent, le manque se voit).
+    const entry = shaped.find((s) => s.id === bin.id)
+    if (entry && entry.shape !== undefined) {
+        const d = entry.shape
+        const finite = (r) => Array.isArray(r) && r.length >= 4
+            && r.every((p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+        if (!finite(d?.outer) || !Array.isArray(d.inner) || !d.inner.every(finite)) {
+            throw new Error('sheet_shape_missing')
+        }
+        return { outer: d.outer, inner: d.inner }
+    }
     const data = bin.shape?.data
     if (!Array.isArray(data?.outer) || data.outer.length < 4) return null
     return { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }

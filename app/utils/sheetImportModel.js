@@ -11,6 +11,7 @@ import {
     describeOutline,
     makeSheetRecord,
     normalizeForbidden,
+    outlineIndexOf,
     pickOutlineIndex,
     ringBbox,
     usableAreaMm2,
@@ -39,6 +40,8 @@ export const ERROR_KEYS = {
     tooManyZones: 'sheetImport.err.tooManyZones',
     nameRequired: 'sheetImport.err.nameRequired',
     storage: 'sheetImport.err.storage',
+    cut: 'sheetImport.err.cut',
+    nothingLeft: 'sheetImport.err.nothingLeft',
 }
 
 const CODE_TO_KEY = {
@@ -46,6 +49,16 @@ const CODE_TO_KEY = {
     sheet_bad_geometry: ERROR_KEYS.badGeometry,
     sheet_too_many_vertices: ERROR_KEYS.tooManyVertices,
     sheet_too_many_zones: ERROR_KEYS.tooManyZones,
+    // Défauts dessinés : la coupe n'a pas pu être appliquée (message générique),
+    // ou il ne reste aucune matière.
+    sheet_bad_defect: ERROR_KEYS.cut,
+    sheet_bad_cut: ERROR_KEYS.cut,
+    sheet_cut_missing: ERROR_KEYS.cut,
+    sheet_cut_failed: ERROR_KEYS.cut,
+    sheet_cut_too_complex: ERROR_KEYS.cut,
+    sheet_cut_time_budget: ERROR_KEYS.cut,
+    sheet_cut_bad_input: ERROR_KEYS.cut,
+    sheet_no_usable_area: ERROR_KEYS.nothingLeft,
     indexeddb_unavailable: ERROR_KEYS.storage,
     indexeddb_blocked: ERROR_KEYS.storage,
 }
@@ -365,9 +378,17 @@ export function isListOnly(contour, scale, minPx = MIN_ZONE_PX) {
  */
 export function thumbModel(record, width = 72, height = 56) {
     const contours = record?.contours
-    const outlineIndex = record?.outlineIndex
+    const outlineIndex = outlineIndexOf(record)
     if (!Array.isArray(contours) || !contours[outlineIndex]) return null
     const fit = fitTransform(contours[outlineIndex].bbox || ringBbox(contours[outlineIndex].ring), width, height, 4)
+    // Tôle coupée : on dessine le contour restant et ses trous, dans le cadre du contour ORIGINAL.
+    if (Array.isArray(record.drawn) && record.drawn.length > 0 && record.cut) {
+        return {
+            ...fit,
+            outlineD: ringPath(record.cut.outer),
+            zonesD: (record.cut.holes || []).map((r) => ringPath(r)),
+        }
+    }
     const zones = normalizeForbidden(contours, outlineIndex, record.forbidden)
     return {
         ...fit,
@@ -406,7 +427,7 @@ export function toPlain(value) {
  * compris) : il part tel quel vers IndexedDB.
  */
 export function buildRecord({
-    slug, projectSlug, name, sourceFileName, sourceUnits, contours, outlineIndex, forbidden, now,
+    slug, projectSlug, name, sourceFileName, sourceUnits, contours, outlineIndex, forbidden, now, drawn, cut,
 }) {
     const clean = cleanName(name)
     if (!clean) return { error: ERROR_KEYS.nameRequired }
@@ -421,6 +442,8 @@ export function buildRecord({
             outlineIndex,
             forbidden: toPlain(forbidden),
             addedAt: now,
+            drawn: toPlain(drawn),
+            cut: toPlain(cut),
         })
         return { record: toPlain(record) }
     } catch (err) {

@@ -892,6 +892,8 @@ export default {
     "sheetImport.err.tooManyZones": "Zu viele gesperrte Zonen. Höchstens 200 sind erlaubt.",
     "sheetImport.err.nameRequired": "Gib dem Blech einen Namen.",
     "sheetImport.err.storage": "Dein Browser konnte dieses Blech nicht speichern. Prüfe, ob Speicher erlaubt und der private Modus aus ist.",
+    "sheetImport.err.cut": "Dieser Defekt konnte nicht auf das Blech angewendet werden. Versuche eine einfachere Form.",
+    "sheetImport.err.nothingLeft": "Nach Abzug der Defekte bleibt kein Blech übrig. Mache sie kleiner.",
     "sheetImport.back": "Andere Datei wählen",
     "sheetImport.review.hint": "Klicke eine Form an, um sie zu sperren. Ohne deine Wahl ist nichts gesperrt.",
     "sheetImport.drawing.label": "Zeichnung des Blechs",

@@ -1023,6 +1023,8 @@ export default {
     'sheetImport.err.tooManyZones': 'Too many forbidden zones. Keep 200 at most.',
     'sheetImport.err.nameRequired': 'Give the sheet a name.',
     'sheetImport.err.storage': 'Your browser could not save this sheet. Check that storage is allowed and that private browsing is off.',
+    'sheetImport.err.cut': 'This defect could not be applied to the sheet. Try a simpler shape.',
+    'sheetImport.err.nothingLeft': 'Nothing is left of the sheet once the defects are removed. Make them smaller.',
     'sheetImport.back': 'Choose another file',
     'sheetImport.review.hint': 'Click a shape to forbid it. Nothing is forbidden until you choose.',
     'sheetImport.drawing.label': 'Drawing of the sheet',

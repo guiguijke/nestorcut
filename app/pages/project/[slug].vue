@@ -268,7 +268,7 @@ import {
 } from "~~/shared/constants/demo.constants";
 import { idlePaneModel } from "~/utils/idlePanes";
 import { ZONE_RED, shapeToDrawPaths } from "~/utils/sheetDraw";
-import { engineBinShape } from "~~/app/utils/sheetShape";
+import { displayShape, engineBinShape } from "~~/app/utils/sheetShape";
 import { PRIVACY_CHIP_KEY, PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
 
 definePageMeta({
@@ -917,7 +917,7 @@ watch(
                 const record = await getSheet(id);
                 if (!record) continue;
                 const shape = engineBinShape(record);
-                const paths = shapeToDrawPaths(shape, shape.heightMm);
+                const paths = shapeToDrawPaths(displayShape(shape), shape.heightMm);
                 if (paths) loaded[id] = { w: shape.widthMm, h: shape.heightMm, ...paths };
             } catch {
                 // illisible : rectangle

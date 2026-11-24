@@ -1183,7 +1183,16 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         if (hasShaped) {
             shapedSheets = nonEmpty
                 .map((s, i) => (s.shaped
-                    ? { id: i, usableAreaMm2: s.shaped.usableAreaMm2, perimeterMm: s.shaped.perimeterMm }
+                    ? {
+                        id: i,
+                        usableAreaMm2: s.shaped.usableAreaMm2,
+                        perimeterMm: s.shaped.perimeterMm,
+                        // Défauts dessinés seulement : la forme LIVRÉE (coupée), pour le
+                        // rapport, le DXF et les dessins ; le moteur garde `bins`.
+                        ...(s.shaped.deliver
+                            ? { shape: { outer: s.shaped.deliver.outer, inner: s.shaped.deliver.inner } }
+                            : {}),
+                    }
                     : null))
                 .filter(Boolean)
         }

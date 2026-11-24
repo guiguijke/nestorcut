@@ -894,6 +894,8 @@ export default {
     "sheetImport.err.tooManyZones": "Demasiadas zonas prohibidas. Deja 200 como máximo.",
     "sheetImport.err.nameRequired": "Ponle un nombre a la chapa.",
     "sheetImport.err.storage": "Tu navegador no pudo guardar esta chapa. Comprueba que el almacenamiento esté permitido y que la navegación privada esté desactivada.",
+    "sheetImport.err.cut": "No se pudo aplicar este defecto a la chapa. Prueba una forma más simple.",
+    "sheetImport.err.nothingLeft": "No queda chapa una vez quitados los defectos. Hazlos más pequeños.",
     "sheetImport.back": "Elegir otro archivo",
     "sheetImport.review.hint": "Haz clic en una forma para prohibirla. Nada está prohibido hasta que lo elijas.",
     "sheetImport.drawing.label": "Dibujo de la chapa",

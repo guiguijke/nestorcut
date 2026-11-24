@@ -889,6 +889,8 @@ export default {
     "sheetImport.err.tooManyZones": "Troppe zone vietate. Ne puoi tenere al massimo 200.",
     "sheetImport.err.nameRequired": "Dai un nome alla lamiera.",
     "sheetImport.err.storage": "Il browser non ha potuto salvare questa lamiera. Verifica che l’archiviazione sia consentita e che la navigazione privata sia disattivata.",
+    "sheetImport.err.cut": "Non è stato possibile applicare questo difetto alla lamiera. Prova una forma più semplice.",
+    "sheetImport.err.nothingLeft": "Dopo aver tolto i difetti non resta lamiera. Falli più piccoli.",
     "sheetImport.back": "Scegli un altro file",
     "sheetImport.review.hint": "Fai clic su una forma per vietarla. Nulla è vietato finché non scegli.",
     "sheetImport.drawing.label": "Disegno della lamiera",
