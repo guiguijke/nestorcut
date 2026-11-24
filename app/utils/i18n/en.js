@@ -294,7 +294,7 @@ export default {
     // Lot J8-d : ce mode est le SEUL qui accepte un .job SheetCam — la
     // carte le dit comme une capacité, au rang de la phrase de
     // confidentialité (texte du propriétaire, §9.73 point 17).
-    'privacy.device.body': 'Your parts stay here. SheetCam job files (.job) accepted. No other computer, no DWG.',
+    'privacy.device.body': "Your parts stay here, and nowhere else: once the browser is closed, they may be lost. SheetCam job files (.job) accepted. No other computer, no DWG.",
     'privacy.cloud.title': 'Our servers',
     // Lot J8-d : le refus .job du mode serveur (jobImport.serverUnsupported)
     // ne doit plus être une découverte au dépôt. À RETIRER quand J5 livre
@@ -305,7 +305,7 @@ export default {
     'privacy.chip.device': 'This device',
     'privacy.chip.cloud': 'Cloud · 24 h',
     'privacy.chip.vault': 'Cloud · vault',
-    'privacy.status.device': 'Parts and results live in this browser. Nothing to download to keep them.',
+    'privacy.status.device': "Parts and results live in this browser only. They may be lost once the browser is closed, and they are if you log out: download what you want to keep.",
     'privacy.status.cloud': 'Download your DXF — sources and results are deleted after 24 h.',
     'privacy.status.vault': 'Files are encrypted on our side. Without your key file, nobody can read them — including us, outside a work session.',
     'localImport.missingGeometry': 'These parts are in the other browser. Re-import them here — nothing was sent to us.',

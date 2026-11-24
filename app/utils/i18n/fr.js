@@ -289,7 +289,7 @@ export default {
     // Régime privacy (création + pastille projet).
     'privacy.choice': "Où vivent les pièces",
     'privacy.device.title': "Cet appareil",
-    'privacy.device.body': "Vos pièces restent ici. Fichiers de travail SheetCam (.job) acceptés. Pas d'autre appareil, pas de DWG.",
+    'privacy.device.body': "Vos pièces restent ici, et nulle part ailleurs  une fois le navigateur fermé, elles peuvent être perdues. Fichiers de travail SheetCam (.job) acceptés. Pas d'autre appareil, pas de DWG.",
     'privacy.cloud.title': "Nos serveurs",
     'privacy.cloud.body': "Tous vos appareils, DWG compris. Fichiers .job SheetCam : pas encore ici. Sans coffre : en clair, effacé après 24 h.",
     'privacy.cloud.vaultOff': "Activer le coffre (votre clé)",
@@ -297,7 +297,7 @@ export default {
     'privacy.chip.device': "Cet appareil",
     'privacy.chip.cloud': "Cloud · 24 h",
     'privacy.chip.vault': "Cloud · coffre",
-    'privacy.status.device': "Pièces et résultats dans ce navigateur. Rien à télécharger pour les garder.",
+    'privacy.status.device': "Pièces et résultats dans ce navigateur seulement. Ils peuvent être perdus une fois le navigateur fermé, et le sont si vous vous déconnectez  téléchargez ce que vous voulez garder.",
     'privacy.status.cloud': "Téléchargez vos DXF — sources et résultats sont effacés après 24 h.",
     'privacy.status.vault': "Fichiers chiffrés chez nous. Sans le fichier-clé, personne ne peut les lire — y compris nous, hors session de travail.",
     'localImport.missingGeometry': "Ces pièces sont dans l'autre navigateur. Réimportez-les ici — rien n'a été envoyé chez nous.",
