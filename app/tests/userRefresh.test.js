@@ -15,6 +15,7 @@ import {
     resolveLockedClick,
     runLockedDownload,
     shouldAutoRefresh,
+    writeFreshPlan,
 } from '../utils/userRefresh'
 import { hasPaidAccess } from '../utils/entitlementUi'
 import { sheetDownloadState } from '../utils/sheetDownloadState'
@@ -33,18 +34,61 @@ const PAID_ANSWER = { id: 'u1', granted: true, compute: { level: 'standard' } }
 function tab({ fetchUser, start = 0, startedAt = null, cache = FREE, storeId = cache?.id } = {}) {
     let t = start
     const w = { cache, storeUser: cache, storeSet: storeId !== undefined }
-    const apply = vi.fn((fresh) => {
-        const merged = mergePlan(w.cache, fresh)
-        if (!merged) return false
-        if (!w.storeSet || (w.storeUser?.id && w.storeUser.id !== merged.id)) return false
-        w.storeUser = merged
-        w.cache = merged
-        return true
-    })
+    const apply = vi.fn((fresh) => writeFreshPlan({
+        fresh,
+        getCurrent: () => w.cache,
+        setCurrent: (merged) => { w.cache = merged },
+        applyUser: (merged) => {
+            if (!w.storeSet || (w.storeUser?.id && w.storeUser.id !== merged.id)) return false
+            w.storeUser = merged
+            return true
+        },
+        isPaid: hasPaidAccess,
+    }))
     const fetch = fetchUser ?? vi.fn(async () => PAID_ANSWER)
     const r = createUserRefresher({ fetchUser: fetch, apply, now: () => t, startedAt })
     return { r, w, apply, fetch, tick: (ms) => { t += ms } }
 }
+
+describe('writeFreshPlan', () => {
+    const PAID = { ...FREE, granted: true, compute: { level: 'standard' } }
+    const run = (cur, fresh, applyUser = () => true) => {
+        let cache = cur
+        const ok = writeFreshPlan({
+            fresh, getCurrent: () => cache, setCurrent: (m) => { cache = m }, applyUser, isPaid: hasPaidAccess,
+        })
+        return { ok, cache }
+    }
+    it('un compte devenu payant pendant la requête n est pas rétrogradé par la réponse', () => {
+        const { ok, cache } = run(PAID, { id: 'u1', granted: false, compute: { level: 'free' } })
+        expect(ok).toBe(false)
+        expect(cache).toBe(PAID)
+    })
+    it('un compte payant qui change de palier est écrit', () => {
+        const { ok, cache } = run(PAID, { id: 'u1', granted: true, compute: { level: 'privacy' } })
+        expect(ok).toBe(true)
+        expect(cache.compute.level).toBe('privacy')
+        expect(cache.encryption).toEqual(FREE.encryption)
+    })
+    it('le store refuse : le cache n est pas écrit', () => {
+        const { ok, cache } = run(FREE, PAID_ANSWER, () => false)
+        expect(ok).toBe(false)
+        expect(cache).toBe(FREE)
+    })
+    it('le composable écrit par writeFreshPlan, jamais en direct', () => {
+        const src = readFileSync(fileURLToPath(new URL('../composables/useUserRefresh.js', import.meta.url)), 'utf8')
+        expect(src).toMatch(/apply: \(fresh\) => writeFreshPlan\(\{/)
+        expect(src).toMatch(/isPaid: hasPaidAccess/)
+        expect(src.match(/userData\.value = /g)).toHaveLength(1)
+    })
+    it('la liste des champs de palier du client est celle du serveur', () => {
+        const src = readFileSync(fileURLToPath(new URL('../../server/utils/planFields.js', import.meta.url)), 'utf8')
+        const body = src.slice(src.indexOf('return {'))
+        for (const k of PLAN_KEYS) expect(body).toMatch(new RegExp('\\b' + k + ':'))
+        const top = [...body.matchAll(/^ {8}(\w+):/gm)].map((m) => m[1]).sort()
+        expect(top).toEqual([...PLAN_KEYS].sort())
+    })
+})
 
 describe('pickPlan / mergePlan', () => {
     it('pickPlan ne garde que la liste blanche, laisse de côté les clés absentes', () => {

@@ -1,4 +1,5 @@
-import { createUserRefresher, mergePlan } from '~/utils/userRefresh'
+import { hasPaidAccess } from '~/utils/entitlementUi'
+import { createUserRefresher, writeFreshPlan } from '~/utils/userRefresh'
 
 // Un seul rafraîchisseur par onglet : son état (relevé en cours, heure du
 // dernier) est partagé entre le plugin de retour d'onglet, les fenêtres de
@@ -27,13 +28,13 @@ export function useUserRefresh() {
             fetchUser: () => $apiFetch(API_ROUTES.USER_PLAN, { timeout: 5000, retry: 0 }),
             // Le cache COURANT est relu à l'écriture : une réponse tardive après
             // déconnexion ou changement de compte n'écrit rien.
-            apply: (fresh) => {
-                const merged = mergePlan(userData.value, fresh)
-                if (!merged) return false
-                if (authStore.actions.applyUser(merged) === false) return false
-                userData.value = merged
-                return true
-            },
+            apply: (fresh) => writeFreshPlan({
+                fresh,
+                getCurrent: () => userData.value,
+                setCurrent: (merged) => { userData.value = merged },
+                applyUser: (merged) => authStore.actions.applyUser(merged),
+                isPaid: hasPaidAccess,
+            }),
         })
     }
     return refresher

@@ -1257,7 +1257,8 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     (`encryption.locked`). Règles : seuls les champs de `PLAN_KEYS`
     (`app/utils/userRefresh.js`) sont écrits, et seulement si l'onglet tient
     encore le même `id` (une réponse tardive après déconnexion ou changement de
-    compte n'écrit rien, `applyUser` refuse aussi) ; un compte qui paie déjà n'est
+    compte n'écrit rien, `applyUser` refuse aussi, et une réponse partie avant le
+    paiement ne rétrograde personne : `writeFreshPlan`) ; un compte qui paie déjà n'est
     jamais relu automatiquement (au renouvellement la réponse peut dire `free` un
     moment) ; un clic sur un cadenas attend la relecture 2 s au plus. Les champs
     de palier se construisent à UN endroit (`server/utils/planFields.js`), qui ne
@@ -1366,7 +1367,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (2 046 au 20/11)
+npx vitest run                                             # app+server (2 151 au 24/11)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 101 au 18/11 (aussi dans la CI ; lit workers/geometry)

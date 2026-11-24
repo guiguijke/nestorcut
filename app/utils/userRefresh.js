@@ -52,6 +52,21 @@ export function mergePlan(cur, fresh) {
 }
 
 /**
+ * Écriture d'un relevé, sur l'utilisateur COURANT du cache. Refuse (false) un
+ * onglet déconnecté, un autre compte, et un compte devenu payant entre-temps :
+ * une réponse partie avant le paiement ne rétrograde personne.
+ */
+export function writeFreshPlan({ getCurrent, setCurrent, applyUser, isPaid, fresh }) {
+    const cur = getCurrent()
+    const merged = mergePlan(cur, fresh)
+    if (!merged) return false
+    if (isPaid(cur) && !isPaid(merged)) return false
+    if (applyUser(merged) === false) return false
+    setCurrent(merged)
+    return true
+}
+
+/**
  * @param {{ fetchUser: () => Promise<any>, apply: (fresh: object) => any, now?: () => number,
  *   startedAt?: number|null }} deps
  *   fetchUser lit /api/user/plan ; apply écrit le cache ET le store et rend false

@@ -113,9 +113,13 @@ const downloadGuard = createLockedClickGuard()
 const exportGuard = createLockedClickGuard()
 let unmounted = false
 onBeforeUnmount(() => { unmounted = true })
+// Une ouverture de la fenêtre = un numéro : un clic d'une ouverture précédente
+// du même résultat n'ouvre rien dans la suivante.
+let openSeq = 0
 const stillCurrent = () => {
     const slug = unref(resultModalData)?.slug
-    return () => !unmounted && Boolean(unref(resultDialog)) && unref(resultModalData)?.slug === slug
+    const seq = openSeq
+    return () => !unmounted && seq === openSeq && Boolean(unref(resultDialog)) && unref(resultModalData)?.slug === slug
 }
 const runDownload = (run, label = 'local download failed') => runLockedDownload({
     run,
@@ -125,12 +129,21 @@ const runDownload = (run, label = 'local download failed') => runLockedDownload(
     guard: downloadGuard,
     isCurrent: stillCurrent(),
 })
-const downloadLocalSingle = () => runDownload(() => {
-    downloadLocalDxf(unref(localRecord), unref(activeAlt), 0, { maxSheet: currentMaxSheet() })
-})
-const downloadLocalSheet = () => runDownload(() => {
-    downloadLocalDxf(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
-})
+// L'option et la tôle sont celles du CLIC : un second essai après l'attente ne
+// livre pas celles choisies entre-temps.
+const downloadLocalSingle = () => {
+    const alt = unref(activeAlt)
+    return runDownload(() => {
+        downloadLocalDxf(unref(localRecord), alt, 0, { maxSheet: currentMaxSheet() })
+    })
+}
+const downloadLocalSheet = () => {
+    const alt = unref(activeAlt)
+    const part = unref(activePart)
+    return runDownload(() => {
+        downloadLocalDxf(unref(localRecord), alt, part, { maxSheet: currentMaxSheet() })
+    })
+}
 const downloadLocalAll = () => runDownload(() => {
     downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet() })
 })
@@ -140,9 +153,13 @@ const downloadLocalAll = () => runDownload(() => {
 const downloadLocalAllJobs = () => runDownload(() => {
     downloadLocalJobs(unref(localRecord), 0, { maxSheet: currentMaxSheet() })
 }, 'local job download failed')
-const downloadLocalSheetJob = () => runDownload(() => {
-    downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
-}, 'local job download failed')
+const downloadLocalSheetJob = () => {
+    const alt = unref(activeAlt)
+    const part = unref(activePart)
+    return runDownload(() => {
+        downloadLocalJob(unref(localRecord), alt, part, { maxSheet: currentMaxSheet() })
+    }, 'local job download failed')
+}
 
 // Report export gating (D-RAP-11): content visible on every plan; exports
 // (copy / CSV) are Unlimited+. COMMERCIAL gate, 100% client-side — the
@@ -281,6 +298,7 @@ onMounted(() => {
 
 watch(resultDialog, async (isOpen) => {
     if (isOpen) {
+        openSeq += 1
         activePart.value = 0
         activeAlt.value = 0
         viewMode.value = 'color'
@@ -464,6 +482,7 @@ const copied = ref(false)
 let copiedTimer = null
 const copyReport = async () => {
     const text = buildReportText()
+    let ok = true
     try {
         await navigator.clipboard.writeText(text)
     } catch {
@@ -472,9 +491,11 @@ const copyReport = async () => {
         ta.value = text
         document.body.appendChild(ta)
         ta.select()
-        document.execCommand('copy')
+        ok = document.execCommand('copy')
         ta.remove()
     }
+    // Copie refusée (Safari après une attente réseau) : ne pas annoncer « copié ».
+    if (!ok) return
     copied.value = true
     trackEvent('report_copied', { altId: unref(activeAlt) })
     clearTimeout(copiedTimer)
