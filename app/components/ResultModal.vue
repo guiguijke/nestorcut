@@ -70,6 +70,7 @@ import {
     sheetGateModel,
 } from '~/utils/sheetDownloadGate'
 import { isOnJobProject } from '~/utils/resultNav'
+import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
 import { failureDetailText } from '~/utils/failureReason'
 import { useLocalMode } from '~/composables/useLocalMode'
 import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
@@ -95,51 +96,53 @@ const localRecord = computed(() => unref(resultModalData)?.localRecord || null)
 // `sheet_locked` est un filet (l'interface ne propose jamais une tôle
 // verrouillée) : il ouvre la fenêtre d'abonnement au lieu d'un échec muet.
 const currentMaxSheet = () => maxDownloadableSheet(unref(downloadState))
-const onLocalDownloadError = (e, label = 'local download failed') => {
-    if (e?.message === 'sheet_locked') {
-        onUnlockSheets('modal_actions')
-        return
-    }
-    console.warn(label, e)
+// Palier périmé (accordé ou payé pendant que l'onglet restait ouvert) : avant
+// d'ouvrir la fenêtre d'abonnement, on relit l'utilisateur (au plus toutes les
+// 5 s, userRefresh.js). 'proceed' = le compte est ouvert.
+const userRefresh = useUserRefresh()
+const lockedClickOutcome = () => resolveLockedClick({
+    refreshIfOlderThan: userRefresh.refreshIfOlderThan,
+    readState: () => unref(downloadState),
+})
+// Un `sheet_locked` (filet) : palier relu, puis UN seul nouvel essai (runLockedDownload,
+// pur et testé) ; un second refus ouvre la fenêtre d'abonnement — pas de boucle.
+// Gardes : un clic en cours de résolution ignore les suivants ; après l'attente,
+// rien ne part si la fenêtre est fermée, a changé de résultat ou est démontée.
+const unlockGuard = createLockedClickGuard()
+const downloadGuard = createLockedClickGuard()
+const exportGuard = createLockedClickGuard()
+let unmounted = false
+onBeforeUnmount(() => { unmounted = true })
+const stillCurrent = () => {
+    const slug = unref(resultModalData)?.slug
+    return () => !unmounted && Boolean(unref(resultDialog)) && unref(resultModalData)?.slug === slug
 }
-const downloadLocalSingle = () => {
-    try {
-        downloadLocalDxf(unref(localRecord), unref(activeAlt), 0, { maxSheet: currentMaxSheet() })
-    } catch (e) {
-        onLocalDownloadError(e)
-    }
-}
-const downloadLocalSheet = () => {
-    try {
-        downloadLocalDxf(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
-    } catch (e) {
-        onLocalDownloadError(e)
-    }
-}
-const downloadLocalAll = () => {
-    try {
-        downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet() })
-    } catch (e) {
-        onLocalDownloadError(e)
-    }
-}
+const runDownload = (run, label = 'local download failed') => runLockedDownload({
+    run,
+    resolve: lockedClickOutcome,
+    paywall: () => openUnlockPaywall('modal_actions'),
+    warn: (e) => console.warn(label, e),
+    guard: downloadGuard,
+    isCurrent: stillCurrent(),
+})
+const downloadLocalSingle = () => runDownload(() => {
+    downloadLocalDxf(unref(localRecord), unref(activeAlt), 0, { maxSheet: currentMaxSheet() })
+})
+const downloadLocalSheet = () => runDownload(() => {
+    downloadLocalDxf(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
+})
+const downloadLocalAll = () => runDownload(() => {
+    downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet() })
+})
 // Lot J4 : le `.job` SheetCam de la TOLE A L'ECRAN (`activePart`), comme le
 // telechargement DXF d'une tole juste au-dessus — un `.job` ne porte qu'une
 // seule `[Work]`, donc une tole = un fichier.
-const downloadLocalAllJobs = () => {
-    try {
-        downloadLocalJobs(unref(localRecord), 0, { maxSheet: currentMaxSheet() })
-    } catch (e) {
-        onLocalDownloadError(e, 'local job download failed')
-    }
-}
-const downloadLocalSheetJob = () => {
-    try {
-        downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
-    } catch (e) {
-        onLocalDownloadError(e, 'local job download failed')
-    }
-}
+const downloadLocalAllJobs = () => runDownload(() => {
+    downloadLocalJobs(unref(localRecord), 0, { maxSheet: currentMaxSheet() })
+}, 'local job download failed')
+const downloadLocalSheetJob = () => runDownload(() => {
+    downloadLocalJob(unref(localRecord), unref(activeAlt), unref(activePart), { maxSheet: currentMaxSheet() })
+}, 'local job download failed')
 
 // Report export gating (D-RAP-11): content visible on every plan; exports
 // (copy / CSV) are Unlimited+. COMMERCIAL gate, 100% client-side — the
@@ -165,10 +168,23 @@ const exportDisabled = computed(() => unref(exportState) === 'disabled')
 const openBuyCredits = useBuyCreditsOpener()
 // Locked state: the click opens the EXISTING paywall dialog (explicit label
 // + CTA, J-054) instead of running the export.
-const onExportClick = (action, trackingTag) => {
+// Palier périmé : relu d'abord (userRefresh.js) ; si le compte est ouvert
+// maintenant, l'export demandé part, sans fenêtre d'abonnement.
+const onExportClick = async (action, trackingTag) => {
     if (unref(exportLocked)) {
-        trackEvent(trackingTag)
-        openBuyCredits({ source: 'export' })
+        await guardedLockedClick({
+            guard: exportGuard,
+            resolve: () => resolveLockedClick({
+                refreshIfOlderThan: userRefresh.refreshIfOlderThan,
+                readState: () => unref(exportState),
+            }),
+            isCurrent: stillCurrent(),
+            onProceed: action,
+            onPaywall: () => {
+                trackEvent(trackingTag)
+                openBuyCredits({ source: 'export' })
+            },
+        })
         return
     }
     action()
@@ -857,7 +873,18 @@ const freeDownloadNote = computed(() => {
     return ''
 })
 
-const onUnlockSheets = (surface) => {
+// Bouton « Débloquer » : relit d'abord le palier ; s'il est ouvert, l'interface
+// déverrouillée apparaît seule (le cache `user` est réactif), sans fenêtre.
+const onUnlockSheets = async (surface) => {
+    if (unref(checkoutChecking)) return
+    await guardedLockedClick({
+        guard: unlockGuard,
+        resolve: lockedClickOutcome,
+        isCurrent: stillCurrent(),
+        onPaywall: () => openUnlockPaywall(surface),
+    })
+}
+const openUnlockPaywall = (surface) => {
     if (unref(checkoutChecking)) return
     const gate = surface === 'modal_viewer'
         ? unref(viewGate)

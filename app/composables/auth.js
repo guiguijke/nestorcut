@@ -75,6 +75,19 @@ async function setUser() {
     }
 }
 
+// Applique un utilisateur DÉJÀ fusionné (useUserRefresh) : pas de requête, pas
+// de remise à zéro. Refuse (false) si l'onglet est déconnecté ou tient un
+// autre compte : une réponse tardive ne reconnecte jamais.
+function applyUser(userData) {
+    if (!userData || !userData.id) return false
+    const state = authState()
+    if (!state.userIsSet) return false
+    const curId = state.user?.id
+    if (curId && curId !== userData.id) return false
+    state.user = userData
+    return true
+}
+
 async function logout() {
     const state = authState()
     try {
@@ -100,6 +113,7 @@ export const authStore = readonly({
     },
     actions: {
         setUser,
+        applyUser,
         logout
     }
 })

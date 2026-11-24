@@ -1248,6 +1248,22 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     garde la sémantique réelle de `$push`. Verrou :
     `server/tests/googleLoginSession.test.js`.
 
+65b. **Le palier affiché dans un onglet ouvert se relit par `/api/user/plan`
+    (champs de palier seuls), jamais par `/api/user`, jamais en remplaçant
+    l'utilisateur entier.** `/api/user` appelle `getVaultStatus`, qui prolonge la
+    session du coffre (2 h) : relire à chaque retour d'onglet garderait la clé en
+    mémoire serveur indéfiniment ; et remplacer l'objet ferait basculer l'unité
+    d'un projet ouvert (`preferredUnit`) ou ouvrir le voile du coffre
+    (`encryption.locked`). Règles : seuls les champs de `PLAN_KEYS`
+    (`app/utils/userRefresh.js`) sont écrits, et seulement si l'onglet tient
+    encore le même `id` (une réponse tardive après déconnexion ou changement de
+    compte n'écrit rien, `applyUser` refuse aussi) ; un compte qui paie déjà n'est
+    jamais relu automatiquement (au renouvellement la réponse peut dire `free` un
+    moment) ; un clic sur un cadenas attend la relecture 2 s au plus. Les champs
+    de palier se construisent à UN endroit (`server/utils/planFields.js`), qui ne
+    doit jamais importer le coffre. Verrous : `app/tests/userRefresh.test.js`,
+    `server/tests/userPlan.test.js`.
+
 66. **Tôle importée d'un DXF : la tôle n'est plus un rectangle, et chaque
     étage qui la supposait rectangulaire doit le savoir (livré
     en V0.9.17, 20/11/2026).** Projet « Cet appareil »

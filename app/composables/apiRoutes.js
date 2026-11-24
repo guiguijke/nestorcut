@@ -2,6 +2,7 @@ export const API_ROUTES = {
     PROJECTS: '/api/project/me',
     LOGOUT: '/api/auth/logout',
     USER: '/api/user',
+    USER_PLAN: '/api/user/plan',
     USER_DELETE: '/api/user/delete',
     USER_PROMO_REDEEM: '/api/user/promo/redeem',
     SUBSCRIPTION: '/api/payment/subscription',

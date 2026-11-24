@@ -169,6 +169,7 @@ import { iconType } from '~~/constants/icon.constants'
 import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
 import { altLayoutCount, altSheetNames, lockedSheetsTrackData, resultHasImportedSheet, sheetGateModel } from '~/utils/sheetDownloadGate'
 import { relativeTimeParts } from '~/utils/relativeTime'
+import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
 
 const props = defineProps({
     result: {
@@ -252,7 +253,35 @@ const downloadTrackData = () => ({
     locked: String(gate.value.anyLocked),
 })
 
-const onUnlock = () => {
+// Palier périmé (accordé ou payé pendant que l'onglet restait ouvert) : on
+// relit l'utilisateur avant d'ouvrir la fenêtre d'abonnement (au plus toutes
+// les 5 s, userRefresh.js) ; un compte ouvert déverrouille la carte seule.
+const userRefresh = useUserRefresh()
+const lockedClickOutcome = () => resolveLockedClick({
+    refreshIfOlderThan: userRefresh.refreshIfOlderThan,
+    readState: () => unref(downloadState),
+})
+
+// Garde : un clic en cours de résolution ignore les suivants ; après l'attente,
+// rien ne part si la carte est démontée ou montre un autre résultat.
+const unlockGuard = createLockedClickGuard()
+let unmounted = false
+onBeforeUnmount(() => { unmounted = true })
+const stillCurrent = () => {
+    const slug = props.result?.slug
+    return () => !unmounted && props.result?.slug === slug
+}
+
+const onUnlock = async () => {
+    if (checkoutChecking.value) return
+    await guardedLockedClick({
+        guard: unlockGuard,
+        resolve: lockedClickOutcome,
+        isCurrent: stillCurrent(),
+        onPaywall: openUnlockPaywall,
+    })
+}
+const openUnlockPaywall = () => {
     if (checkoutChecking.value) return
     const g = gate.value
     trackEvent('locked_sheets_unlock_click', lockedSheetsTrackData('card', g, isLocal.value))
@@ -268,20 +297,24 @@ const onUnlock = () => {
     })
 }
 
-const downloadLocal = () => {
+const downloadGuard = createLockedClickGuard()
+const downloadLocal = async () => {
     const record = props.result?.localRecord;
     if (!record) return;
+    // Clic précédent en cours de résolution : ignoré (ni suivi ni second essai).
+    if (downloadGuard.busy) return;
     trackEvent('click_download_button', downloadTrackData());
-    try {
-        downloadLocalResult(record, 0, { maxSheet: maxDownloadableSheet(unref(downloadState)) });
-    } catch (e) {
-        // §3.11 : filet (l'archive écarte déjà les tôles verrouillées).
-        if (e?.message === 'sheet_locked') {
-            onUnlock()
-            return
-        }
-        console.warn('local download failed', e);
-    }
+    const run = () => downloadLocalResult(record, 0, { maxSheet: maxDownloadableSheet(unref(downloadState)) });
+    // §3.11 : filet (l'archive écarte déjà les tôles verrouillées). Palier
+    // périmé : relu d'abord ; compte ouvert → le fichier demandé est livré.
+    await runLockedDownload({
+        run,
+        resolve: lockedClickOutcome,
+        paywall: openUnlockPaywall,
+        warn: (e) => console.warn('local download failed', e),
+        guard: downloadGuard,
+        isCurrent: stillCurrent(),
+    });
 };
 
 const downloadUrl = computed(() => {
