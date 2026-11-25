@@ -20,8 +20,7 @@ describe('offres : la tôle importée et le rapport distinguent Free d’Unlimit
     const page = read('../pages/plans.vue')
     const KEYS = [
         'plans.free.customSheets', 'plans.free.report', 'plans.unlimited.customSheets', 'plans.unlimited.report',
-        'plans.compare.customSheets', 'plans.compare.report',
-        'plans.value.nestOnly', 'plans.value.withCutFiles', 'plans.value.onScreen', 'plans.value.copyCsv',
+        'plans.compare.customNest', 'plans.compare.customExport', 'plans.compare.reportView', 'plans.compare.reportExport',
     ]
 
     it('les textes existent dans les 6 langues, sur une ligne', () => {
@@ -51,10 +50,11 @@ describe('offres : la tôle importée et le rapport distinguent Free d’Unlimit
         }
     })
 
-    it('le comparatif : Free calcule et voit, Unlimited et Pro ont les fichiers, la copie et le CSV', () => {
-        expect(page).toMatch(/plans\.compare\.customSheets'\),\s*values: \[t\('plans\.value\.nestOnly'\), t\('plans\.value\.withCutFiles'\), t\('plans\.value\.withCutFiles'\)\]/)
-        expect(page).toMatch(/plans\.compare\.report'\),\s*values: \[t\('plans\.value\.onScreen'\), t\('plans\.value\.copyCsv'\), t\('plans\.value\.copyCsv'\)\]/)
-        expect(page.indexOf('plans.compare.customSheets')).toBeGreaterThan(page.indexOf('plans.compare.sheetDownloads'))
+    it('le comparatif : nesting et rapport ouverts à tous, leur export réservé à Unlimited et Pro', () => {
+        for (const [key, values] of [['customNest', 'true, true, true'], ['customExport', 'false, true, true'], ['reportView', 'true, true, true'], ['reportExport', 'false, true, true']]) {
+            expect(page).toContain(`{ label: t('plans.compare.${key}'), values: [${values}] },`)
+        }
+        expect(page.indexOf('plans.compare.customNest')).toBeGreaterThan(page.indexOf('plans.compare.sheetDownloads'))
     })
 })
 

@@ -305,14 +305,11 @@ const comparisonRows = computed(() => [
             t('plans.value.allSheets'),
         ],
     },
-    {
-        label: t('plans.compare.customSheets'),
-        values: [t('plans.value.nestOnly'), t('plans.value.withCutFiles'), t('plans.value.withCutFiles')],
-    },
-    {
-        label: t('plans.compare.report'),
-        values: [t('plans.value.onScreen'), t('plans.value.copyCsv'), t('plans.value.copyCsv')],
-    },
+    // Tôle importée et rapport : ouverts à tous, leur export distingue les offres.
+    { label: t('plans.compare.customNest'), values: [true, true, true] },
+    { label: t('plans.compare.customExport'), values: [false, true, true] },
+    { label: t('plans.compare.reportView'), values: [true, true, true] },
+    { label: t('plans.compare.reportExport'), values: [false, true, true] },
     { label: t('plans.compare.heterogeneous'), values: [true, true, true] },
     { label: t('plans.compare.export'), values: [true, true, true] },
     // Email de fin de nesting : chaîne inatteignable (AGENTS #38) — pas de claim.
