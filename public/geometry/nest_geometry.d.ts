@@ -31,6 +31,19 @@ export function canonical_dxf_scaled(bytes: Uint8Array, factor: number): Uint8Ar
 export function compute_report(json: string): string;
 
 /**
+ * cut_sheet(json {outer, holes?, defects?, time_budget_ms?}) -> JSON
+ * `{outer, holes, usableArea, pieces, lostArea, removedArea, changed, repairs,
+ * maxShift, lostPieces, hazards}` : la région utile d'une tôle moins les défauts
+ * dessinés (`nest_import::sheet_cut`) ; `hazards` = les interdits du moteur sur
+ * le contour d'ORIGINE, coupés par lui. Une coordonnée est un nombre ou une CHAÎNE
+ * (exacte au bit près). L'erreur est un code nommé, tel quel dans le message :
+ * `sheet_no_usable_area`, `sheet_bad_geometry`, `sheet_bad_defect`,
+ * `sheet_cut_too_complex`, `sheet_cut_time_budget`, `sheet_cut_failed`,
+ * `sheet_cut_bad_input`.
+ */
+export function cut_sheet(json: string): string;
+
+/**
  * export_dxf(dxf_bytes_source, json {transforms, space, add_out_shape,
  * bin_width, bin_height, output_unit}) -> DXF texte (une source).
  */
@@ -103,6 +116,7 @@ export interface InitOutput {
     readonly canonical_dxf_part: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly canonical_dxf_scaled: (a: number, b: number, c: number) => [number, number, number, number];
     readonly compute_report: (a: number, b: number) => [number, number, number, number];
+    readonly cut_sheet: (a: number, b: number) => [number, number, number, number];
     readonly export_dxf: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly export_svg_sheet: (a: number, b: number) => [number, number, number, number];

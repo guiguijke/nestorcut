@@ -11,6 +11,7 @@ pub mod budget;
 pub mod dxf;
 pub mod findings;
 pub mod sheet;
+pub mod sheet_cut;
 #[cfg(feature = "svg")]
 pub mod svg;
 pub mod units;

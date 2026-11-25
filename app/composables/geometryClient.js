@@ -107,6 +107,43 @@ export async function geoImportSheet(bytes, opts = {}) {
     if (r.status === 'refused') return { refusal: r.refusal, message: r.message }
     return r.result
 }
+
+/**
+ * Tôle moins les défauts dessinés à la main : `outer` (contour), `holes` (zones
+ * interdites) et `defects` sont des anneaux en mm dans le même repère. Rend
+ * `{ outer, holes, usableArea, pieces, lostArea, removedArea, changed, repairs,
+ * maxShift, lostPieces, hazards }` (aires en mm² ; anneaux fermés anti-horaires),
+ * ou `{ ok: false, error }` avec un code nommé : `sheet_no_usable_area`,
+ * `sheet_bad_geometry`, `sheet_bad_defect`, `sheet_cut_too_complex`,
+ * `sheet_cut_time_budget`, `sheet_cut_failed`, `sheet_cut_bad_input`.
+ *
+ * Deux descriptions de la même région :
+ * - `outer` + `holes` : la tôle COUPÉE (le morceau de plus grande aire nette),
+ *   pour le rapport, l'aire, le dessin et le DXF livré. `changed` false = les
+ *   anneaux d'entrée, au bit près. `lostPieces` = `[{ outer, holes }]`, les autres
+ *   morceaux (leurs aires font `lostArea`) ;
+ * - le contour d'ORIGINE + `hazards` : ce que le moteur reçoit (zones, défauts et
+ *   morceaux perdus réunis, COUPÉS par le contour). Aire du contour moins aires des
+ *   `hazards` = `usableArea` : l'aire que le moteur en tire est juste.
+ *
+ * Un défaut est rempli en règle NON NULLE (défaut de SVG et de Canvas) : le
+ * dessiner sans `fill-rule="evenodd"`, un chemin par défaut. Un cercle doit
+ * arriver en polygone CIRCONSCRIT (sommets à r / cos(π/n)), sinon la corde laisse
+ * de la tôle permise sur le défaut. Les coordonnées partent en CHAÎNES
+ * (`String(x)`) : le lecteur de nombres du wasm peut se tromper d'un ULP.
+ */
+export async function geoCutSheet(outer, holes = [], defects = [], opts = {}) {
+    const list = (a) => (Array.isArray(a) ? a : [])
+    const ring = (r) => list(r).map((p) => [String(p?.[0]), String(p?.[1])])
+    return parse(await call('cut_sheet', {
+        json: JSON.stringify({
+            outer: ring(outer),
+            holes: list(holes).map(ring),
+            defects: list(defects).map(ring),
+            time_budget_ms: opts.timeBudgetMs ?? IMPORT_TIME_BUDGET_MS,
+        }),
+    }))
+}
 export async function geoOpenHoles(outer, holes, spaceMm) {
     return parse(await call('open_holes', { json: JSON.stringify({ outer, holes, space_mm: spaceMm }) }))
 }

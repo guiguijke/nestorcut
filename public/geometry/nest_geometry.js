@@ -92,6 +92,40 @@ export function compute_report(json) {
 }
 
 /**
+ * cut_sheet(json {outer, holes?, defects?, time_budget_ms?}) -> JSON
+ * `{outer, holes, usableArea, pieces, lostArea, removedArea, changed, repairs,
+ * maxShift, lostPieces, hazards}` : la région utile d'une tôle moins les défauts
+ * dessinés (`nest_import::sheet_cut`) ; `hazards` = les interdits du moteur sur
+ * le contour d'ORIGINE, coupés par lui. Une coordonnée est un nombre ou une CHAÎNE
+ * (exacte au bit près). L'erreur est un code nommé, tel quel dans le message :
+ * `sheet_no_usable_area`, `sheet_bad_geometry`, `sheet_bad_defect`,
+ * `sheet_cut_too_complex`, `sheet_cut_time_budget`, `sheet_cut_failed`,
+ * `sheet_cut_bad_input`.
+ * @param {string} json
+ * @returns {string}
+ */
+export function cut_sheet(json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.cut_sheet(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
  * export_dxf(dxf_bytes_source, json {transforms, space, add_out_shape,
  * bin_width, bin_height, output_unit}) -> DXF texte (une source).
  * @param {Uint8Array} source

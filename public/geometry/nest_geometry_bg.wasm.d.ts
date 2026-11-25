@@ -5,6 +5,7 @@ export const canonical_dxf: (a: number, b: number, c: number) => [number, number
 export const canonical_dxf_part: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const canonical_dxf_scaled: (a: number, b: number, c: number) => [number, number, number, number];
 export const compute_report: (a: number, b: number) => [number, number, number, number];
+export const cut_sheet: (a: number, b: number) => [number, number, number, number];
 export const export_dxf: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const export_dxf_sheet: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const export_svg_sheet: (a: number, b: number) => [number, number, number, number];

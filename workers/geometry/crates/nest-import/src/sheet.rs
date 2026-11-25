@@ -82,7 +82,7 @@ fn key(p: Pt) -> Key {
 /// d'un sommet déjà sur la pile, la boucle qui se ferme là est extraite. Le
 /// cycle est circulaire : le premier sommet est rejoué à la fin pour fermer la
 /// dernière boucle. Rend chaque boucle sans point de fermeture.
-fn split_simple_loops(cycle: &[Pt]) -> Vec<Vec<Pt>> {
+pub(crate) fn split_simple_loops(cycle: &[Pt]) -> Vec<Vec<Pt>> {
     let mut loops: Vec<Vec<Pt>> = Vec::new();
     let mut stack: Vec<Pt> = Vec::new();
     let mut at: HashMap<Key, usize> = HashMap::new();

@@ -61,6 +61,20 @@ pub fn import_sheet_limited(
         .map_err(|e| JsError::new(&format!("{e}")))
 }
 
+/// cut_sheet(json {outer, holes?, defects?, time_budget_ms?}) -> JSON
+/// `{outer, holes, usableArea, pieces, lostArea, removedArea, changed, repairs,
+/// maxShift, lostPieces, hazards}` : la région utile d'une tôle moins les défauts
+/// dessinés (`nest_import::sheet_cut`) ; `hazards` = les interdits du moteur sur
+/// le contour d'ORIGINE, coupés par lui. Une coordonnée est un nombre ou une CHAÎNE
+/// (exacte au bit près). L'erreur est un code nommé, tel quel dans le message :
+/// `sheet_no_usable_area`, `sheet_bad_geometry`, `sheet_bad_defect`,
+/// `sheet_cut_too_complex`, `sheet_cut_time_budget`, `sheet_cut_failed`,
+/// `sheet_cut_bad_input`.
+#[wasm_bindgen]
+pub fn cut_sheet(json: &str) -> Result<String, JsError> {
+    nest_import::sheet_cut::cut_sheet_json(json).map_err(|e| JsError::new(e.code()))
+}
+
 /// import_svg(bytes, tol) -> JSON ImportResult.
 #[wasm_bindgen]
 pub fn import_svg(bytes: &[u8], tol: f64) -> Result<String, JsError> {
