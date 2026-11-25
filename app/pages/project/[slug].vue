@@ -905,8 +905,11 @@ const currentSheets = computed(() => {
 // le panneau garde son rectangle. Une entrée par shapeId des panneaux affichés.
 const idleShapes = ref({});
 watch(
-    () => idlePanes.value.panes.map((p) => p.shapeId || "").join("|"),
-    async (key) => {
+    // La révision de forme (une retouche garde le même shapeId) fait relire le dessin.
+    () => `${idlePanes.value.panes.map((p) => p.shapeId || "").join("|")}#${filesStore.getters.shapeRevision}`,
+    async (fullKey) => {
+        const key = fullKey.slice(0, fullKey.lastIndexOf("#"));
+        const revision = filesStore.getters.shapeRevision;
         const ids = [...new Set(key.split("|").filter(Boolean))];
         idleShapes.value = {};
         if (!ids.length || !import.meta.client) return;
@@ -925,6 +928,7 @@ watch(
         }
         // Obsolète si la liste des tôles a changé pendant la lecture.
         const now = [...new Set(idlePanes.value.panes.map((p) => p.shapeId).filter(Boolean))];
+        if (revision !== filesStore.getters.shapeRevision) return; // retouchée pendant la lecture : la relecture suivante prend la main
         if (now.length === ids.length && now.every((id) => ids.includes(id))) idleShapes.value = loaded;
     },
     { immediate: true }

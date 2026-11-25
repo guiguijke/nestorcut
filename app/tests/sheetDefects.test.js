@@ -14,17 +14,20 @@ import {
 } from '../utils/sheetDefects'
 import {
     bindCut,
+    contoursOf,
     cutKeyOf,
     displayShape,
     engineBinShape,
     engineRings,
+    hasDefectMarks,
     makeSheetRecord as makeRawRecord,
     outlineIndexOf,
+    recordCounts,
     recordZoneCount,
     ringArea,
     ringBbox,
 } from '../utils/sheetShape'
-import { buildRecord, importErrorOf, thumbModel, ERROR_KEYS } from '../utils/sheetImportModel'
+import { buildRecord, buildSheetView, importErrorOf, thumbModel, ERROR_KEYS } from '../utils/sheetImportModel'
 import { DICTS, LOCALES } from '../utils/i18n'
 
 const rect = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]
@@ -39,7 +42,8 @@ const sheetContours = () => [
     contour(rect(-20, 30, -10, 40), 2, 0),
 ]
 // Éclat sur le bord droit : x 90..110 (repère local), y 40..60.
-const chipHazard = () => rect(OX + 90, OY + 40, OX + 110, OY + 60)
+// Dangers découpés au contour (géométrie finale) : le carré de l'éclat est retiré au bord x = 100.
+const chipHazard = () => rect(OX + 90, OY + 40, OX + 100, OY + 60)
 const chipDefect = () => makeDefect('d1', 'rect', { a: [OX + 90, OY + 40], b: [OX + 110, OY + 60] })
 const notched = () => [
     [OX, OY], [OX + 100, OY], [OX + 100, OY + 40], [OX + 90, OY + 40], [OX + 90, OY + 60],
@@ -69,6 +73,9 @@ const bound = (a) => (a.cut && Array.isArray(a.drawn) && a.drawn.length
     : a)
 const makeSheetRecord = (a) => makeRawRecord(bound(a))
 const withChip = (extra = {}) => makeSheetRecord(base({ drawn: [chipDefect()], cut: chipCut(), ...extra }))
+
+// Lecture de la vignette AVANT contoursV2 : `contours[outlineIndex]`, sans repli.
+const oldThumb = (record) => (Array.isArray(record.contours) && record.contours[record.outlineIndex] ? 'dessin' : null)
 
 describe('anneaux de défauts', () => {
     it('DEFECT_KINDS', () => expect(DEFECT_KINDS).toEqual(['free', 'circle', 'rect']))
@@ -325,17 +332,23 @@ describe('makeSheetRecord avec défauts', () => {
         expect(outlineIndexOf({ outlineIndex: 3 })).toBe(3)
         expect(outlineIndexOf({ outlineIndex: -1, outlineIndexV2: 1.5 })).toBe(-1)
         expect(outlineIndexOf(null)).toBeUndefined()
-        // L'ancienne formule (outlineIndex lu tel quel, base 84243b52) ne trouve plus de contour : refus bruyant.
-        const oldOutline = rec.contours[rec.outlineIndex]
-        expect(oldOutline).toBeUndefined()
+        // Les contours sont dans contoursV2 ; `contours` reste vide : l'ancienne fenêtre ne lit pas une tôle propre.
+        expect(rec.contours).toEqual([])
+        expect(contoursOf(rec)).toBe(rec.contoursV2)
+        expect(contoursOf(makeSheetRecord(base()))).toHaveLength(2)
+        expect(hasDefectMarks(rec)).toBe(true)
+        expect(hasDefectMarks(makeSheetRecord(base()))).toBe(false)
+        // ANCIENNES règles de lecture sur un enregistrement neuf : fenêtre (vue nulle), vignette, moteur.
+        expect(buildSheetView(rec.contours)).toBeNull()
+        expect(oldThumb(rec)).toBeNull()
         const oldEngineBinShape = (record) => {
             const outer = record.contours[record.outlineIndex]?.ring
             const box = outer ? ringBbox(outer) : null
             if (!box) throw new Error('sheet_shape_missing')
         }
         expect(() => oldEngineBinShape(rec)).toThrow('sheet_shape_missing')
-        // La nouvelle lit l'indice V2.
-        expect(engineRings(rec).outer).toEqual(rec.contours[0].ring)
+        // La nouvelle lit l'indice V2 et les contours V2.
+        expect(engineRings(rec).outer).toEqual(rec.contoursV2[0].ring)
     })
 
     it('limites : sommets (original + dangers, ou coupe), zones (dangers, trous, zones + défauts)', () => {
@@ -367,6 +380,8 @@ describe('makeSheetRecord avec défauts', () => {
 
     it('recordZoneCount = zones normalisées + défauts', () => {
         expect(recordZoneCount(withChip())).toBe(2)
+        expect(recordCounts(withChip())).toEqual({ zones: 1, defects: 1 })
+        expect(recordCounts(makeSheetRecord(base()))).toEqual({ zones: 1, defects: 0 })
     })
 })
 
@@ -376,7 +391,7 @@ describe('engineBinShape avec défauts', () => {
         expect(shape.outer).toEqual(rect(0, 0, 100, 100))
         expect(shape.inner).toEqual([
             rect(17.5, 17.75, 27.5, 27.75),
-            rect(90, 40, 110, 60),
+            rect(90, 40, 100, 60),
         ])
         expect(shape.widthMm).toBe(100)
         expect(shape.heightMm).toBe(100)
@@ -395,7 +410,7 @@ describe('engineBinShape avec défauts', () => {
         const cut = {
             ...chipCut(),
             outer: rect(OX, OY, OX + 90, OY + 100),
-            hazards: [rect(OX + 90, OY - 10, OX + 110, OY + 110)],
+            hazards: [rect(OX + 90, OY, OX + 100, OY + 100)],
             holes: [],
             usableArea: 9000,
         }
@@ -406,7 +421,7 @@ describe('engineBinShape avec défauts', () => {
         expect(shape.heightMm).toBe(100)
         expect(shape.outer).toEqual(rect(0, 0, 100, 100))
         expect(shape.deliver.outer).toEqual(rect(0, 0, 90, 100))
-        expect(shape.inner).toEqual([rect(90, -10, 110, 110)])
+        expect(shape.inner).toEqual([rect(90, 0, 100, 100)])
         expect(shape.deliver.inner).toEqual([])
     })
 
@@ -426,7 +441,7 @@ describe('engineBinShape avec défauts', () => {
 
     it('tôle coupée en deux : les morceaux perdus sont des dangers du moteur', () => {
         const lost = rect(OX + 60, OY, OX + 100, OY + 100)
-        const band = rect(OX + 50, OY - 5, OX + 60, OY + 105)
+        const band = rect(OX + 50, OY, OX + 60, OY + 100)
         const cut = {
             ...chipCut(), outer: rect(OX, OY, OX + 50, OY + 100), holes: [],
             hazards: [band, lost], lostPieces: [{ outer: lost, holes: [] }],
@@ -434,15 +449,37 @@ describe('engineBinShape avec défauts', () => {
         }
         const d = makeDefect('d1', 'rect', { a: [OX + 50, OY - 5], b: [OX + 60, OY + 105] })
         const shape = engineBinShape(makeSheetRecord(base({ forbidden: [], drawn: [d], cut })))
-        expect(shape.inner).toEqual([rect(50, -5, 60, 105), rect(60, 0, 100, 100)])
+        expect(shape.inner).toEqual([rect(50, 0, 60, 100), rect(60, 0, 100, 100)])
         expect(shape.deliver.outer).toEqual(rect(0, 0, 50, 100))
         expect(shape.usableAreaMm2).toBe(5000)
     })
 
     it('un danger dégénéré après translation est abandonné', () => {
-        const cut = { ...chipCut(), hazards: [chipHazard(), rect(0, 0, 1e-6, 1e-6)] }
+        const cut = { ...chipCut(), hazards: [rect(-20, 30, -10, 40), chipHazard(), rect(0, 0, 1e-6, 1e-6)] }
         // 1e-6 x 1e-6 : aire 1e-12 <= 1e-9 -> dégénéré
-        expect(engineBinShape(withChip({ cut })).inner).toHaveLength(1)
+        expect(engineBinShape(withChip({ cut })).inner).toHaveLength(2) // zone + éclat ; le danger minuscule est abandonné
+    })
+
+    it('marques de défauts sans défauts valides, ou dangers retouchés : refus, jamais une tôle propre', () => {
+        const rec = withChip()
+        for (const drawn of [undefined, null, [], 'x', [{ id: 'x' }]]) {
+            expect(() => engineBinShape({ ...rec, drawn })).toThrow('sheet_shape_missing')
+        }
+        expect(() => engineBinShape({ ...rec, drawn: undefined, cut: undefined })).toThrow('sheet_shape_missing')
+        // sans `drawn` ni `cut` mais avec outlineIndexV2 ou contoursV2 seuls
+        const bare = { ...makeSheetRecord(base()), outlineIndexV2: 0 }
+        expect(() => engineBinShape(bare)).toThrow('sheet_shape_missing')
+        expect(() => engineBinShape({ ...makeSheetRecord(base()), contoursV2: sheetContours() })).toThrow('sheet_shape_missing')
+        // enregistrement sans défaut : inchangé
+        expect(engineBinShape(makeSheetRecord(base())).usableAreaMm2).toBe(9900)
+        // dangers altérés : l'aire ne se recoupe plus
+        const forged = { ...rec, cut: { ...rec.cut, hazards: rec.cut.hazards.slice(0, 1) } }
+        expect(() => engineBinShape(forged)).toThrow('sheet_shape_missing')
+        // tolérance 0,5 mm2 + 1e-6 x aire + 2e-4 x longueur des bords (ici 0,61 mm2)
+        const near = { ...rec, cut: { ...rec.cut, usableArea: rec.cut.usableArea + 0.4 } }
+        expect(engineBinShape(near).usableAreaMm2).toBeCloseTo(9700.4, 6)
+        const far = { ...rec, cut: { ...rec.cut, usableArea: rec.cut.usableArea + 0.7 } }
+        expect(() => engineBinShape(far)).toThrow('sheet_shape_missing')
     })
 
     it('coupe absente ou illisible dans l\'enregistrement : sheet_shape_missing, jamais la tôle non coupée', () => {

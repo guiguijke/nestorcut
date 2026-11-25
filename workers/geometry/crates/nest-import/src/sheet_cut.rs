@@ -48,7 +48,7 @@
 //! Tour après tour, les reprises grandissent (0,12 mm, puis 10 % de plus à chaque
 //! tour) : des bords parallèles écartés d'une reprise se la renverraient sans fin.
 //! Une reprise va au plus à 0,18 mm du tracé ; un interdit coupé par le contour en
-//! demande parfois deux (0,27 mm au pire mesuré, la limite des tests est 0,30).
+//! demande parfois deux (0,45 mm au pire sur 31 000 cas faits pour cela).
 //! Un détail du contour LUI-MÊME (encoche, languette trop fine) n'est pas repris : là
 //! où une reprise couvre déjà tout, rien de plus n'est ajouté.
 //!

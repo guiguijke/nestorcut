@@ -78,6 +78,18 @@
             </g>
             <text v-if="liveText" :x="liveAt[0]" :y="liveAt[1]" class="draw__live" aria-hidden="true" data-testid="defect-live">{{ liveText }}</text>
         </svg>
+        <!-- Dès trois points : indispensable au doigt (pas de double clic). Posé sur le dessin,
+             il ne déplace rien en apparaissant. -->
+        <button
+            v-if="canClose"
+            type="button"
+            class="draw__close"
+            data-testid="defect-close"
+            @click="closeContour"
+        >
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9" /></svg>
+            <span>{{ t('sheetImport.defect.close') }}</span>
+        </button>
         </div>
         <ul class="draw__legend" aria-hidden="true">
             <li><i class="draw__key draw__key--sheet" />{{ t('sheetImport.legend.sheet') }}</li>
@@ -136,7 +148,7 @@ const props = defineProps({
     cutStale: { type: Boolean, default: false },
     hoveredDefect: { type: Number, default: null },
 })
-const emit = defineEmits(['toggle', 'hover', 'scale', 'add', 'draft', 'hoverDefect'])
+const emit = defineEmits(['toggle', 'hover', 'scale', 'add', 'draft', 'hoverDefect', 'exitTool'])
 
 const { t } = useLocale()
 const { fmtLength } = useUnit()
@@ -280,8 +292,9 @@ defineExpose({ cancelDraft, popPoint: popDraftPoint, closeContour })
 watch(() => props.tool, () => cancelDraft())
 
 // Échap et Entrée pendant un tracé : la phase de capture sur window passe AVANT
-// l'écoute du DialogWrapper (document, phase de bulle) ; Échap annule le tracé
-// SANS fermer la fenêtre. Hors tracé, l'écoute n'existe pas.
+// l'écoute du DialogWrapper (document, phase de bulle). Un outil de dessin actif :
+// Échap annule le tracé en cours, ou, sans tracé, REND LE POINTEUR (`exitTool`) ;
+// jamais la fenêtre n'est fermée. Outil « choisir les formes » : l'écoute n'existe pas.
 // Le bouton de l'outil garde souvent le focus (on vient de cliquer dessus) :
 // Entrée y ferme le contour ; tout autre bouton garde son Entrée.
 const isFieldTarget = (el) => Boolean(el)
@@ -291,7 +304,8 @@ const onKey = (e) => {
     if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
-        cancelDraft()
+        if (drafting.value) cancelDraft()
+        else emit('exitTool')
     } else if (e.key === 'Enter' && canClose.value && !isFieldTarget(e.target)) {
         e.preventDefault()
         e.stopPropagation()
@@ -309,15 +323,18 @@ function stopKeys() {
     window.removeEventListener('keydown', onKey, true)
     keysOn = false
 }
-// Un tracé est « en cours » dès un point posé ou un glissé commencé.
-watch(drafting, (on) => { if (on) startKeys(); else stopKeys() })
+// L'écoute vit tant qu'un outil de dessin est actif.
+watch(drawing, (on) => { if (on) startKeys(); else stopKeys() }, { immediate: true })
 
 // ------------------------------------------------------------------ pointeur
 const release = (e) => {
     try { svg.value?.releasePointerCapture?.(e.pointerId) } catch { /* déjà relâché */ }
 }
+// Dernier type de pointeur : le double clic ne ferme le contour qu'à la souris (le doigt a le bouton).
+let lastPointerType = ''
 const onDown = (e) => {
     if (!drawing.value || activeId !== null) return
+    lastPointerType = e.pointerType
     // Premier contact seulement : ni bouton secondaire, ni deuxième doigt.
     if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return
     const q = readPoint(e)
@@ -372,6 +389,7 @@ const onCancel = (e) => {
     cursor.value = null
 }
 const onDouble = () => {
+    if (lastPointerType !== 'mouse') return
     if (drawing.value && props.tool === 'free' && points.value.length >= 3) closeContour()
 }
 </script>
@@ -429,6 +447,36 @@ $lost-line: #c9d2e3;
             cursor: crosshair;
             user-select: none;
         }
+    }
+
+    &__close {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-height: 40px;
+        padding: 4px 14px;
+        border: 1px solid #fff;
+        border-radius: var(--radius);
+        background-color: #fff;
+        color: #0b4ea2;
+        font-family: inherit;
+        font-size: var(--fs-13);
+        font-weight: 700;
+        cursor: pointer;
+
+        svg {
+            width: 16px;
+            height: 16px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        &:focus-visible { outline: none; box-shadow: 0 0 0 3px $focus-line; }
     }
 
     &__sheet {

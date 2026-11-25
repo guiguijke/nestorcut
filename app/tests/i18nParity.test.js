@@ -39,6 +39,8 @@ const IDENTICAL_OK = [
     'Factor', 'factor {v}',
     // dessin des défauts (tôle importée) : « Rectangle » EST le mot français.
     'Rectangle',
+    // « 2 zones interdites, 3 défauts » : simple assemblage, même gabarit partout.
+    '{zones}, {defects}',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()

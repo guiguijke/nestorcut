@@ -23,7 +23,7 @@
                         type="button"
                         class="sid__link"
                         data-testid="sheet-import-back"
-                        @click="backToChoose"
+                        @click="askThen('back')"
                     >
                         {{ t('sheetImport.back') }}
                     </button>
@@ -123,9 +123,7 @@
                     <SheetDefectTools
                         v-model:tool="tool"
                         :canUndo="canUndo"
-                        :points="draftPoints"
                         @undo="undo"
-                        @close="drawingRef?.closeContour()"
                     />
                     <div class="stage__canvas">
                         <SheetImportDrawing
@@ -146,6 +144,7 @@
                             @add="addDefect"
                             @draft="draftPoints = $event"
                             @hoverDefect="hoveredDefect = $event"
+                            @exitTool="tool = 'pointer'"
                         />
                     </div>
                     <p class="stage__hint">{{ stageHint }}</p>
@@ -267,7 +266,15 @@
             <footer v-if="step === 'review'" class="sid__foot">
                 <p v-if="importedExportNote" class="sid__trial" data-testid="sheet-import-trial-note">{{ importedExportNote }}</p>
                 <p v-if="saveError" class="sid__error sid__error--foot" role="alert" data-testid="sheet-import-save-error">{{ saveError }}</p>
-                <div class="sid__actions">
+                <!-- Défauts dessinés pas enregistrés : on demande avant de les perdre (fermer ou changer de fichier). -->
+                <div v-if="leaveAsk" class="sid__leave" role="alertdialog" aria-labelledby="sid-leave-text" data-testid="sheet-import-leave">
+                    <p id="sid-leave-text" class="sid__leave-text">{{ t('sheetImport.defect.leave.text') }}</p>
+                    <div class="sid__leave-actions">
+                        <button type="button" class="chip" data-testid="sheet-import-leave-keep" @click="leaveAsk = ''">{{ t('sheetImport.defect.leave.keep') }}</button>
+                        <button type="button" class="chip chip--danger" data-testid="sheet-import-leave-discard" @click="leaveNow">{{ t('sheetImport.defect.leave.discard') }}</button>
+                    </div>
+                </div>
+                <div v-else class="sid__actions">
                     <MainButton
                         :label="t('sheetImport.cancel')"
                         :theme="themeType.secondary"
@@ -312,7 +319,9 @@ import { themeType } from '~~/constants/theme.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import { filesStore } from '~/composables/files'
-import { bindCut, cutKeyOf, recordZoneCount, ringBbox, scaleContours } from '~/utils/sheetShape'
+import {
+    bindCut, contoursOf, cutKeyOf, hasDefectMarks, hasValidDrawn, recordCounts, ringBbox, scaleContours,
+} from '~/utils/sheetShape'
 import { cutInput, makeDefect, normalizeDrawn, scaleDrawn } from '~/utils/sheetDefects'
 import {
     canAddDefect, historyPop, historyPush, historyScale, isDrawTool, nextDefectId,
@@ -373,6 +382,11 @@ const cutBusy = ref(false)
 const cutErrorKey = ref('') // le calcul a échoué : clé de message
 const limitKey = ref('') // un ajout a été refusé (plafond de zones) : clé de message
 let cutToken = 0
+// Défauts pas enregistrés : la signature de ce qui a été OUVERT (aucun défaut pour un nouveau fichier,
+// ceux de l'enregistrement sinon) est comparée à l'état courant.
+const drawnSig = (list) => JSON.stringify(list.map((d) => [d.kind, d.ring]))
+let openedSig = drawnSig([])
+const leaveAsk = ref('') // '' | 'close' | 'back' : l'action en attente de confirmation
 const name = ref('')
 const nameTouched = ref(false)
 const hovered = ref(null)
@@ -485,7 +499,9 @@ watch([drawn, forbidden, contours, step], () => { recomputeCut() })
 
 // Réglage « pouces » : les défauts restent au même endroit de la tôle, historique compris.
 // `sync` : tout change d'un bloc, aucun calcul ne voit contours et défauts à deux échelles.
+// Le tracé en cours (points en mm de l'ancienne échelle) est abandonné.
 watch(inchesOn, (on) => {
+    drawingRef.value?.cancelDraft()
     const factor = on ? INCH_FACTOR : 1 / INCH_FACTOR
     if (drawn.value.length) drawn.value = scaleDrawn(drawn.value, factor)
     history.value = historyScale(history.value, factor, scaleDrawn)
@@ -571,8 +587,12 @@ const canConfirm = computed(() => step.value === 'review' && !saving.value && cl
 const confirmText = computed(() => {
     if (saving.value) return t('sheetImport.saving')
     // Un défaut est de la matière interdite : il compte avec les zones interdites.
-    const label = confirmLabel(forbiddenCount.value + drawn.value.length)
-    return label.plural ? tp(label.plural, label.n) : t(label.key)
+    const label = confirmLabel(forbiddenCount.value, drawn.value.length)
+    const zones = label.plural ? tp(label.plural, label.n) : ''
+    if (label.defects) {
+        return t(label.key, { zones, defects: tp('sheetImport.defect.count', label.defects) })
+    }
+    return label.plural ? zones : t(label.key)
 })
 
 // Nom proposé tant que l'utilisateur ne l'a pas touché.
@@ -583,9 +603,13 @@ watch([view, unit, locale], () => {
 
 // ------------------------------------------------------------ cartes récentes
 const recentSize = (r) => `${fmtLength(r.widthMm)} × ${fmtLength(r.heightMm)}`
+// Zones interdites et défauts dessinés, comptés séparément.
 const recentZones = (r) => {
-    const n = recordZoneCount(r)
-    return n === 0 ? t('sheetImport.recent.noZones') : tp('sheetImport.recent.zones', n)
+    const { zones, defects } = recordCounts(r)
+    const z = zones > 0 ? tp('sheetImport.recent.zones', zones) : ''
+    const d = defects > 0 ? tp('sheetImport.defect.count', defects) : ''
+    if (z && d) return t('sheetImport.defect.join', { zones: z, defects: d })
+    return z || d || t('sheetImport.recent.noZones')
 }
 const loadRecents = async () => {
     try {
@@ -630,6 +654,8 @@ const reset = () => {
     hovered.value = null
     // Les défauts d'abord : le réglage « pouces » qui suit ne doit rien avoir à remettre à l'échelle.
     drawn.value = []
+    openedSig = drawnSig([])
+    leaveAsk.value = ''
     history.value = []
     tool.value = 'pointer'
     draftPoints.value = 0
@@ -645,7 +671,17 @@ const reset = () => {
 }
 
 const openOnRecord = (record, { edit }) => {
-    const first = buildSheetView(record.contours)
+    // Les contours d'un enregistrement à défauts sont dans contoursV2 (contours reste vide).
+    const recordContours = contoursOf(record)
+    // Le réglage « pouces » d'une ouverture précédente ne doit rien remettre à l'échelle ici.
+    inchesOn.value = false
+    // Marque de défauts sans défauts valides : jamais ouvert comme une tôle propre (il serait réécrit tel quel).
+    if (hasDefectMarks(record) && !hasValidDrawn(record)) {
+        error.value = { key: ERROR_KEYS.unreadable, detail: null }
+        step.value = 'choose'
+        return false
+    }
+    const first = buildSheetView(recordContours)
     if (!first) {
         error.value = importErrorOf({ contours: [] })
         step.value = 'choose'
@@ -661,7 +697,7 @@ const openOnRecord = (record, { edit }) => {
         return false
     }
     source.value = {
-        contours: record.contours,
+        contours: recordContours,
         sourceUnits: record.sourceUnits ?? 0,
         fileName: record.sourceFileName || record.name,
         openPaths: 0,
@@ -670,6 +706,7 @@ const openOnRecord = (record, { edit }) => {
     fromRecord.value = true
     forbidden.value = Array.isArray(record.forbidden) ? [...record.forbidden] : []
     drawn.value = restored
+    openedSig = drawnSig(restored)
     history.value = []
     name.value = record.name
     nameTouched.value = true
@@ -754,6 +791,7 @@ const readFile = async (file) => {
     }
     fromRecord.value = false
     drawn.value = [] // un nouveau fichier : aucun défaut hérité
+    openedSig = drawnSig([])
     history.value = []
     inchesOn.value = false
     forbidden.value = [] // jamais de zone interdite présumée
@@ -772,8 +810,11 @@ const backToChoose = () => {
     error.value = null
     saveError.value = ''
     drawn.value = []
+    openedSig = drawnSig([])
     history.value = []
     tool.value = 'pointer'
+    leaveAsk.value = ''
+    inchesOn.value = false // le réglage « pouces » est celui du fichier quitté
     loadRecents()
 }
 
@@ -831,8 +872,40 @@ onMounted(() => window.addEventListener('keydown', onUndoKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onUndoKey))
 
 // --------------------------------------------------------------- validation
-const close = () => emit('update:open', false)
-const onWrapper = (value) => { if (value === false) close() }
+// Un contour commencé compte : il serait perdu aussi.
+const hasUnsaved = () => step.value === 'review'
+    && (draftPoints.value > 0 || drawnSig(drawn.value) !== openedSig)
+const closeNow = () => emit('update:open', false)
+const askThen = (action) => {
+    if (hasUnsaved()) {
+        leaveAsk.value = action
+        return
+    }
+    if (action === 'back') backToChoose()
+    else closeNow()
+}
+const leaveNow = () => {
+    const action = leaveAsk.value
+    leaveAsk.value = ''
+    if (action === 'back') backToChoose()
+    else closeNow()
+}
+const close = () => askThen('close')
+// La question est dans le pied : sur un écran bas elle serait hors de vue, et la
+// fenêtre aurait l'air bloquée. On l'amène à l'écran, et le focus avec.
+watch(leaveAsk, async (action) => {
+    if (!action) return
+    await nextTick()
+    const keep = rootEl.value?.querySelector('[data-testid="sheet-import-leave-keep"]')
+    keep?.scrollIntoView?.({ block: 'center' })
+    keep?.focus?.({ preventScroll: true })
+})
+// Échap, croix, fond : la même question ; une deuxième demande (Échap) répond « Continuer ».
+const onWrapper = (value) => {
+    if (value !== false) return
+    if (leaveAsk.value) leaveAsk.value = ''
+    else close()
+}
 
 const confirm = async () => {
     if (!canConfirm.value || !view.value) return
@@ -840,6 +913,8 @@ const confirm = async () => {
     if (drawn.value.length && !cutMatches.value) return
     saveError.value = ''
     saving.value = true
+    leaveAsk.value = ''
+    const savedSig = drawnSig(drawn.value) // ce qui part à l'enregistrement, pas ce qui serait dessiné pendant
     const now = new Date().toISOString()
     const slug = editRecord ? editRecord.slug : newSheetSlug(Date.now(), Math.random())
     const { record, error: buildError } = buildRecord({
@@ -878,6 +953,7 @@ const confirm = async () => {
     if (props.replaceIndex != null) actions.replaceSheetShape(props.replaceIndex, record)
     else actions.addSheetFromShape(record)
     // Des nombres seulement (en chaînes) : aucune géométrie ne part.
+    openedSig = savedSig // enregistré : rien à perdre
     trackEvent('sheet_import_confirm', { zones: String(record.forbidden.length), defects: String(record.drawn?.length ?? 0) })
     saving.value = false
     close()
@@ -1021,6 +1097,28 @@ const confirm = async () => {
         gap: var(--sp-3);
         padding-top: var(--sp-4);
         border-top: 1px solid var(--border);
+    }
+    // Défauts pas enregistrés : une question en ligne dans le pied (pas de window.confirm).
+    &__leave {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--sp-3);
+        padding: var(--sp-3) var(--sp-4);
+        border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+        border-radius: var(--radius);
+        background-color: var(--warn-bg);
+    }
+    &__leave-text {
+        margin: 0;
+        color: var(--text);
+        font-size: var(--fs-14);
+        font-weight: 600;
+    }
+    &__leave-actions {
+        display: flex;
+        gap: var(--sp-2);
     }
     &__actions {
         display: flex;
@@ -1332,6 +1430,14 @@ const confirm = async () => {
         &:hover { color: var(--text); background-color: var(--surface-2); }
     }
     &:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+    &--danger {
+        border-color: var(--danger);
+        color: var(--danger);
+    }
+}
+@media (max-width: 900px) {
+    .chip { min-height: 40px; padding: var(--sp-1) var(--sp-4); }
 }
 
 .zlist {
@@ -1450,5 +1556,32 @@ const confirm = async () => {
     .sid__body--review { padding-bottom: var(--sp-2); }
     .card { grid-template-columns: 80px minmax(0, 1fr); }
     .card__thumb { width: 80px; height: 56px; }
+}
+
+// ───────────────────────── écran bas (téléphone en paysage) : le pied ne mange pas la place
+// Pied non collant, sur une seule ligne ; dessin et panneau côte à côte quand la largeur le permet.
+@media (max-height: 500px) {
+    .sid {
+        padding: var(--sp-3);
+        gap: var(--sp-2);
+
+        // Grand téléphone en paysage (plus de 900 px de large) : la fenêtre défile,
+        // sinon le dessin recouvre le pied.
+        &--review { height: auto; }
+        &__foot {
+            position: static;
+            padding-top: var(--sp-2);
+            padding-bottom: 0;
+        }
+        &__actions { flex-wrap: nowrap; }
+        &__actions > * { flex: 1 1 0; min-width: 0; }
+        &__title { font-size: var(--fs-16); }
+    }
+    .stage__hint { display: none; }
+    .panel { overflow: visible; flex: 0 0 auto; }
+}
+@media (max-height: 500px) and (min-width: 680px) {
+    .sid__body--review { grid-template-columns: minmax(0, 1fr) 280px; gap: var(--sp-3); }
+    .stage__canvas { min-height: 240px; }
 }
 </style>

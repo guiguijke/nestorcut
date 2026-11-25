@@ -182,9 +182,38 @@ export function outlineIndexOf(record) {
     return Number.isInteger(record?.outlineIndexV2) ? record.outlineIndexV2 : record?.outlineIndex
 }
 
+/**
+ * Contours d'un ENREGISTREMENT. Avec défauts dessinés, `contours` reste `[]`
+ * (une ancienne version lit alors une tôle sans contour, refusée bruyamment, et
+ * ne la réécrit jamais comme une tôle propre) et les vrais contours sont dans
+ * `contoursV2`. Tout lecteur d'enregistrement passe par ici.
+ */
+export function contoursOf(record) {
+    return Array.isArray(record?.contoursV2) ? record.contoursV2 : record?.contours
+}
+
+/**
+ * Vrai si l'enregistrement porte une marque de tôle à défauts (indice V2, coupe
+ * ou contours V2) : il ne doit alors JAMAIS être lu comme une tôle propre.
+ */
+export function hasDefectMarks(record) {
+    return Number.isInteger(record?.outlineIndexV2) || Boolean(record?.cut) || Array.isArray(record?.contoursV2)
+}
+
+/** Défauts valides et non vides d'un enregistrement ? */
+export function hasValidDrawn(record) {
+    if (!Array.isArray(record?.drawn) || record.drawn.length === 0) return false
+    try {
+        normalizeDrawn(record.drawn)
+        return true
+    } catch {
+        return false
+    }
+}
+
 /** Anneaux pour le moteur : contour de tôle + zones interdites normalisées. */
 export function engineRings(record) {
-    const contours = record?.contours
+    const contours = contoursOf(record)
     const outlineIndex = outlineIndexOf(record)
     if (!validIndex(contours, outlineIndex)) return { outer: null, holes: [] }
     const holes = normalizeForbidden(contours, outlineIndex, record.forbidden)
@@ -346,6 +375,8 @@ export function makeSheetRecord({
     // Cadre, largeur et hauteur restent ceux du contour ORIGINAL ; l'aire est celle de la coupe.
     return {
         ...base,
+        contours: [],
+        contoursV2: contours,
         outlineIndex: -1,
         outlineIndexV2: outlineIndex,
         drawn: defects,
@@ -369,11 +400,18 @@ function drawnLimits(contours, outlineIndex, zones, defects, cut) {
     return { ok: reason === null, reason, vertexCount, zoneCount }
 }
 
+/** Zones interdites (normalisées) et défauts dessinés d'un enregistrement, comptés séparément. */
+export function recordCounts(record) {
+    const defects = Array.isArray(record?.drawn) ? record.drawn.length : 0
+    return { zones: recordZoneCount(record) - defects, defects }
+}
+
 /** Nombre de zones d'un enregistrement : zones interdites normalisées + défauts dessinés. */
 export function recordZoneCount(record) {
     const drawnCount = Array.isArray(record?.drawn) ? record.drawn.length : 0
-    const forbidden = Array.isArray(record?.contours)
-        ? normalizeForbidden(record.contours, outlineIndexOf(record), record.forbidden).length
+    const contours = contoursOf(record)
+    const forbidden = Array.isArray(contours)
+        ? normalizeForbidden(contours, outlineIndexOf(record), record.forbidden).length
         : (Array.isArray(record?.forbidden) ? record.forbidden.length : 0)
     return forbidden + drawnCount
 }
@@ -429,7 +467,11 @@ function translatedClosedRing(ring, dx, dy) {
  * zones gardées ; `perimeterMm` = contour + zones (pour la capacité).
  */
 export function engineBinShape(record) {
-    if (Array.isArray(record?.drawn) && record.drawn.length > 0) return engineBinShapeCut(record)
+    if (hasValidDrawn(record)) return engineBinShapeCut(record)
+    // Marque de défauts sans défauts valides : jamais lue comme une tôle propre.
+    if (hasDefectMarks(record) || (Array.isArray(record?.drawn) && record.drawn.length > 0)) {
+        throw new Error('sheet_shape_missing')
+    }
     const { outer, holes } = engineRings(record)
     const box = ringBbox(outer)
     if (!box) throw new Error('sheet_shape_missing')
@@ -463,7 +505,7 @@ function engineBinShapeCut(record) {
     let cut
     try {
         cut = normalizeCut(record.cut)
-        const key = cutKeyOf(record.contours, outlineIndexOf(record), record.forbidden, record.drawn)
+        const key = cutKeyOf(contoursOf(record), outlineIndexOf(record), record.forbidden, record.drawn)
         // La coupe gardée doit être celle de CE dessin (contour, zones, défauts).
         if (record.cut.forKey !== key) throw new Error('sheet_bad_cut')
     } catch {
@@ -472,6 +514,15 @@ function engineBinShapeCut(record) {
     const { outer } = engineRings(record)
     const box = ringBbox(outer)
     if (!box) throw new Error('sheet_shape_missing')
+    // Aire : contour original - dangers (découpés au contour) = aire utile ; des dangers
+    // modifiés après coup ne passent pas.
+    const outlineArea = ringArea(outer)
+    const hazardArea = cut.hazards.reduce((sum, r) => sum + ringArea(r), 0)
+    // Grille de 1e-4 mm : l'écart d'arrondi suit la longueur des bords (bandes de 12 m).
+    const edges = ringPerimeter(outer) + cut.hazards.reduce((sum, r) => sum + ringPerimeter(r), 0)
+    if (Math.abs(outlineArea - hazardArea - cut.usableArea) > 0.5 + 1e-6 * outlineArea + 2e-4 * edges) {
+        throw new Error('sheet_shape_missing')
+    }
     const [dx, dy] = box
     const outerRing = translatedClosedRing(outer, dx, dy)
     const deliverOuter = translatedClosedRing(cut.outer, dx, dy)

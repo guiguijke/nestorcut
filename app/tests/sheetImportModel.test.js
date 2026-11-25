@@ -169,6 +169,10 @@ describe('libellé du bouton', () => {
         expect(confirmLabel(1)).toEqual({ plural: 'sheetImport.confirm.some', n: 1 })
         expect(confirmLabel(7)).toEqual({ plural: 'sheetImport.confirm.some', n: 7 })
         expect(confirmLabel(-3).key).toBe('sheetImport.confirm.none')
+        // zones et défauts comptés séparément
+        expect(confirmLabel(0, 3)).toEqual({ key: 'sheetImport.confirm.defects', defects: 3 })
+        expect(confirmLabel(2, 3)).toEqual({ key: 'sheetImport.defect.join', plural: 'sheetImport.confirm.some', n: 2, defects: 3 })
+        expect(confirmLabel(2, 0)).toEqual({ plural: 'sheetImport.confirm.some', n: 2 })
     })
 })
 

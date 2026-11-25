@@ -30,6 +30,8 @@ const DB_VERSION = 1
 const STORE = 'sheets'
 export const MAX_RECENT_SHEETS = 12
 
+const hasDrawn = (rec) => Array.isArray(rec?.drawn) && rec.drawn.length > 0
+
 let dbPromise = null
 
 function openDb() {
@@ -130,11 +132,23 @@ export async function listRecentSheets() {
  * gardés). `now` = horodatage ISO (ou nombre) fourni par l'appelant.
  */
 export async function rememberRecentSheet(record, now) {
-    const existing = (await allRecents()).find((rec) => rec.geometryKey === record.geometryKey)
+    const all = await allRecents()
+    const existing = all.find((rec) => rec.geometryKey === record.geometryKey)
+    // `fromSlug` : la tôle de projet dont vient la copie (relie les versions successives d'une même tôle).
+    const fromSlug = record.fromSlug ?? record.slug
     const copy = existing
-        ? { ...existing, lastUsedAt: now }
-        : { ...record, slug: `recent-${record.geometryKey}`, projectSlug: null, lastUsedAt: now }
+        ? { ...existing, fromSlug: existing.fromSlug ?? fromSlug, lastUsedAt: now }
+        : { ...record, slug: `recent-${record.geometryKey}`, projectSlug: null, fromSlug, lastUsedAt: now }
     await saveSheet(copy)
+    // Une tôle à défauts remplace les versions à défauts de la MÊME tôle (une retouche ne laisse pas
+    // ses brouillons en bibliothèque) ; la version propre, elle, reste.
+    if (hasDrawn(copy)) {
+        for (const rec of all) {
+            if (rec.slug !== copy.slug && hasDrawn(rec) && rec.fromSlug != null && rec.fromSlug === copy.fromSlug) {
+                await deleteSheet(rec.slug)
+            }
+        }
+    }
     const recents = await listRecentSheets()
     for (const rec of recents.slice(MAX_RECENT_SHEETS)) {
         await deleteSheet(rec.slug)

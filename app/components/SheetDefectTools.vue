@@ -27,35 +27,21 @@
             </svg>
             <span>{{ t('sheetImport.defect.undo') }}</span>
         </button>
-        <button
-            v-if="points >= 3"
-            type="button"
-            class="dtools__btn dtools__btn--close"
-            data-testid="defect-close"
-            @click="emit('close')"
-        >
-            <svg class="dtools__icon" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="m4 10 4 4 8-9" />
-            </svg>
-            <span>{{ t('sheetImport.defect.close') }}</span>
-        </button>
     </div>
 </template>
 
 <script setup>
 /**
  * Barre d'outils du dessin des défauts : choisir les formes (par défaut),
- * contour libre, cercle, rectangle, annuler ; « Fermer le contour » dès trois
- * points posés (indispensable au doigt, sans double clic). Boutons de type
- * radio (aria-pressed), icône SVG en ligne + texte.
+ * contour libre, cercle, rectangle, annuler. Boutons de type radio
+ * (aria-pressed), icône SVG en ligne + texte. « Fermer le contour » est sur le
+ * dessin (SheetImportDrawing) : il apparaît sans déplacer quoi que ce soit.
  */
 defineProps({
     tool: { type: String, required: true },
     canUndo: { type: Boolean, default: false },
-    // points déjà posés du contour libre en cours
-    points: { type: Number, default: 0 },
 })
-const emit = defineEmits(['update:tool', 'undo', 'close'])
+const emit = defineEmits(['update:tool', 'undo'])
 
 const { t } = useLocale()
 
@@ -99,10 +85,6 @@ const items = [
             border-color: var(--accent);
             color: var(--accent);
             background-color: color-mix(in srgb, var(--accent) 10%, transparent);
-        }
-        &--close {
-            border-color: var(--accent);
-            color: var(--accent);
         }
     }
     &__icon {

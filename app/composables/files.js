@@ -141,6 +141,9 @@ function createFilesState() {
         localImportNotice: '',
         localImportNoticeParams: {},
         lastParams: '',
+        // Compteur des formes de tôle remplacées (replaceSheetShape) : une retouche garde le MÊME
+        // shapeId ; les lecteurs de la forme (dessin au repos) s'en servent pour relire.
+        shapeRevision: 0,
         // Set when a demo nesting hits the monthly demo quota — shown on the
         // project page instead of the paywall (demo 402s are reason=demo_quota).
         demoQuotaReached: false,
@@ -1133,6 +1136,10 @@ function replaceSheetShape(index, record) {
         ...state.params,
         sheets: sheets.map((sheet, i) => (i === index ? shapeSheetEntry(record, sheet.count) : sheet)),
     }
+    state.shapeRevision++
+    // Une retouche qui laisse le corps de la requête identique (même boîte, même nom) ne doit pas
+    // griser Nest : la forme, elle, a changé.
+    resetLastParams()
     scheduleSnapshotPersist()
 }
 
@@ -1396,6 +1403,7 @@ export const filesStore = readonly({
             state.filesStatusDone.reduce((acc, curr) => acc + curr.count, 0)
         ),
         isNewParams: getter((state) => state.requestBody !== state.lastParams),
+        shapeRevision: getter((state) => state.shapeRevision),
         demoQuotaReached: getter((state) => state.demoQuotaReached),
         // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
         sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),

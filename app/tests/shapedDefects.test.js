@@ -49,7 +49,8 @@ const chipCut = () => ({
     ok: true,
     outer: NOTCHED.map(([x, y]) => [x + OX, y + OY]),
     holes: [],
-    hazards: [CHIP.map(([x, y]) => [x + OX, y + OY])],
+    // dangers découpés au contour (géométrie finale) : la moitié du carré qui dépasse est retirée
+    hazards: [rect(90, 40, 100, 60).map(([x, y]) => [x + OX, y + OY])],
     lostPieces: [],
     usableArea: 9800,
     pieces: 1,
@@ -107,7 +108,7 @@ describe('payload', () => {
 
     it('avec défaut : le moteur reçoit le contour original + dangers ; shapedSheets porte la forme livrée', async () => {
         const { payload } = await build(chipRecord())
-        expect(payload.instance.bins[0].shape.data).toEqual({ outer: rect(0, 0, 100, 100), inner: [CHIP] })
+        expect(payload.instance.bins[0].shape.data).toEqual({ outer: rect(0, 0, 100, 100), inner: [rect(90, 40, 100, 60)] })
         expect(payload.shapedSheets).toHaveLength(1)
         expect(payload.shapedSheets[0]).toMatchObject({ id: 0, usableAreaMm2: 9800 })
         expect(payload.shapedSheets[0].shape).toEqual({ outer: NOTCHED, inner: [] })
@@ -127,7 +128,7 @@ describe('reportSheetShapes, binShapeForDxf, liveShapeTable', () => {
         const p = await payloadOf()
         const [e] = reportSheetShapes(p, [{ container_id: 0 }])
         expect(e.shape).toEqual({ outer: NOTCHED, inner: [] })
-        expect(e.engineShape).toEqual({ outer: rect(0, 0, 100, 100), inner: [CHIP] })
+        expect(e.engineShape).toEqual({ outer: rect(0, 0, 100, 100), inner: [rect(90, 40, 100, 60)] })
         const q = await payloadOf(plainRecord())
         const [f] = reportSheetShapes(q, [{ container_id: 0 }])
         expect(Object.keys(f)).toEqual(['shape'])
@@ -206,6 +207,16 @@ describe('mergeShapeVerify', () => {
         expect(both('smallestGapMm', 3, 1)).toBe(1)
         expect(both('smallestGapMm', null, 1)).toBe(1)
         expect(both('smallestGapMm', null, null)).toBeNull()
+        // Zones : le PIRE des deux calculs, dans les deux sens
+        const zones = (a, b) => mergeShapeVerify(rep(a), rep(b)).verify
+        expect(zones({ zoneClear: false, zoneViolations: 3 }, { zoneClear: true, zoneViolations: 0 })).toMatchObject({ zoneClear: false, zoneViolations: 3 })
+        expect(zones({ zoneClear: true, zoneViolations: 0 }, { zoneClear: false, zoneViolations: 3 })).toMatchObject({ zoneClear: false, zoneViolations: 3 })
+        expect(zones({ zoneOverlapAreaMm2: 9, minDistToZoneMm: 0.5 }, { zoneOverlapAreaMm2: 2, minDistToZoneMm: 4 })).toMatchObject({ zoneOverlapAreaMm2: 9, minDistToZoneMm: 0.5 })
+        expect(zones({ zoneOverlapAreaMm2: 2, minDistToZoneMm: 4 }, { zoneOverlapAreaMm2: 9, minDistToZoneMm: 0.5 })).toMatchObject({ zoneOverlapAreaMm2: 9, minDistToZoneMm: 0.5 })
+        expect(zones({ zonesChecked: 2 }, { zonesChecked: 5 }).zonesChecked).toBe(5)
+        expect(zones({ zoneClear: null }, { zoneClear: null }).zoneClear).toBeNull()
+        expect(zones({ zoneClear: true }, { zoneClear: null }).zoneClear).toBe(true)
+        expect(zones({ zoneOverlapAreaMm2: null, minDistToZoneMm: null }, { zoneOverlapAreaMm2: null, minDistToZoneMm: null })).toMatchObject({ zoneOverlapAreaMm2: null, minDistToZoneMm: null })
     })
 
     it('ne touche pas ses entrées ; tout le reste vient du rapport livré', () => {
@@ -301,9 +312,13 @@ describe('rapport, double calcul (wasm réel)', () => {
     })
 
     it('spacingOk jugé sur le rapport fusionné, une seule fois', async () => {
-        const arts = await run(chipRecord(), [place(20, 20)])
-        const v = arts[0].report.verify
-        expect(typeof v.smallestGapMm).toBe('number')
-        expect(v.spacingOk).toBe(v.smallestGapMm >= 2 - 0.01 ? true : v.spacingOk)
+        // Espacement 2 mm : une pièce à 1 mm du danger (bord x = 90) échoue, à 3 mm elle passe.
+        const near = (await run(chipRecord(), [place(79, 45)]))[0].report.verify
+        expect(near.smallestGapMm).toBeGreaterThan(0.9)
+        expect(near.smallestGapMm).toBeLessThan(1.1)
+        expect(near.spacingOk).toBe(false)
+        const far = (await run(chipRecord(), [place(77, 45)]))[0].report.verify
+        expect(far.smallestGapMm).toBeGreaterThan(2.9)
+        expect(far.spacingOk).toBe(true)
     })
 })

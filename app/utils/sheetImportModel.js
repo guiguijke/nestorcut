@@ -9,6 +9,7 @@
  */
 import {
     describeOutline,
+    contoursOf,
     makeSheetRecord,
     normalizeForbidden,
     outlineIndexOf,
@@ -256,11 +257,18 @@ export function usableArea(contours, view, forbidden) {
 /**
  * Libellé du bouton de confirmation : le choix y est dit en toutes lettres
  * (c'est le garde-fou contre un clic oublié). `{ key }` sans zone ;
- * `{ plural, n }` sinon (à passer à `tp`).
+ * `{ plural, n }` sinon (à passer à `tp`). Avec des défauts dessinés, zones et
+ * défauts sont comptés SÉPARÉMENT : `{ key, defects }` (sans zone) ou
+ * `{ key, plural, n, defects }` (les zones par `tp(plural, n)`, les défauts par
+ * `tp('sheetImport.defect.count', defects)`, le tout dans `t(key, { zones, defects })`).
  */
-export function confirmLabel(forbiddenCount) {
+export function confirmLabel(forbiddenCount, defectCount = 0) {
     const n = Number.isInteger(forbiddenCount) && forbiddenCount > 0 ? forbiddenCount : 0
-    return n === 0 ? { key: 'sheetImport.confirm.none', n: 0 } : { plural: 'sheetImport.confirm.some', n }
+    const d = Number.isInteger(defectCount) && defectCount > 0 ? defectCount : 0
+    if (d === 0) return n === 0 ? { key: 'sheetImport.confirm.none', n: 0 } : { plural: 'sheetImport.confirm.some', n }
+    return n === 0
+        ? { key: 'sheetImport.confirm.defects', defects: d }
+        : { key: 'sheetImport.defect.join', plural: 'sheetImport.confirm.some', n, defects: d }
 }
 
 // ------------------------------------------------------------------- unités
@@ -377,7 +385,7 @@ export function isListOnly(contour, scale, minPx = MIN_ZONE_PX) {
  * normalisées, transformation dans une boîte de `width` x `height` px.
  */
 export function thumbModel(record, width = 72, height = 56) {
-    const contours = record?.contours
+    const contours = contoursOf(record)
     const outlineIndex = outlineIndexOf(record)
     if (!Array.isArray(contours) || !contours[outlineIndex]) return null
     const fit = fitTransform(contours[outlineIndex].bbox || ringBbox(contours[outlineIndex].ring), width, height, 4)

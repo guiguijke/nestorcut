@@ -1095,6 +1095,10 @@ function _unverifiedCopy(report) {
  * Pure : rend une copie. Un second rapport absent ou en erreur donne « non
  * vérifié », jamais vert.
  */
+const zoneClearOf = (a, b) => {
+    if (a === false || b === false) return false
+    return a === true || b === true ? true : null
+}
 export function mergeShapeVerify(deliverReport, engineReport) {
     if (!deliverReport || deliverReport.error || !deliverReport.verify) return deliverReport
     if (!engineReport || engineReport.error || !engineReport.verify) return _unverifiedCopy(deliverReport)
@@ -1109,11 +1113,12 @@ export function mergeShapeVerify(deliverReport, engineReport) {
         verify: {
             ...d,
             insideSheet: _bothTrue(d.insideSheet, e.insideSheet),
-            zoneClear: e.zoneClear,
-            zoneViolations: e.zoneViolations,
-            zonesChecked: e.zonesChecked,
-            zoneOverlapAreaMm2: e.zoneOverlapAreaMm2,
-            minDistToZoneMm: e.minDistToZoneMm,
+            // Zones : le PIRE des deux calculs (forme livrée et forme du moteur), jamais seulement le second.
+            zoneClear: zoneClearOf(d.zoneClear, e.zoneClear),
+            zoneViolations: num(d.zoneViolations, e.zoneViolations, Math.max),
+            zonesChecked: num(d.zonesChecked, e.zonesChecked, Math.max),
+            zoneOverlapAreaMm2: num(d.zoneOverlapAreaMm2, e.zoneOverlapAreaMm2, Math.max),
+            minDistToZoneMm: num(d.minDistToZoneMm, e.minDistToZoneMm, Math.min),
             partsOutsideOutline: num(d.partsOutsideOutline, e.partsOutsideOutline, Math.max) ?? d.partsOutsideOutline,
             smallestGapMm: num(d.smallestGapMm, e.smallestGapMm, Math.min),
             spacingOk: _bothTrue(d.spacingOk, e.spacingOk),

@@ -290,6 +290,26 @@ describe('localSheetsStore — bibliotheque des récentes', () => {
         await sheetsStore.forgetRecentSheet(recent.slug)
         expect(await sheetsStore.listRecentSheets()).toEqual([])
     })
+
+    it('fromSlug : une tôle à défauts remplace les versions à défauts de la MÊME tôle ; la propre reste', async () => {
+        const withDefects = (id, key, over = {}) => ({
+            ...makeRecord({ id }), geometryKey: key, drawn: [{ id: 'd1' }], ...over,
+        })
+        await sheetsStore.rememberRecentSheet(makeRecord({ id: 'sheet-1' }), '2026-11-19T11:00:00.000Z') // propre
+        await sheetsStore.rememberRecentSheet(withDefects('sheet-1', 'g2-aaa'), '2026-11-19T12:00:00.000Z')
+        await sheetsStore.rememberRecentSheet(withDefects('sheet-2', 'g2-zzz'), '2026-11-19T12:30:00.000Z') // autre tôle
+        let recents = await sheetsStore.listRecentSheets()
+        expect(recents.map((r) => r.fromSlug).sort()).toEqual(['sheet-1', 'sheet-1', 'sheet-2'])
+        // la tôle 1 est retouchée : nouvelle version à défauts
+        await sheetsStore.rememberRecentSheet(withDefects('sheet-1', 'g2-bbb'), '2026-11-19T13:00:00.000Z')
+        recents = await sheetsStore.listRecentSheets()
+        expect(recents.map((r) => r.geometryKey).sort()).toEqual(
+            [makeRecord().geometryKey, 'g2-bbb', 'g2-zzz'].sort(),
+        )
+        // une version PROPRE n'efface rien
+        await sheetsStore.rememberRecentSheet(makeRecord({ id: 'sheet-1' }, 5), '2026-11-19T14:00:00.000Z')
+        expect(await sheetsStore.listRecentSheets()).toHaveLength(4)
+    })
 })
 
 // ---------------------------------------------------------------------------
@@ -342,6 +362,22 @@ describe('files.js — tôle importée', () => {
         // Une tôle ordinaire reste entièrement éditable.
         store.actions.updateSheet(0, { width: '500' })
         expect(store.getters.params.sheets[0].width).toBe('500')
+    })
+
+    it('replaceSheetShape : révision de forme, et Nest redevient disponible même si le corps de la requête est inchangé', async () => {
+        store.actions.addSheetFromShape(record())
+        expect(store.getters.shapeRevision).toBe(0)
+        await store.actions.nest('p')
+        expect(store.getters.isNewParams).toBe(false)
+        // retouche : même boîte, même nom, même shapeId -> corps identique
+        store.actions.replaceSheetShape(1, record())
+        expect(store.getters.shapeRevision).toBe(1)
+        expect(store.getters.isNewParams).toBe(true)
+        // index invalide : rien ne change
+        store.actions.replaceSheetShape(9, record())
+        expect(store.getters.shapeRevision).toBe(1)
+        // aucun champ de plus dans l'entrée de tôle
+        expect(Object.keys(store.getters.params.sheets[1]).sort()).toEqual(['count', 'height', 'name', 'shapeId', 'width'])
     })
 
     it('replaceSheetShape : change la forme, garde la quantité ; index invalide sans effet', () => {
