@@ -85,7 +85,13 @@
                         </span>
                     </p>
                 </div>
-                <LiveNestingView v-if="stageLive" :result="stageLive" :job-done="stageJobDone" />
+                <LiveNestingView
+                    v-if="stageLive"
+                    :result="stageLive"
+                    :job-done="stageJobDone"
+                    :local-compute="localComputeRunning"
+                    :partial-total="localPartialTotal"
+                />
                 <!-- Calcul sur le serveur terminé : la vue live s'est retirée,
                      la scène montre la première tôle produite et invite à
                      ouvrir le résultat (même fenêtre que la carte). -->
@@ -256,7 +262,7 @@ import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
 import { useLocalMode } from "~/composables/useLocalMode";
 import { itemGeometryParams } from "~/composables/localGeomError";
-import { belongsToProject, pickAwaitingLocal, pickFinishedServerJob, pickLiveJob, pickRunningJob, serverJobState, liveJobDone } from "~/utils/liveJob";
+import { belongsToProject, pickAwaitingLocal, pickFinishedServerJob, pickLiveJob, pickRunningJob, serverJobState, liveJobDone, isPartialBppFrame } from "~/utils/liveJob";
 import { altDensityPctOf } from "~/utils/resultQuality";
 import { jobErrorBannerText } from "~/utils/failureReason";
 import { useJobScroll } from "~/composables/useJobScroll";
@@ -837,8 +843,16 @@ const fmtElapsed = (sec) => {
     const min = Math.floor(n / 60);
     return `${min} min ${String(Math.floor(n % 60)).padStart(2, '0')}`;
 };
+// Pièces demandées au total (donné par le calcul local), ou null.
+const localPartialTotal = computed(() => {
+    const n = Number(unref(localLive)?.liveLayout?.requested);
+    return Number.isFinite(n) && n > 0 ? n : null;
+});
 const bestDensityPct = computed(() => {
-    const d = unref(localLive)?.liveLayout?.density;
+    // Pas de « meilleur X % » pour une disposition partielle (il manque des pièces).
+    const frame = unref(localLive)?.liveLayout;
+    if (isPartialBppFrame(frame)) return null;
+    const d = frame?.density;
     return (typeof d === 'number' && d > 0) ? d * 100 : null;
 });
 const statusLine = computed(() => {
@@ -1434,9 +1448,18 @@ const startsNest = () => {
 
     // Plusieurs tôles : colonnes proportionnelles à la largeur affichée (même
     // échelle pour toutes) ; sur téléphone elles passent à la ligne, deux par ligne.
+    // Plancher : la colonne d'une petite tôle ne devient pas plus étroite que
+    // son étiquette (un disque de 500 mm à côté de deux tôles de 3 m).
     &__idle--multi &__pane {
         flex: var(--pane-w) 1 0;
         width: auto;
+        min-width: 4.5rem;
+    }
+
+    // Deux lignes réservées : les tôles gardent leur ligne de base quand un
+    // nom long passe à la ligne dans une colonne et pas dans l'autre.
+    &__idle--multi &__dims {
+        min-height: 2.6em;
     }
 
     &__idle--multi &__sheet {
@@ -1447,6 +1470,10 @@ const startsNest = () => {
     &__more {
         flex: none;
         align-self: center;
+    }
+
+    &__idle--multi &__more {
+        min-height: 0;
     }
 
     @media (max-width: 640px) {
@@ -1481,12 +1508,14 @@ const startsNest = () => {
         color: var(--label-primary);
     }
 
+    // L'étiquette passe à la ligne au lieu d'être coupée : le nom complet reste
+    // lisible sur un téléphone, où l'infobulle n'existe pas.
     &__dims {
         margin: 0;
         max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        overflow-wrap: anywhere;
+        text-align: center;
+        line-height: 1.3;
         font-size: var(--fs-12);
         color: var(--label-tertiary);
         font-variant-numeric: tabular-nums;

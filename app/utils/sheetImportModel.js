@@ -35,6 +35,8 @@ export const ERROR_KEYS = {
     notDxf: 'sheetImport.err.notDxf',
     notDxfContent: 'sheetImport.err.notDxfContent',
     tooHeavy: 'sheetImport.err.tooHeavy',
+    paperSpaceOnly: 'sheetImport.err.paperSpaceOnly',
+    blockDepth: 'sheetImport.err.blockDepth',
     noContour: 'sheetImport.err.noContour',
     badGeometry: 'sheetImport.err.badGeometry',
     tooManyVertices: 'sheetImport.err.tooManyVertices',
@@ -64,13 +66,22 @@ const CODE_TO_KEY = {
     indexeddb_blocked: ERROR_KEYS.storage,
 }
 
+// Refus du lecteur -> clé ; les noms sont le serde camelCase de TooHeavyReason.
+const REFUSAL_KEYS = {
+    paperSpaceOnly: ERROR_KEYS.paperSpaceOnly,
+    blockDepth: ERROR_KEYS.blockDepth,
+}
+
 /**
  * Message d'erreur de tout ce qui peut mal tourner, en une clé :
  *   - une Error du modèle (`sheet_*`) ou du stockage ;
- *   - un résultat du lecteur : `{ refusal, message }` (trop lourd, le
- *     message du lecteur est montré tel quel : `detail`), `{ ok: false }`
+ *   - un résultat du lecteur : `{ refusal, message }`, `{ ok: false }`
  *     (illisible), contours vides (aucun contour fermé).
- * Rend `{ key, detail }` ; `detail` n'est posé que pour le refus « trop lourd ».
+ * Rend `{ key, detail }`. Le refus du lecteur se lit à `refusal.reason`
+ * (TooHeavyReason, workers/geometry/crates/nest-import/src/budget.rs) : dessin
+ * entièrement en espace papier, blocs imbriqués trop profondément, sinon
+ * (entités, temps) « trop lourd ». `message` est une phrase anglaise du lecteur :
+ * elle n'est jamais montrée, `detail` reste null.
  */
 export function importErrorOf(input) {
     if (input instanceof Error) {
@@ -81,7 +92,7 @@ export function importErrorOf(input) {
     }
     if (!input || typeof input !== 'object') return { key: ERROR_KEYS.unreadable, detail: null }
     if (input.refusal) {
-        return { key: ERROR_KEYS.tooHeavy, detail: typeof input.message === 'string' && input.message ? input.message : null }
+        return { key: REFUSAL_KEYS[input.refusal.reason] || ERROR_KEYS.tooHeavy, detail: null }
     }
     if (input.ok === false) return { key: ERROR_KEYS.unreadable, detail: null }
     if (!Array.isArray(input.contours) || input.contours.length === 0) {

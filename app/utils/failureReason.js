@@ -88,9 +88,24 @@ function refusalCode(information) {
     return serverRefusalCode(code)
 }
 
-export function failureReasonKey(information) {
+// Projet « cet appareil » : le serveur n'a aucune géométrie, « réessayez en mode
+// serveur » est impossible à suivre. Mêmes variantes que le bandeau (mapError).
+const LOCAL_ONLY_KEYS = {
+    memory_cap: 'localMode.memoryLocal',
+    entity_limit: 'localMode.entityLimitLocal',
+    all_alternatives_invalid: 'localMode.allInvalidLocal',
+    crash: 'localMode.crashLocal',
+}
+
+/** Un job est calculé dans ce navigateur : résultat local, ou job `localOnly` du serveur. */
+export function isLocalJob(job) {
+    return Boolean(job?.isLocal || job?.localOnly)
+}
+
+export function failureReasonKey(information, { localOnly = false } = {}) {
     const code = refusalCode(information)
-    return code ? REASON_KEYS[code] : null
+    if (!code) return null
+    return (localOnly && LOCAL_ONLY_KEYS[code]) || REASON_KEYS[code]
 }
 
 /**
@@ -138,7 +153,7 @@ export function failureBannerText(job, t, mapLocalError, files = []) {
         if (code === 'part_too_large' && typeof mapLocalError === 'function') {
             return mapLocalError(code, tooLargeParams(information))
         }
-        return t(REASON_KEYS[code])
+        return t(failureReasonKey(information, { localOnly: isLocalJob(job) }))
     }
     if (isEngineTrace(information)) return t('result.failed')
     return information || t('result.failed')

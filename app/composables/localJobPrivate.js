@@ -546,6 +546,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // gardé stable d'une frame à l'autre, par walk. Job à un seul format ou
     // sans tôle importée : rien n'est ajouté, la frame est celle d'avant.
     const formatHints = new Map()
+    const requestedTotal = (payload?.parts || []).reduce((n, p) => n + (p.count || 0), 0)
     const liveHandler = !onLive
         ? undefined
         : (evt) => {
@@ -565,6 +566,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                   itemMap: itemMap || evt?.itemMap,
                   // J-093 : taille du pool affichée par la vue (stat libellée).
                   walks: poolConc,
+                  // Pièces demandées au total : la vue live en tire « n sur m
+                  // pièces posées » tant qu'aucune disposition ne tient.
+                  requested: requestedTotal,
               })
           }
 

@@ -164,7 +164,7 @@ import { themeType } from '~~/constants/theme.constants';
 import { statusType } from "~~/constants/status.constants";
 import { trackEvent } from '~/utils/track';
 import { altDensityPctOf } from '~/utils/resultQuality';
-import { degradedNoteKey, failureReasonKey } from '~/utils/failureReason';
+import { degradedNoteKey, failureReasonKey, isLocalJob } from '~/utils/failureReason';
 import { computed, onMounted, ref } from "vue";
 import { iconType } from '~~/constants/icon.constants'
 import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadState'
@@ -454,7 +454,7 @@ const isCapacityRefusal = computed(() =>
 // d'un échec muet qui bloque l'utilisateur en 409.
 const isOrphanExpired = computed(() =>
     props.result?.information === 'awaiting_local_expired')
-const failureKey = computed(() => failureReasonKey(props.result?.information))
+const failureKey = computed(() => failureReasonKey(props.result?.information, { localOnly: isLocalJob(props.result) }))
 const failureTitle = computed(() =>
     isOrphanExpired.value ? t('results.orphanExpired.short')
     : isCapacityRefusal.value ? t('nest.capacity.title')

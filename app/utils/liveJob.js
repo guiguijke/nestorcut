@@ -90,6 +90,47 @@ export function frameFitsSheet(s) {
     return true
 }
 
+/**
+ * Frame BPP qui ne tient pas encore, mais dont les pièces posées sont sans
+ * collision : le moteur compte les pièces restantes à part (`unplaced`). Jamais
+ * vrai en SPP, où « ne tient pas » veut dire collisions ou bande trop large,
+ * ni pour une frame d'un ancien worker qui n'envoie pas `unplaced`.
+ */
+export function isPartialBppFrame(f) {
+    return !!f
+        && f.isSpp === false
+        && f.feasible === false
+        && Number.isInteger(f.unplaced)
+        && f.unplaced > 0
+        && Array.isArray(f.items)
+        && f.items.length > 0
+        && f.items.every((it) => Array.isArray(it) && it.length === 5)
+}
+
+// Secondes de recherche sans aucune frame qui tienne avant de montrer la
+// meilleure disposition partielle : un job qui tient a ses premières frames
+// partielles aussi, elles ne doivent pas clignoter à l'écran.
+export const PARTIAL_DELAY_SEC = 8
+
+/**
+ * Pièces posées d'une frame, comptées comme le résultat final (un élément posé
+ * = une pièce, un bloc compte pour un) et seulement celles que la vue sait
+ * dessiner (géométrie chargée). `cache` : fileSlug -> pièces.
+ */
+export function partialPlacedCount(frame, itemMap, cache) {
+    if (!frame?.items?.length || !Array.isArray(itemMap)) return 0
+    const byId = new Map(itemMap.map((m) => [m.id, m]))
+    let n = 0
+    for (const raw of frame.items) {
+        const m = byId.get(raw[0])
+        if (!m) continue
+        const all = cache?.[m.slug]
+        if (!all) continue
+        if ((m.parts || 1) > 1 ? all.length > 0 : !!all[m.part]) n += 1
+    }
+    return n
+}
+
 // Fenêtre d'égalité SPP : les frames phase 2 vivent à largeur ≈ champion
 // phase 1 + slack moteur (corridor = phase1 + 1 mm) — dans cette fenêtre le
 // départage se fait sur la hauteur utilisée (critère secondaire du merge),
@@ -106,6 +147,12 @@ export function frameIsBetter(a, b) {
     if (!b) return true
     const fa = frameFitsSheet(a), fb = frameFitsSheet(b)
     if (fa !== fb) return fa
+    // Deux frames BPP qui ne tiennent pas encore : le moteur classe d'abord
+    // les pièces non posées (bpp/sa.rs), la vue fait comme lui. L'ordre des
+    // frames qui tiennent n'est pas touché.
+    if (!fa && isPartialBppFrame(a) && isPartialBppFrame(b) && a.unplaced !== b.unplaced) {
+        return a.unplaced < b.unplaced
+    }
     const aw = a.strip_width ?? Infinity, bw = b.strip_width ?? Infinity
     if (aw !== bw) {
         const tie = a.isSpp && b.isSpp && Math.abs(aw - bw) <= SPP_TIE_WINDOW_MM

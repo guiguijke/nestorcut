@@ -7,6 +7,7 @@
             <span v-if="badgeKind" class="live__badge" :class="{ 'live__badge--ok': badgeKind !== 'searching' }">
                 {{ badgeText }}
             </span>
+            <span v-if="partialLine" class="live__partial" data-testid="live-partial">{{ partialLine }}</span>
             <span class="live__spacer" />
             <!-- U3 passe 3 (plan U2 reporté deux fois) : les statistiques de
                  l'en-tête live sont des `UiStat` — valeur en chiffres
@@ -255,7 +256,7 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // Champion live partagé avec le registre de solves (R-6 audit 2026-08-31) :
 // une seule définition de « meilleure frame » — la couche registre filtrait
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
-import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity } from '~/utils/liveJob';
+import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity, isPartialBppFrame, partialPlacedCount, PARTIAL_DELAY_SEC } from '~/utils/liveJob';
 import { formatElapsed } from '~/utils/elapsedFormat';
 import { ZONE_RED, livePaneShape, liveHatchId, liveHatchPitch } from '~/utils/sheetDraw';
 
@@ -265,6 +266,11 @@ const props = defineProps({
     // Le job ENTIER est fini (posé par la page d'après l'état réel du calcul).
     // Seul ce signal autorise « Terminé » ; une frame `final` ne suffit pas.
     jobDone: { type: Boolean, default: false },
+    // Calcul dans CE navigateur : seul cas où la meilleure disposition
+    // partielle peut remplacer le message d'attente (jamais un résultat serveur).
+    localCompute: { type: Boolean, default: false },
+    // Pièces demandées au total, donné par la page ; null = inconnu, pas de ligne.
+    partialTotal: { type: Number, default: null },
 });
 
 const { t, fmtPercent, locale } = useLocale();
@@ -435,6 +441,9 @@ const snapshots = ref({}); // worker -> liveLayout
 const champions = ref({});
 let pendingChamps = {};
 let champTimer = null;
+// Meilleure frame BPP partielle vue (moins de pièces non posées). Jamais un
+// champion : elle ne sert que tant qu'aucune frame ne tient.
+const partialChamp = ref(null);
 
 const DIRECTION_CLASSES = ['left', 'bottom', 'balanced'];
 
@@ -503,6 +512,7 @@ watch(
         snapshots.value = {};
         champions.value = {};
         pendingChamps = {};
+        partialChamp.value = null;
         selected.value = 'best';
         if (champTimer) {
             clearTimeout(champTimer);
@@ -523,6 +533,9 @@ watch(
             snapshots.value = { ...snapshots.value, [live.worker]: live };
         }
         offerChampion(live);
+        if (isPartialBppFrame(live) && isBetter(live, partialChamp.value)) {
+            partialChamp.value = live;
+        }
         // Default the main view to the left strategy as soon as it exists.
         if (selected.value === 'best' && champions.value.left) {
             selected.value = 'left';
@@ -534,7 +547,8 @@ watch(
 );
 
 // ---- views ------------------------------------------------------------------
-const best = computed(() => {
+// Meilleure disposition qui TIENT (champion, sinon snapshot qui tient), ou null.
+const fittingBest = computed(() => {
     const champ = champions.value[selected.value];
     if (champ) return champ;
     // The selected strategy has no champion yet: show the best available
@@ -552,6 +566,26 @@ const best = computed(() => {
     });
     if (!fitting.length) return null;
     return fitting.sort((a, b) => (isBetter(a, b) ? -1 : 1))[0];
+});
+
+// Meilleure disposition PARTIELLE à dessiner : seulement pour un calcul dans
+// ce navigateur, quand aucune frame ne tient depuis PARTIAL_DELAY_SEC. Dès
+// qu'une frame tient, fittingBest existe et la vue est celle d'avant.
+const partialBest = computed(() => {
+    if (!props.localCompute || fittingBest.value || !partialChamp.value) return null;
+    const sec = elapsedSec.value;
+    return sec != null && sec >= PARTIAL_DELAY_SEC ? partialChamp.value : null;
+});
+const isPartialView = computed(() => !fittingBest.value && !!partialBest.value);
+const best = computed(() => fittingBest.value || partialBest.value || null);
+
+const partialLine = computed(() => {
+    if (!isPartialView.value) return null;
+    const total = Number(props.partialTotal);
+    if (!Number.isFinite(total) || total <= 0) return null;
+    const placed = partialPlacedCount(best.value, props.result?.itemMap, geometryCache.value);
+    // 0 = géométrie pas encore chargée : rien n'est dessiné, pas de « 0 sur m ».
+    return placed > 0 ? t('live.partial', { placed, total }) : null;
 });
 
 const liveStage = computed(() => resolveLiveStage(props.result, best.value?.stage));
@@ -754,9 +788,10 @@ function formatScore(density) {
 
 // U3 passe 3 : nombre de tôles du meilleur agencement courant (BPP) —
 // « layouts » de l'en-tête du plan.
+// Rien de dessiné ou une disposition partielle : pas de nombre de tôles.
 const sheetCount = computed(() => {
-    const live = best.value || props.result?.liveLayout;
-    const n = Number(live?.bins);
+    if (isPartialView.value) return null;
+    const n = Number(best.value?.bins);
     return Number.isFinite(n) && n > 0 ? n : null;
 })
 
@@ -768,8 +803,8 @@ const usedLengthLabel = computed(() => {
 })
 
 const scoreLabel = computed(() => {
-    const live = best.value || props.result?.liveLayout;
-    const d = frameDensity(live);
+    if (isPartialView.value) return null;
+    const d = frameDensity(best.value);
     return d != null ? formatScore(d) : null;
 })
 
@@ -813,6 +848,11 @@ const stageLabel = computed(() => {
     &__stage {
         font-weight: 700;
         color: var(--label-primary);
+    }
+
+    &__partial {
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
     }
 
     &__badge {

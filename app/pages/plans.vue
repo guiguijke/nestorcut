@@ -75,6 +75,7 @@
                     </tbody>
                 </table>
             </div>
+            <p class="compare__note" data-testid="plans-imported-note">{{ t('plans.compare.importedNote') }}</p>
         </section>
 
         <LoginView />
@@ -504,6 +505,14 @@ function onTierClick(tier) {
         overflow-x: auto;
         border: 1px solid var(--separator-secondary);
         border-radius: var(--radius-l);
+    }
+
+    &__note {
+        margin-top: 12px;
+        padding: 0 8px;
+        font-size: var(--fs-13);
+        color: var(--label-secondary);
+        text-align: center;
     }
 
     &__table {

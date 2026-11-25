@@ -7,6 +7,8 @@ import {
     pickRunningJob,
     frameFitsSheet,
     frameIsBetter,
+    isPartialBppFrame,
+    partialPlacedCount,
     liveBadgeKind,
     liveJobDone,
     liveUsedLength,
@@ -243,5 +245,81 @@ describe("liveJob — résultat d'un calcul serveur terminé", () => {
         expect(pickFinishedServerJob([{ ...done, purgedAt: '2026-11-07' }], 'pA')).toBe(null)
         expect(pickFinishedServerJob([{ ...done, svgs: [] }], 'pA')).toBe(null)
         expect(pickFinishedServerJob(null, 'pA')).toBe(null)
+    })
+})
+
+// ---- disposition partielle BPP (tôle importée : toutes les pièces ne tiennent pas) ----
+const partial = (over = {}) => ({
+    feasible: false, isSpp: false, bins: 1, unplaced: 3, remnant: 0.2,
+    items: [[0, 0, 0, 1, 1], [1, 0, 90, 5, 5]],
+    ...over,
+})
+
+describe('isPartialBppFrame', () => {
+    it('vrai pour une frame BPP qui ne tient pas, avec des pièces non posées et des pièces posées', () => {
+        expect(isPartialBppFrame(partial())).toBe(true)
+    })
+    it('jamais pour du SPP : « ne tient pas » y veut dire collisions ou bande trop large', () => {
+        expect(isPartialBppFrame(partial({ isSpp: true }))).toBe(false)
+        expect(isPartialBppFrame(partial({ isSpp: undefined }))).toBe(false)
+        expect(isPartialBppFrame(partial({ items: [[0, 0, 1, 1], [1, 5, 5, 0]] }))).toBe(false)
+        expect(isPartialBppFrame(spp({ feasible: false, unplaced: 2 }))).toBe(false)
+    })
+    it('faux pour une frame qui tient, sans non-posées, ou d’un ancien worker', () => {
+        expect(isPartialBppFrame(partial({ feasible: true }))).toBe(false)
+        expect(isPartialBppFrame(partial({ unplaced: 0 }))).toBe(false)
+        expect(isPartialBppFrame(partial({ unplaced: undefined }))).toBe(false)
+        expect(isPartialBppFrame(partial({ unplaced: NaN }))).toBe(false)
+        expect(isPartialBppFrame(partial({ unplaced: 2.5 }))).toBe(false)
+        expect(isPartialBppFrame(partial({ items: [] }))).toBe(false)
+        expect(isPartialBppFrame(partial({ items: undefined }))).toBe(false)
+        expect(isPartialBppFrame(null)).toBe(false)
+    })
+})
+
+describe('frameIsBetter : deux frames BPP qui ne tiennent pas', () => {
+    it('moins de pièces non posées gagne, même avec plus de tôles et moins de remnant', () => {
+        expect(frameIsBetter(partial({ unplaced: 2, bins: 4, remnant: 0.1 }), partial({ unplaced: 3 }))).toBe(true)
+        expect(frameIsBetter(partial({ unplaced: 3 }), partial({ unplaced: 2, bins: 4, remnant: 0.1 }))).toBe(false)
+    })
+    it('à non-posées égal, l’ordre d’avant : tôles, puis remnant', () => {
+        expect(frameIsBetter(partial({ bins: 1 }), partial({ bins: 2 }))).toBe(true)
+        expect(frameIsBetter(partial({ remnant: 0.5 }), partial({ remnant: 0.2 }))).toBe(true)
+    })
+    it('une frame sans `unplaced` retombe sur l’ordre d’avant', () => {
+        const old = partial({ unplaced: undefined })
+        expect(frameIsBetter(partial({ unplaced: 9, bins: 1 }), { ...old, bins: 2 })).toBe(true)
+    })
+    it('une frame qui tient bat toujours une partielle, quel que soit le reste', () => {
+        expect(frameIsBetter(bpp({ bins: 9, remnant: 0 }), partial({ unplaced: 1, bins: 1 }))).toBe(true)
+        expect(frameIsBetter(partial({ unplaced: 1 }), bpp({ bins: 9 }))).toBe(false)
+    })
+    it('l’ordre de deux frames qui tiennent ne change pas (unplaced ignoré)', () => {
+        expect(frameIsBetter(bpp({ unplaced: 5 }), bpp({ unplaced: 0, remnant: 500 }))).toBe(true)
+        expect(frameIsBetter(bpp({ bins: 2, unplaced: 9 }), bpp({ bins: 3, unplaced: 0 }))).toBe(true)
+    })
+})
+
+describe('partialPlacedCount : pièces posées, comptées comme le résultat final', () => {
+    const itemMap = [
+        { id: 0, slug: 'a', part: 0 },
+        { id: 1, slug: 'a', part: 1 },
+        { id: 2, slug: 'blk', part: 0, parts: 3 },
+        { id: 3, slug: 'absent', part: 0 },
+    ]
+    const cache = { a: [{ d: 'M0 0' }, { d: 'M1 1' }], blk: [{ d: 'M0 0' }, { d: 'M1 1' }, { d: 'M2 2' }] }
+    const frame = (ids) => ({ items: ids.map((id) => [id, 0, 0, 0, 0]) })
+
+    it('une pièce posée compte un, un bloc compte un', () => {
+        expect(partialPlacedCount(frame([0, 1, 2]), itemMap, cache)).toBe(3)
+    })
+    it('une pièce dont la géométrie n’est pas chargée n’est pas dessinée : pas comptée', () => {
+        expect(partialPlacedCount(frame([0, 3]), itemMap, cache)).toBe(1)
+        expect(partialPlacedCount(frame([0, 1]), itemMap, {})).toBe(0)
+    })
+    it('rien de posé ou rien à lire : zéro', () => {
+        expect(partialPlacedCount(null, itemMap, cache)).toBe(0)
+        expect(partialPlacedCount(frame([0]), undefined, cache)).toBe(0)
+        expect(partialPlacedCount({ items: [] }, itemMap, cache)).toBe(0)
     })
 })

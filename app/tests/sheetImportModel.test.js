@@ -52,10 +52,30 @@ const CONTOURS = [
 ]
 
 describe('importErrorOf', () => {
-    it('refus du lecteur : trop lourd, le message du lecteur est gardé', () => {
-        expect(importErrorOf({ refusal: { reason: 'time' }, message: 'Too many entities' }))
-            .toEqual({ key: ERROR_KEYS.tooHeavy, detail: 'Too many entities' })
-        expect(importErrorOf({ refusal: {} }).detail).toBeNull()
+    it('refus du lecteur : entités ou temps = trop lourd, sans la phrase anglaise du lecteur', () => {
+        expect(importErrorOf({ refusal: { reason: 'time' }, message: 'too heavy for in-browser import: 12 entities' }))
+            .toEqual({ key: ERROR_KEYS.tooHeavy, detail: null })
+        expect(importErrorOf({ refusal: { reason: 'entities' }, message: 'x' }))
+            .toEqual({ key: ERROR_KEYS.tooHeavy, detail: null })
+        expect(importErrorOf({ refusal: {} }).key).toBe(ERROR_KEYS.tooHeavy)
+        expect(importErrorOf({ refusal: { reason: 'inconnu' } }).key).toBe(ERROR_KEYS.tooHeavy)
+    })
+    // Noms = serde camelCase de TooHeavyReason (budget.rs), lus dans la source Rust.
+    it('chaque cause du lecteur a son message, jamais une phrase anglaise en dessous', () => {
+        const src = readFileSync(new URL('../../workers/geometry/crates/nest-import/src/budget.rs', import.meta.url), 'utf8')
+        const body = src.match(/pub enum TooHeavyReason \{([\s\S]*?)\r?\n\}/)[1]
+        const names = [...body.matchAll(/^\s*([A-Z][A-Za-z]+),/gm)].map((m) => m[1].replace(/^./, (c) => c.toLowerCase()))
+        expect(names.sort()).toEqual(['blockDepth', 'entities', 'paperSpaceOnly', 'time'])
+        const keys = new Map(names.map((reason) => {
+            const out = importErrorOf({ refusal: { reason }, message: 'English technical sentence' })
+            expect(out.detail, reason).toBeNull()
+            return [reason, out.key]
+        }))
+        expect(keys.get('paperSpaceOnly')).toBe(ERROR_KEYS.paperSpaceOnly)
+        expect(keys.get('blockDepth')).toBe(ERROR_KEYS.blockDepth)
+        expect(keys.get('entities')).toBe(ERROR_KEYS.tooHeavy)
+        expect(keys.get('time')).toBe(ERROR_KEYS.tooHeavy)
+        expect(new Set([ERROR_KEYS.paperSpaceOnly, ERROR_KEYS.blockDepth, ERROR_KEYS.tooHeavy]).size).toBe(3)
     })
     it('échec du lecteur ou valeur vide : illisible', () => {
         expect(importErrorOf({ ok: false, error: 'boom' }).key).toBe(ERROR_KEYS.unreadable)

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { degradedNoteKey, failureBannerText, failureDetailText, serverRefusalCode, failureReasonKey, jobErrorBannerText } from '../utils/failureReason'
+import { degradedNoteKey, failureBannerText, failureDetailText, serverRefusalCode, failureReasonKey, isLocalJob, jobErrorBannerText } from '../utils/failureReason'
 import en from '../utils/i18n/en'
 import fr from '../utils/i18n/fr'
 import de from '../utils/i18n/de'
@@ -54,6 +54,57 @@ describe('failureReasonKey', () => {
         const NEVER_SHOWN = ['local_geometry_missing', 'engine_error']
         const missing = accepted.filter((c) => !NEVER_SHOWN.includes(c) && !failureReasonKey(c))
         expect(missing).toEqual([])
+    })
+})
+
+describe('failureReasonKey : calcul sur cet appareil', () => {
+    const LOCAL_CODES = ['memory_cap', 'entity_limit', 'all_alternatives_invalid', 'crash']
+
+    it('les quatre codes à conseil serveur donnent la variante locale, traduite dans les 6 langues', () => {
+        const keys = LOCAL_CODES.map((c) => failureReasonKey(c, { localOnly: true }))
+        expect(keys).toEqual([
+            'localMode.memoryLocal',
+            'localMode.entityLimitLocal',
+            'localMode.allInvalidLocal',
+            'localMode.crashLocal',
+        ])
+        for (const [name, dict] of Object.entries({ en, fr, de, es, it: it_, pt })) {
+            for (const key of keys) expect(dict[key], `${name}:${key}`).toBeTruthy()
+        }
+    })
+
+    it('aucune variante locale ne conseille le mode serveur, dans les 6 langues', () => {
+        for (const [name, dict] of Object.entries({ en, fr, de, es, it: it_, pt })) {
+            for (const code of LOCAL_CODES) {
+                const text = dict[failureReasonKey(code, { localOnly: true })]
+                expect(text, `${name}:${code}`).not.toMatch(/serveur|server|servidor|servitore|Server-?Modus/i)
+            }
+        }
+    })
+
+    it('sans localOnly, la table est celle d’avant ; les autres codes ne changent pas', () => {
+        expect(failureReasonKey('crash')).toBe('localMode.crashError')
+        expect(failureReasonKey('memory_cap', { localOnly: false })).toBe('localMode.memorySuggest')
+        expect(failureReasonKey('part_too_large', { localOnly: true })).toBe('localMode.partTooLargePlain')
+        expect(failureReasonKey('free text', { localOnly: true })).toBeNull()
+    })
+
+    it('un résultat local ou un job localOnly du serveur est local', () => {
+        expect(isLocalJob({ isLocal: true })).toBe(true)
+        expect(isLocalJob({ localOnly: true })).toBe(true)
+        expect(isLocalJob({})).toBe(false)
+        expect(isLocalJob(null)).toBe(false)
+    })
+
+    it('le bandeau d’un job local rechargé donne la variante locale', () => {
+        const t = (key) => `t:${key}`
+        expect(failureBannerText({ information: 'crash', localOnly: true }, t)).toBe('t:localMode.crashLocal')
+        expect(failureBannerText({ information: 'crash' }, t)).toBe('t:localMode.crashError')
+    })
+
+    it('la carte de résultat passe le même drapeau', () => {
+        const card = readFileSync(new URL('../components/UserResultItem.vue', import.meta.url), 'utf8')
+        expect(card).toMatch(/failureReasonKey\(props\.result\?\.information, \{ localOnly: isLocalJob\(props\.result\) \}\)/)
     })
 })
 

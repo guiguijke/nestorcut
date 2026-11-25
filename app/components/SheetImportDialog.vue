@@ -74,7 +74,6 @@
                 </div>
                 <div v-if="errorText" class="sid__error" role="alert" data-testid="sheet-import-error">
                     <span>{{ errorText }}</span>
-                    <small v-if="error && error.detail">{{ error.detail }}</small>
                 </div>
 
                 <section v-if="recents.length" class="recent" data-testid="sheet-import-recents">

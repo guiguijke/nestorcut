@@ -29,6 +29,9 @@ async function loadSfc(file, env) {
     const { descriptor } = parse(readFileSync(file, 'utf8'), { filename: file, sourceMap: false })
     const { content } = compileScript(descriptor, { id: 'test', inlineTemplate: true, genDefaultAs: '__sfc__' })
     const body = importsToConsts(content)
+        // import('…') à littéral : même résolution que les import statiques (alias
+        // `~`, modules remplacés), sinon le Function natif ne connaît pas `~/…`.
+        .replace(/\bimport\(\s*(['"][^'"]+['"])\s*\)/g, '__import($1)')
         .replaceAll('import.meta.client', 'true')
         .replaceAll('import.meta.server', 'false')
     const load = (spec) => {
