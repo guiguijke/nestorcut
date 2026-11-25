@@ -40,6 +40,8 @@
  *   multi-start in-engine optimize_multi.
  */
 
+import { engineSendOf, withSwappedCutoff } from '../utils/sheetHull'
+
 // ---------------------------------------------------------------------------
 // derive_seed — miroir BigInt EXACT de spp.rs (splitmix64-style, wrapping
 // 64 bits, masqué à 63 bits pour le round-trip Mongo Int64). La seed master
@@ -131,7 +133,7 @@ function liveSheets(payload) {
  * du walk w en singleton (voir l'en-tête — le mono-walk interne prend
  * toujours biases[0]). */
 function workerEngineConfig(payload, w, isSpp) {
-    const base = payload?.engineConfig || {}
+    const base = withSwappedCutoff(payload?.engineConfig || {}, engineSendOf(payload).swapped)
     // Plan « dernière tôle » §8.3.3 : les WALKS ne finissent PAS leur tôle
     // partielle. La fusion n'en retient qu'une par classe : huit walks qui
     // finissent chacun la leur, c'est huit fois le même travail dont sept
@@ -496,7 +498,8 @@ function startWalk(jobSlug, pool, payload, masterSeed, w) {
     }
     slot.worker.postMessage({
         jobSlug,
-        instance: payload.instance,
+        // Tôle concave : enveloppe + poches (sheetHull.js), sinon payload.instance lui-même.
+        instance: engineSendOf(payload).instance,
         engineConfig: workerEngineConfig(payload, w, pool.isSpp),
         seed: n === 1 ? masterSeed : deriveSeed(masterSeed, w).toString(),
         live: Boolean(pool.onLive),
@@ -873,7 +876,7 @@ function postMerge(jobSlug, pool, payload) {
         op: 'merge',
         merge: {
             problem: payload?.problem ?? target.outcome.result?.problem,
-            instance: payload?.instance,
+            instance: engineSendOf(payload).instance,
             // J-093 : prng_seed arrive en STRING (63 bits, piège #16) mais le
             // parse EngineConfig du merge exige un u64 — et le passer en
             // number le mangle. Le merge ne cherche pas (la seed ne sert
@@ -889,6 +892,8 @@ function postMerge(jobSlug, pool, payload) {
                 ...(Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
                     ? { finish_partial_sheet: false }
                     : {}),
+                // Tôle concave substituée : même config que les walks.
+                ...(engineSendOf(payload).swapped ? { narrow_concavity_cutoff: null } : {}),
             },
             runs,
             biases: payload?.engineConfig?.biases || [],

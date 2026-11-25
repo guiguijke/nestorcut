@@ -9,6 +9,8 @@
  * refunds the consumed quota — same semantics as worker_common/refund.py).
  */
 
+import { engineSendOf, withSwappedCutoff } from '../utils/sheetHull'
+
 export function isLocalComputeEnabled() {
     // P4 : le worker de finalisation importe geometryClient → ici. Pas de
     // Nuxt dans un Worker : absence de useRuntimeConfig = chemin local ON
@@ -87,15 +89,17 @@ export function runInWorker(jobSlug, payload, { onLive } = {}) {
         if (onLive) {
             liveHandlers.set(jobSlug, (evt) => onLive({ ...evt, sheets, isSpp }))
         }
+        const send = engineSendOf(payload)
         getWorker().postMessage({
             jobSlug,
-            instance: payload.instance,
+            // Tôle concave : enveloppe + poches (sheetHull.js), sinon payload.instance lui-même.
+            instance: send.instance,
             // Tôle importée : finition de tôle partielle éteinte aussi sur ce
             // chemin mono-walk (le builder l'a déjà éteinte ; garde si un
             // payload arrive d'ailleurs). Inchangé pour un job rectangulaire.
-            engineConfig: Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
+            engineConfig: withSwappedCutoff(Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
                 ? { ...payload.engineConfig, finish_partial_sheet: false }
-                : payload.engineConfig,
+                : payload.engineConfig, send.swapped),
             seed: payload.engineConfig?.prng_seed ?? '0',
             live: Boolean(onLive),
         })

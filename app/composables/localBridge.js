@@ -2169,7 +2169,8 @@ export function binShapeForDxf(payload, container) {
 /** Clé `bin_shape` du spec wasm (ou rien). Les anneaux partent en CHAÎNES
  * (`String(x)` = représentation la plus courte) : le lecteur de nombres JSON du
  * wasm peut se tromper d'un ULP, la lecture d'une chaîne est exacte — le DXF
- * porte les anneaux que le moteur a reçus, au bit près. */
+ * porte les anneaux du payload, au bit près (ceux du moteur aussi, sauf tôle
+ * concave ou à défauts : sheetHull.js, `deliver`). */
 function binShapeSpec(shape) {
     if (!shape) return {}
     // Une coordonnée non finie ferait jeter le lecteur du wasm, et le fichier

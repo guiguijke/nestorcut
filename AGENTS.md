@@ -1318,14 +1318,16 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       (cadre rectangulaire : il pourrait être découpé hors du métal). Les
       anneaux partent au wasm en TEXTE (`binShapeSpec`, `localBridge.js:2065` :
       le lecteur de nombres JSON se trompe d'un ULP, le DXF doit porter les
-      anneaux du moteur au bit près).
+      anneaux du payload au bit près ; sauf tôle concave ou à défauts, ce sont
+      aussi ceux du moteur, voir plus bas).
     - **Téléchargement Free d'un job à tôle importée** : voir piège 63 et le
       lot de la sortie. Décision du propriétaire du 20/11 : en Free on
       importe, on imbrique et on voit ; les fichiers de découpe d'un job à
       tôle importée (DXF, ZIP, .job) demandent Unlimited (piège 63).
     - **Défauts dessinés à la main (V0.9.19).** Deux descriptions de la même
       tôle, rendues ensemble par `cut_sheet` (`nest-import/src/sheet_cut.rs`,
-      `geoCutSheet`) : le MOTEUR reçoit le contour d'ORIGINE et les `hazards`
+      `geoCutSheet`) : le MOTEUR reçoit le contour d'ORIGINE (son enveloppe
+      convexe et ses poches s'il est concave, voir plus bas) et les `hazards`
       (zones, défauts, morceaux perdus, limités à la tôle) en trous, parce
       qu'il réduit un contour à encoches sans contrôle ni repli (1 à 2 % de
       contours faux, `shape_modification.rs`, érosion) ; le rapport, les aires,
@@ -1344,10 +1346,20 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       dessiner un défaut en `evenodd`. Un défaut sans aire (trait, points
       alignés) est épaissi, jamais perdu. Sans défaut dessiné, rien ne change :
       verrous d'identité dans `sheetDefects` et `shapedDefects`.
+    **Contenant du moteur d'une tôle CONCAVE (V0.9.20) : plus le contour livré.**
+    Le moteur reçoit enveloppe convexe + poches en trous (`app/utils/sheetHull.js`,
+    `engineInstanceOf`), et `narrow_concavity_cutoff: null` ; la substitution est
+    faite au seul envoi (`localPool.js` walks et fusion, `localCompute.js`).
+    Ne JAMAIS la mettre dans `payload.instance.bins` : le rapport et le badge
+    compteraient les poches comme des zones interdites. Une poche se ferme HORS
+    de l'enveloppe (lèvre et drapeau), selon l'arête de l'enveloppe : fermée sur
+    sa bouche, une poche mince fait refuser tout le job. Convexe à 0,005 mm près :
+    payload inchangé, même référence (verrou).
     Verrous : `sheetShape`, `sheetImportModel`, `localSheetsStore`,
     `filesSheetShapeId`, `localShapedSheet`, `localShapedPasses`,
     `localShapedHoleFill`, `shapedReport`, `sheetDraw` (`app/tests/`) ;
-    `sheetDefects`, `shapedDefects`, `sheetCut`, `defectDrawing` (`app/tests/`) ;
+    `sheetDefects`, `shapedDefects`, `sheetCut`, `defectDrawing`, `sheetHull`,
+    `localPoolHull` (`app/tests/`) ;
     `shapedSheetServer` (`server/tests/`) ; `nest-import/tests/sheet_contours.rs`,
     `nest-import/tests/sheet_cut.rs`,
     `nest-export/tests/bin_shape.rs`, `nest-report/src/shaped_tests.rs`.
