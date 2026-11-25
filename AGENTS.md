@@ -1323,11 +1323,55 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       lot de la sortie. Décision du propriétaire du 20/11 : en Free on
       importe, on imbrique et on voit ; les fichiers de découpe d'un job à
       tôle importée (DXF, ZIP, .job) demandent Unlimited (piège 63).
+    - **Défauts dessinés à la main (V0.9.19).** Deux descriptions de la même
+      tôle, rendues ensemble par `cut_sheet` (`nest-import/src/sheet_cut.rs`,
+      `geoCutSheet`) : le MOTEUR reçoit le contour d'ORIGINE et les `hazards`
+      (zones, défauts, morceaux perdus, limités à la tôle) en trous, parce
+      qu'il réduit un contour à encoches sans contrôle ni repli (1 à 2 % de
+      contours faux, `shape_modification.rs`, érosion) ; le rapport, les aires,
+      le DXF et tous les dessins portent la tôle COUPÉE (`deliver` de
+      `engineBinShape`, `payload.shapedSheets[].shape`), dans le repère de la
+      boîte du contour d'origine : le zéro ne bouge jamais. Pour ces tôles le
+      DXF ne porte donc PAS les anneaux du moteur. Le rapport est calculé deux
+      fois et `mergeShapeVerify` prend le pire. Une coupe est liée à son dessin
+      (`bindCut`, `forKey`) : celle d'un autre état est refusée à
+      l'enregistrement et au calcul.
+      Enregistrement : `contours: []` + `contoursV2`, `outlineIndex: -1` +
+      `outlineIndexV2`, pour qu'une version plus ancienne refuse la tôle au lieu
+      d'ignorer ses défauts ou de la réécrire. Toujours lire par `contoursOf` et
+      `outlineIndexOf`.
+      Un contour libre qui se recoupe est rempli à la règle NON NULLE : ne jamais
+      dessiner un défaut en `evenodd`. Un défaut sans aire (trait, points
+      alignés) est épaissi, jamais perdu. Sans défaut dessiné, rien ne change :
+      verrous d'identité dans `sheetDefects` et `shapedDefects`.
     Verrous : `sheetShape`, `sheetImportModel`, `localSheetsStore`,
     `filesSheetShapeId`, `localShapedSheet`, `localShapedPasses`,
     `localShapedHoleFill`, `shapedReport`, `sheetDraw` (`app/tests/`) ;
+    `sheetDefects`, `shapedDefects`, `sheetCut`, `defectDrawing` (`app/tests/`) ;
     `shapedSheetServer` (`server/tests/`) ; `nest-import/tests/sheet_contours.rs`,
+    `nest-import/tests/sheet_cut.rs`,
     `nest-export/tests/bin_shape.rs`, `nest-report/src/shaped_tests.rs`.
+
+67. **Zéro des fichiers et positions des pièces (V0.9.19).** Le DXF stocké
+    n'est JAMAIS modifié : « Centre de la tôle » le translate au téléchargement
+    (`dxfOrigin.js`), par paires code/valeur, pour les seules entités que notre
+    écrivain sait produire. Toute autre entité, section ou coordonnée est une
+    erreur (`dxf_origin_unsupported`) et rien n'est livré, jamais un fichier au
+    coin quand le centre est demandé. Une entité ajoutée à `dxf_writer.rs` doit
+    l'être aussi à `AXIS`. Le centre d'un disque importé est celui du CERCLE :
+    la boîte d'un polygone à nombre impair de côtés n'y est pas (`sheetCentre`).
+    Les positions (CSV) partent de l'enveloppe de l'anneau ORIGINAL importé
+    (`ringHull`), affinée par les entités du dessin (`dxfEntities.partShape`).
+    Ni les anneaux du payload (simplifiés, cordés pour une polyligne à arcs,
+    ÉLARGIS par la réserve d'amorce d'un `.job`), ni la boîte de toutes les
+    poignées (l'importeur rattache à une pièce ses axes, ses cotes, l'arête
+    d'une voisine) : les deux ont donné des centres faux de plusieurs
+    millimètres en relecture. Forme ambiguë ou illisible : pas de CSV, jamais un
+    nombre deviné. Positions seulement pour un job construit dans le navigateur,
+    gardées dans le record, jamais envoyées ; même verrou que les fichiers de
+    coupe (piège 63). Verrous : `dxfOrigin`, `dxfOriginHardening`,
+    `partEntities`, `partPositions`, `positionsFinalize`, `positionsJob`,
+    `localDownloadsOrigin`, `sheetAxesOrigin`.
 
 ## 3. Banc d'essai (workers/nesting/bench/)
 
@@ -1367,7 +1411,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (2 152 au 24/11)
+npx vitest run                                             # app+server (2 349 au 25/11)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 101 au 18/11 (aussi dans la CI ; lit workers/geometry)

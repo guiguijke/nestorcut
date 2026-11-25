@@ -4,6 +4,44 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.19
+
+*FR*
+
+- Nouveau : positions des pièces en CSV. Dans un projet « Cet appareil », le bouton « Positions des pièces (CSV) » donne une ligne par pièce posée : la tôle, le fichier, le centre X et Y, le diamètre si la pièce est ronde, et sa rotation. Les valeurs sont mesurées sur le dessin livré. Le calcul est à relancer pour un résultat déjà fait.
+- Nouveau : zéro des fichiers au choix, pour les résultats calculés dans votre navigateur : coin bas-gauche, comme avant, ou centre de la tôle. Il vaut pour le DXF, l'archive et les positions ; le nom du fichier le dit, et le repère X/Y de l'aperçu suit. Pour un disque importé, le zéro est le centre du cercle. Un fichier `.job` SheetCam garde le coin.
+- Nouveau : défauts dessinés à la main sur une tôle importée. Dans la fenêtre de la tôle, trois outils (contour libre, cercle, rectangle) marquent une fracture ou un éclat, à la souris ou au doigt. Aucune pièce n'est posée sur un défaut, ni plus près que l'espacement. Un éclat qui touche le bord retire ce morceau du contour ; si les défauts coupent la tôle, le plus grand morceau est gardé et l'écran dit ce qui est perdu. Le zéro du fichier ne bouge pas.
+
+*EN*
+
+- New: part positions as CSV. In a "This device" project, the "Part positions (CSV)" button gives one line per placed part: the sheet, the file, the center X and Y, the diameter if the part is round, and its rotation. The values are measured on the delivered drawing. Run the nest again for a result made earlier.
+- New: choose the zero of the files, for results computed in your browser: bottom-left corner, as before, or center of the sheet. It applies to the DXF, the archive and the positions; the file name says it, and the X/Y marker of the preview follows. For an imported disc, the zero is the center of the circle. A SheetCam `.job` file keeps the corner.
+- New: draw defects by hand on an imported sheet. In the sheet window, three tools (free outline, circle, rectangle) mark a crack or a chip, with the mouse or a finger. No part is placed on a defect, nor closer to it than the spacing. A chip that touches the edge removes that piece of the outline; if the defects cut the sheet, the largest piece is kept and the screen says what is lost. The zero of the file does not move.
+
+*PT*
+
+- Novo: posições das peças em CSV. Em um projeto «Este dispositivo», o botão «Posições das peças (CSV)» dá uma linha por peça posicionada: a chapa, o arquivo, o centro X e Y, o diâmetro se a peça for redonda, e a sua rotação. Os valores são medidos no desenho entregue. Para um resultado já feito, execute o cálculo de novo.
+- Novo: zero dos arquivos à escolha, para os resultados calculados no seu navegador: canto inferior esquerdo, como antes, ou centro da chapa. Vale para o DXF, o arquivo compactado e as posições; o nome do arquivo o indica, e a marca X/Y da visualização acompanha. Para um disco importado, o zero é o centro do círculo. Um arquivo `.job` do SheetCam mantém o canto.
+- Novo: defeitos desenhados à mão em uma chapa importada. Na janela da chapa, três ferramentas (contorno livre, círculo, retângulo) marcam uma fissura ou uma lasca, com o mouse ou o dedo. Nenhuma peça é colocada sobre um defeito, nem mais perto do que o espaçamento. Uma lasca que toca a borda retira esse pedaço do contorno; se os defeitos cortam a chapa, o maior pedaço é mantido e a tela diz o que se perde. O zero do arquivo não muda.
+
+*IT*
+
+- Novità: posizioni dei pezzi in CSV. In un progetto «Questo dispositivo», il pulsante «Posizioni dei pezzi (CSV)» dà una riga per pezzo collocato: la lamiera, il file, il centro X e Y, il diametro se il pezzo è tondo, e la sua rotazione. I valori sono misurati sul disegno consegnato. Per un risultato già fatto, rilancia il calcolo.
+- Novità: zero dei file a scelta, per i risultati calcolati nel tuo browser: angolo in basso a sinistra, come prima, o centro della lamiera. Vale per il DXF, l'archivio e le posizioni; il nome del file lo dice, e il riferimento X/Y dell'anteprima segue. Per un disco importato, lo zero è il centro del cerchio. Un file `.job` di SheetCam mantiene l'angolo.
+- Novità: difetti disegnati a mano su una lamiera importata. Nella finestra della lamiera, tre strumenti (contorno libero, cerchio, rettangolo) segnano una crepa o una scheggiatura, con il mouse o con il dito. Nessun pezzo viene messo su un difetto, né più vicino della distanza impostata. Una scheggiatura che tocca il bordo toglie quel pezzo del contorno; se i difetti tagliano la lamiera, si tiene il pezzo più grande e lo schermo dice quanto si perde. Lo zero del file non si sposta.
+
+*DE*
+
+- Neu: Teilepositionen als CSV. In einem Projekt „Dieses Gerät“ gibt die Schaltfläche „Teilepositionen (CSV)“ eine Zeile je platziertem Teil: das Blech, die Datei, die Mitte X und Y, den Durchmesser bei einem runden Teil und seine Drehung. Die Werte sind an der gelieferten Zeichnung gemessen. Für ein älteres Ergebnis die Berechnung neu starten.
+- Neu: Nullpunkt der Dateien wählbar, für im Browser berechnete Ergebnisse: Ecke unten links, wie bisher, oder Mitte des Blechs. Er gilt für das DXF, das Archiv und die Positionen; der Dateiname sagt es, und die X/Y-Markierung der Vorschau folgt. Bei einer importierten Scheibe ist der Nullpunkt die Mitte des Kreises. Eine `.job`-Datei von SheetCam behält die Ecke.
+- Neu: Defekte von Hand auf ein importiertes Blech zeichnen. Im Blechfenster markieren drei Werkzeuge (freie Kontur, Kreis, Rechteck) einen Riss oder einen Ausbruch, mit der Maus oder dem Finger. Kein Teil wird auf einen Defekt gelegt, auch nicht näher als der Abstand. Ein Ausbruch am Rand entfernt dieses Stück der Kontur; teilen die Defekte das Blech, bleibt das größte Stück, und der Bildschirm sagt, was verloren geht. Der Nullpunkt der Datei bleibt, wo er ist.
+
+*ES*
+
+- Novedad: posiciones de las piezas en CSV. En un proyecto «Este dispositivo», el botón «Posiciones de piezas (CSV)» da una línea por pieza colocada: la chapa, el archivo, el centro X e Y, el diámetro si la pieza es redonda, y su rotación. Los valores se miden en el dibujo entregado. Para un resultado ya hecho, vuelve a lanzar el cálculo.
+- Novedad: cero de los archivos a elegir, para los resultados calculados en tu navegador: esquina inferior izquierda, como antes, o centro de la chapa. Vale para el DXF, el archivo comprimido y las posiciones; el nombre del archivo lo indica, y la marca X/Y de la vista previa lo sigue. Para un disco importado, el cero es el centro del círculo. Un archivo `.job` de SheetCam conserva la esquina.
+- Novedad: defectos dibujados a mano en una chapa importada. En la ventana de la chapa, tres herramientas (contorno libre, círculo, rectángulo) marcan una grieta o una desportilladura, con el ratón o con el dedo. Ninguna pieza se coloca sobre un defecto, ni más cerca que la separación. Una desportilladura que toca el borde quita ese trozo del contorno; si los defectos cortan la chapa, se conserva el trozo más grande y la pantalla dice lo que se pierde. El cero del archivo no se mueve.
+
 ## V0.9.18
 
 *FR*
