@@ -953,7 +953,9 @@ const confirm = async () => {
     if (props.replaceIndex != null) actions.replaceSheetShape(props.replaceIndex, record)
     else {
         // Sans résultat encore, une tôle d'usine intacte est remplacée par l'import (files.js).
-        const hasResult = (globalStore.getters.resultsList || []).some((r) => belongsToProject(r, props.projectSlug))
+        // Liste pas encore lue : on ne sait pas, donc rien n'est remplacé.
+        const hasResult = !globalStore.getters.resultsLoaded
+            || (globalStore.getters.resultsList || []).some((r) => belongsToProject(r, props.projectSlug))
         actions.addSheetFromShape(record, { hasResult })
     }
     // Des nombres seulement (en chaînes) : aucune géométrie ne part.

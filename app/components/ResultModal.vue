@@ -76,7 +76,7 @@ import { csvCell } from '~/utils/partPositions'
 import { DXF_ORIGIN_UNSUPPORTED } from '~/utils/dxfOrigin'
 import { effectiveOrigin, originChoiceOffered } from '~/utils/originChoice'
 import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
-import { failureDetailText } from '~/utils/failureReason'
+import { failureDetailText, isLocalJob } from '~/utils/failureReason'
 import { useLocalMode } from '~/composables/useLocalMode'
 import { FREE_DOWNLOAD_SHEET_CAP } from '~~/shared/constants/payment.constants'
 
@@ -919,7 +919,7 @@ const localModeCtl = useLocalMode()
 const failureDetail = computed(() => failureDetailText(
     unref(resultModalData),
     t,
-    (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocal), params: params || null }),
+    (code, params) => localModeCtl.mapError(code, { localOnly: isLocalJob(unref(resultModalData)), params: params || null }),
     unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
 ))
 // D26 : information Free avant de relancer un calcul. La règle (propriétaire,

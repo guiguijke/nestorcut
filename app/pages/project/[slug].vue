@@ -607,8 +607,8 @@ const preflightReport = computed(() => {
     if (model.imported && model.state !== 'ready') return null
     const parts = preflightParts(files, model.imported)
     const p = unref(params)
-    // Même espacement que le worker et le calcul sur l'appareil : demandé +
-    // marge de courbes (0 pour des rectangles ou un espacement 0).
+    // Espacement du calcul : demandé + marge de courbes (0 pour des rectangles, un
+    // espacement 0, ou une fiche de projet « cet appareil », qui n'a pas d'anneaux).
     const spaceMm = displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0)
     const curveMargin = computeSpacingMargin(files.filter((f) => Number(f.count) > 0), spaceMm)
     return capacityReport(parts, model.sheets, spaceMm + curveMargin)
@@ -671,7 +671,7 @@ const preflightLine = computed(() => {
         bits.push(t('project.preflightArea', { area: fmtNumber(report.totalInflatedMm2 / 1e6, 2) }))
     }
     // Ni nombre de tôles ni densité tant que le chiffre n'est pas juste (forme
-    // pas lue, illisible, pièce hors contour).
+    // pas lue ou illisible).
     if (figure.show) {
         bits.push(tp('project.preflightSheets', nSheets))
         bits.push(t('project.preflightDensity', { pct: Math.round((REFERENCE_PACKING || 0.85) * 100) }))
@@ -1098,8 +1098,8 @@ const capacityPanel = computed(() => {
         sheets: unref(currentSheets),
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
-        // Tôle importée : null, le panneau garde le chiffre du refus, calculé avec
-        // la vraie forme. Rectangles : le chiffre du bouton, comme avant.
+        // Une seule source : le chiffre du bouton. Sans chiffre (forme pas lue ou
+        // illisible), null : le panneau garde celui du refus.
         preflightSheets: unref(sheetCountFigure).panelSheets,
     });
 });

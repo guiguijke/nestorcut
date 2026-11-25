@@ -98,9 +98,10 @@ const LOCAL_ONLY_KEYS = {
     crash: 'localMode.crashLocal',
 }
 
-/** Un job est calculé dans ce navigateur : résultat local, ou job `localOnly` du serveur. */
+/** Un job est calculé dans ce navigateur : résultat local, job `localOnly` du serveur, ou
+ * job (même en échec) d'un projet « cet appareil ». */
 export function isLocalJob(job) {
-    return Boolean(job?.isLocal || job?.localOnly)
+    return Boolean(job?.isLocal || job?.localOnly || job?.projectLocal)
 }
 
 export function failureReasonKey(information, { localOnly = false } = {}) {

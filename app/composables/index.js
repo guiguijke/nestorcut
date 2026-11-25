@@ -3,6 +3,9 @@ import { statusType } from "~~/constants/status.constants";
 
 const state = reactive({
     resultsList: [],
+    // La liste des résultats a été lue au moins une fois (une liste vide avant cela
+    // ne veut pas dire « aucun résultat »).
+    resultsLoaded: false,
     projectsList: null,
     resultModalData: {},
     screenshotModalData: {},
@@ -11,8 +14,9 @@ const state = reactive({
     needNotification: false
 })
 
-function setResults(results) {
+function setResults(results, loaded = true) {
     state.resultsList = [...results]
+    state.resultsLoaded = loaded
 }
 async function getProjects() {
     try {
@@ -44,6 +48,7 @@ function updateNotification(value) {
 export const globalStore = readonly({
     getters: {
         resultsList: computed(() => state.resultsList),
+        resultsLoaded: computed(() => state.resultsLoaded),
         isNesting: computed(() => state.resultsList && state.resultsList.some(item => [statusType.unfinished, statusType.pending].includes(item.status))),
         projectsList: computed(() => state.projectsList),
         resultModalData: computed(() => state.resultModalData),

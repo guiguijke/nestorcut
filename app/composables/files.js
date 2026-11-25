@@ -453,6 +453,13 @@ function setProjectFiles(files, path, state = filesState()) {
             state.params = factoryParams()
             state.paramsUnit = 'mm'
         }
+        // Réglages d'usine (en mm) ou retrouvés (dans l'unité d'alors) : sans ceci un
+        // compte en pouces ouvrait son projet sur une tôle de 1000 × 2000 POUCES et
+        // 2 pouces d'espacement (le sélecteur d'unité n'a rien à convertir tant que
+        // l'unité ne change pas). Les réglages de la démo, eux, sont posés par la page
+        // déjà dans l'unité affichée. Au navigateur seulement : en SSR, le sélecteur
+        // convertit au montage.
+        if ((snap || !state.pendingCuratedDefaults) && !import.meta.server) syncParamsToUnit(getUnitState())
         state.pendingCuratedDefaults = false
     }
     scheduleFilesRefresh(path)
@@ -1100,6 +1107,7 @@ function addSheet() {
     const sheets = normalizedSheets(state.params)
     // Au plafond de formats : le bouton est grisé, ceci n'est qu'un filet.
     if (sheets.length >= MAX_SHEET_FORMATS) return
+    state.factorySheetReplaced = '' // la note a été lue : elle ne revient pas
     const last = sheets[sheets.length - 1] || { ...DEFAULT_SHEET.mm, count: '1' }
     // Une tôle simple : la copie d'une tôle importée ne reprend pas son
     // shapeId (width/height = sa boîte englobante, éditables).
@@ -1146,6 +1154,7 @@ function addSheetFromShape(record, { hasResult = false } = {}) {
         scheduleSnapshotPersist()
         return
     }
+    state.factorySheetReplaced = '' // la note a été lue : elle ne revient pas
     // --- fin du bloc
     state.params = { ...state.params, sheets: [...sheets, shapeSheetEntry(record, 1)] }
     scheduleSnapshotPersist()

@@ -102,6 +102,7 @@ describe('failureReasonKey : calcul sur cet appareil', () => {
     it('un résultat local ou un job localOnly du serveur est local', () => {
         expect(isLocalJob({ isLocal: true })).toBe(true)
         expect(isLocalJob({ localOnly: true })).toBe(true)
+        expect(isLocalJob({ projectLocal: true })).toBe(true)
         expect(isLocalJob({})).toBe(false)
         expect(isLocalJob(null)).toBe(false)
     })

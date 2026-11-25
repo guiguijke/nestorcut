@@ -607,7 +607,7 @@ export default {
     'project.nestingInProgress': 'calcul en cours',
     'project.minSheet':
         "La plus grande pièce nécessite une tôle d'au moins {w} × {h} {unit} — aucun type de tôle déclaré n'est assez grand.",
-    'project.sheetShapeMissing': 'La forme de la tôle « {name} » est introuvable ou illisible dans ce navigateur. Réimportez-la.',
+    'project.sheetShapeMissing': 'La forme de la tôle « {name} » est introuvable ou illisible dans ce navigateur. Retirez cette tôle de la liste, puis réimportez-la.',
     'project.changeToRegenerate': 'Modifiez les réglages ou les fichiers pour relancer',
 
     'time.justNow': "à l'instant",

@@ -251,8 +251,8 @@ export function partFitsAnySheet(w, h, sheets, space) {
  * Boîte tournée d'abord (le test historique, inchangé) ; pour une tôle
  * importée (`sheet.shaped.outer`) la pièce doit AUSSI pouvoir tenir dans
  * l'enveloppe de son contour (partMayFitSheet : faux seulement si c'est
- * prouvé impossible). Sans tôle importée : exactement l'ancien test. La page
- * l'appelle avec les mêmes tôles et le même espacement que le calcul.
+ * prouvé impossible). Sans tôle importée : exactement l'ancien test. La page ne
+ * l'appelle pas : elle n'a que la boîte des pièces, elle refuserait à tort.
  * @returns {{ fits: boolean, boxFits: boolean }} `boxFits` : la boîte seule
  *   passait déjà (un refus avec boxFits vrai vient donc de la forme). */
 export function itemFitsSheets(coords, rotations, sheets, space) {

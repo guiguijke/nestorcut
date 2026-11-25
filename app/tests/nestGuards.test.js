@@ -208,3 +208,55 @@ describe('tôle d\'usine intacte remplacée par l\'import', () => {
         expect(store.getters.factorySheetReplaced).toBe('')
     })
 })
+
+describe('note « tôle remplacée » : dite une fois', () => {
+    const record = (slug) => ({ slug, name: slug, widthMm: 153, heightMm: 153 })
+    beforeEach(() => setup([doneFile('f1', [{ width: 50, height: 50 }])]))
+
+    it('une seconde tôle puis son retrait ne font pas revenir la note', () => {
+        store.actions.addSheetFromShape(record('shape-1'), { hasResult: false })
+        expect(store.getters.factorySheetReplaced).toBe('shape-1')
+        store.actions.addSheetFromShape(record('shape-2'), { hasResult: false })
+        store.actions.removeSheet(1)
+        expect(store.getters.params.sheets.map((s) => s.shapeId)).toEqual(['shape-1'])
+        expect(store.getters.factorySheetReplaced).toBe('')
+    })
+})
+
+describe('projet ouvert avec l’unité en pouces', () => {
+    afterEach(() => vi.doUnmock('~/composables/useUnit'))
+    let current
+    const open = async (unit) => {
+        current = unit
+        vi.doMock('~/composables/useUnit', () => ({ getUnitState: () => current }))
+        await setup([doneFile('f1', [{ width: 50, height: 50 }])])
+    }
+
+    it('les réglages d’usine sont convertis : 48 × 96 pouces, jamais 1000 × 2000 pouces', async () => {
+        await open('inch')
+        const p = store.getters.params
+        expect(p.sheets).toEqual([{ width: '48', height: '96', count: '1' }])
+        expect(Number(p.safety)).toBeCloseTo(2 / 25.4, 3)
+        expect(Number(p.space)).toBeCloseTo(2 / 25.4, 3)
+        // Le sélecteur d'unité repasse sans rien changer (déjà en pouces).
+        store.actions.syncParamsToUnit('inch')
+        expect(store.getters.params.sheets[0].width).toBe('48')
+        // Un second projet, jamais visité, part des mêmes réglages convertis.
+        await store.actions.getProject(API_ROUTES.PROJECT('q'))
+        expect(store.getters.params.sheets[0]).toEqual({ width: '48', height: '96', count: '1' })
+    })
+
+    it('les réglages de la démo, déjà posés en pouces par la page, ne sont pas convertis deux fois', async () => {
+        await open('mm') // réglages du store encore notés en mm
+        current = 'inch' // la page de la démo, elle, pose déjà des pouces
+        store.actions.updateParams({ sheets: [{ width: '120', height: '60', count: '3' }] })
+        store.actions.markCuratedDefaults()
+        await store.actions.getProject(API_ROUTES.PROJECT('demo'))
+        expect(store.getters.params.sheets[0]).toEqual({ width: '120', height: '60', count: '3' })
+    })
+
+    it('en millimètres rien ne change', async () => {
+        await open('mm')
+        expect(store.getters.params).toMatchObject({ sheets: [{ width: '1000', height: '2000', count: '1' }], safety: '2', space: '2' })
+    })
+})

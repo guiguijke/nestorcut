@@ -624,7 +624,7 @@ export default {
     'project.nestingInProgress': 'nesting in progress',
     'project.minSheet':
         'The biggest part needs a sheet of at least {w} × {h} {unit} — no declared sheet type is large enough.',
-    'project.sheetShapeMissing': 'The shape of the sheet "{name}" cannot be found or read in this browser. Import it again.',
+    'project.sheetShapeMissing': 'The shape of the sheet "{name}" cannot be found or read in this browser. Remove this sheet from the list, then import it again.',
     'project.changeToRegenerate': 'Change settings or files to generate again',
 
     'time.justNow': 'just now',

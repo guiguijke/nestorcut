@@ -137,6 +137,7 @@
                             :y="pane.h / 2"
                             text-anchor="middle"
                             class="live__placeholder"
+                            :style="{ fontSize: `${placeholderSize(pane)}px` }"
                         >
                             {{ t('live.waiting') }}
                         </text>
@@ -680,7 +681,11 @@ function shapesByPane(frame, panes) {
     }
     return map;
 }
-const mainPaneShapes = computed(() => shapesByPane(best.value, mainPanes.value));
+// Rien de présentable encore : la forme vient de la première frame reçue (mêmes
+// règles, un seul format connu), pas un rectangle qui deviendrait un disque.
+const mainPaneShapes = computed(() => shapesByPane(best.value || Object.values(snapshots.value)[0], mainPanes.value));
+// Texte d'attente : en unités de la tôle, il doit tenir dans un petit panneau.
+const placeholderSize = (pane) => Math.min(32, pane.w / 18);
 const paneClipId = (cardKey, bin) => `${clipId}-${String(cardKey).replace(/[^a-zA-Z0-9_-]/g, '')}-${bin}`;
 const hatchViewId = `live-${clipId}`;
 const hatchId = (cardKey, bin) => liveHatchId(hatchViewId, cardKey, bin);

@@ -7,6 +7,7 @@ vi.mock('~~/server/db/mongo', () => ({
 }))
 
 import { getResults, RESULTS_LIMIT } from '~~/server/features/results/resultcontroller'
+import { failureReasonKey, isLocalJob } from '../../app/utils/failureReason'
 
 // Mini collection qui APPLIQUE réellement { projection, sort, limit } comme le
 // pilote Mongo (inclusion, chemins pointés à travers les tableaux). Avec
@@ -119,6 +120,20 @@ describe('getResults — projection, borne et index', () => {
         // Constat « pièces à traits fins » (local ET serveur) : sans ces champs la ligne du rapport ne sort jamais.
         expect(done.thinParts).toEqual([{ item: 3, slug: 'f', part: 1 }])
         expect(done.thinCount).toBe(80)
+    })
+
+    it('un job en ÉCHEC d’un projet « cet appareil » se reconnaît (localOnly n’est posé qu’au succès)', async () => {
+        const failed = { status: 'error', error: 'boom', information: 'memory_cap', localOnly: undefined }
+        const docs = [fullJob(1, { ...failed, localConfig: { timeBudgetSec: 13, vcores: 4 } }), fullJob(2, failed)]
+        state.db = dbOver(docs, { honorOptions: true })
+        const { items } = await getResults('u1')
+        const local = items.find((i) => i.slug === 'job-1')
+        expect(local).toMatchObject({ status: 'failed', localOnly: false, projectLocal: true })
+        expect(local).not.toHaveProperty('localConfig')
+        expect(failureReasonKey(local.information, { localOnly: isLocalJob(local) })).toBe('localMode.memoryLocal')
+        const server = items.find((i) => i.slug === 'job-2')
+        expect(server.projectLocal).toBe(false)
+        expect(failureReasonKey(server.information, { localOnly: isLocalJob(server) })).toBe('localMode.memorySuggest')
     })
 
     it('n’envoie que les trois pièces que le rapport nomme, avec le vrai compte', async () => {

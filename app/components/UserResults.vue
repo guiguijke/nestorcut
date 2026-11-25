@@ -54,7 +54,7 @@ onMounted(() => {
     updateResults()
 })
 const updateResults = () => {
-    setResults([])
+    setResults([], false)
 
     if (unref(eventSource)) {
         unref(eventSource).close()

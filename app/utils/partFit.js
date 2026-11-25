@@ -107,6 +107,20 @@ function feasibleTranslation(dirs, sheetSupport, partHull, clearance) {
     return true
 }
 
+// Enveloppe, directions et appuis d'une tôle : une fois par contour (les mêmes tôles
+// sont essayées pour chaque pièce). null : contour illisible ou dégénéré.
+const sheetCache = new WeakMap()
+function sheetFrame(sheetOuter) {
+    let f = sheetCache.get(sheetOuter)
+    if (f === undefined) {
+        const hull = sheetOuter.every(finitePoint) ? convexHull(sheetOuter) : []
+        const dirs = hull.length < 3 ? [] : sheetDirections(hull)
+        f = dirs.length ? { dirs, supports: dirs.map(([nx, ny]) => support(hull, nx, ny)) } : null
+        sheetCache.set(sheetOuter, f)
+    }
+    return f
+}
+
 /**
  * @param {Array<[number, number]>} partRing anneau extérieur de la pièce (mm)
  * @param {Array<[number, number]>} sheetOuter contour d'origine de la tôle (mm)
@@ -117,13 +131,10 @@ function feasibleTranslation(dirs, sheetSupport, partHull, clearance) {
 export function partMayFitSheet(partRing, sheetOuter, space, rotations) {
     if (!Array.isArray(partRing) || !Array.isArray(sheetOuter)) return true
     // Un point illisible ne doit jamais rétrécir la tôle ni la pièce : on ne tranche pas.
-    if (!partRing.every(finitePoint) || !sheetOuter.every(finitePoint)) return true
-    const sheetHull = convexHull(sheetOuter)
+    if (!partRing.every(finitePoint)) return true
+    const frame = sheetFrame(sheetOuter)
     const partHull = convexHull(partRing)
-    if (sheetHull.length < 3 || partHull.length < 3) return true // dégénéré : ne pas refuser
-    const dirs = sheetDirections(sheetHull)
-    if (!dirs.length) return true
-    const sheetSupport = dirs.map(([nx, ny]) => support(sheetHull, nx, ny))
+    if (!frame || partHull.length < 3) return true // illisible ou dégénéré : ne pas refuser
     const s = Number(space)
     const clearance = (Number.isFinite(s) ? Math.max(0, s) : 0) - FIT_RELAX_MM
     const angles = Array.isArray(rotations) && rotations.length ? rotations : [0]
@@ -132,7 +143,7 @@ export function partMayFitSheet(partRing, sheetOuter, space, rotations) {
         if (!Number.isFinite(ang)) return true // angle illisible : ne pas refuser
         // Signe de rotation du moteur non garanti pour une liste libre : l'un OU l'autre.
         for (const sign of ang === 0 ? [1] : [1, -1]) {
-            if (feasibleTranslation(dirs, sheetSupport, convexHull(rotate(partHull, sign * ang)), clearance)) return true
+            if (feasibleTranslation(frame.dirs, frame.supports, convexHull(rotate(partHull, sign * ang)), clearance)) return true
         }
     }
     return false

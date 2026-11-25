@@ -1145,8 +1145,9 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
 63. **Téléchargement Free = les 2 premières tôles, lues dans le NOM du
     fichier, jamais dans l'index d'un tableau (lot V1, 02/11 ; spec
     LOT-V1-TELECHARGEMENT-FREE-2026-11.md, coffre privé).** Le calcul Free n'a plus
-    de plafond (O1) : `MAX_SHEETS_PER_JOB` (1000, 400 `too_many_sheets`) est
-    la seule borne, démo comprise. Le verrou porte sur le TÉLÉCHARGEMENT :
+    de plafond (O1) : seules bornes, démo comprise, `MAX_SHEETS_PER_JOB` (1000,
+    400 `too_many_sheets`) et `MAX_SHEET_FORMATS` (10 types de tôle, 400
+    `too_many_formats`, jamais une troncature muette). Le verrou porte sur le TÉLÉCHARGEMENT :
     - **Identité de tôle** : `_part_N.dxf` / `_toleN.job`, parseur unique
       `shared/constants/sheetDownload.constants.js`, plafond
       `FREE_DOWNLOAD_SHEET_CAP` (≥ 2, `payment.constants.js`). Côté
@@ -1290,8 +1291,8 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       la boîte (poser des pièces sur du vide).
     - **Calcul** : toujours le chemin multi-tôles BPP (`localPayloadBuilder.js:
       1105`). `finish_partial_sheet` éteint partout : builder (ligne 1297),
-      walks (`localPool.js:140`), fusion (`localPool.js:889`), mono-walk
-      (`localCompute.js:96`) — il refait la dernière tôle dans son rectangle
+      walks (`workerEngineConfig`) et fusion (`postMerge`, `localPool.js`),
+      mono-walk (`runInWorker`, `localCompute.js`) — il refait la dernière tôle dans son rectangle
       englobant. Passes faites pour un rectangle SAUTÉES pour tout le job :
       alternative grille (`finalizeLocal.js:73`), bandes résiduelles et le
       hole-fill qui les suit (`localBridge.js:1763`). Le hole-fill de la fin est,
@@ -1355,6 +1356,12 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     de l'enveloppe (lèvre et drapeau), selon l'arête de l'enveloppe : fermée sur
     sa bouche, une poche mince fait refuser tout le job. Convexe à 0,005 mm près :
     payload inchangé, même référence (verrou).
+    **Avant le calcul (V0.9.20)** : `itemFitsSheets` (`localPayloadBuilder.js`,
+    `partFit.js`) refuse une pièce qui ne peut PAS tenir dans l'enveloppe de la
+    forme, avant la capacité, jamais la page (elle n'a que des boîtes). Lecture
+    refusée = `sheet_shape_unreadable`, absente = `sheet_shape_missing`.
+    L'estimation de la page lit l'aire utile (`preflightModel.js`) ; importer une
+    tôle remplace la tôle d'usine intacte d'un projet sans résultat.
     Verrous : `sheetShape`, `sheetImportModel`, `localSheetsStore`,
     `filesSheetShapeId`, `localShapedSheet`, `localShapedPasses`,
     `localShapedHoleFill`, `shapedReport`, `sheetDraw` (`app/tests/`) ;

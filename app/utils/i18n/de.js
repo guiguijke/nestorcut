@@ -554,7 +554,7 @@ export default {
     "project.results": "Ergebnisse",
     "project.nestingInProgress": "Nesting läuft",
     "project.minSheet": "Das größte Teil braucht ein Blech von mindestens {w} × {h} {unit} — kein angegebener Blechtyp ist groß genug.",
-    "project.sheetShapeMissing": "Die Form des Blechs \"{name}\" wurde in diesem Browser nicht gefunden oder kann nicht gelesen werden. Importieren Sie es erneut.",
+    "project.sheetShapeMissing": "Die Form des Blechs \"{name}\" wurde in diesem Browser nicht gefunden oder kann nicht gelesen werden. Entfernen Sie dieses Blech aus der Liste und importieren Sie es dann erneut.",
     "project.changeToRegenerate": "Einstellungen oder Dateien ändern, um neu zu erzeugen",
     "time.justNow": "gerade eben",
     "time.minAgo": "vor {n} Min.",

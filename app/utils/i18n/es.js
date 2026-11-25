@@ -556,7 +556,7 @@ export default {
     "project.results": "resultados",
     "project.nestingInProgress": "nesting en curso",
     "project.minSheet": "La pieza más grande necesita una chapa de al menos {w} × {h} {unit} — ningún tipo de chapa declarado es lo bastante grande.",
-    "project.sheetShapeMissing": "La forma de la chapa \"{name}\" no se encuentra o no se puede leer en este navegador. Impórtala de nuevo.",
+    "project.sheetShapeMissing": "La forma de la chapa \"{name}\" no se encuentra o no se puede leer en este navegador. Quita esta chapa de la lista y vuelve a importarla.",
     "project.changeToRegenerate": "Cambia ajustes o archivos para volver a generar",
     "time.justNow": "justo ahora",
     "time.minAgo": "hace {n} min",

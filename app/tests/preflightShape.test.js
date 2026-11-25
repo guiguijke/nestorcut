@@ -161,13 +161,19 @@ describe('estimation avec une tôle importée : les vraies aires, plus les boît
         for (const count of ['', '0']) {
             const model = preflightSheetsOf([shapedRow(SQ_ID, count)], {}, toMm)
             expect(model.imported).toBe(false)
-            expect(model.state).toBe('ready')
+            expect(model.state).toBe('inactive')
             expect(model.sheets).toEqual([])
+            // Le champ est vide le temps d'une saisie : aucun chiffre, jamais « 1 tôle ».
+            expect(sheetFigure({ imported: model.imported, state: model.state, report: null })).toEqual({ show: false, n: 1, panelSheets: null })
         }
         // avec une autre ligne importée active, la ligne rectangle vide est écartée aussi
         const rows = [mmRow(300, 300, ''), sqRow()]
         expect(preflightSheetsOf(rows, sqStats(), toMm).sheets).toHaveLength(1)
         expect(estimate(files, rows, sqStats()).sheetsNeeded).toBe(1)
+    })
+
+    it('une tôle importée lue : le panneau de refus suit le chiffre du bouton', () => {
+        expect(sheetFigure({ imported: true, state: 'ready', report: { sheetsNeeded: 2 } })).toEqual({ show: true, n: 2, panelSheets: 2 })
     })
 
     it('un projet sans tôle importée donne EXACTEMENT les chiffres d\'avant (nombres réels)', () => {

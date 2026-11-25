@@ -1,10 +1,11 @@
-import { convexHullRing, simplifyRing } from '../composables/localPayloadBuilder' // relatif : en vitest, `~` = racine du dépôt
+import { convexHullRing } from '../composables/localPayloadBuilder' // relatif : en vitest, `~` = racine du dépôt
 
 /**
  * Deux nombres par pièce pour l'estimation de la page : aire et périmètre du
  * contour EXTÉRIEUR (trous non déduits), comme ce que le calcul donne à
- * `inflatedArea`. Le calcul simplifie l'anneau (Douglas-Peucker) avant de le
- * mesurer : on fait pareil, sinon les deux chiffres divergent d'un cheveu.
+ * `inflatedArea`. Mesurés sur l'anneau BRUT : le calcul le simplifie d'abord
+ * (écart d'un cheveu), mais cette simplification coûte des secondes sur des
+ * centaines de pièces détaillées, et ceci tourne à chaque chargement.
  */
 
 function ringMeasures(ring) {
@@ -25,7 +26,7 @@ const usable = (ring) => Array.isArray(ring) && ring.length >= 3
 /** Nombres d'une pièce seule, ou null si son anneau est illisible (le repli reste la boîte). */
 export function partOutlineNumbers(ring) {
     if (!usable(ring)) return null
-    const m = ringMeasures(simplifyRing(ring))
+    const m = ringMeasures(ring)
     return m.outlineAreaMm2 > 0 ? m : null
 }
 
@@ -34,7 +35,7 @@ export function partOutlineNumbers(ring) {
 export function blockOutlineNumbers(rings) {
     const lists = (rings || []).filter(usable)
     if (lists.length < 2) return null
-    const hull = convexHullRing(lists.flatMap((ring) => simplifyRing(ring)))
+    const hull = convexHullRing(lists.flat())
     if (hull.length < 4) return null
     const m = ringMeasures(hull)
     return m.outlineAreaMm2 > 0 ? m : null

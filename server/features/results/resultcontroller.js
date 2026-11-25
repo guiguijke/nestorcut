@@ -6,7 +6,7 @@ import { connectDB } from "~~/server/db/mongo";
 // plus rapatrié à chaque seconde et par onglet. Ajouter ici tout champ lu
 // dans le mapping : server/tests/resultsList.test.js le verrouille.
 const RESULT_FIELDS = [
-    'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly',
+    'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly', 'localConfig',
     'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
     'information', 'errorCode', 'itemGeometry', 'thinParts', 'thinCount', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
     'dxf_files', 'svg_files',
@@ -82,6 +82,10 @@ export async function getResults(userId, projectSlug) {
             // affiche « calculé sur un autre appareil » au lieu d'un
             // téléchargement vide.
             localOnly: Boolean(queueItem.localOnly),
+            // Job d'un projet « cet appareil » (`localConfig` n'existe que là) : en
+            // échec, `localOnly` n'est pas posé et « réessayez en mode serveur »
+            // serait impossible à suivre.
+            projectLocal: Boolean(queueItem.localConfig),
             createdAt: queueItem.createdAt,
             // Purge 24 h (D-PRV-10) : posé quand les blobs résultats ont été
             // supprimés — l'UI masque les téléchargements (le rapport reste).

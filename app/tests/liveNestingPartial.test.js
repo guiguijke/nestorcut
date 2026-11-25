@@ -86,6 +86,20 @@ describe('vue en direct : disposition partielle (calcul sur l’appareil)', () =
         expect(view.textOf(partialLine(view))).toBe('Best so far: 5 of 7 parts placed')
     })
 
+    it('pendant l’attente : la vraie forme de la tôle importée, et un texte qui tient dans un petit panneau', async () => {
+        const shape = { w: 153, h: 153, outline: 'M0,76 L76,0 L153,76 L76,153 Z', zones: null }
+        const { view, drawn } = await mount({ liveLayout: frame([0, 1], { sheets: [[153, 153]], sheetShapes: [shape] }), elapsed: 3 })
+        expect(drawn()).toBe(0)
+        expect(view.byClass('live__sheet-bg')[0].tag).toBe('path')
+        const text = view.byClass('live__placeholder')[0]
+        const size = Number.parseFloat(text.props.style.fontSize ?? String(text.props.style).match(/font-size:\s*([\d.]+)/)?.[1])
+        expect(size).toBeCloseTo(153 / 18, 6)
+        // Une grande tôle garde la taille d'avant.
+        const big = await mount({ liveLayout: frame([0, 1]), elapsed: 3 })
+        const bigText = big.view.byClass('live__placeholder')[0]
+        expect(Number.parseFloat(bigText.props.style.fontSize ?? String(bigText.props.style).match(/font-size:\s*([\d.]+)/)?.[1])).toBe(32)
+    })
+
     it('total inconnu : la disposition est dessinée, aucune ligne', async () => {
         const { view, drawn } = await mount({ liveLayout: frame([0, 1, 2]), partialTotal: null })
         expect(drawn()).toBe(3)

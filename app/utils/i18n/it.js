@@ -551,7 +551,7 @@ export default {
     "project.results": "risultati",
     "project.nestingInProgress": "nesting in corso",
     "project.minSheet": "Il pezzo più grande richiede una lamiera di almeno {w} × {h} {unit} — nessun tipo di lamiera dichiarato è abbastanza grande.",
-    "project.sheetShapeMissing": "La forma della lamiera \"{name}\" non è stata trovata o non può essere letta in questo browser. Importala di nuovo.",
+    "project.sheetShapeMissing": "La forma della lamiera \"{name}\" non è stata trovata o non può essere letta in questo browser. Rimuovi questa lamiera dall'elenco, poi importala di nuovo.",
     "project.changeToRegenerate": "Cambia impostazioni o file per generare di nuovo",
     "time.justNow": "proprio ora",
     "time.minAgo": "{n} min fa",

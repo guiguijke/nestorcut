@@ -63,12 +63,14 @@ export function hasActiveImportedSheet(settings) {
  *   importée donne sa boîte, son aire utile et son périmètre.
  * `state` : 'ready' ; 'pending' (une forme pas encore lue) ; 'unreadable' (une
  * lecture refusée) ; 'missing' (enregistrement absent ou inutilisable, noms dans
- * `missing`). Jamais un repli sur la boîte d'une tôle importée.
+ * `missing`) ; 'inactive' (des tôles importées, toutes sans quantité : le champ est
+ * vide le temps d'une saisie). Jamais un repli sur la boîte d'une tôle importée.
  * @returns {{ sheets: object[], state: string, missing: string[], imported: boolean }}
  */
 export function preflightSheetsOf(settings, shapeStats, toMm) {
     const rows = settings || []
     const imported = hasActiveImportedSheet(rows)
+    const inactive = !imported && rows.some((row) => shapeIdOf(row))
     const sheets = []
     const missing = []
     let pending = false
@@ -102,7 +104,7 @@ export function preflightSheetsOf(settings, shapeStats, toMm) {
             })
         }
     }
-    const state = missing.length ? 'missing' : unreadable ? 'unreadable' : pending ? 'pending' : 'ready'
+    const state = inactive ? 'inactive' : missing.length ? 'missing' : unreadable ? 'unreadable' : pending ? 'pending' : 'ready'
     return { sheets, state, missing, imported }
 }
 
@@ -141,11 +143,12 @@ export function preflightParts(files, imported) {
 /**
  * Le chiffre « ≈ n tôles » : sans tôle importée, toujours dit (repli à 1 d'avant).
  * Avec une tôle importée : seulement si toutes les formes sont lues ET que
- * capacityReport a rendu un rapport. Le panneau de refus garde alors TOUJOURS le
- * chiffre du calcul (panelSheets null) : lui seul a la marge de courbes et la
- * vraie forme de chaque pièce.
+ * capacityReport a rendu un rapport. Le panneau de refus suit le même chiffre (une
+ * seule source, il suit les réglages) ; sans chiffre, il garde celui du refus.
  */
 export function sheetFigure({ imported, state, report }) {
+    if (state === 'inactive') return { show: false, n: 1, panelSheets: null }
     if (!imported) return { show: true, n: report?.sheetsNeeded ?? 1, panelSheets: report?.sheetsNeeded ?? null }
-    return { show: state === 'ready' && Boolean(report), n: report?.sheetsNeeded ?? 1, panelSheets: null }
+    const show = state === 'ready' && Boolean(report)
+    return { show, n: report?.sheetsNeeded ?? 1, panelSheets: show ? report.sheetsNeeded : null }
 }
