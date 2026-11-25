@@ -3,58 +3,58 @@ import { fileURLToPath } from 'node:url'
 import * as sass from 'sass'
 import { describe, expect, it } from 'vitest'
 import { DICTS } from '../utils/i18n'
+import { UNLIMITED_DIALOG_FEATURE_KEYS, UNLIMITED_FEATURE_KEYS } from '../utils/planBenefits'
 
-// Textes de la tôle importée : offres, note du tableau comparatif, introduction de
+// Textes de la tôle importée : offres et tableau comparatif, introduction de
 // la fenêtre d'import, aide du cadre de la tôle, et étiquettes des vignettes.
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8')
 const LANGS = Object.keys(DICTS)
 
-// Un fragment par langue, dans le vocabulaire de results.importedLocked.
-const EXCEPT = {
-    en: /except imported sheets/, fr: /sauf les tôles importées/, de: /außer importierten Blechen/,
-    es: /salvo las chapas importadas/, it: /tranne le lamiere importate/, pt: /exceto as chapas importadas/,
-}
-const INCLUDED = {
-    en: /imported sheets included/, fr: /tôles importées comprises/, de: /auch importierter Bleche/,
-    es: /incluidas las importadas/, it: /incluse le lamiere importate/, pt: /incluindo as importadas/,
-}
 const CRACKS = {
     en: /[Cc]racks and chips/, fr: /fissures et les éclats/, de: /Risse und Ausbrüche/,
     es: /grietas y los desconchones/, it: /crepe e le scheggiature/, pt: /fissuras e as lascas/,
 }
 
-describe('offres : la tôle importée est dite sur /plans', () => {
-    it('Free : l’export des premières tôles exclut les tôles importées, dans les 6 langues', () => {
-        for (const lang of LANGS) expect(DICTS[lang]['plans.free.f3'], lang).toMatch(EXCEPT[lang])
-    })
+describe('offres : la tôle importée et le rapport distinguent Free d’Unlimited', () => {
+    const page = read('../pages/plans.vue')
+    const KEYS = [
+        'plans.free.customSheets', 'plans.free.report', 'plans.unlimited.customSheets', 'plans.unlimited.report',
+        'plans.compare.customSheets', 'plans.compare.report',
+        'plans.value.nestOnly', 'plans.value.withCutFiles', 'plans.value.onScreen', 'plans.value.copyCsv',
+    ]
 
-    it('Unlimited : tout se télécharge, tôles importées comprises, dans les 6 langues', () => {
-        for (const lang of LANGS) expect(DICTS[lang]['plans.unlimited.f3'], lang).toMatch(INCLUDED[lang])
-    })
-
-    it('la note du tableau existe partout, nomme Free et Unlimited et garde le {n} des cartes', () => {
+    it('les textes existent dans les 6 langues, sur une ligne', () => {
         for (const lang of LANGS) {
-            const note = DICTS[lang]['plans.compare.importedNote']
-            expect(note, lang).toBeTruthy()
-            expect(note, lang).toMatch(/Free/)
-            expect(note, lang).toMatch(/Unlimited/)
-            expect(note, lang).not.toMatch(/\n/)
+            for (const key of KEYS) {
+                expect(DICTS[lang][key], `${lang} ${key}`).toBeTruthy()
+                expect(DICTS[lang][key], `${lang} ${key}`).not.toMatch(/\n/)
+            }
+            expect(DICTS[lang]['plans.free.customSheets'], lang).toMatch(/DXF/)
+            expect(DICTS[lang]['plans.unlimited.report'], lang).toMatch(/CSV/)
             expect(DICTS[lang]['plans.free.f3'], lang).toContain('{n}')
+            expect(DICTS[lang], lang).not.toHaveProperty('plans.compare.importedNote')
         }
-        // espaces insécables avant : et ; (règle de resultFinish.test.js)
-        expect(DICTS.fr['plans.compare.importedNote'].replaceAll(' ', ' ')).toBe(
-            "Tôle importée : en Free, le calcul et l'aperçu sont ouverts ; télécharger ses fichiers de coupe demande Unlimited.",
-        )
     })
 
-    it('la note vient APRÈS le tableau, sur une ligne à elle', () => {
-        const page = read('../pages/plans.vue')
-        const end = page.indexOf('</table>')
-        const note = page.indexOf("t('plans.compare.importedNote')")
-        expect(end).toBeGreaterThan(-1)
-        expect(note).toBeGreaterThan(end)
-        expect(page.slice(end, note)).toMatch(/<p class="compare__note"/)
+    it('Free ne promet que des tôles rectangulaires au téléchargement', () => {
+        const RECT = { en: /rectangular/, fr: /rectangulaires/, de: /rechteckigen/, es: /rectangulares/, it: /rettangolari/, pt: /retangulares/ }
+        for (const lang of LANGS) expect(DICTS[lang]['plans.free.f3'], lang).toMatch(RECT[lang])
+    })
+
+    it('la carte Free, la carte Unlimited et la fenêtre d’abonnement les portent', () => {
+        expect(page).toContain("t('plans.free.customSheets')")
+        expect(page).toContain("t('plans.free.report')")
+        for (const key of ['plans.unlimited.customSheets', 'plans.unlimited.report']) {
+            expect(UNLIMITED_FEATURE_KEYS).toContain(key)
+            expect(UNLIMITED_DIALOG_FEATURE_KEYS).toContain(key)
+        }
+    })
+
+    it('le comparatif : Free calcule et voit, Unlimited et Pro ont les fichiers, la copie et le CSV', () => {
+        expect(page).toMatch(/plans\.compare\.customSheets'\),\s*values: \[t\('plans\.value\.nestOnly'\), t\('plans\.value\.withCutFiles'\), t\('plans\.value\.withCutFiles'\)\]/)
+        expect(page).toMatch(/plans\.compare\.report'\),\s*values: \[t\('plans\.value\.onScreen'\), t\('plans\.value\.copyCsv'\), t\('plans\.value\.copyCsv'\)\]/)
+        expect(page.indexOf('plans.compare.customSheets')).toBeGreaterThan(page.indexOf('plans.compare.sheetDownloads'))
     })
 })
 

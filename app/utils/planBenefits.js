@@ -13,6 +13,8 @@ export const UNLIMITED_FEATURE_KEYS = [
     'plans.unlimited.f1',
     'plans.unlimited.f2',
     'plans.unlimited.f3',
+    'plans.unlimited.customSheets',
+    'plans.unlimited.report',
     'plans.unlimited.f4',
     'plans.unlimited.f5',
 ]

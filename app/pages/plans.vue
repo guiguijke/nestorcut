@@ -75,7 +75,6 @@
                     </tbody>
                 </table>
             </div>
-            <p class="compare__note" data-testid="plans-imported-note">{{ t('plans.compare.importedNote') }}</p>
         </section>
 
         <LoginView />
@@ -242,6 +241,10 @@ const tiers = computed(() => {
                 // O1/O2 : calcul sans plafond, téléchargement des 2 premières tôles.
                 t('plans.free.allSheets'),
                 t('plans.free.f3', { n: FREE_DOWNLOAD_SHEET_CAP }),
+                // Ce qui distingue les offres : tôle importée (calcul ouvert, fichiers de
+                // coupe payants) et rapport (à l'écran, copie et CSV payants).
+                t('plans.free.customSheets'),
+                t('plans.free.report'),
                 t('plans.free.f4'),
             ],
             cta: t('plans.cta.startFree'),
@@ -301,6 +304,14 @@ const comparisonRows = computed(() => [
             t('plans.value.allSheets'),
             t('plans.value.allSheets'),
         ],
+    },
+    {
+        label: t('plans.compare.customSheets'),
+        values: [t('plans.value.nestOnly'), t('plans.value.withCutFiles'), t('plans.value.withCutFiles')],
+    },
+    {
+        label: t('plans.compare.report'),
+        values: [t('plans.value.onScreen'), t('plans.value.copyCsv'), t('plans.value.copyCsv')],
     },
     { label: t('plans.compare.heterogeneous'), values: [true, true, true] },
     { label: t('plans.compare.export'), values: [true, true, true] },
@@ -505,14 +516,6 @@ function onTierClick(tier) {
         overflow-x: auto;
         border: 1px solid var(--separator-secondary);
         border-radius: var(--radius-l);
-    }
-
-    &__note {
-        margin-top: 12px;
-        padding: 0 8px;
-        font-size: var(--fs-13);
-        color: var(--label-secondary);
-        text-align: center;
     }
 
     &__table {
