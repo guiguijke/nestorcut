@@ -4,6 +4,68 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.20
+
+*FR*
+
+- Tôle importée en creux (équerre, peigne, chute à encoche) : certaines formes étaient refusées, vues presque vides, ou laissaient des pièces trop près du bord (le rapport le signalait). C'est corrigé. Les fichiers livrés portent toujours le contour exact.
+- Tôle importée, avant le calcul : le nombre de tôles annoncé tient compte de la surface utile ; une pièce qui n'entre pas dans la forme est refusée avec son nom, au lieu de conseiller d'ajouter une tôle ; importer une tôle remplace la tôle par défaut si vous n'y avez pas touché et si le projet n'a pas de résultat.
+- Calcul sur cet appareil : quand toutes les pièces n'ont pas trouvé leur place au bout de quelques secondes, la vue montre la meilleure disposition et le nombre de pièces posées, au lieu d'un message d'attente.
+- Plus de 10 types de tôle dans un calcul : un message le dit. Avant, les suivants étaient ignorés sans le dire.
+- Compte en pouces : un nouveau projet s'ouvre avec une tôle de 48 × 96 pouces et l'espacement converti. Avant, il affichait 1000 × 2000 pouces et 2 pouces d'espacement.
+- Offres : la page et la fenêtre d'abonnement disent ce que Free et Unlimited permettent pour les tôles importées et pour le rapport de nesting.
+- Messages plus justes : calcul « Cet appareil » en échec, dessin de tôle en espace papier, tôle introuvable dans ce navigateur. Un long nom de tôle n'est plus coupé.
+
+*EN*
+
+- Imported sheet with hollows (L shape, comb, notched offcut): some shapes were refused, seen as almost empty, or left parts too close to the edge (the report flagged it). This is fixed. The delivered files always carry the exact outline.
+- Imported sheet, before the nest: the announced number of sheets now counts the usable area; a part that does not fit the shape is refused by name, instead of advising to add a sheet; importing a sheet replaces the default sheet if you have not changed it and the project has no result yet.
+- Nesting on this device: when all the parts have not found their place after a few seconds, the view shows the best layout so far and the number of parts placed, instead of a waiting message.
+- More than 10 sheet types in one nest: a message says so. Before, the extra ones were ignored without a word.
+- Account in inches: a new project opens with a 48 × 96 inch sheet and the spacing converted. Before, it showed 1000 × 2000 inches and a 2 inch spacing.
+- Plans: the page and the subscription window say what Free and Unlimited allow for imported sheets and for the nesting report.
+- Clearer messages: failed "This device" nest, sheet drawing in paper space, sheet not found in this browser. A long sheet name is no longer cut.
+
+*PT*
+
+- Chapa importada com reentrâncias (em L, pente, retalho com entalhe): algumas formas eram recusadas, vistas como quase vazias, ou deixavam peças perto demais da borda (o relatório avisava). Corrigido. Os arquivos entregues têm sempre o contorno exato.
+- Chapa importada, antes do cálculo: o número de chapas anunciado considera a área útil; uma peça que não cabe na forma é recusada pelo nome, em vez de aconselhar a adicionar uma chapa; importar uma chapa substitui a chapa padrão se você não a alterou e se o projeto ainda não tem resultado.
+- Cálculo neste dispositivo: quando nem todas as peças encontraram lugar depois de alguns segundos, a vista mostra a melhor disposição e o número de peças colocadas, em vez de uma mensagem de espera.
+- Mais de 10 tipos de chapa em um cálculo: uma mensagem avisa. Antes, os seguintes eram ignorados sem aviso.
+- Conta em polegadas: um novo projeto abre com uma chapa de 48 × 96 polegadas e o espaçamento convertido. Antes, mostrava 1000 × 2000 polegadas e 2 polegadas de espaçamento.
+- Planos: a página e a janela de assinatura dizem o que Free e Unlimited permitem para as chapas importadas e para o relatório de nesting.
+- Mensagens mais claras: cálculo «Este dispositivo» com falha, desenho de chapa no espaço do papel, chapa não encontrada neste navegador. Um nome longo de chapa já não é cortado.
+
+*IT*
+
+- Lamiera importata con rientranze (a L, a pettine, ritaglio con intaglio): alcune forme erano rifiutate, viste quasi vuote, o lasciavano pezzi troppo vicini al bordo (il rapporto lo segnalava). Corretto. I file consegnati portano sempre il contorno esatto.
+- Lamiera importata, prima del calcolo: il numero di lamiere annunciato tiene conto dell'area utile; un pezzo che non entra nella forma è rifiutato con il suo nome, invece di consigliare di aggiungere una lamiera; importare una lamiera sostituisce quella predefinita se non l'hai modificata e se il progetto non ha ancora risultati.
+- Calcolo su questo dispositivo: quando dopo qualche secondo non tutti i pezzi hanno trovato posto, la vista mostra la disposizione migliore e il numero di pezzi collocati, invece di un messaggio di attesa.
+- Più di 10 tipi di lamiera in un calcolo: un messaggio lo dice. Prima, quelli in più erano ignorati senza avviso.
+- Account in pollici: un nuovo progetto si apre con una lamiera di 48 × 96 pollici e la distanza convertita. Prima mostrava 1000 × 2000 pollici e 2 pollici di distanza.
+- Piani: la pagina e la finestra di abbonamento dicono cosa permettono Free e Unlimited per le lamiere importate e per il rapporto di nesting.
+- Messaggi più chiari: calcolo «Questo dispositivo» non riuscito, disegno di lamiera nello spazio carta, lamiera non trovata in questo browser. Un nome di lamiera lungo non viene più tagliato.
+
+*DE*
+
+- Importiertes Blech mit Einbuchtungen (L-Form, Kamm, Rest mit Kerbe): einige Formen wurden abgelehnt, als fast leer gesehen oder ließen Teile zu nah am Rand (der Bericht meldete es). Behoben. Die gelieferten Dateien tragen immer die genaue Kontur.
+- Importiertes Blech, vor der Berechnung: die angekündigte Anzahl Bleche zählt die nutzbare Fläche; ein Teil, das nicht in die Form passt, wird mit Namen abgelehnt, statt ein weiteres Blech zu empfehlen; der Import eines Blechs ersetzt das Standardblech, wenn Sie es nicht geändert haben und das Projekt noch kein Ergebnis hat.
+- Berechnung auf diesem Gerät: haben nach einigen Sekunden nicht alle Teile ihren Platz gefunden, zeigt die Ansicht die bisher beste Anordnung und die Zahl der platzierten Teile statt einer Wartemeldung.
+- Mehr als 10 Blechtypen in einer Berechnung: eine Meldung sagt es. Vorher wurden die weiteren ohne Hinweis ignoriert.
+- Konto in Zoll: ein neues Projekt öffnet mit einem Blech von 48 × 96 Zoll und umgerechnetem Abstand. Vorher zeigte es 1000 × 2000 Zoll und 2 Zoll Abstand.
+- Angebote: die Seite und das Abo-Fenster sagen, was Free und Unlimited bei importierten Blechen und beim Nesting-Bericht erlauben.
+- Klarere Meldungen: fehlgeschlagene Berechnung „Dieses Gerät“, Blechzeichnung im Papierbereich, Blech in diesem Browser nicht gefunden. Ein langer Blechname wird nicht mehr abgeschnitten.
+
+*ES*
+
+- Chapa importada con entrantes (en L, peine, sobrante con muesca): algunas formas se rechazaban, se veían casi vacías o dejaban piezas demasiado cerca del borde (el informe lo avisaba). Corregido. Los archivos entregados llevan siempre el contorno exacto.
+- Chapa importada, antes del cálculo: el número de chapas anunciado cuenta el área útil; una pieza que no cabe en la forma se rechaza con su nombre, en vez de aconsejar añadir una chapa; importar una chapa sustituye la chapa por defecto si no la has cambiado y si el proyecto aún no tiene resultado.
+- Cálculo en este dispositivo: cuando a los pocos segundos no todas las piezas han encontrado su sitio, la vista muestra la mejor disposición y el número de piezas colocadas, en vez de un mensaje de espera.
+- Más de 10 tipos de chapa en un cálculo: un mensaje lo dice. Antes, los siguientes se ignoraban sin avisar.
+- Cuenta en pulgadas: un proyecto nuevo se abre con una chapa de 48 × 96 pulgadas y la separación convertida. Antes mostraba 1000 × 2000 pulgadas y 2 pulgadas de separación.
+- Planes: la página y la ventana de suscripción dicen qué permiten Free y Unlimited para las chapas importadas y para el informe de nesting.
+- Mensajes más claros: cálculo «Este dispositivo» fallido, dibujo de chapa en espacio papel, chapa no encontrada en este navegador. Un nombre de chapa largo ya no se corta.
+
 ## V0.9.19
 
 *FR*
