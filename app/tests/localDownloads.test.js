@@ -185,10 +185,10 @@ describe('test statique des appelants', () => {
         return src.slice(start)
     }
 
-    it('chaque appel downloadLocal(Dxf|Zip|Job|Jobs|Result)( hors du module passe maxSheet', () => {
+    it('chaque appel downloadLocal(Dxf|Zip|Job|Jobs|Result|Positions)( hors du module passe maxSheet', () => {
         const files = walk(appDir).filter((f) => !f.endsWith(join('composables', 'localDownloads.js')))
         const calls = []
-        const re = /\bdownloadLocal(Dxf|Zip|Job|Jobs|Result)\(/g
+        const re = /\bdownloadLocal(Dxf|Zip|Job|Jobs|Result|Positions)\(/g
         for (const file of files) {
             const src = readFileSync(file, 'utf8')
             for (const m of src.matchAll(re)) {

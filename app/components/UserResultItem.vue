@@ -51,6 +51,7 @@
                     :src="svg"
                     :width="sheetSizeAt(svgIndex).w"
                     :height="sheetSizeAt(svgIndex).h"
+                    :origin="effectiveFileOrigin"
                     class="result__display"
                 />
             </div>
@@ -170,6 +171,8 @@ import { maxDownloadableSheet, sheetDownloadState } from '~/utils/sheetDownloadS
 import { altLayoutCount, altSheetNames, lockedSheetsTrackData, resultHasImportedSheet, sheetGateModel } from '~/utils/sheetDownloadGate'
 import { relativeTimeParts } from '~/utils/relativeTime'
 import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
+import { DXF_ORIGIN_UNSUPPORTED } from '~/utils/dxfOrigin'
+import { effectiveOrigin, originChoiceOffered } from '~/utils/originChoice'
 
 const props = defineProps({
     result: {
@@ -298,20 +301,43 @@ const openUnlockPaywall = () => {
 }
 
 const downloadGuard = createLockedClickGuard()
+// Zéro des fichiers retenu par l'utilisateur : le même que dans la fenêtre de
+// résultat, et seulement si CETTE fenêtre le proposerait pour ce résultat (local,
+// sans `.job`). Le nom du fichier livré dit `_center`.
+const { origin: originChoice } = useOriginChoice()
+const { show: showToast } = useToast()
+// Résultat « utilisable » comme dans la fenêtre : ni échec, ni purgé, ni hors tôle
+// (unfit) — sinon le coin seulement, comme la fenêtre qui n'offre alors aucun choix.
+const originUsable = computed(() => {
+    if (!isResultCompleted.value || isResultFailed.value || props.result?.purgedAt) return false
+    const r0 = props.result?.alternatives?.[0]?.report
+    return !(r0 && (r0.insideSheet === false || r0.overlapFree === false || r0.zoneClear === false
+        || (r0.duplicatePoses || 0) > 0))
+})
+const effectiveFileOrigin = computed(() => effectiveOrigin(
+    originChoiceOffered({ isLocal: isLocal.value, hasJobs: Boolean(props.result?.hasJobs), usable: originUsable.value }),
+    unref(originChoice),
+))
 const downloadLocal = async () => {
     const record = props.result?.localRecord;
     if (!record) return;
     // Clic précédent en cours de résolution : ignoré (ni suivi ni second essai).
     if (downloadGuard.busy) return;
     trackEvent('click_download_button', downloadTrackData());
-    const run = () => downloadLocalResult(record, 0, { maxSheet: maxDownloadableSheet(unref(downloadState)) });
+    // Zéro lu AU CLIC (comme dans la fenêtre de résultat).
+    const origin = unref(effectiveFileOrigin);
+    const run = () => downloadLocalResult(record, 0, { maxSheet: maxDownloadableSheet(unref(downloadState)), origin });
     // §3.11 : filet (l'archive écarte déjà les tôles verrouillées). Palier
     // périmé : relu d'abord ; compte ouvert → le fichier demandé est livré.
     await runLockedDownload({
         run,
         resolve: lockedClickOutcome,
         paywall: openUnlockPaywall,
-        warn: (e) => console.warn('local download failed', e),
+        // Recentrage impossible : un message, rien n'est livré.
+        warn: (e) => {
+            console.warn('local download failed', e);
+            if (e?.message === DXF_ORIGIN_UNSUPPORTED) showToast(t('results.origin.error'), 'alert');
+        },
         guard: downloadGuard,
         isCurrent: stillCurrent(),
     });
@@ -330,11 +356,15 @@ const downloadButtonText = computed(() => {
     return isMultiSheet.value ? t('results.downloadAll') : t('results.download');
 });
 const downloadButtonAttrs = computed(() => {
+    // Le zéro des fichiers quand c'est le centre : le nom du fichier le dit aussi.
+    const zero = isLocal.value && effectiveFileOrigin.value === 'center' ? t('results.origin.title') : ''
+    const withZero = (text) => (zero ? (text ? `${text} — ${zero}` : zero) : text)
     if (gate.value.importedLock) {
-        return { icon: iconType.lock, 'aria-label': t('results.importedLocked'), title: t('results.importedLocked') }
+        const full = withZero(t('results.importedLocked'))
+        return { icon: iconType.lock, 'aria-label': full, title: full }
     }
-    if (!gate.value.anyLocked) return {}
-    const full = t('results.downloadFirstSheets', { n: gate.value.cap })
+    if (!gate.value.anyLocked) return zero ? { 'aria-label': zero, title: zero } : {}
+    const full = withZero(t('results.downloadFirstSheets', { n: gate.value.cap }))
     return { 'aria-label': full, title: full }
 });
 

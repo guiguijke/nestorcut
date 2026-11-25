@@ -10,6 +10,58 @@ import {
     normalizeLayouts,
     sheetDims,
 } from './localBridge'
+import { sheetCentre, sheetPositions } from '../utils/partPositions.js'
+import { entityIndexOf } from '../utils/dxfEntities.js'
+
+/** Contour d'une tôle importée (repère de la tôle, celui du moteur : la tôle
+ * ENTIÈRE), ou null pour un rectangle. Ne sort jamais d'ici. */
+function importedOutline(container, payload) {
+    const bin = payload?.instance?.bins?.[container?.container_id]
+    const shaped = Array.isArray(payload?.shapedSheets)
+        && payload.shapedSheets.some((s) => s.id === bin?.id)
+    return shaped ? bin.shape?.data?.outer ?? null : null
+}
+
+/** Centre (mm) de la tôle d'un container : celui que « Centre de la tôle » met
+ * en (0, 0). */
+export function containerCentre(container, payload) {
+    return sheetCentre([container.bin_width, container.bin_height], importedOutline(container, payload))
+}
+
+/** Positions des pièces de CHAQUE tôle d'une alternative (CSV « Positions »),
+ * ou null : tout ou rien — une tôle sans positions ne doit pas disparaître en
+ * silence d'un CSV qui aurait l'air complet. Ne fait JAMAIS échouer le job. */
+export function alternativePositions(containers, payload, entityIndex) {
+    try {
+        if (!containers?.length) return null
+        const partsById = new Map((payload?.parts || []).map((p) => [String(p.id), p]))
+        const out = []
+        for (let li = 0; li < containers.length; li++) {
+            const c = containers[li]
+            const rows = sheetPositions(c, partsById, entityIndex)
+            if (!rows) return null
+            out.push({
+                sheet: li + 1,
+                box: [c.bin_width, c.bin_height],
+                center: containerCentre(c, payload),
+                rows,
+            })
+        }
+        return out
+    } catch {
+        return null
+    }
+}
+
+/** Les positions n'existent que pour un job construit DANS le navigateur
+ * (`mode === 'client-built'`, projet « Cet appareil ») : le payload préparé par le
+ * serveur a perdu `blockParts` et les noms de fichiers. Retire `positions` des
+ * alternatives sinon (mutation). */
+export function dropPositionsUnlessBrowserBuilt(alternatives, mode) {
+    if (mode === 'client-built') return alternatives
+    for (const alt of alternatives || []) delete alt.positions
+    return alternatives
+}
 
 /** Frame finale synthétique pour la vue live (même forme que le reveal
  * serveur : [item_id, bin, rot_deg, x, y]). */
@@ -139,7 +191,9 @@ async function appendBppGrid(result, payload) {
     }
 }
 
-export async function assembleBrowserArtifacts({ result, payload, sources, jobSlug, qa = null }) {
+export async function assembleBrowserArtifacts({ result, payload, sources, jobSlug, qa = null, withPositions = true }) {
+    // Entités réelles des sources (positions des pièces), lues une fois par source.
+    const entityIndex = entityIndexOf(sources)
     const localDiscarded = []
     // §17.2 : états de poses des alternatives écartées (QA seulement).
     const qaDiscarded = []
@@ -289,10 +343,23 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
                 const d = await buildSheetDxf(
                     `${jobSlug}_alt${rank}`, li + 1, containers[li], payload, sources,
                 )
-                if (d) dxfs.push(d)
+                if (d) {
+                    // Boîte et centre (mm) de la tôle ENTIÈRE : le recentrage du fichier
+                    // et le CSV en ont besoin, et un record plus ancien ne la
+                    // porte pas (il la relit du rapport).
+                    d.box = [containers[li].bin_width, containers[li].bin_height]
+                    d.center = containerCentre(containers[li], payload)
+                    dxfs.push(d)
+                }
             }
             alternatives[rank].dxfs = dxfs
             alternatives[rank].altId = rank
+            // Additif : unité du DXF livré (celle du CSV) et positions des
+            // pièces. Restent dans le record du navigateur, jamais envoyés.
+            alternatives[rank].outputUnit = payload?.outputUnit === 'inch' ? 'inch' : 'mm'
+            // `withPositions` faux (job préparé par le serveur) : on ne mesure rien.
+            const positions = withPositions ? alternativePositions(containers, payload, entityIndex) : null
+            if (positions) alternatives[rank].positions = positions
         }
         liveLayout = buildLiveLayout(result, payload,
             result.alternatives[idx[0]] ?? bestRaw, alternatives[0]?.density ?? null)

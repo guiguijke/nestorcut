@@ -131,6 +131,10 @@ export function hydrateLocalItem(item, record = null) {
         // Seuls les NOMS voyagent : les octets restent dans `localRecord`,
         // que `downloadLocalJob` lit directement — inutile de les recopier.
         jobs: (alt.jobs || []).filter((j) => j?.bytes).map((j) => ({ fileName: j.fileName })),
+        // Lot positions : l'écran sait SEULEMENT qu'elles existent (un
+        // booléen) ; les lignes se lisent dans `localRecord` au clic. Absent
+        // d'un record d'avant : pas de bouton « Positions (CSV) ».
+        hasPositions: Array.isArray(alt.positions) && alt.positions.length > 0,
     }))
     return {
         ...item,

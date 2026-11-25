@@ -19,7 +19,7 @@
                 preserveAspectRatio="none"
             />
         </g>
-        <SheetAxes :width="w" :height="h" />
+        <SheetAxes :width="w" :height="h" :origin="origin" />
     </svg>
     <img
         v-else
@@ -36,6 +36,8 @@ const props = defineProps({
     src: { type: String, required: true },
     width: { type: Number, default: 0 },
     height: { type: Number, default: 0 },
+    // Zéro des fichiers livrés, pour le repère X/Y : 'corner' (défaut) | 'center'.
+    origin: { type: String, default: 'corner' },
 })
 
 const w = computed(() => Number(props.width) || 0)

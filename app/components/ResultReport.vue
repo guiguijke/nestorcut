@@ -325,6 +325,24 @@
                 </details>
             </div>
             <div class="controls" data-testid="report-actions"><HelpDot topic="downloads" />
+                <!-- Lot positions : zéro des fichiers livrés (DXF et CSV des
+                     positions), seulement pour un résultat « Cet appareil »
+                     sans `.job`. Retenu par navigateur. -->
+                <div
+                    v-if="originOffered"
+                    class="result-report__origin"
+                    data-testid="origin-choice"
+                >
+                    <span class="result-report__origin-label">{{ t('results.origin.label') }}</span>
+                    <UiSegmented
+                        class="result-report__origin-seg"
+                        :model-value="origin"
+                        :options="originOptions"
+                        :label="t('results.origin.label')"
+                        testid="origin"
+                        @update:modelValue="$emit('origin', $event)"
+                    />
+                </div>
                 <MainButton
                     v-if="reportSheets.length"
                     :label="copied ? t('report.copied') : t('report.copy')"
@@ -344,6 +362,20 @@
                     :theme="themeType.ghost"
                     trackingTag="report_csv"
                     @click="onExportClick(exportCsv, 'report_csv_locked_click')"
+                />
+                <!-- Lot positions : liste simple des pièces (fichier, X, Y,
+                     diamètre). Même verrou que les DXF (cadenas d'une tôle
+                     importée verrouillée) ; absent d'un résultat d'avant. -->
+                <MainButton
+                    v-if="positionsOffered"
+                    :label="positionsPartial ? t('results.positions.buttonPartial', { n: positionsCap }) : t('results.positions.button')"
+                    :title="t('results.positions.title')"
+                    :icon="importedLock ? iconType.lock : undefined"
+                    :isDisable="isHaveError || isUnfit"
+                    :size="sizeType.s"
+                    :theme="themeType.ghost"
+                    data-testid="download-positions"
+                    @click="$emit('download-positions')"
                 />
                 <!-- Une seule action principale : le téléchargement. Débloquer,
                      copier, CSV et recommencer passent au second plan sans
@@ -458,7 +490,7 @@ const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
     'download-single', 'download-job', 'download-all-jobs', 'close', 'copy-slug',
-    'unlock-sheets', 'unfit-open-project',
+    'unlock-sheets', 'unfit-open-project', 'download-positions', 'origin',
 ])
 
 const t = (...a) => props.d.t(...a)
@@ -520,6 +552,17 @@ const EMPTY_GATE = { anyLocked: false, cap: 0, total: 0 }
 const downloadGate = computed(() => props.d.downloadGate || EMPTY_GATE)
 const jobGate = computed(() => props.d.jobGate || EMPTY_GATE)
 const unlockOffered = computed(() => Boolean(props.d.unlockOffered))
+// Lot positions : choix du zéro des fichiers et bouton « Positions (CSV) ».
+const originOffered = computed(() => Boolean(props.d.originOffered))
+const origin = computed(() => (props.d.origin === 'center' ? 'center' : 'corner'))
+const positionsOffered = computed(() => Boolean(props.d.positionsOffered))
+// Tôles laissées de côté par le plafond : le libellé le dit (« tôles 1-N »).
+const positionsPartial = computed(() => Boolean(props.d.positionsPartial))
+const positionsCap = computed(() => props.d.positionsCap)
+const originOptions = computed(() => ([
+    { value: 'corner', label: t('results.origin.corner') },
+    { value: 'center', label: t('results.origin.center') },
+]))
 // Essai Free d'une tôle importée (20/11) : cadenas sur chaque export, phrase dite.
 const importedLock = computed(() => Boolean(props.d.importedLock))
 const importedUnlockLabel = computed(() => t('results.unlockImported'))
@@ -610,6 +653,39 @@ defineExpose({ reportEl })
         flex-wrap: wrap;
         gap: var(--sp-2);
         margin-top: var(--sp-2);
+    }
+
+    // Zéro des fichiers : une rangée à part, libellé puis choix segmenté.
+    &__origin {
+        flex: 1 1 100%;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--sp-2);
+    }
+
+    &__origin-label {
+        font-size: var(--fs-12);
+        color: var(--label-secondary);
+    }
+
+    &__origin-seg {
+        flex: 0 1 auto;
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* Téléphone : les deux choix passent à la ligne (ou s'empilent) au lieu de
+       déborder — l'italien et l'espagnol sont plus longs que l'anglais. */
+    &__origin-seg :deep(.ui-seg) {
+        flex-wrap: wrap;
+    }
+
+    &__origin-seg :deep(.ui-seg__opt) {
+        flex: 1 1 auto;
+        min-width: 0;
+        white-space: normal;
+        text-align: center;
     }
 
     &__state-note {

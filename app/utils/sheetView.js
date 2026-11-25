@@ -115,8 +115,10 @@ export function axesMarkSizes(len, k = 1) {
  * Portrait rotated: origin top-left, +X down, +Y right (length along the screen).
  * The triad is inset a few viewBox units so the origin mark and labels
  * are not clipped by the SVG edge — directions stay exact.
+ * `origin === 'center'` (the file zero chosen at download): same directions,
+ * the triad starts at the centre of the sheet instead of its corner.
  */
-export function sheetAxesDisplay(width, height) {
+export function sheetAxesDisplay(width, height, origin = 'corner') {
     const W = Number(width) || 1
     const H = Number(height) || 1
     const { viewW, viewH } = sheetDisplaySize(W, H)
@@ -124,6 +126,30 @@ export function sheetAxesDisplay(width, height) {
     const len = Math.min(Math.max(short * 0.18, Math.max(viewW, viewH) * 0.055), short * 0.28)
     const k = axesMinScale(viewW, viewH)
     const inset = Math.max(short * 0.014, 10 * k)
+    if (origin === 'center') {
+        const cx = viewW / 2
+        const cy = viewH / 2
+        if (isSheetPortrait(W, H)) {
+            return {
+                origin: { x: cx, y: cy },
+                xTo: { x: cx, y: cy + len },
+                yTo: { x: cx + len, y: cy },
+                len,
+                k,
+                viewW,
+                viewH,
+            }
+        }
+        return {
+            origin: { x: cx, y: cy },
+            xTo: { x: cx + len, y: cy },
+            yTo: { x: cx, y: cy - len },
+            len,
+            k,
+            viewW,
+            viewH,
+        }
+    }
     if (isSheetPortrait(W, H)) {
         return {
             origin: { x: inset, y: inset },

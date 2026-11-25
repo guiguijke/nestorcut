@@ -34,6 +34,8 @@
                     @export="onExportIntent"
                     @download-all="downloadLocalAll"
                     @download-single="downloadLocalSingle"
+                    @download-positions="downloadLocalPositionsCsv"
+                    @origin="setOrigin"
                     @download-job="downloadLocalSheetJob"
                     @download-all-jobs="downloadLocalAllJobs"
                     @copy-slug="copySlug"
@@ -70,6 +72,9 @@ import {
     sheetGateModel,
 } from '~/utils/sheetDownloadGate'
 import { isOnJobProject } from '~/utils/resultNav'
+import { csvCell } from '~/utils/partPositions'
+import { DXF_ORIGIN_UNSUPPORTED } from '~/utils/dxfOrigin'
+import { effectiveOrigin, originChoiceOffered } from '~/utils/originChoice'
 import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
 import { failureDetailText } from '~/utils/failureReason'
 import { useLocalMode } from '~/composables/useLocalMode'
@@ -125,28 +130,64 @@ const runDownload = (run, label = 'local download failed') => runLockedDownload(
     run,
     resolve: lockedClickOutcome,
     paywall: () => openUnlockPaywall('modal_actions'),
-    warn: (e) => console.warn(label, e),
+    // Recentrage impossible : un message, et RIEN n'est livré (jamais un
+    // fichier au coin quand le centre est demandé).
+    warn: (e) => {
+        console.warn(label, e)
+        if (e?.message === DXF_ORIGIN_UNSUPPORTED) showToast(t('results.origin.error'), 'alert')
+    },
     guard: downloadGuard,
     isCurrent: stillCurrent(),
 })
 // L'option et la tôle sont celles du CLIC : un second essai après l'attente ne
 // livre pas celles choisies entre-temps.
+// Zéro des fichiers (lot positions) : lu au CLIC (à côté de `alt`), comme
+// l'option et la tôle : un second essai après l'attente du palier livre le zéro
+// choisi au clic, pas celui d'un instant plus tard. 'center' seulement quand le
+// choix est proposé pour ce résultat (local, sans `.job`).
+const { origin: originChoice, setOrigin } = useOriginChoice()
+const currentOrigin = () => effectiveOrigin(unref(originOffered), unref(originChoice))
 const downloadLocalSingle = () => {
     const alt = unref(activeAlt)
+    const origin = currentOrigin()
     return runDownload(() => {
-        downloadLocalDxf(unref(localRecord), alt, 0, { maxSheet: currentMaxSheet() })
+        downloadLocalDxf(unref(localRecord), alt, 0, { maxSheet: currentMaxSheet(), origin })
     })
 }
 const downloadLocalSheet = () => {
     const alt = unref(activeAlt)
     const part = unref(activePart)
+    const origin = currentOrigin()
     return runDownload(() => {
-        downloadLocalDxf(unref(localRecord), alt, part, { maxSheet: currentMaxSheet() })
+        downloadLocalDxf(unref(localRecord), alt, part, { maxSheet: currentMaxSheet(), origin })
     })
 }
-const downloadLocalAll = () => runDownload(() => {
-    downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet() })
-})
+const downloadLocalAll = () => {
+    const origin = currentOrigin()
+    return runDownload(() => {
+        downloadLocalZip(unref(localRecord), null, { maxSheet: currentMaxSheet(), origin })
+    })
+}
+// CSV des positions de l'option à l'écran : même verrou et même chemin que les
+// boutons DXF (runDownload : palier relu, déblocage, fenêtre d'abonnement).
+const downloadLocalPositionsCsv = () => {
+    const alt = unref(activeAlt)
+    const origin = currentOrigin()
+    return runDownload(() => {
+        downloadLocalPositions(unref(localRecord), alt, {
+            maxSheet: currentMaxSheet(),
+            origin,
+            headers: {
+                sheet: t('positions.csv.sheet'),
+                part: t('positions.csv.part'),
+                x: t('positions.csv.x'),
+                y: t('positions.csv.y'),
+                diameter: t('positions.csv.diameter'),
+                rotation: t('positions.csv.rotation'),
+            },
+        })
+    }, 'local positions download failed')
+}
 // Lot J4 : le `.job` SheetCam de la TOLE A L'ECRAN (`activePart`), comme le
 // telechargement DXF d'une tole juste au-dessus — un `.job` ne porte qu'une
 // seule `[Work]`, donc une tole = un fichier.
@@ -504,10 +545,7 @@ const copyReport = async () => {
 
 // CSV v1: comma separator, dot decimals, i18n headers with the display unit
 // in the header name; values in the display unit (in / mm, in² / mm²).
-const csvCell = (v) => {
-    const s = String(v)
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
+// `csvCell` (utils/partPositions) : la cellule partagée avec le CSV des positions.
 const exportCsv = () => {
     const sheets = unref(reportSheets)
     const totals = unref(reportTotals)
@@ -841,6 +879,19 @@ const currentSheetLocked = computed(() => Boolean(unref(viewGate).locked[unref(a
 // vendrait un téléchargement qui n'existe plus (C2-9).
 const usable = computed(() =>
     !unref(isHaveError) && !unref(isUnfit) && !unref(resultModalData)?.purgedAt)
+// Zéro des fichiers : proposé seulement pour un résultat local sans `.job`.
+const originOffered = computed(() => originChoiceOffered({
+    isLocal: unref(isLocal),
+    hasJobs: Boolean(unref(resultModalData)?.hasJobs),
+    usable: unref(usable),
+}))
+// Bouton « Positions (CSV) » : résultat local dont l'option à l'écran a gardé
+// ses positions (un résultat d'avant cette version n'en a pas : pas de bouton).
+const positionsOffered = computed(() => unref(isLocal) && unref(usable)
+    && Boolean(unref(alternatives)[unref(activeAlt)]?.hasPositions))
+// Tôles laissées de côté par le plafond sur l'option à l'écran (même condition que
+// le bouton DXF « tôles 1-N ») : le bouton et le nom du fichier le disent.
+const positionsPartial = computed(() => unref(viewGate).anyLocked && !unref(viewGate).importedLock)
 const unlockOffered = computed(() =>
     unref(usable) && (unref(downloadGate).anyLocked || unref(jobGate).anyLocked))
 const sheetUnlockOffered = computed(() =>
@@ -1000,6 +1051,11 @@ const bundle = computed(() => ({
     currentSheetLocked: unref(currentSheetLocked),
     usable: unref(usable),
     unlockOffered: unref(unlockOffered),
+    originOffered: unref(originOffered),
+    origin: effectiveOrigin(unref(originOffered), unref(originChoice)),
+    positionsOffered: unref(positionsOffered),
+    positionsPartial: unref(positionsPartial),
+    positionsCap: unref(viewGate).cap,
     sheetUnlockOffered: unref(sheetUnlockOffered),
     unlockTotal: unref(unlockTotal),
     checkoutChecking: unref(checkoutChecking),

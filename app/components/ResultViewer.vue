@@ -116,6 +116,7 @@
                         :src="currentSvgs[activePart]"
                         :width="previewSheet.w"
                         :height="previewSheet.h"
+                        :origin="axesOrigin"
                         :class="displayClasses"
                         :style="zoomStyle"
                         class="modal__display modal__svg-preview"
@@ -189,6 +190,7 @@
                     :src="currentSvgs[0]"
                     :width="previewSheet.w"
                     :height="previewSheet.h"
+                    :origin="axesOrigin"
                     :class="displayClasses"
                     :style="zoomStyle"
                     class="modal__display modal__svg-preview"
@@ -239,6 +241,9 @@ const currentDxfs = computed(() => props.d.currentDxfs)
 const activeAlt = computed(() => props.d.activeAlt)
 const activePart = computed(() => props.d.activePart)
 const previewSheet = computed(() => props.d.previewSheet)
+// Zéro des fichiers choisi au téléchargement : le repère X/Y de l'aperçu couleur
+// le suit (centre de la tôle ou coin bas-gauche, défaut).
+const axesOrigin = computed(() => (props.d.origin === 'center' ? 'center' : 'corner'))
 const displayClasses = computed(() => props.d.displayClasses)
 const placeholderClasses = computed(() => props.d.placeholderClasses)
 // O2 (02/11) : verrou de la tôle affichée (alternative affichée, d4).

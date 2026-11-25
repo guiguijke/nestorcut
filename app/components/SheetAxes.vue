@@ -91,6 +91,8 @@ import { axesMarkSizes, axisLabelPos, sheetAxesDisplay } from '~/utils/sheetView
 const props = defineProps({
     width: { type: Number, required: true },
     height: { type: Number, required: true },
+    // Zéro des fichiers livrés : 'corner' (défaut, tracé d'avant) ou 'center'.
+    origin: { type: String, default: 'corner' },
 })
 
 const { t } = useLocale()
@@ -103,7 +105,7 @@ const ids = {
     y: `ax-y-${uid}`,
 }
 
-const axes = computed(() => sheetAxesDisplay(props.width, props.height))
+const axes = computed(() => sheetAxesDisplay(props.width, props.height, props.origin))
 // Minima en mm réduits sur une petite tôle (k < 1 sous 700 mm de long côté) :
 // les traits restent en pixels (non-scaling-stroke), seules les marques
 // mesurées en mm changent.

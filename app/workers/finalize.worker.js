@@ -1,15 +1,15 @@
 /**
  * P4 : worker de finalisation (post-pass, SVG, DXF, rapport).
- * Protocol : in { id, result, payload, sources, jobSlug, qa }
+ * Protocol : in { id, result, payload, sources, jobSlug, qa, withPositions }
  *            out { id, ok, alternatives, liveLayout, placed,
  *                  allAlternativesInvalid, localDiscarded, result }
  */
 import { assembleBrowserArtifacts } from '../composables/finalizeLocal.js'
 
 self.onmessage = async (event) => {
-    const { id, result, payload, sources, jobSlug, qa } = event.data || {}
+    const { id, result, payload, sources, jobSlug, qa, withPositions } = event.data || {}
     try {
-        const out = await assembleBrowserArtifacts({ result, payload, sources, jobSlug, qa })
+        const out = await assembleBrowserArtifacts({ result, payload, sources, jobSlug, qa, withPositions })
         self.postMessage({ id, ok: true, ...out })
     } catch (err) {
         console.error('[finalize.worker]', err)

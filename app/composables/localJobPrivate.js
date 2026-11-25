@@ -21,6 +21,7 @@ import {
     expandMeta,
 } from './localBridge'
 import { assembleBrowserArtifactsOffThread } from './finalizeClient'
+import { dropPositionsUnlessBrowserBuilt } from './finalizeLocal'
 // Import STATIQUE (audit 2026-08-31 §R-i) : la sentinelle d'annulation des
 // zones est comparée dans runLocalJobPrivate — référencée sans import, elle
 // ne résolvait que par l'auto-import Nuxt (fragile : ReferenceError pile
@@ -343,7 +344,7 @@ async function fetchSources(payload) {
  * les bytes sources pour l'export DXF viennent du store local.
  */
 async function buildClientPayload(meta) {
-    const [{ buildLocalPayload }, { getLocalFile }, { geoOpenHoles, geoPinwheelCapacity }] = await Promise.all([
+    const [{ buildLocalPayload, attachRingHulls }, { getLocalFile }, { geoOpenHoles, geoPinwheelCapacity }] = await Promise.all([
         import('./localPayloadBuilder'),
         import('./localFilesStore'),
         import('./geometryClient'),
@@ -373,7 +374,7 @@ async function buildClientPayload(meta) {
         })
         sources[f.slug] = new Uint8Array(record.dxfBytes)
     }
-    const { payload, itemMap } = await buildLocalPayload(
+    const { payload, itemMap, ringHulls } = await buildLocalPayload(
         { files, params: meta.params, profile: meta.localConfig },
         {
             openHoles: (coords, holes, spaceMm) => geoOpenHoles(coords, holes, spaceMm),
@@ -386,12 +387,18 @@ async function buildClientPayload(meta) {
             },
         },
     )
+    // Enveloppe de l'anneau d'origine de chaque pièce (CSV des positions) : sur le payload.
+    attachRingHulls(payload, ringHulls)
     // Lot J4 — de quoi réécrire un `.job` SheetCam à la fin du solve : le
     // fichier déposé, les noms de dessins, et les anneaux RÉELS (ceux du
     // dessin, jamais les anneaux réservés ni les anneaux simplifiés — les
     // poses `.job` se calculent sur ce que SheetCam va couper).
     const sheetcam = jobContextFromRecords(records)
-    return { payload, sources, itemMap, ...(sheetcam ? { sheetcam } : {}) }
+    // Noms AFFICHÉS des fichiers (ceux de la carte), pour le CSV des positions :
+    // gardés dans le record du navigateur, le slug opaque n'a aucun sens pour
+    // l'utilisateur et le fichier peut être supprimé ensuite.
+    const fileNames = Object.fromEntries(records.map((r) => [r.slug, String(r.name || '')]))
+    return { payload, sources, itemMap, fileNames, ...(sheetcam ? { sheetcam } : {}) }
 }
 
 /**
@@ -462,6 +469,8 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // Lot J4 : de quoi reecrire un `.job` SheetCam a la fin du solve. Reste
     // `null` pour tout projet ordinaire — le chemin est alors inchange.
     let sheetcamContext = null
+    // Slug -> nom affiché du fichier (projet « Cet appareil » seulement).
+    let fileNames = null
     if (fetched?.mode === 'client-built') {
         try {
             const built = await buildClientPayload(fetched)
@@ -469,6 +478,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             sources = built.sources
             itemMap = built.itemMap
             sheetcamContext = built.sheetcam || null
+            fileNames = built.fileNames || null
         } catch (e) {
             // Géométrie locale absente ou instance invalide : refund propre,
             // jamais de quota consommé sur un job qui n'a pas pu démarrer.
@@ -694,6 +704,8 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     {
         const assembled = await assembleBrowserArtifactsOffThread({
             result, payload, sources, jobSlug,
+            // Positions des pièces : seulement pour un job construit dans le navigateur.
+            withPositions: fetched?.mode === 'client-built',
             // §17.2 : le harnais peut demander l'état MOTEUR des layouts,
             // avant expansion meta / hole-fill / bandes résiduelles, pour
             // savoir si un écart sous l'espacement existe DÉJÀ à la sortie
@@ -865,6 +877,20 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             // telle quelle jusqu'à la fiche, jamais un message technique
             // brut à l'écran (piège #24).
             jobError = { code: e?.code || 'sheetcamJob.writeFailed', params: e?.params || {} }
+        }
+    }
+
+    // Noms affichés des fichiers posés (CSV des positions) : un record sans eux
+    // retombe sur le slug. Additif, jamais envoyé au serveur.
+    // Positions : seulement pour un job construit DANS le navigateur (projet « Cet
+    // appareil »). Un payload préparé par le serveur a perdu `blockParts` et les
+    // noms : un dessin à plusieurs pièces y deviendrait UNE ligne, sans nom.
+    dropPositionsUnlessBrowserBuilt(alternatives, fetched?.mode)
+    if (fileNames) {
+        for (const alt of alternatives) {
+            const used = new Set((alt.positions || []).flatMap((s) => s.rows.map((r) => r.fileSlug)))
+            const names = Object.fromEntries([...used].filter((k) => fileNames[k]).map((k) => [k, fileNames[k]]))
+            if (Object.keys(names).length) alt.fileNames = names
         }
     }
 

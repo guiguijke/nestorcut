@@ -372,6 +372,15 @@ export function ringSelfIntersects(open) {
  * aire nulle (miroir de `is_empty`) ou auto-intersectant ⇒ anneau
  * D'ORIGINE conservé (dégradation sûre). L'anneau retourné est fermé.
  */
+/** Enveloppe convexe d'un anneau (fermée), ou null s'il est illisible. */
+function ringHullOf(ring) {
+    if (!Array.isArray(ring) || ring.length < 3) return null
+    const pts = ring.map((p) => [Number(p?.[0]), Number(p?.[1])])
+    if (pts.some((p) => !Number.isFinite(p[0]) || !Number.isFinite(p[1]))) return null
+    const hull = convexHullRing(pts)
+    return hull.length >= 4 ? hull : null
+}
+
 export function simplifyRing(ring, tol = SIMPLIFY_MM) {
     const original = ring.map((p) => [...p])
     const open = isClosedRing(ring) ? ring.slice(0, -1) : ring.slice()
@@ -884,6 +893,10 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                 coords,
                 holes,
                 handles: part.handles,
+                // Enveloppe de l'anneau ORIGINAL importé (avant simplification et
+                // avant la réserve d'amorce) : c'est elle qui dit au CSV des
+                // positions ce qu'est la pièce. ADDITIF.
+                ringHull: ringHullOf(part.coordinates ?? part.coords),
                 // Couleur d'affichage persistée à l'import ; fallback
                 // déterministe sinon (resolve_part_color côté Python).
                 color: part.color || (await colorForPart(fileSlug, partIndex)),
@@ -920,6 +933,9 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                     coords: p.coords,
                     holes: p.holes,
                     color: p.color,
+                    // Ses poignées : le CSV des positions mesure ses entités réelles.
+                    handles: p.handles,
+                    ringHull: p.ringHull,
                 })),
             })
             continue
@@ -931,6 +947,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                 coords: p.coords,
                 holes: p.holes,
                 handles: p.handles,
+                ringHull: p.ringHull,
                 count,
                 rotations,
                 color: p.color,
@@ -1370,9 +1387,25 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // pour les jobs ordinaires ni pour les anciens résultats relus.
         ...(reserveNotes.length ? { leadInReserve: reserveNotes } : {}),
     }
+    // Enveloppe de l'anneau ORIGINAL de chaque pièce simple (id -> anneau) : à part
+    // du payload (la parité exacte avec le payload du worker Python ne doit pas
+    // bouger) ; `attachRingHulls` la pose sur `payload.parts` pour le CSV des positions.
+    const ringHulls = {}
+    for (const it of inputItems) if (it.ringHull) ringHulls[it.id] = it.ringHull
     return {
         payload,
         seed,
         itemMap,
+        ringHulls,
     }
+}
+
+/** Pose `ringHull` sur les pièces simples d'un payload (additif, projet « Cet
+ * appareil » seulement) ; les pièces d'un bloc portent la leur dans `blockParts`. */
+export function attachRingHulls(payload, ringHulls) {
+    for (const p of payload?.parts || []) {
+        const hull = ringHulls?.[p.id]
+        if (hull && !p.blockParts?.length) p.ringHull = hull
+    }
+    return payload
 }
