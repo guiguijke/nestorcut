@@ -29,6 +29,7 @@ vi.mock('~~/server/features/payment/stripe', () => ({
 import nestHandler from '~~/server/api/project/[slug]/nest.post.js'
 import payloadHandler from '~~/server/api/results/[slug]/local-payload.get.js'
 import { fakeDb } from './helpers/fakeMongo'
+import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
 
 const currentPeriod = () => new Date().toISOString().slice(0, 7)
 const SHAPE_ID = 'sheet-lx2k9f0a-ab12cd'
@@ -146,6 +147,49 @@ describe('POST nest — shapeId d\'une tôle importée', () => {
         state.db = localDb()
         await nestHandler(ev('u1', 'p1', bodyWith({ width: 100, height: 200, count: 1, shapeId: null })))
         expect(state.enqueued[0].params.sheets).toEqual([{ width: 100, height: 200, count: 1 }])
+    })
+})
+
+describe('POST nest — plafond de formats (MAX_SHEET_FORMATS)', () => {
+    const formats = (n, shaped = 0) => Array.from({ length: n }, (_, i) => (i < shaped
+        ? { width: 100 + i, height: 200, count: 1, shapeId: `sheet-lx2k9f0a-ab12c${i}` }
+        : { width: 1000 + i, height: 2000, count: 1 }))
+    const post = (sheets) => nestHandler(ev('u1', 'p1', { files: [{ slug: 'f-aabbccddeeff.dxf', count: 4 }], params: { sheets, space: 2 } }))
+
+    it('la constante vaut 10', () => {
+        expect(MAX_SHEET_FORMATS).toBe(10)
+    })
+
+    it('10 formats passent, tous gardés', async () => {
+        state.db = localDb()
+        await post(formats(10))
+        expect(state.enqueued).toHaveLength(1)
+        expect(state.enqueued[0].params.sheets).toHaveLength(10)
+    })
+
+    it('11 formats : 400 too_many_formats, rien en file, quota intact (jamais tronqué en silence)', async () => {
+        const userDoc = user()
+        state.db = localDb(userDoc)
+        await expect(post(formats(11))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'too_many_formats',
+            data: { reason: 'too_many_formats', max: 10 },
+        })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.freeNestingUsed).toBe(0)
+    })
+
+    it('10 rectangles + 1 tôle importée : refusé, la tôle importée n’est pas perdue en silence', async () => {
+        state.db = localDb()
+        const sheets = [...formats(10), { width: 100, height: 200, count: 1, shapeId: SHAPE_ID }]
+        await expect(post(sheets)).rejects.toMatchObject({ statusMessage: 'too_many_formats' })
+        expect(state.enqueued).toHaveLength(0)
+    })
+
+    it('les lignes invalides ne comptent pas dans le plafond (elles étaient déjà écartées)', async () => {
+        state.db = localDb()
+        await post([...formats(10), { width: 0, height: 0, count: 0 }])
+        expect(state.enqueued[0].params.sheets).toHaveLength(10)
     })
 })
 

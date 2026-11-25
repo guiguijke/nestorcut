@@ -9,7 +9,7 @@ import it_ from '../utils/i18n/it'
 import pt from '../utils/i18n/pt'
 
 const CODES = [
-    'memory_cap', 'entity_limit', 'geometry_missing', 'sheet_shape_missing', 'all_alternatives_invalid',
+    'memory_cap', 'entity_limit', 'geometry_missing', 'sheet_shape_missing', 'sheet_shape_unreadable', 'all_alternatives_invalid',
     'capacity_exceeded', 'item_geometry', 'item_unplaceable', 'part_too_large', 'spacing_too_large',
     'strip_height', 'crash', 'local_interrupted', 'payload_build', 'pool_failed', 'merge_failed', 'merge_parse', 'local_unknown',
 ]
@@ -43,6 +43,16 @@ describe('failureReasonKey', () => {
         const block = src.match(/LOCAL_FAIL_CODES = new Set\(\[([\s\S]*?)\]\)/)
         expect(block[1]).toContain("'sheet_shape_missing'")
         expect(failureReasonKey('sheet_shape_missing')).toBe('localImport.missingSheetShape')
+    })
+
+    it('sheet_shape_unreadable (lecture refusée) : accepté par local-fail, sa propre phrase, distincte de « absente »', () => {
+        const src = readFileSync(new URL('../../server/api/results/[slug]/local-fail.post.js', import.meta.url), 'utf8')
+        const block = src.match(/LOCAL_FAIL_CODES = new Set\(\[([\s\S]*?)\]\)/)
+        expect(block[1]).toContain("'sheet_shape_unreadable'")
+        expect(failureReasonKey('sheet_shape_unreadable')).toBe('localImport.unreadableSheetShape')
+        for (const dict of [en, fr, de, es, it_, pt]) {
+            expect(dict['localImport.unreadableSheetShape']).not.toBe(dict['localImport.missingSheetShape'])
+        }
     })
 
     it('chaque code accepté par local-fail a une raison, sauf les deux codes jamais affichés', () => {

@@ -13,6 +13,7 @@ import {
     DEMO_VCORES,
     resolveDemoWalks,
 } from '../../../../shared/constants/demo.constants'
+import { MAX_SHEET_FORMATS } from '../../../../shared/constants/payment.constants'
 
 // Forme exacte des slugs de tôle importée (newSheetSlug, app/utils/
 // sheetImportModel.js) : « sheet-<horodatage base 36>-<6 caractères base 36> ».
@@ -241,7 +242,15 @@ export default defineEventHandler(async (event) => {
                 ...(sheet.shapeId != null ? { shapeId: checkedShapeId(sheet.shapeId) } : {}),
             }))
             .filter(isValidSheet)
-            .slice(0, 10)
+        // Jamais de troncature muette : une tôle en trop serait perdue sans un mot.
+        // 400 AVANT toute charge, comme too_many_sheets.
+        if (sheets.length > MAX_SHEET_FORMATS) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'too_many_formats',
+                data: { reason: 'too_many_formats', max: MAX_SHEET_FORMATS },
+            })
+        }
         if (sheets.length === 0) {
             throw invalidSheetError()
         }

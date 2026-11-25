@@ -68,19 +68,24 @@ export function useLocalMode(projectSlug) {
         if (err === 'geometry_missing') return t('localImport.missingGeometry')
         // Tôle importée absente de CE navigateur (ou inutilisable : aire utile nulle).
         if (err === 'sheet_shape_missing') return t('localImport.missingSheetShape')
+        // Le navigateur n'a pas pu RELIRE la tôle (stockage fermé ou refusé) : autre cause, autre conseil.
+        if (err === 'sheet_shape_unreadable') return t('localImport.unreadableSheetShape')
         // Lot A1 (audit P3-4) : pièce/bloc trop grand pour toute tôle
         // déclarée à cet espacement — le message NOMME le fichier et son
         // étendue mesurée, comme item_geometry nomme sa pièce. Jamais le
         // générique « arrêté de façon inattendue ».
         if (err === 'part_too_large') {
-            // Marge de courbes > 0 : la phrase la dit (« 2 mm, plus 0,10 mm »),
-            // la décision de la garde se prend avec demandé + marge.
+            // La boîte de la tôle importée suffisait : c'est son CONTOUR qui refuse.
+            // Marge de courbes > 0 : la phrase la dit (« 2 mm, plus 0,10 mm »), la
+            // décision de la garde se prend avec demandé + marge.
             if (params?.margin != null) {
                 const m = Number(params.margin)
                 const margin = locale.value === 'en' ? m.toFixed(2) : m.toFixed(2).replace('.', ',')
-                return t('localMode.partTooLargeMargin', {
-                    ...params, space: fmtNumber(params.space, 2), margin,
-                })
+                const key = params.shape ? 'localMode.partTooLargeShapeMargin' : 'localMode.partTooLargeMargin'
+                return t(key, { file: params.file, w: params.w, h: params.h, space: fmtNumber(params.space, 2), margin })
+            }
+            if (params?.shape) {
+                return t('localMode.partTooLargeShape', { file: params.file, w: params.w, h: params.h })
             }
             return params
                 ? t('localMode.partTooLarge', params)

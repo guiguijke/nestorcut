@@ -88,6 +88,7 @@ import { partWithReserve } from '~~/shared/sheetcamReserve.js'
 // Tôle importée d'un DXF : géométrie pure (aucune dépendance), même règle
 // d'alias que ci-dessus.
 import { engineBinShape } from '~~/app/utils/sheetShape.js'
+import { partMayFitSheet } from '~~/app/utils/partFit.js'
 
 /**
  * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
@@ -244,6 +245,28 @@ export function partFitsAnySheet(w, h, sheets, space) {
         }
     }
     return false
+}
+
+/** Pièce (anneau + rotations permises) : tient-elle dans AU MOINS une tôle ?
+ * Boîte tournée d'abord (le test historique, inchangé) ; pour une tôle
+ * importée (`sheet.shaped.outer`) la pièce doit AUSSI pouvoir tenir dans
+ * l'enveloppe de son contour (partMayFitSheet : faux seulement si c'est
+ * prouvé impossible). Sans tôle importée : exactement l'ancien test. La page
+ * l'appelle avec les mêmes tôles et le même espacement que le calcul.
+ * @returns {{ fits: boolean, boxFits: boolean }} `boxFits` : la boîte seule
+ *   passait déjà (un refus avec boxFits vrai vient donc de la forme). */
+export function itemFitsSheets(coords, rotations, sheets, space) {
+    const rots = rotations?.length ? rotations : [0]
+    const boxes = rots.map((angle) => rotatedBBoxSize(coords, Number(angle) || 0))
+    let boxFits = false
+    for (const sheet of sheets) {
+        if (!boxes.some(([w, h]) => partFitsAnySheet(w, h, [sheet], space))) continue
+        boxFits = true
+        if (!sheet.shaped || partMayFitSheet(coords, sheet.shaped.outer, space, rots)) {
+            return { fits: true, boxFits }
+        }
+    }
+    return { fits: false, boxFits }
 }
 
 /** Bbox [w, h] de l'anneau tourné de `angleDeg` (anti-horaire, y-up, autour
@@ -743,7 +766,8 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             try {
                 record = typeof deps.getSheetRecord === 'function' ? await deps.getSheetRecord(id) : null
             } catch {
-                record = null
+                // Lecture refusée (IndexedDB fermée, bloquée) : pas « absente ».
+                throw new Error('sheet_shape_unreadable')
             }
             if (!record) throw new Error('sheet_shape_missing')
             loaded.set(id, engineBinShape(record))
@@ -979,18 +1003,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     //    avec le message EXACT du worker Python.
     const unplaceable = []
     for (const item of inputItems) {
-        const rotations = item.rotations?.length ? item.rotations : [0]
-        let fitsAnywhere = false
-        for (const angle of rotations) {
-            const [w, h] = rotatedBBoxSize(item.coords, Number(angle) || 0)
-            if (partFitsAnySheet(w, h, sheets, space)) {
-                fitsAnywhere = true
-                break
-            }
-        }
-        if (!fitsAnywhere) {
+        const { fits, boxFits } = itemFitsSheets(item.coords, item.rotations, sheets, space)
+        if (!fits) {
             const [w, h] = ringBBoxSize(item.coords)
-            unplaceable.push({ name: item.file_slug, width: w, height: h, count: item.count })
+            // `shape` : la boîte passait, c'est le CONTOUR de la tôle importée qui refuse.
+            unplaceable.push({ name: item.file_slug, width: w, height: h, count: item.count, shape: boxFits })
         }
     }
     if (unplaceable.length) {
@@ -1020,6 +1037,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             width: pyFixed0(firstOffender.width),
             height: pyFixed0(firstOffender.height),
             ...(curveMargin > 0 ? { space: requestedSpace, margin: curveMargin.toFixed(2) } : {}),
+            ...(firstOffender.shape ? { shape: true } : {}),
         }
         throw tooLargeErr
     }

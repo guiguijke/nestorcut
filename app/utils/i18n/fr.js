@@ -260,6 +260,7 @@ export default {
     'settings.directions.paidHint': 'Un sens = un meilleur layout. Cochez-en plusieurs pour comparer plusieurs propositions.',
     'nest.computing': 'Calcul en cours…',
     'nest.error.maxSheets': 'Trop de tôles : {n} tôles au maximum par tâche.',
+    'nest.error.tooManyFormats': 'Trop de types de tôle : {max} types au maximum par calcul. Retirez-en un puis réessayez.',
     'nest.error.concurrent': "Un calcul d'imbrication est déjà en cours — attendez sa fin avant d'en lancer un autre.",
     'nest.error.generic': "La requête d'imbrication a échoué — veuillez réessayer.",
     // Z1 (vérif 2026-09-05) : bandeau refus capacité (leviers + actions).
@@ -302,7 +303,8 @@ export default {
     'privacy.status.cloud': "Téléchargez vos DXF — sources et résultats sont effacés après 24 h.",
     'privacy.status.vault': "Fichiers chiffrés chez nous. Sans le fichier-clé, personne ne peut les lire — y compris nous, hors session de travail.",
     'localImport.missingGeometry': "Ces pièces sont dans l'autre navigateur. Réimportez-les ici — rien n'a été envoyé chez nous.",
-    'localImport.missingSheetShape': "La tôle importée de ce calcul est dans l'autre navigateur. Réimportez-la ici — rien n'a été envoyé chez nous.",
+    'localImport.missingSheetShape': "La tôle importée de ce calcul est dans un autre navigateur, ou a été retirée dans un autre onglet. Réimportez-la ici — rien n'a été envoyé chez nous.",
+    'localImport.unreadableSheetShape': "Le navigateur n'a pas pu relire la tôle importée. Rechargez la page ou réimportez-la — rien n'a été envoyé chez nous.",
     'localImport.dwgRejected': "Les fichiers DWG sont convertis sur nos serveurs — choisis « Nos serveurs » pour ce fichier.",
     'localImport.unsupportedType': "Type de fichier non supporté — DXF ou SVG uniquement sur cet appareil.",
     'localImport.parseError': "Ce fichier n'a pas pu être analysé dans le navigateur — essayez « Nos serveurs ».",
@@ -452,6 +454,8 @@ export default {
     'localMode.capacityExceeded': "Ces pièces ne tiennent pas sur les tôles déclarées à cet espacement — ajoutez une tôle, réduisez l'espacement ou retirez des pièces. L'imbrication a été remboursée.",
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+    'localMode.partTooLargeShape': "La pièce « {file} » ({w} × {h} mm) ne tient pas dans le contour de la tôle importée à cet espacement, même tournée aux angles autorisés — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
+    'localMode.partTooLargeShapeMargin': "La pièce « {file} » ({w} × {h} mm) ne tient pas dans le contour de la tôle importée à cet espacement ({space} mm, plus {margin} mm de marge pour les courbes), même tournée aux angles autorisés — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.partTooLargeMargin': "La pièce « {file} » ({w} × {h} mm) ne tient dans aucune tôle déclarée à cet espacement ({space} mm, plus {margin} mm de marge pour les courbes) — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.partTooLargePlain': "Une pièce ne tient dans aucune tôle déclarée à cet espacement — agrandissez la tôle, autorisez plus de rotations ou réduisez l'espacement. L'imbrication a été remboursée.",
     'localMode.spacingTooLarge': "L'espacement est trop grand pour cette tâche (la bande initiale serait vide) — réduisez l'espacement ou ajoutez des pièces/tôles. L'imbrication a été remboursée.",
@@ -603,6 +607,7 @@ export default {
     'project.nestingInProgress': 'calcul en cours',
     'project.minSheet':
         "La plus grande pièce nécessite une tôle d'au moins {w} × {h} {unit} — aucun type de tôle déclaré n'est assez grand.",
+    'project.sheetShapeMissing': 'La forme de la tôle « {name} » est introuvable ou illisible dans ce navigateur. Réimportez-la.',
     'project.changeToRegenerate': 'Modifiez les réglages ou les fichiers pour relancer',
 
     'time.justNow': "à l'instant",
@@ -974,6 +979,8 @@ export default {
     'licences.group.engine': "Moteur d'imbrication (Rust)",
     // Lot 3 tôle importée : fenêtre d’import (DXF) et liste des tôles.
     'settings.importSheet': "Importer une tôle (DXF)",
+    'settings.sheetFormatsLimit': 'Limite atteinte : {max} types de tôle par calcul.',
+    'settings.factorySheetReplaced': 'La tôle par défaut de {w} × {h} {unit} a été remplacée.',
     'settings.sheetShape.size': "Dimensions",
     'settings.sheetShape.badge': "Contour importé",
     'settings.sheetShape.editZones': "Modifier les zones et défauts",

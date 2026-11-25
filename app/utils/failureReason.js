@@ -13,6 +13,7 @@ const REASON_KEYS = {
     entity_limit: 'localMode.entityLimit',
     geometry_missing: 'localImport.missingGeometry',
     sheet_shape_missing: 'localImport.missingSheetShape',
+    sheet_shape_unreadable: 'localImport.unreadableSheetShape',
     all_alternatives_invalid: 'localMode.allInvalid',
     capacity_exceeded: 'localMode.capacityExceeded',
     item_geometry: 'localMode.itemGeometryUnknown',

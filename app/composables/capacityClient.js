@@ -34,9 +34,16 @@ function ringPerimeter(coords) {
 }
 
 export function inflatedArea(part, space) {
+    const s = Math.max(0, Number(space) || 0)
+    // La page, en projet « cet appareil », n'a pas l'anneau : elle donne l'aire et le
+    // périmètre du contour (mêmes nombres que ringArea/ringPerimeter) — même formule.
+    const area = Number(part?.outlineAreaMm2)
+    const perimeter = Number(part?.outlinePerimeterMm)
+    if (Number.isFinite(area) && area > 0 && Number.isFinite(perimeter) && perimeter >= 0) {
+        return area + perimeter * s / 2 + Math.PI * s * s / 4
+    }
     const coords = (part && part.coords) || []
     if (coords.length < 3) return 0
-    const s = Math.max(0, Number(space) || 0)
     return ringArea(coords) + ringPerimeter(coords) * s / 2
         + Math.PI * s * s / 4
 }

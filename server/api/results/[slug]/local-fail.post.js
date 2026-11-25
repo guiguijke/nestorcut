@@ -5,6 +5,7 @@ import { connectDB } from '~~/server/db/mongo'
 // localSolverRegistry) — seule liste autorisée à entrer dans `error`/`detail`.
 const LOCAL_FAIL_CODES = new Set([
     'memory_cap', 'entity_limit', 'geometry_missing', 'local_geometry_missing', 'sheet_shape_missing',
+    'sheet_shape_unreadable',
     'all_alternatives_invalid', 'capacity_exceeded', 'item_geometry',
     'item_unplaceable',
     'part_too_large', 'spacing_too_large', 'strip_height', 'crash', 'payload_build',

@@ -15,3 +15,7 @@ export const FREE_DOWNLOAD_SHEET_CAP = 2
 /** d6 (02/11) : borne TECHNIQUE (pas commerciale) de la somme des `count` des
  * formats d'un job, tous paliers, démo comprise — 400 `too_many_sheets`. */
 export const MAX_SHEETS_PER_JOB = 1000
+/** Nombre maximal de FORMATS de tôle (lignes de la liste) par calcul. Le serveur
+ * refuse au-delà (400 `too_many_formats`, avant toute charge) au lieu de garder
+ * les premiers en silence ; le client grise « Ajouter une tôle » et Nest. */
+export const MAX_SHEET_FORMATS = 10

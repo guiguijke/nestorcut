@@ -200,6 +200,6 @@ describe('pré-contrôles : la capacité est jugée à l’espacement interne co
         expect(api).toContain('...userMaxSpacing(cap.maxSpacingForFitMm, curveMargin)')
         const page = read('../pages/project/[slug].vue')
         expect(page).toContain('computeSpacingMargin(')
-        expect(page).toContain('capacityReport(parts, sheets, spaceMm + curveMargin)')
+        expect(page).toContain('capacityReport(parts, model.sheets, spaceMm + curveMargin)')
     })
 })

@@ -494,6 +494,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const spacingTooLarge = e?.__spacingTooLarge || null
             const errorCode = e?.message === 'local_geometry_missing' ? 'geometry_missing'
                 : e?.message === 'sheet_shape_missing' ? 'sheet_shape_missing'
+                : e?.message === 'sheet_shape_unreadable' ? 'sheet_shape_unreadable'
                 : isCapacity ? 'capacity_exceeded'
                 : tooLarge ? 'part_too_large'
                 : spacingTooLarge ? 'spacing_too_large'

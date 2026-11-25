@@ -1,12 +1,14 @@
 
 import { computed, customRef, reactive, readonly } from 'vue'
 import { processingType } from '~~/constants/files.constants'
-import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH } from '~/utils/units'
+import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH, unitLabel } from '~/utils/units'
 import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
 import { exceedsMaxSheets } from '~/utils/capacityPanel'
 import { flagOn } from '~/utils/runtimeFlag'
 import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
+import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
+import { isUntouchedFactorySheet, factorySheetOf } from '~/utils/factorySheet'
 
 const { actions } = globalStore
 const { getProjects, setModalNestData } = actions
@@ -154,6 +156,11 @@ function createFilesState() {
         // Nombre de refus de soumission posés (nestError) : le texte peut être le
         // même d'un refus au suivant, la page a besoin d'un événement, pas d'un texte.
         nestRefusals: 0,
+        // Slug de la tôle importée qui a REMPLACÉ la tôle d'usine intacte (note unique des réglages).
+        factorySheetReplaced: '',
+        // Ce qui a été remplacé, figé au remplacement : { w, h, unit } (le texte dit
+        // la bonne tôle même si l'unité change ensuite).
+        factorySheetReplacedLabel: null,
         // Z1 (vérif 2026-09-05) : payload structuré du refus 422 capacité
         // (aire gonflée > seuil) — {reason, ratio, sheetsNeeded,
         // maxPartsAtSpacing, maxSpacingForFitMm} pour le bandeau à leviers.
@@ -432,6 +439,8 @@ function setProjectFiles(files, path, state = filesState()) {
         // relançait (un crédit consommé) avec les chiffres de A.
         state.nestUnfit = null
         state.nestError = ''
+        state.factorySheetReplaced = ''
+        state.factorySheetReplacedLabel = null
         // Params du projet visité : son snapshot s'il existe (l'utilisateur
         // était déjà passé), sinon les curated defaults posés au montage
         // (démo), sinon les défauts d'usine.
@@ -1089,6 +1098,8 @@ function updateSheet(index, patch) {
 function addSheet() {
     const state = filesState()
     const sheets = normalizedSheets(state.params)
+    // Au plafond de formats : le bouton est grisé, ceci n'est qu'un filet.
+    if (sheets.length >= MAX_SHEET_FORMATS) return
     const last = sheets[sheets.length - 1] || { ...DEFAULT_SHEET.mm, count: '1' }
     // Une tôle simple : la copie d'une tôle importée ne reprend pas son
     // shapeId (width/height = sa boîte englobante, éditables).
@@ -1121,9 +1132,21 @@ function shapeSheetEntry(record, count) {
  * entrent dans les réglages (donc dans le snapshot sessionStorage) ; la
  * géométrie reste dans IndexedDB (localSheetsStore).
  */
-function addSheetFromShape(record) {
+function addSheetFromShape(record, { hasResult = false } = {}) {
     const state = filesState()
     const sheets = normalizedSheets(state.params)
+    // --- Tôle d'usine intacte REMPLACÉE (à valider par le propriétaire) : ce bloc,
+    // `factorySheetReplaced` et la note des réglages s'enlèvent ensemble. Sans
+    // résultat encore : un calcul déjà fait garde sa tôle, l'import s'ajoute.
+    if (!hasResult && isUntouchedFactorySheet(sheets, state.paramsUnit)) {
+        const factory = factorySheetOf(state.paramsUnit)
+        state.params = { ...state.params, sheets: [shapeSheetEntry(record, 1)] }
+        state.factorySheetReplaced = record.slug
+        state.factorySheetReplacedLabel = { w: factory.width, h: factory.height, unit: unitLabel(state.paramsUnit) }
+        scheduleSnapshotPersist()
+        return
+    }
+    // --- fin du bloc
     state.params = { ...state.params, sheets: [...sheets, shapeSheetEntry(record, 1)] }
     scheduleSnapshotPersist()
 }
@@ -1282,6 +1305,12 @@ async function nest(slug) {
             state.nestError = ''
             state.nestUnfit = null
             state.demoQuotaReached = false
+            // Défense (le bouton Nest est déjà grisé) : trop de formats. Refus
+            // SYNCHRONE : aucun await avant le POST, le corps part tel qu'au clic.
+            if (normalizedSheets(state.params).length > MAX_SHEET_FORMATS) {
+                refuseSubmission('nest.error.tooManyFormats')
+                return
+            }
             const data = await $fetch(API_ROUTES.NEST(slug), {
                 method: 'POST',
                 headers: {
@@ -1303,6 +1332,12 @@ async function nest(slug) {
                 // sur le projet soumis.
                 if (!stillOnSubmittedProject()) return
                 state.nestUnfit = error?.data?.data?.unfit || null
+                return
+            }
+            if (error?.data?.statusMessage === 'too_many_formats') {
+                // Plafond de formats (400, avant toute charge) : le client grise Nest
+                // d'ordinaire avant ; ici il a été contourné.
+                if (stillOnSubmittedProject()) refuseSubmission('nest.error.tooManyFormats')
                 return
             }
             if (error?.data?.statusMessage === 'too_many_sheets') {
@@ -1409,6 +1444,11 @@ export const filesStore = readonly({
         sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),
         nestError: getter((state) => state.nestError),
         nestRefusals: getter((state) => state.nestRefusals),
+        // Plus de formats que le serveur n'en prend : refusé ici avant le POST.
+        sheetFormatsTooMany: getter((state) => normalizedSheets(state.params).length > MAX_SHEET_FORMATS),
+        sheetFormatsAtLimit: getter((state) => normalizedSheets(state.params).length >= MAX_SHEET_FORMATS),
+        factorySheetReplaced: getter((state) => state.factorySheetReplaced),
+        factorySheetReplacedLabel: getter((state) => state.factorySheetReplacedLabel),
         nestUnfit: getter((state) => state.nestUnfit),
         nestBusy: getter((state) => state.nestBusy),
         params: getter((state) => state.params),

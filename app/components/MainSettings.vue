@@ -84,6 +84,7 @@
                 </div>
                 <button
                     class="size__add"
+                    :disabled="formatsAtLimit"
                     @click="addSheet"
                 >
                     {{ t('settings.addSheet') }}
@@ -94,6 +95,7 @@
                     v-if="isLocalProject"
                     class="size__add size__import"
                     data-testid="settings-import-sheet"
+                    :disabled="formatsAtLimit"
                     @click="openImport"
                 >
                     <svg class="size__importIcon" viewBox="0 0 16 16" aria-hidden="true">
@@ -101,6 +103,13 @@
                     </svg>
                     {{ t('settings.importSheet') }}
                 </button>
+                <p v-if="formatsAtLimit" class="size__rule" data-testid="settings-formats-limit">
+                    {{ t('settings.sheetFormatsLimit', { max: MAX_SHEET_FORMATS }) }}
+                </p>
+                <!-- Tôle d'usine intacte remplacée par l'import : dit une fois. -->
+                <p v-if="factorySheetNote" class="size__rule" data-testid="settings-factory-replaced">
+                    {{ factorySheetNote }}
+                </p>
                 </section>
                 <!-- B.4 / masterplan 3.10 : l'espacement se règle par ses deux
                      causes — kerf (largeur de coupe) et sécurité (marge par
@@ -237,6 +246,7 @@
 
 <script setup>
     import { DEFAULT_SHEET, SHEET_PRESETS } from '~/utils/units'
+    import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
     import { holesDisabledHintVisible } from '~/utils/holesHint'
     import { DEMO_MAX_DIRECTIONS, DEMO_PROJECT_SLUG, DEMO_WALK_CHOICES, resolveDemoWalks } from '~~/shared/constants/demo.constants'
     import { displayDirectionArrow } from '~/utils/sheetView'
@@ -266,6 +276,20 @@
     // Tôle importée d'un DXF : projet local seulement. Entrée (« Importer »),
     // édition des zones (ligne `index`), et suppression avec son enregistrement.
     const isLocalProject = computed(() => Boolean(unref(getters.projectLocal)))
+    // Plafond de formats (le serveur refuse au-delà) : on n'en ajoute plus.
+    const formatsAtLimit = computed(() => Boolean(unref(getters.sheetFormatsAtLimit)))
+    // Note unique : la tôle d'usine intacte a été remplacée par la tôle importée.
+    // Elle disparaît dès que la liste change (autre ligne, autre tôle).
+    const factorySheetNote = computed(() => {
+        const id = unref(getters.factorySheetReplaced)
+        const list = sheets.value
+        if (!id || list.length !== 1 || list[0]?.shapeId !== id) return ''
+        // Chiffres figés au remplacement : après un changement d'unité, la phrase
+        // nomme encore la tôle réellement remplacée.
+        const replaced = unref(getters.factorySheetReplacedLabel)
+        if (!replaced) return ''
+        return t('settings.factorySheetReplaced', replaced)
+    })
     const importOpen = ref(false)
     const importIndex = ref(null)
     const importSlug = ref('')
@@ -571,11 +595,16 @@ const spacingBelowKerf = computed(() => {
                 background-color 0.3s;
 
             @media (hover: hover) {
-                &:hover {
+                &:hover:not(:disabled) {
                     border-color: var(--accent-primary);
                     color: var(--accent-primary);
                     background-color: color-mix(in srgb, var(--accent-primary) 5%, transparent);
                 }
+            }
+
+            &:disabled {
+                opacity: 0.5;
+                cursor: not-allowed;
             }
         }
 

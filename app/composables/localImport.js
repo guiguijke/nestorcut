@@ -12,6 +12,7 @@ import {
     IMPORT_MAX_ENTITIES,
 } from './geometryClient'
 import { drawingExtent, resolveScale } from './advancedImport'
+import { blockOutlineNumbers, partOutlineNumbers } from '../utils/outlineStats'
 import { makeLocalFileSlug } from './localFilesStore'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import {
@@ -898,6 +899,9 @@ export function localRecordToUiFile(record) {
         dxfUrl = null
     }
     const block = (record.parts || []).length > 1 ? blockSummary(record.parts) : null
+    // Aire et périmètre du contour (calculés ICI depuis l'anneau stocké, jamais lus
+    // de l'enregistrement : les fiches des versions précédentes les ont aussi).
+    const blockNumbers = block ? blockOutlineNumbers(record.parts.map((p) => p.coordinates ?? p.coords)) : null
     return {
         slug: record.slug,
         name: record.name,
@@ -912,9 +916,10 @@ export function localRecordToUiFile(record) {
             width: Math.round(p.width * 10) / 10,
             height: Math.round(p.height * 10) / 10,
             color: p.color,
+            ...partOutlineNumbers(p.coordinates ?? p.coords),
         })),
         // E4-a : résumé bloc, ADDITIF (fiches à une pièce inchangées).
-        ...(block ? { block } : {}),
+        ...(block ? { block: { ...block, ...blockNumbers } } : {}),
         // E4-b/E4-c : drapeau d'échelle (montre « Réinitialiser ») et
         // parent d'éclatement (héritage de quantité) — additifs.
         importScaleApplied: record.importScaleApplied === true,

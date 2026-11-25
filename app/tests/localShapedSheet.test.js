@@ -201,10 +201,17 @@ describe('buildLocalPayload — tôle importée', () => {
             [{ width: 100, height: 200, count: 1, shapeId: SHEET_ID }],
             { deps: {} },
         )).rejects.toThrow('sheet_shape_missing')
-        // Le lecteur lui-même qui échoue (IndexedDB indisponible).
+    })
+
+    it('lecture refusée (IndexedDB fermée, bloquée) => sheet_shape_unreadable, pas « absente »', async () => {
         await expect(build(
             [{ width: 100, height: 200, count: 1, shapeId: SHEET_ID }],
             { deps: { getSheetRecord: async () => { throw new Error('indexeddb_unavailable') } } },
+        )).rejects.toThrow('sheet_shape_unreadable')
+        // Un enregistrement absent reste « absent » (rendu null, pas levé).
+        await expect(build(
+            [{ width: 100, height: 200, count: 1, shapeId: SHEET_ID }],
+            { deps: { getSheetRecord: async () => null } },
         )).rejects.toThrow('sheet_shape_missing')
     })
 

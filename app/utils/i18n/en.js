@@ -262,6 +262,7 @@ export default {
     'settings.directions.paidHint': 'One direction = one best layout. Check more to compare several proposals.',
     'nest.computing': 'Computing…',
     'nest.error.maxSheets': 'Too many sheets: at most {n} sheets per job.',
+    'nest.error.tooManyFormats': 'Too many sheet types: at most {max} sheet types per calculation. Remove one and try again.',
     'nest.error.concurrent': 'A nesting job is already running — wait for it to finish before starting another.',
     'nest.error.generic': 'The nesting request failed — please try again.',
     // Z1 (vérif 2026-09-05) : bandeau refus capacité (leviers + actions).
@@ -310,7 +311,8 @@ export default {
     'privacy.status.cloud': 'Download your DXF — sources and results are deleted after 24 h.',
     'privacy.status.vault': 'Files are encrypted on our side. Without your key file, nobody can read them — including us, outside a work session.',
     'localImport.missingGeometry': 'These parts are in the other browser. Re-import them here — nothing was sent to us.',
-    'localImport.missingSheetShape': 'The imported sheet for this job is in the other browser. Import it again here — nothing was sent to us.',
+    'localImport.missingSheetShape': 'The imported sheet for this job is in another browser, or was removed in another tab. Import it again here — nothing was sent to us.',
+    'localImport.unreadableSheetShape': 'This browser could not read the imported sheet back. Reload the page or import it again — nothing was sent to us.',
     'localImport.dwgRejected': 'DWG files are converted on our servers — pick “Our servers” for this file.',
     'localImport.unsupportedType': 'Unsupported file type — DXF or SVG only on this device.',
     'localImport.parseError': 'This file could not be parsed in the browser — try “Our servers”.',
@@ -464,6 +466,8 @@ export default {
     'localMode.capacityExceeded': 'These parts do not fit the declared sheets at this spacing — add a sheet, reduce the spacing or remove parts. The nesting was refunded.',
     // Lot A1 (audit P3-4/P3-6d) : refus ACTIONNABLES du builder local.
     'localMode.partTooLarge': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+    'localMode.partTooLargeShape': 'Part "{file}" ({w} × {h} mm) does not fit inside the outline of the imported sheet at this spacing, even rotated to the allowed angles — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
+    'localMode.partTooLargeShapeMargin': 'Part "{file}" ({w} × {h} mm) does not fit inside the outline of the imported sheet at this spacing ({space} mm, plus {margin} mm margin for curves), even rotated to the allowed angles — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.partTooLargeMargin': 'Part "{file}" ({w} × {h} mm) does not fit any declared sheet at this spacing ({space} mm, plus {margin} mm margin for curves) — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.partTooLargePlain': 'A part does not fit any declared sheet at this spacing — use a larger sheet, allow more rotations, or reduce spacing. The nesting was refunded.',
     'localMode.spacingTooLarge': 'Spacing is too large for this job (the initial strip would be empty) — reduce the spacing or add more parts/sheets. The nesting was refunded.',
@@ -620,6 +624,7 @@ export default {
     'project.nestingInProgress': 'nesting in progress',
     'project.minSheet':
         'The biggest part needs a sheet of at least {w} × {h} {unit} — no declared sheet type is large enough.',
+    'project.sheetShapeMissing': 'The shape of the sheet "{name}" cannot be found or read in this browser. Import it again.',
     'project.changeToRegenerate': 'Change settings or files to generate again',
 
     'time.justNow': 'just now',
@@ -997,6 +1002,8 @@ export default {
     'licences.group.engine': 'Nesting engine (Rust)',
     // Lot 3 tôle importée : fenêtre d’import (DXF) et liste des tôles.
     'settings.importSheet': 'Import a sheet (DXF)',
+    'settings.sheetFormatsLimit': 'Limit reached: {max} sheet types per calculation.',
+    'settings.factorySheetReplaced': 'The default {w} × {h} {unit} sheet was replaced.',
     'settings.sheetShape.size': 'Size',
     'settings.sheetShape.badge': 'Imported outline',
     'settings.sheetShape.editZones': 'Edit zones and defects',

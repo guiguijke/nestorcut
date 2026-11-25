@@ -210,7 +210,7 @@
             {{ t(nestRequestError) }}
         </div>
         <div v-if="nestSubmitError" ref="nestRefusalEl" class="content__error" data-testid="nest-refusal">
-            {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}
+            {{ t(nestSubmitError, { n: fmtNumber(MAX_SHEETS_PER_JOB, 0), max: MAX_SHEET_FORMATS }) }}
         </div>
         <div class="atelier__cta">
             <MainButton
@@ -230,6 +230,12 @@
                  grisé, avant tout clic (en bas de page il sortait de l'écran). -->
             <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
                 {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+            </p>
+            <p v-if="missingSheetNames.length && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="sheet-shape-missing" role="alert">
+                {{ t('project.sheetShapeMissing', { name: missingSheetNames[0] }) }}
+            </p>
+            <p v-if="sheetFormatsTooMany && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="too-many-formats" role="alert">
+                {{ t('nest.error.tooManyFormats', { max: MAX_SHEET_FORMATS }) }}
             </p>
             <p v-if="ctaHint && (sizesIsAvailable || nestRequestError)" class="atelier__cta-hint">{{ ctaHint }}</p>
             <!-- D26 : INFORMATION sans bouton — un compte Free télécharge
@@ -254,9 +260,16 @@ import { safetyPatchForTargetMm } from "~/utils/spacingParams";
 import { capacityPanelModel } from "~/utils/capacityPanel";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
-import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB } from "~~/shared/constants/payment.constants";
+import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB, MAX_SHEET_FORMATS } from "~~/shared/constants/payment.constants";
 import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
 import { computeSpacingMargin } from "~/composables/localPayloadBuilder";
+import {
+    preflightParts,
+    preflightSheetsOf,
+    sheetFigure,
+    SHAPE_UNREADABLE,
+    shapeStatsFromShape,
+} from "~/utils/preflightModel";
 import { isLocalComputeEnabled } from "~/composables/localCompute";
 import { hasActiveJob, progressFor } from "~/composables/localSolverRegistry";
 import { invalidateLocalRecords } from "~/composables/localHydrate";
@@ -458,6 +471,7 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
                 h: localTooLarge.value.height,
                 ...(localTooLarge.value.margin != null
                     ? { space: localTooLarge.value.space, margin: localTooLarge.value.margin } : {}),
+                ...(localTooLarge.value.shape ? { shape: true } : {}),
             }
         : null,
 }));
@@ -525,6 +539,7 @@ watch(
               : p.error === 'entity_limit' ? 'entity_limit'
               : p.error === 'geometry_missing' ? 'geometry_missing'
               : p.error === 'sheet_shape_missing' ? 'sheet_shape_missing'
+              : p.error === 'sheet_shape_unreadable' ? 'sheet_shape_unreadable'
               : p.error === 'all_alternatives_invalid' ? 'all_alternatives_invalid'
               : p.error === 'capacity_exceeded' ? 'capacity_exceeded'
               : p.error === 'item_geometry' ? 'item_geometry'
@@ -577,32 +592,37 @@ const { setProjectFiles, setProjectName, nest, getProject, consumePendingLocalFi
 const filesCount = computed(() => filesGetters.filesCount);
 // C06 : « 900 pièces · 2 fichiers » — les deux compteurs honnêtes.
 const projectFilesCount = computed(() => (filesGetters.projectFiles || []).length);
-const partCoords = (p) => p.coordinates ?? p.coords ?? (
-    p.width && p.height
-        ? [[0, 0], [p.width, 0], [p.width, p.height], [0, p.height], [0, 0]]
-        : []
-)
+// Formes des tôles importées, lues d'IndexedDB (voir le watcher plus bas) :
+// { [shapeId]: { widthMm, heightMm, usableAreaMm2, perimeterMm } | null | SHAPE_UNREADABLE }.
+// Absent = pas encore lu ; null = enregistrement absent ou inutilisable ; SHAPE_UNREADABLE =
+// lecture refusée. Des nombres seulement, bruts : aucun suivi profond de Vue.
+const shapeStats = shallowRef({});
+const preflightSheets = computed(() => preflightSheetsOf(unref(currentSheets), unref(shapeStats), displayToMm));
 const preflightReport = computed(() => {
     const files = projectFiles.value || []
     if (!unref(filesCount) || !files.length) return null
-    const parts = []
-    for (const f of files) {
-        const count = Number(f.count) || 0
-        if (!count) continue
-        for (const p of f.parts || []) parts.push({ coords: partCoords(p), count })
-    }
+    const model = unref(preflightSheets)
+    // Tôle importée : pas un seul chiffre tant que sa forme n'est pas lue (en attente,
+    // absente ou illisible). Sans tôle importée : les chiffres d'avant, inchangés.
+    if (model.imported && model.state !== 'ready') return null
+    const parts = preflightParts(files, model.imported)
     const p = unref(params)
-    const sheets = unref(currentSheets).map((s) => ({
-        width: displayToMm(Number(String(s.width).replace(',', '.')) || 0),
-        height: displayToMm(Number(String(s.height).replace(',', '.')) || 0),
-        count: Number(s.count) || 1,
-    }))
     // Même espacement que le worker et le calcul sur l'appareil : demandé +
     // marge de courbes (0 pour des rectangles ou un espacement 0).
     const spaceMm = displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0)
     const curveMargin = computeSpacingMargin(files.filter((f) => Number(f.count) > 0), spaceMm)
-    return capacityReport(parts, sheets, spaceMm + curveMargin)
+    return capacityReport(parts, model.sheets, spaceMm + curveMargin)
 })
+// Le chiffre « ≈ n tôles » : sans tôle importée toujours, comme avant ; avec une
+// tôle importée seulement si la forme est lue et que le rapport existe.
+const sheetCountFigure = computed(() => sheetFigure({
+    imported: unref(preflightSheets).imported,
+    state: unref(preflightSheets).state,
+    report: unref(preflightReport),
+}));
+// Tôle importée absente de ce navigateur : dit en clair, Nest grisé. (Une lecture
+// REFUSÉE ne grise rien : le calcul relit et porte son propre message.)
+const missingSheetNames = computed(() => unref(preflightSheets).missing);
 const partsFilesLine = computed(() => {
     const nParts = unref(filesCount)
     if (!nParts) return ''
@@ -630,7 +650,8 @@ const preflightLine = computed(() => {
     const nParts = unref(filesCount)
     if (!nParts || !files.length) return ''
     const report = preflightReport.value
-    const nSheets = report?.sheetsNeeded ?? 1
+    const figure = unref(sheetCountFigure)
+    const nSheets = figure.n
     // Lot J11-bis (R6) : le MÊME compte que l'en-tête — fichiers
     // DÉPOSÉS, pas fiches (un .job à N sections = 1 fichier déposé).
     const jobNames = new Set()
@@ -649,13 +670,19 @@ const preflightLine = computed(() => {
     if (report?.totalInflatedMm2 > 0) {
         bits.push(t('project.preflightArea', { area: fmtNumber(report.totalInflatedMm2 / 1e6, 2) }))
     }
-    bits.push(tp('project.preflightSheets', nSheets))
-    bits.push(t('project.preflightDensity', { pct: Math.round((REFERENCE_PACKING || 0.85) * 100) }))
+    // Ni nombre de tôles ni densité tant que le chiffre n'est pas juste (forme
+    // pas lue, illisible, pièce hors contour).
+    if (figure.show) {
+        bits.push(tp('project.preflightSheets', nSheets))
+        bits.push(t('project.preflightDensity', { pct: Math.round((REFERENCE_PACKING || 0.85) * 100) }))
+    }
     return bits.join(' · ')
 })
 const ctaHint = computed(() => {
     if (!unref(filesCount)) return ''
-    const n = preflightReport.value?.sheetsNeeded ?? 1
+    const figure = unref(sheetCountFigure)
+    if (!figure.show) return ''
+    const n = figure.n
     const modeKey = PRIVACY_CHIP_KEY[privacyMode.value]
     const mode = modeKey ? t(modeKey) : ''
     return tp('nest.ctaHint', n, { mode })
@@ -918,32 +945,83 @@ const currentSheets = computed(() => {
 // des réglages (qui ne portent que shapeId, nom et boîte). Illisible ou absente :
 // le panneau garde son rectangle. Une entrée par shapeId des panneaux affichés.
 const idleShapes = ref({});
+// Formes à relire : celles des panneaux dessinés (la scène en montre six au
+// plus) ET de toute tôle importée qui servira (jusqu'à dix formats) : l'estimation
+// a besoin des secondes aussi.
+const shapeIdsWanted = computed(() => [...new Set([
+    ...idlePanes.value.panes.map((p) => p.shapeId),
+    ...unref(currentSheets).filter((s) => Math.trunc(Number(s?.count)) > 0).map((s) => s?.shapeId),
+].filter((id) => typeof id === "string" && id))]);
+// Relecture d'une forme dont la LECTURE a été refusée (IndexedDB fermée un instant) :
+// une fois, environ une seconde plus tard, puis à chaque retour de la fenêtre au premier plan.
+const shapeRetryTick = ref(0);
+let shapeRetried = false;
+let shapeRetryTimer = null;
+let shapeBaseKey = "";
+const retryUnreadableShapes = () => {
+    if (Object.values(shapeStats.value).some((v) => v === SHAPE_UNREADABLE)) shapeRetryTick.value++;
+};
+onMounted(() => window.addEventListener("focus", retryUnreadableShapes));
+onBeforeUnmount(() => {
+    window.removeEventListener("focus", retryUnreadableShapes);
+    clearTimeout(shapeRetryTimer);
+});
 watch(
     // La révision de forme (une retouche garde le même shapeId) fait relire le dessin.
-    () => `${idlePanes.value.panes.map((p) => p.shapeId || "").join("|")}#${filesStore.getters.shapeRevision}`,
+    () => [shapeIdsWanted.value.join("|"), filesStore.getters.shapeRevision, shapeRetryTick.value].join("#"),
     async (fullKey) => {
-        const key = fullKey.slice(0, fullKey.lastIndexOf("#"));
+        const [key, revisionKey] = fullKey.split("#");
+        const baseKey = `${key}#${revisionKey}`;
+        if (baseKey !== shapeBaseKey) {
+            shapeBaseKey = baseKey;
+            shapeRetried = false;
+        }
         const revision = filesStore.getters.shapeRevision;
         const ids = [...new Set(key.split("|").filter(Boolean))];
         idleShapes.value = {};
+        shapeStats.value = {};
         if (!ids.length || !import.meta.client) return;
         const { getSheet } = await import("~/composables/localSheetsStore");
         const loaded = {};
+        // Les mêmes lectures servent l'estimation, trois états : lue ; absente ou
+        // inutilisable (null) ; lecture refusée (SHAPE_UNREADABLE). Jamais la boîte des réglages.
+        const stats = {};
         for (const id of ids) {
+            stats[id] = null;
+            let record;
             try {
-                const record = await getSheet(id);
-                if (!record) continue;
-                const shape = engineBinShape(record);
+                record = await getSheet(id);
+            } catch {
+                stats[id] = SHAPE_UNREADABLE;
+                continue;
+            }
+            if (!record) continue;
+            let shape;
+            try {
+                shape = engineBinShape(record);
+            } catch {
+                continue; // inutilisable : comme absente
+            }
+            stats[id] = markRaw(shapeStatsFromShape(shape));
+            try {
                 const paths = shapeToDrawPaths(displayShape(shape), shape.heightMm);
                 if (paths) loaded[id] = { w: shape.widthMm, h: shape.heightMm, ...paths };
             } catch {
-                // illisible : rectangle
+                // dessin impossible : rectangle au repos, l'estimation garde ses nombres
             }
         }
         // Obsolète si la liste des tôles a changé pendant la lecture.
-        const now = [...new Set(idlePanes.value.panes.map((p) => p.shapeId).filter(Boolean))];
+        const now = shapeIdsWanted.value;
         if (revision !== filesStore.getters.shapeRevision) return; // retouchée pendant la lecture : la relecture suivante prend la main
-        if (now.length === ids.length && now.every((id) => ids.includes(id))) idleShapes.value = loaded;
+        if (now.length === ids.length && now.every((id) => ids.includes(id))) {
+            idleShapes.value = loaded;
+            shapeStats.value = stats;
+            if (!shapeRetried && Object.values(stats).includes(SHAPE_UNREADABLE)) {
+                shapeRetried = true;
+                clearTimeout(shapeRetryTimer);
+                shapeRetryTimer = setTimeout(retryUnreadableShapes, 1000);
+            }
+        }
     },
     { immediate: true }
 );
@@ -1020,7 +1098,9 @@ const capacityPanel = computed(() => {
         sheets: unref(currentSheets),
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
-        preflightSheets: unref(preflightReport)?.sheetsNeeded ?? null,
+        // Tôle importée : null, le panneau garde le chiffre du refus, calculé avec
+        // la vraie forme. Rectangles : le chiffre du bouton, comme avant.
+        preflightSheets: unref(sheetCountFigure).panelSheets,
     });
 });
 // C04 : le panneau est ancré sous le bouton Nest — sur un petit viewport il
@@ -1058,7 +1138,7 @@ const ctaImportedNote = computed(() =>
     importedSheetLockVisible(unref(downloadState), unref(projectHasImportedSheet))
         ? t('nest.importedSheetNote') : '');
 const ctaFreeNote = computed(() =>
-    !unref(ctaImportedNote) && freeDownloadNoteVisible(unref(downloadState), unref(preflightReport)?.sheetsNeeded)
+    !unref(ctaImportedNote) && freeDownloadNoteVisible(unref(downloadState), unref(sheetCountFigure).show ? unref(preflightReport)?.sheetsNeeded : undefined)
         ? unref(freeDownloadNoteText) : '');
 // Pas de note Free dans le panneau de refus : rien n'est calculé ni livré, la
 // limite de téléchargement ne concerne pas ce refus.
@@ -1133,8 +1213,11 @@ watch(capacityActionRequest, async (req) => {
 // paliers, démo comprise. Le SERVEUR la refuse à l'enqueue (400
 // too_many_sheets, avant toute charge) — ceci n'est que le miroir UX.
 const sheetCountTooHigh = computed(() => filesGetters.sheetCountTooHigh)
+// Plus de formats que le serveur n'en prend (MAX_SHEET_FORMATS) : refusé avant
+// le POST, jamais tronqué en silence.
+const sheetFormatsTooMany = computed(() => filesGetters.sheetFormatsTooMany)
 const btnIsDisable = computed(() => {
-    return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(sheetCountTooHigh) || unref(nestBusy)
+    return Boolean(unref(nestRequestError)) || unref(filesCount) < 1 || !unref(isNewParams) || !unref(resultsList) || !unref(sizesIsAvailable) || unref(missingSheetNames).length > 0 || unref(sheetFormatsTooMany) || unref(sheetCountTooHigh) || unref(nestBusy)
 })
 const addFiles = (files) => {
     jobScroll.expectImport()

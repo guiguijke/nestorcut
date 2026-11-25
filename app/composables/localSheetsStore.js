@@ -51,6 +51,11 @@ function openDb() {
                 db.close()
                 dbPromise = null
             }
+            // Connexion fermée par le navigateur (stockage purgé, profil fermé) :
+            // sans ceci la connexion gardée en cache échouait jusqu'au rechargement.
+            db.onclose = () => {
+                dbPromise = null
+            }
             resolve(db)
         }
         req.onerror = () => reject(req.error)

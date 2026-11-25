@@ -318,6 +318,7 @@ import { themeType } from '~~/constants/theme.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { MAX_UPLOAD_FILE_BYTES } from '~~/shared/constants/upload.constants'
 import { filesStore } from '~/composables/files'
+import { belongsToProject } from '~/utils/liveJob'
 import {
     bindCut, contoursOf, cutKeyOf, hasDefectMarks, hasValidDrawn, recordCounts, ringBbox, scaleContours,
 } from '~/utils/sheetShape'
@@ -950,7 +951,11 @@ const confirm = async () => {
         return
     }
     if (props.replaceIndex != null) actions.replaceSheetShape(props.replaceIndex, record)
-    else actions.addSheetFromShape(record)
+    else {
+        // Sans résultat encore, une tôle d'usine intacte est remplacée par l'import (files.js).
+        const hasResult = (globalStore.getters.resultsList || []).some((r) => belongsToProject(r, props.projectSlug))
+        actions.addSheetFromShape(record, { hasResult })
+    }
     // Des nombres seulement (en chaînes) : aucune géométrie ne part.
     openedSig = savedSig // enregistré : rien à perdre
     trackEvent('sheet_import_confirm', { zones: String(record.forbidden.length), defects: String(record.drawn?.length ?? 0) })

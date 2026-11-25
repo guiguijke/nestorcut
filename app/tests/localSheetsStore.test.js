@@ -169,6 +169,17 @@ describe('base dediee nestorcut-sheets', () => {
         expect(typeof handles[1].onversionchange).toBe('function')
     })
 
+    it('close : une connexion fermée par le navigateur est rouverte au prochain appel', async () => {
+        await sheetsStore.saveSheet(makeRecord())
+        const handles = globalThis.indexedDB.open._handles
+        expect(typeof handles[0].onclose).toBe('function')
+        handles[0].onclose()
+        expect((await sheetsStore.getSheet('sheet-1'))?.name).toBe('Chute')
+        expect(globalThis.indexedDB.open._calls).toHaveLength(2)
+        expect(handles).toHaveLength(2)
+        expect(typeof handles[1].onclose).toBe('function')
+    })
+
     it('onblocked : rejette indexeddb_blocked, puis retente au prochain appel', async () => {
         globalThis.indexedDB.open._blocked = true
         await expect(sheetsStore.saveSheet(makeRecord())).rejects.toThrow('indexeddb_blocked')
@@ -343,8 +354,9 @@ describe('files.js — tôle importée', () => {
 
     const record = () => makeRecord({ id: 'shape-1', name: 'Disque 100' }, 23.5)
 
+    // Avec un résultat déjà là, l'import s'AJOUTE à la tôle d'usine (le remplacement : nestGuards.test.js).
     it('addSheetFromShape : shapeId, nom et boite englobante (mm) dans les réglages, pas de géométrie', () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         const sheets = store.getters.params.sheets
         expect(sheets).toHaveLength(2)
         expect(sheets[1]).toEqual({ width: '123.5', height: '60', count: '1', shapeId: 'shape-1', name: 'Disque 100' })
@@ -356,7 +368,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('updateSheet : width/height/shapeId/name ignorés sur une tôle importée, count éditable', () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         store.actions.updateSheet(1, { width: '1', height: '2', shapeId: 'autre', name: 'x', count: '3' })
         expect(store.getters.params.sheets[1]).toEqual({ width: '123.5', height: '60', count: '3', shapeId: 'shape-1', name: 'Disque 100' })
         // Une tôle ordinaire reste entièrement éditable.
@@ -365,7 +377,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('replaceSheetShape : révision de forme, et Nest redevient disponible même si le corps de la requête est inchangé', async () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         expect(store.getters.shapeRevision).toBe(0)
         await store.actions.nest('p')
         expect(store.getters.isNewParams).toBe(false)
@@ -381,7 +393,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('replaceSheetShape : change la forme, garde la quantité ; index invalide sans effet', () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         store.actions.updateSheet(1, { count: '4' })
         store.actions.replaceSheetShape(1, makeRecord({ id: 'shape-2', name: 'Autre' }))
         expect(store.getters.params.sheets[1]).toEqual({ width: '100', height: '60', count: '4', shapeId: 'shape-2', name: 'Autre' })
@@ -394,7 +406,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('validation des réglages (isInvalidParams via nestRequestError) : une tôle avec shapeId et nom est valide, une quantité invalide la rend invalide', () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         expect(store.getters.params.sheets[1]).toMatchObject({ shapeId: 'shape-1', name: 'Disque 100' })
         expect(store.getters.nestRequestError).toBe('')
         store.actions.updateSheet(1, { count: '0' })
@@ -404,7 +416,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('removeSheet et addSheet : la copie d une tôle importée est une tôle simple', () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         store.actions.addSheet()
         const last = store.getters.params.sheets.at(-1)
         expect(last).toEqual({ width: '123.5', height: '60', count: '1' })
@@ -413,7 +425,7 @@ describe('files.js — tôle importée', () => {
     })
 
     it('corps POST /nest : { width, height, count } + shapeId (chaîne courte) pour la tôle importée ; jamais de nom ni de géométrie', async () => {
-        store.actions.addSheetFromShape(record())
+        store.actions.addSheetFromShape(record(), { hasResult: true })
         store.actions.updateSheet(1, { count: '2' })
         await store.actions.nest('p')
         const call = fetchMock.mock.calls.find(([url]) => url === API_ROUTES.NEST('p'))
