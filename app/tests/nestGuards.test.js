@@ -221,6 +221,39 @@ describe('note « tôle remplacée » : dite une fois', () => {
         expect(store.getters.params.sheets.map((s) => s.shapeId)).toEqual(['shape-1'])
         expect(store.getters.factorySheetReplaced).toBe('')
     })
+
+    it('« Ajouter un type de tôle » puis son retrait non plus', () => {
+        store.actions.addSheetFromShape(record('shape-1'), { hasResult: false })
+        store.actions.addSheet()
+        store.actions.removeSheet(1)
+        expect(store.getters.factorySheetReplaced).toBe('')
+    })
+})
+
+describe('projet rouvert dans l’autre unité : conversion numérique, jamais un format voisin', () => {
+    beforeEach(() => setup([doneFile('f1', [{ width: 50, height: 50 }])]))
+    const sheetOf = () => store.getters.params.sheets.map(({ width, height, count }) => [width, height, count])
+
+    it('une vraie tôle de 1000 × 2000 revient à 1000 × 2000', () => {
+        store.actions.updateParams({ sheets: [{ width: '1000', height: '2000', count: '5' }] })
+        store.actions.syncParamsToUnit('inch', { restored: true })
+        expect(sheetOf()).toEqual([['39.37', '78.74', '5']])
+        store.actions.syncParamsToUnit('mm', { restored: true })
+        expect(sheetOf()).toEqual([['1000', '2000', '5']])
+    })
+
+    it('la tôle d’usine intacte devient celle de l’unité, et revient', () => {
+        store.actions.syncParamsToUnit('inch', { restored: true })
+        expect(sheetOf()).toEqual([['48', '96', '1']])
+        store.actions.syncParamsToUnit('mm', { restored: true })
+        expect(sheetOf()).toEqual([['1000', '2000', '1']])
+    })
+
+    it('le bouton d’unité garde sa règle (format régional)', () => {
+        store.actions.updateParams({ sheets: [{ width: '1000', height: '2000', count: '5' }] })
+        store.actions.syncParamsToUnit('inch')
+        expect(sheetOf()).toEqual([['48', '96', '5']])
+    })
 })
 
 describe('projet ouvert avec l’unité en pouces', () => {

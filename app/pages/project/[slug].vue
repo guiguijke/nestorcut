@@ -620,6 +620,7 @@ const sheetCountFigure = computed(() => sheetFigure({
     state: unref(preflightSheets).state,
     report: unref(preflightReport),
 }));
+const hasSheetcamFile = computed(() => (projectFiles.value || []).some((f) => f.sheetcamJobName && Number(f.count) > 0));
 // Tôle importée absente de ce navigateur : dit en clair, Nest grisé. (Une lecture
 // REFUSÉE ne grise rien : le calcul relit et porte son propre message.)
 const missingSheetNames = computed(() => unref(preflightSheets).missing);
@@ -1099,8 +1100,10 @@ const capacityPanel = computed(() => {
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
         // Une seule source : le chiffre du bouton. Sans chiffre (forme pas lue ou
-        // illisible), null : le panneau garde celui du refus.
-        preflightSheets: unref(sheetCountFigure).panelSheets,
+        // illisible), null : le panneau garde celui du refus. De même avec un `.job`
+        // sur une tôle importée : la page ne connaît pas la réserve d'amorce.
+        preflightSheets: unref(preflightSheets).imported && hasSheetcamFile.value
+            ? null : unref(sheetCountFigure).panelSheets,
     });
 });
 // C04 : le panneau est ancré sous le bouton Nest — sur un petit viewport il

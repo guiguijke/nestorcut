@@ -293,7 +293,7 @@ export default {
     "privacy.status.cloud": "Descarga tu DXF — los archivos de origen y los resultados se eliminan después de 24 h.",
     "privacy.status.vault": "Los archivos están cifrados de nuestra parte. Sin tu archivo de clave, nadie puede leerlos — nosotros incluidos, fuera de una sesión de trabajo.",
     "localImport.missingGeometry": "Estas piezas están en el otro navegador. Reimpórtalas aquí — no se ha enviado nada a nosotros.",
-    "localImport.missingSheetShape": "La chapa importada de este cálculo está en otro navegador, o se quitó en otra pestaña. Impórtala de nuevo aquí — no se ha enviado nada a nosotros.",
+    "localImport.missingSheetShape": "La chapa importada de este cálculo está en otro navegador, o se quitó en otra pestaña. Quítala de la lista de chapas y vuelve a importarla — no se ha enviado nada a nosotros.",
     "localImport.unreadableSheetShape": "El navegador no ha podido volver a leer la chapa importada. Recarga la página o impórtala de nuevo — no se ha enviado nada a nosotros.",
     "localImport.dwgRejected": "Los archivos DWG se convierten en nuestros servidores — elige \"Nuestros servidores\" para este archivo.",
     "localImport.unsupportedType": "Tipo de archivo no compatible — solo DXF o SVG en este dispositivo.",

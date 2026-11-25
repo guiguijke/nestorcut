@@ -93,7 +93,7 @@ describe('vue en direct : disposition partielle (calcul sur l’appareil)', () =
         expect(view.byClass('live__sheet-bg')[0].tag).toBe('path')
         const text = view.byClass('live__placeholder')[0]
         const size = Number.parseFloat(text.props.style.fontSize ?? String(text.props.style).match(/font-size:\s*([\d.]+)/)?.[1])
-        expect(size).toBeCloseTo(153 / 18, 6)
+        expect(size).toBeCloseTo(153 / 20, 6)
         // Une grande tôle garde la taille d'avant.
         const big = await mount({ liveLayout: frame([0, 1]), elapsed: 3 })
         const bigText = big.view.byClass('live__placeholder')[0]

@@ -320,7 +320,7 @@ export default {
     'privacy.status.cloud': 'Download your DXF — sources and results are deleted after 24 h.',
     'privacy.status.vault': 'Files are encrypted on our side. Without your key file, nobody can read them — including us, outside a work session.',
     'localImport.missingGeometry': 'These parts are in the other browser. Re-import them here — nothing was sent to us.',
-    'localImport.missingSheetShape': 'The imported sheet for this job is in another browser, or was removed in another tab. Import it again here — nothing was sent to us.',
+    'localImport.missingSheetShape': 'The imported sheet for this job is in another browser, or was removed in another tab. Remove it from the sheet list, then import it again — nothing was sent to us.',
     'localImport.unreadableSheetShape': 'This browser could not read the imported sheet back. Reload the page or import it again — nothing was sent to us.',
     'localImport.dwgRejected': 'DWG files are converted on our servers — pick “Our servers” for this file.',
     'localImport.unsupportedType': 'Unsupported file type — DXF or SVG only on this device.',

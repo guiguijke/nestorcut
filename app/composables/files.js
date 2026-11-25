@@ -9,6 +9,7 @@ import { flagOn } from '~/utils/runtimeFlag'
 import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
 import { isUntouchedFactorySheet, factorySheetOf } from '~/utils/factorySheet'
+import { SNAPSHOT_VERSION, snapshotUnit } from '~/utils/projectSnapshot'
 
 const { actions } = globalStore
 const { getProjects, setModalNestData } = actions
@@ -94,6 +95,7 @@ function snapshotCurrentProject() {
     const state = filesState()
     if (state.projectSlug == null) return
     projectSnapshots.set(state.projectSlug, {
+        v: SNAPSHOT_VERSION,
         params: JSON.parse(JSON.stringify(state.params)),
         paramsUnit: state.paramsUnit,
         countBySlug: Object.fromEntries(
@@ -448,7 +450,7 @@ function setProjectFiles(files, path, state = filesState()) {
             // withKerfDefaults : snapshot posé avant le chantier kerf
             // (B.4) — même espacement effectif après migration.
             state.params = withKerfDefaults(JSON.parse(JSON.stringify(snap.params)))
-            state.paramsUnit = snap.paramsUnit
+            state.paramsUnit = snapshotUnit(snap, getUnitState())
         } else if (!state.pendingCuratedDefaults) {
             state.params = factoryParams()
             state.paramsUnit = 'mm'
@@ -459,7 +461,9 @@ function setProjectFiles(files, path, state = filesState()) {
         // l'unité ne change pas). Les réglages de la démo, eux, sont posés par la page
         // déjà dans l'unité affichée. Au navigateur seulement : en SSR, le sélecteur
         // convertit au montage.
-        if ((snap || !state.pendingCuratedDefaults) && !import.meta.server) syncParamsToUnit(getUnitState())
+        if ((snap || !state.pendingCuratedDefaults) && !import.meta.server) {
+            syncParamsToUnit(getUnitState(), { restored: Boolean(snap) })
+        }
         state.pendingCuratedDefaults = false
     }
     scheduleFilesRefresh(path)
@@ -1182,8 +1186,11 @@ function replaceSheetShape(index, record) {
  * equivalent REGIONAL standard (1000×2000 mm -> 48×96", never
  * 39.37×78.74"); custom sizes and the spacing are converted numerically
  * (0.1 mm <-> 0.004" round-trips exactly through the display trimming).
+ * `restored` : réglages d'un projet simplement ROUVERT dans l'autre unité. Une vraie
+ * tôle de 1000 × 2000 ne doit pas devenir un 48 × 96 (puis 1250 × 2500 au retour) :
+ * conversion numérique ; seule la tôle d'usine intacte devient celle de l'unité.
  */
-function syncParamsToUnit(toUnit) {
+function syncParamsToUnit(toUnit, { restored = false } = {}) {
     const state = filesState()
     if (!toUnit || state.paramsUnit === toUnit) return
     const fromUnit = state.paramsUnit
@@ -1213,7 +1220,8 @@ function syncParamsToUnit(toUnit) {
             const mm = (v) => (fromUnit === 'inch' ? Number(v) * MM_PER_INCH : Number(v))
             return { ...s, width: shapeDisplayLength(mm(s.width), toUnit), height: shapeDisplayLength(mm(s.height), toUnit) }
         }
-        const eq = equivalentSheetPreset(s.width, s.height, fromUnit, toUnit)
+        const eq = !restored ? equivalentSheetPreset(s.width, s.height, fromUnit, toUnit)
+            : isUntouchedFactorySheet(sheets, fromUnit) ? factorySheetOf(toUnit) : null
         return eq ? { ...s, ...eq } : { ...s, width: conv(s.width), height: conv(s.height) }
     }
     const kerf = convFine(p.kerf)

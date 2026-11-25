@@ -63,14 +63,14 @@ export function hasActiveImportedSheet(settings) {
  *   importée donne sa boîte, son aire utile et son périmètre.
  * `state` : 'ready' ; 'pending' (une forme pas encore lue) ; 'unreadable' (une
  * lecture refusée) ; 'missing' (enregistrement absent ou inutilisable, noms dans
- * `missing`) ; 'inactive' (des tôles importées, toutes sans quantité : le champ est
- * vide le temps d'une saisie). Jamais un repli sur la boîte d'une tôle importée.
+ * `missing`) ; 'inactive' (une tôle importée et AUCUNE ligne avec une quantité : le
+ * champ est vide le temps d'une saisie). Jamais un repli sur la boîte d'une tôle importée.
  * @returns {{ sheets: object[], state: string, missing: string[], imported: boolean }}
  */
 export function preflightSheetsOf(settings, shapeStats, toMm) {
     const rows = settings || []
     const imported = hasActiveImportedSheet(rows)
-    const inactive = !imported && rows.some((row) => shapeIdOf(row))
+    const inactive = !rows.some(isActive) && rows.some((row) => shapeIdOf(row))
     const sheets = []
     const missing = []
     let pending = false

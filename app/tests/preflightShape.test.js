@@ -166,6 +166,9 @@ describe('estimation avec une tôle importée : les vraies aires, plus les boît
             // Le champ est vide le temps d'une saisie : aucun chiffre, jamais « 1 tôle ».
             expect(sheetFigure({ imported: model.imported, state: model.state, report: null })).toEqual({ show: false, n: 1, panelSheets: null })
         }
+        // Un rectangle actif à côté : son chiffre est dit, la ligne importée vide ne compte pas.
+        const mixed = preflightSheetsOf([mmRow(1000, 2000), shapedRow(SQ_ID, '')], {}, toMm)
+        expect([mixed.imported, mixed.state, mixed.sheets.length]).toEqual([false, 'ready', 1])
         // avec une autre ligne importée active, la ligne rectangle vide est écartée aussi
         const rows = [mmRow(300, 300, ''), sqRow()]
         expect(preflightSheetsOf(rows, sqStats(), toMm).sheets).toHaveLength(1)

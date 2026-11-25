@@ -685,7 +685,8 @@ function shapesByPane(frame, panes) {
 // règles, un seul format connu), pas un rectangle qui deviendrait un disque.
 const mainPaneShapes = computed(() => shapesByPane(best.value || Object.values(snapshots.value)[0], mainPanes.value));
 // Texte d'attente : en unités de la tôle, il doit tenir dans un petit panneau.
-const placeholderSize = (pane) => Math.min(32, pane.w / 18);
+// (le plus long, le français, mesure 18,8 fois la taille du caractère).
+const placeholderSize = (pane) => Math.min(32, pane.w / 20);
 const paneClipId = (cardKey, bin) => `${clipId}-${String(cardKey).replace(/[^a-zA-Z0-9_-]/g, '')}-${bin}`;
 const hatchViewId = `live-${clipId}`;
 const hatchId = (cardKey, bin) => liveHatchId(hatchViewId, cardKey, bin);

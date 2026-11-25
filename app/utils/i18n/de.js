@@ -291,7 +291,7 @@ export default {
     "privacy.status.cloud": "Laden Sie Ihre DXF herunter — Quelldateien und Ergebnisse werden nach 24 h gelöscht.",
     "privacy.status.vault": "Dateien sind bei uns verschlüsselt. Ohne Ihre Schlüsseldatei kann sie niemand lesen — wir eingeschlossen, außerhalb einer Arbeitssitzung.",
     "localImport.missingGeometry": "Diese Teile sind im anderen Browser. Importieren Sie sie hier erneut — es wurde nichts zu uns gesendet.",
-    "localImport.missingSheetShape": "Das importierte Blech dieser Berechnung ist in einem anderen Browser oder wurde in einem anderen Tab entfernt. Importieren Sie es hier erneut — es wurde nichts zu uns gesendet.",
+    "localImport.missingSheetShape": "Das importierte Blech dieser Berechnung ist in einem anderen Browser oder wurde in einem anderen Tab entfernt. Entfernen Sie es aus der Blechliste und importieren Sie es erneut — es wurde nichts zu uns gesendet.",
     "localImport.unreadableSheetShape": "Der Browser konnte das importierte Blech nicht erneut lesen. Laden Sie die Seite neu oder importieren Sie es erneut — es wurde nichts zu uns gesendet.",
     "localImport.dwgRejected": "DWG-Dateien werden auf unseren Servern konvertiert — wählen Sie für diese Datei \"Unsere Server\".",
     "localImport.unsupportedType": "Nicht unterstützter Dateityp — auf diesem Gerät nur DXF oder SVG.",
