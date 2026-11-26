@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from worker_common.geometry.cleanup import is_micro_void, ring_too_thin, strip_spurs
+from worker_common.geometry.cleanup import is_micro_void, join_free_ends, ring_too_thin, strip_spurs
 from worker_common.geometry.dxf_parser import convert_entity_to_shapely
 from worker_common.geometry.import_findings import NOTABLE_SAGITTA_MM
 
@@ -200,6 +200,22 @@ def _material_faces(faces: List[Polygon]) -> List[Polygon]:
     return material
 
 
+def _join_free_ends(noded, deadline=None):
+    """Linework noué (grille 1e-4) dont les bouts libres voisins sont réunis. Sans
+    un tel bout, rend l'objet reçu : rien ne change."""
+    lines = [list(g.coords) for g in getattr(noded, "geoms", [noded]) if g.geom_type == "LineString"]
+    moved = join_free_ends(lines, deadline)
+    if not moved:
+        return noded
+    joined = []
+    for line in lines:
+        pts = [moved.get(p, p) for p in line]
+        pts = [p for i, p in enumerate(pts) if i == 0 or p != pts[i - 1]]
+        if len(pts) > 1:
+            joined.append(LineString(pts))
+    return unary_union(joined)
+
+
 @dataclass(slots=True)
 class ClosedPolygon:
     geometry: Polygon
@@ -381,7 +397,7 @@ def build_geometry(drawing: Drawing, tolerance: float, deadline=None, stats=None
     if deadline is not None:
         deadline.check()
     merged_lines = set_precision(unary_union(linework), GRID_SIZE)
-    noded = unary_union(merged_lines)
+    noded = _join_free_ends(unary_union(merged_lines), deadline)
     if stats is None:
         faces = list(polygonize(noded))
     else:

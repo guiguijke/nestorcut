@@ -1,8 +1,13 @@
+import math
 from dataclasses import dataclass
+
+import numpy as np
+from ezdxf.math import arc_segment_count
 from shapely.geometry import Point, LineString, Polygon
 from shapely.geometry.base import BaseGeometry
 
 from ..logger import setup_logger
+from .cleanup import opens_on_grid
 
 logger = setup_logger("dxf_parser")
 
@@ -17,6 +22,24 @@ class DxfEntityGeometry:
 
 def _vec2(v):
     return Point(float(v[0]), float(v[1]))
+
+def _full_turn(entity, tol: float):
+    """Sommets d'un ARC d'un tour entier dont les deux angles, ramenés à [0, 360),
+    diffèrent d'un arrondi : ezdxf en fait un point. None si l'arc est sain.
+    Miroir de `flatten_primitive` (Rust)."""
+    start, stop = entity.dxf.start_angle, entity.dxf.end_angle
+    if not math.isclose(stop - start, 360.0):
+        return None
+    start %= 360
+    stop %= 360
+    if stop <= start:
+        stop += 360
+    if stop - start >= 180:
+        return None
+    stop += 360
+    count = arc_segment_count(abs(entity.dxf.radius), math.radians(stop - start), tol)
+    return entity.vertices(np.linspace(start, stop, count + 1))
+
 
 def flatten_entity(entity, tol: float):
     """
@@ -56,7 +79,8 @@ def flatten_entity(entity, tol: float):
         if radius < tol:
             pts = []
         else:
-            pts = [_vec2(p) for p in entity.flattening(sagitta=tol)]
+            full = _full_turn(entity, tol)
+            pts = [_vec2(p) for p in (entity.flattening(sagitta=tol) if full is None else full)]
 
     elif kind == "CIRCLE":
         pts = [_vec2(p) for p in entity.flattening(sagitta=tol)]
@@ -111,6 +135,10 @@ def convert_entity_to_shapely(entity, tol) -> DxfEntityGeometry | None:
         distance = first_point.distance(last_point)
         is_closed = distance < tol
         if is_closed:
+            # Un cercle calculé à 0 et à 360 degrés peut s'arrondir sur deux
+            # points de la grille : le dernier sommet redevient le premier.
+            if opens_on_grid([(p.x, p.y) for p in points]):
+                points[-1] = first_point
             shapely_geom = Polygon(points)
         else:
             shapely_geom = LineString(points)

@@ -13,11 +13,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from worker_common.geometry.cleanup import (
+    JOIN_STEPS,
     MICRO_VOID_AREA_MM2,
     MICRO_VOID_MIN_DIM_MM,
     MIN_PART_WIDTH_MM,
     SPUR_EPS_MM,
     is_micro_void,
+    join_free_ends,
+    opens_on_grid,
     ring_too_thin,
     strip_spurs,
 )
@@ -40,6 +43,44 @@ class TestParityWithRust:
         assert MICRO_VOID_MIN_DIM_MM == _rust_const("MICRO_VOID_MIN_DIM_MM")
         assert SPUR_EPS_MM == _rust_const("SPUR_EPS_MM")
         assert MIN_PART_WIDTH_MM == _rust_const("MIN_PART_WIDTH_MM")
+
+    def test_le_pas_de_jonction_est_le_meme(self):
+        m = re.search(r"pub const JOIN_STEPS: i32 = ([0-9]+);", RUST.read_text(encoding="utf-8"))
+        assert m and JOIN_STEPS == int(m.group(1))
+
+
+class TestJoinFreeEnds:
+    def test_deux_bouts_libres_a_un_pas_se_rejoignent(self):
+        moved = join_free_ends([[(0.0, 0.0), (10.0, 0.0)], [(10.0, 0.0001), (10.0, 5.0)]])
+        assert moved == {(10.0, 0.0): (10.0, 0.0001)}
+
+    def test_un_bout_libre_rejoint_le_sommet_deja_relie(self):
+        lines = [[(0.0, 0.0), (10.0, 0.0), (10.0, 5.0)], [(10.0001, -0.0001), (20.0, 0.0)]]
+        assert join_free_ends(lines) == {(10.0001, -0.0001): (10.0, 0.0)}
+
+    def test_trois_bouts_libres_finissent_au_meme_point(self):
+        lines = [[(0.0, 0.0), (10.0, 0.0)], [(10.0001, 0.0), (20.0, 0.0)], [(10.0, 0.0001), (10.0, 9.0)]]
+        moved = join_free_ends(lines)
+        ends = {moved.get(p, p) for p in ((10.0, 0.0), (10.0001, 0.0), (10.0, 0.0001))}
+        assert len(ends) == 1
+
+    def test_au_dela_des_deux_pas_rien_ne_bouge(self):
+        assert join_free_ends([[(0.0, 0.0), (10.0, 0.0)], [(10.0, 0.0003), (10.0, 5.0)]]) == {}
+
+    def test_un_petit_trait_isole_n_est_pas_ecrase(self):
+        assert join_free_ends([[(0.0, 0.0), (0.0001, 0.0)]]) == {}
+
+    def test_un_contour_ferme_ne_bouge_pas(self):
+        assert join_free_ends([[(0.0, 0.0), (10.0, 0.0), (10.0, 5.0), (0.0, 0.0)]]) == {}
+
+    def test_un_trace_ferme_qui_s_ouvrirait_a_l_arrondi(self):
+        def ring(y0, y1):
+            return [(0.0, y0), (9.0, 0.0), (9.0, 9.0), (0.0, y1)]
+        assert opens_on_grid(ring(0.00005, 0.00005 - 1e-15))
+        assert not opens_on_grid(ring(0.00002, 0.00001))
+        assert not opens_on_grid(ring(0.0, 0.0003))
+        # Petit arc ouvert de 0,02 mm : il n'est pas refermé.
+        assert not opens_on_grid([(0.0, 0.0), (0.02, 0.02), (0.0, 0.0001)])
 
 
 class TestMicroVoid:

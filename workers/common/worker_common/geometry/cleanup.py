@@ -22,12 +22,84 @@ Les seuils sont ceux de `workers/geometry/crates/nest-import/src/assemble.rs` ;
 un test les relit DANS le fichier Rust (pas une copie de constantes).
 """
 
+import math
+
 MICRO_VOID_AREA_MM2 = 1.0
 MICRO_VOID_MIN_DIM_MM = 0.5
 SPUR_EPS_MM = 0.01
 # Regle W : un corps dont la LARGEUR MINIMALE (plus petit ecart entre deux
 # droites paralleles qui l'enserrent) est sous ce seuil n'est pas une piece.
 MIN_PART_WIDTH_MM = 0.1
+# Écart, en pas de grille (1e-4 mm) et par axe, sous lequel deux bouts sont le
+# MÊME point. Même valeur que le Rust (assemble.rs), qui dit pourquoi.
+JOIN_STEPS = 2
+
+
+def snap(v: float) -> float:
+    return math.floor(v * 1e4 + 0.5) / 1e4
+
+
+def opens_on_grid(coords) -> bool:
+    """Vrai si les deux bouts d'un tracé fermé s'arrondissent à JOIN_STEPS pas au
+    plus l'un de l'autre, mais PAS sur le même point : il s'ouvrirait. Un tracé
+    plus petit que MIN_PART_WIDTH_MM est un petit arc ouvert, il le reste."""
+    (ax, ay), (bx, by) = ((snap(x), snap(y)) for x, y in (coords[0], coords[-1]))
+    near = (JOIN_STEPS + 0.5) * 1e-4  # demi-pas : marge d'arrondi
+    if (ax, ay) == (bx, by) or abs(ax - bx) > near or abs(ay - by) > near:
+        return False
+    xs, ys = [p[0] for p in coords], [p[1] for p in coords]
+    return min(max(xs) - min(xs), max(ys) - min(ys)) >= MIN_PART_WIDTH_MM
+
+
+def join_free_ends(lines, deadline=None):
+    """Déplacements des bouts LIBRES voisins d'un autre sommet : {point: point}.
+
+    `lines` : listes de points (x, y) noués et posés sur la grille 1e-4. Miroir
+    de `snap_edges_until` (assemble.rs) : le bout d'un segment est écrit, celui
+    d'un arc est calculé, et ils s'arrondissent parfois d'un pas l'un à côté de
+    l'autre. Seul un bout libre (un seul voisin) bouge, et jamais vers son propre
+    voisin. Les sommets sont comparés par case de grille : GEOS les rend en
+    multiples de 1e-4, au dernier bit près.
+    """
+    only = {}
+    point_at = {}
+    for line_idx, line in enumerate(lines):
+        if deadline is not None:
+            deadline.check(line_idx)
+        cells = [(round(x * 1e4), round(y * 1e4)) for x, y in line]
+        point_at.update(zip(cells, line))
+        for a, b in zip(cells, cells[1:]):
+            if a == b:
+                continue
+            for p, q in ((a, b), (b, a)):
+                if only.setdefault(p, q) != q:
+                    only[p] = None
+    moved = {}
+    held = set()
+    for p in sorted(k for k, n in only.items() if n is not None):
+        if p in held:
+            continue
+        own = only[p]
+        # Le plus proche ; à égalité un sommet déjà relié passe avant un autre
+        # bout libre, puis le plus petit (x puis y).
+        best = None
+        for r in range(1, JOIN_STEPS + 1):
+            for dx in range(-r, r + 1):
+                for dy in range(-r, r + 1):
+                    if max(abs(dx), abs(dy)) != r:
+                        continue
+                    c = (p[0] + dx, p[1] + dy)
+                    if c == own or c in moved or c not in only:
+                        continue
+                    is_free = only[c] is not None
+                    if best is None or (best[0] and not is_free):
+                        best = (is_free, c)
+            if best is not None:
+                break
+        if best is not None:
+            moved[p] = best[1]
+            held.add(best[1])
+    return {point_at[p]: point_at[c] for p, c in moved.items()}
 
 
 def _cross(o, a, b) -> float:
