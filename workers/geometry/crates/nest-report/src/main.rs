@@ -2,7 +2,7 @@
 //! Entrée JSON : {items, containers, space} → sortie {per_sheet, totals,
 //! used_share, verify}.
 use nest_report::{
-    compute_used_sheet_share, per_sheet_metrics, report_totals, verify_layout, Container, Item,
+    compute_used_sheet_share, per_sheet_metrics, report_totals, verify_layout_edge, Container, Item,
 };
 use std::io::Read;
 
@@ -12,6 +12,10 @@ struct Spec {
     containers: Vec<Container>,
     #[serde(default)]
     space: f64,
+    /// Distance au bord propre (mm, convention interne de `space`). Absente :
+    /// rapport d'avant, octet pour octet.
+    #[serde(default)]
+    edge: Option<f64>,
 }
 
 fn main() {
@@ -21,7 +25,7 @@ fn main() {
     let sheets = per_sheet_metrics(&spec.containers, &spec.items);
     let totals = report_totals(&sheets);
     let used = compute_used_sheet_share(&spec.containers, &spec.items);
-    let verify = verify_layout(&spec.containers, &spec.items, spec.space);
+    let verify = verify_layout_edge(&spec.containers, &spec.items, spec.space, spec.edge);
     println!(
         "{}",
         serde_json::json!({

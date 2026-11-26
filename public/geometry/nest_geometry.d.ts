@@ -26,7 +26,9 @@ export function canonical_dxf_part(bytes: Uint8Array, handles_json: string): Uin
 export function canonical_dxf_scaled(bytes: Uint8Array, factor: number): Uint8Array;
 
 /**
- * compute_report(json {items, containers, space}) -> rapport JSON.
+ * compute_report(json {items, containers, space, edge?}) -> rapport JSON.
+ * `edge` (mm, convention interne de `space`) : distance au bord réglée à part ;
+ * absente, le rapport est celui d'avant (`nest_report::verify_layout_edge`).
  */
 export function compute_report(json: string): string;
 
@@ -91,6 +93,19 @@ export function import_sheet_limited(bytes: Uint8Array, tol: number, max_entitie
 export function import_svg(bytes: Uint8Array, tol: number): string;
 
 /**
+ * offset_ring(json {ring, distance_mm, segments_per_turn?, time_budget_ms?,
+ * keep_voids?}) -> JSON `{ring, pieces, lost_area_mm2, max_shift_mm,
+ * applied_distance_mm, voids}` : le contour d'une tôle décalé d'une vraie
+ * distance (`nest_import::sheet_offset`), positif vers l'extérieur, négatif vers
+ * l'intérieur, toujours du côté sûr (jamais plus grand que le décalage exact).
+ * Une coordonnée est un nombre ou une CHAÎNE (exacte au bit près). L'erreur est
+ * un code nommé, tel quel dans le message : `offset_bad_input`, `offset_empty`,
+ * `offset_enclosed_void`, `offset_too_complex`, `offset_failed`,
+ * `sheet_cut_time_budget`.
+ */
+export function offset_ring(json: string): string;
+
+/**
  * open_holes(json {outer, holes, space_mm}) -> JSON {ring, channels_opened}.
  */
 export function open_holes(json: string): string;
@@ -124,6 +139,7 @@ export interface InitOutput {
     readonly import_file_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly import_sheet_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
     readonly import_svg: (a: number, b: number, c: number) => [number, number, number, number];
+    readonly offset_ring: (a: number, b: number) => [number, number, number, number];
     readonly open_holes: (a: number, b: number) => [number, number, number, number];
     readonly pinwheel_capacity: (a: number, b: number) => [number, number, number, number];
     readonly wasm_memory_pages: () => number;

@@ -12,6 +12,7 @@ pub mod dxf;
 pub mod findings;
 pub mod sheet;
 pub mod sheet_cut;
+pub mod sheet_offset;
 #[cfg(feature = "svg")]
 pub mod svg;
 pub mod units;

@@ -66,7 +66,9 @@ export function canonical_dxf_scaled(bytes, factor) {
 }
 
 /**
- * compute_report(json {items, containers, space}) -> rapport JSON.
+ * compute_report(json {items, containers, space, edge?}) -> rapport JSON.
+ * `edge` (mm, convention interne de `space`) : distance au bord réglée à part ;
+ * absente, le rapport est celui d'avant (`nest_report::verify_layout_edge`).
  * @param {string} json
  * @returns {string}
  */
@@ -322,6 +324,40 @@ export function import_svg(bytes, tol) {
         const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.import_svg(ptr0, len0, tol);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * offset_ring(json {ring, distance_mm, segments_per_turn?, time_budget_ms?,
+ * keep_voids?}) -> JSON `{ring, pieces, lost_area_mm2, max_shift_mm,
+ * applied_distance_mm, voids}` : le contour d'une tôle décalé d'une vraie
+ * distance (`nest_import::sheet_offset`), positif vers l'extérieur, négatif vers
+ * l'intérieur, toujours du côté sûr (jamais plus grand que le décalage exact).
+ * Une coordonnée est un nombre ou une CHAÎNE (exacte au bit près). L'erreur est
+ * un code nommé, tel quel dans le message : `offset_bad_input`, `offset_empty`,
+ * `offset_enclosed_void`, `offset_too_complex`, `offset_failed`,
+ * `sheet_cut_time_budget`.
+ * @param {string} json
+ * @returns {string}
+ */
+export function offset_ring(json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.offset_ring(ptr0, len0);
         var ptr2 = ret[0];
         var len2 = ret[1];
         if (ret[3]) {

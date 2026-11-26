@@ -128,7 +128,82 @@ fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
 /// et pieds des sommets du contour proches) — la valeur d'une excursion est
 /// donc une borne basse proche du maximum, la décision (> tolérance) ne manque
 /// pas une vraie traversée.
+/// BORNE BASSE ÉCHANTILLONNÉE : entre deux points d'essai, un dépassement plus
+/// profond peut exister (arête qui traverse une encoche de biais). Elle suffit
+/// pour dire « dehors » contre 0,01 mm ; pour comparer une profondeur à une
+/// limite (distance au bord négative), prendre `outside_depth_exact`.
 pub fn outside_depth(part: &[Pt], sh: &ReadyShape) -> f64 {
+    outside_depth_with(part, sh, false)
+}
+
+/// Évaluations de distance accordées à UNE pièce par `outside_depth_exact`.
+/// Au-delà, les tronçons restants ne sont plus affinés : la valeur redevient
+/// une borne basse (jamais vu sur les formes d'essai, quelques dizaines
+/// d'évaluations par tronçon).
+const EXACT_DEPTH_EVALS: usize = 20_000;
+
+/// Précision visée de la profondeur exacte (mm) : mille fois plus fine que le
+/// millième affiché.
+const EXACT_DEPTH_EPS: f64 = 1e-6;
+
+/// `outside_depth` sans l'échantillonnage : la profondeur MAXIMALE du
+/// dépassement, à `EXACT_DEPTH_EPS` près. Sert quand un dépassement est permis
+/// (distance au bord négative) : la valeur est alors comparée à une limite, et
+/// une borne basse laisserait passer un dépassement trop profond.
+///
+/// Sur un tronçon d'arête entièrement dehors, la distance au contour est le
+/// minimum des distances à ses arêtes, chacune CONVEXE le long du tronçon. Entre
+/// deux points dont l'arête la plus proche est la même, la distance ne dépasse
+/// donc pas la plus grande des deux valeurs : rien à chercher. Sinon le tronçon
+/// est coupé en deux, tant que la borne de Lipschitz (pente 1) laisse la place
+/// à mieux que le maximum connu.
+pub fn outside_depth_exact(part: &[Pt], sh: &ReadyShape) -> f64 {
+    outside_depth_with(part, sh, true)
+}
+
+/// Distance au contour et indice de l'arête la plus proche.
+fn nearest_edge(p: Pt, ring: &[Pt]) -> (f64, usize) {
+    let mut best = (f64::INFINITY, 0usize);
+    for (i, w) in ring.windows(2).enumerate() {
+        let d = geom::point_seg_dist(p, w[0], w[1]);
+        if d < best.0 {
+            best = (d, i);
+        }
+    }
+    best
+}
+
+/// Maximum de la distance au contour sur le tronçon dehors `a + t·ab`, t dans
+/// [t0 ; t1] (voir `outside_depth_exact`). `evals` : budget restant de la pièce.
+fn exact_span_depth(a: Pt, ab: Pt, t0: f64, t1: f64, ring: &[Pt], floor: f64, evals: &mut usize) -> f64 {
+    let len = (ab[0] * ab[0] + ab[1] * ab[1]).sqrt();
+    let at = |t: f64| -> (f64, usize) { nearest_edge([a[0] + t * ab[0], a[1] + t * ab[1]], ring) };
+    let (e0, e1) = (at(t0), at(t1));
+    let mut best = floor.max(e0.0).max(e1.0);
+    let mut stack = vec![(t0, e0, t1, e1)];
+    while let Some((ta, ea, tb, eb)) = stack.pop() {
+        if ea.1 == eb.1 {
+            continue;
+        }
+        let span = (tb - ta) * len;
+        if span <= EXACT_DEPTH_EPS || 0.5 * (ea.0 + eb.0 + span) <= best + EXACT_DEPTH_EPS {
+            continue;
+        }
+        if *evals == 0 {
+            break;
+        }
+        *evals -= 1;
+        let tm = 0.5 * (ta + tb);
+        let em = at(tm);
+        best = best.max(em.0);
+        stack.push((ta, ea, tm, em));
+        stack.push((tm, em, tb, eb));
+    }
+    best
+}
+
+fn outside_depth_with(part: &[Pt], sh: &ReadyShape, exact: bool) -> f64 {
+    let mut evals = EXACT_DEPTH_EVALS;
     let ring = &sh.outer;
     let pb = geom::ring_bounds(part);
     let eb = [pb[0] - ON_EPS, pb[1] - ON_EPS, pb[2] + ON_EPS, pb[3] + ON_EPS];
@@ -202,6 +277,15 @@ pub fn outside_depth(part: &[Pt], sh: &ReadyShape) -> f64 {
         for k in 0..ts.len() - 1 {
             let (t0, t1) = (ts[k], ts[k + 1]);
             if t1 - t0 <= 1e-12 {
+                continue;
+            }
+            if exact {
+                // Le tronçon ne croise pas le contour : dedans ou dehors d'un bloc,
+                // son milieu le dit.
+                let tm = t0 + 0.5 * (t1 - t0);
+                if !inside([a[0] + tm * ab[0], a[1] + tm * ab[1]]) {
+                    depth = exact_span_depth(a, ab, t0, t1, ring, depth, &mut evals);
+                }
                 continue;
             }
             let mut samples = vec![t0 + 0.25 * (t1 - t0), t0 + 0.5 * (t1 - t0), t0 + 0.75 * (t1 - t0)];
@@ -569,13 +653,45 @@ pub fn check_sheet(
     sh: &ReadyShape,
     overlap_eps_mm2: f64,
 ) -> ShapeChecks {
+    check_sheet_with(placed, sh, overlap_eps_mm2, None)
+}
+
+/// `check_sheet` quand la distance au bord est réglée à part : un dépassement
+/// du contour est admis jusqu'à `overhang` mm (0 si la distance est positive),
+/// et l'écart au contour est SIGNÉ sans palier : `-profondeur` dès que la pièce
+/// sort, la profondeur étant le maximum exact (`outside_depth_exact`), pas la
+/// borne basse échantillonnée du rapport d'avant. Les zones interdites sont
+/// jugées comme avant.
+pub fn check_sheet_edge(
+    placed: &[(Vec<Pt>, Vec<Vec<Pt>>)],
+    sh: &ReadyShape,
+    overlap_eps_mm2: f64,
+    overhang: f64,
+) -> ShapeChecks {
+    check_sheet_with(placed, sh, overlap_eps_mm2, Some(overhang.max(0.0)))
+}
+
+fn check_sheet_with(
+    placed: &[(Vec<Pt>, Vec<Vec<Pt>>)],
+    sh: &ReadyShape,
+    overlap_eps_mm2: f64,
+    overhang: Option<f64>,
+) -> ShapeChecks {
     let mut out = ShapeChecks::default();
     let mut best_outline = f64::INFINITY;
     let mut best_zone = f64::INFINITY;
     for (o, h) in placed {
         let ring = closed(o);
-        let depth = outside_depth(&ring, sh);
-        let gap = if depth > OUTLINE_TOL_MM {
+        let depth = match overhang {
+            None => outside_depth(&ring, sh),
+            Some(_) => outside_depth_exact(&ring, sh),
+        };
+        let gap = if let Some(over) = overhang {
+            if depth > OUTLINE_TOL_MM + over {
+                out.parts_outside += 1;
+            }
+            if depth > 0.0 { -depth } else { gap_to_outline(&ring, sh, best_outline) }
+        } else if depth > OUTLINE_TOL_MM {
             out.parts_outside += 1;
             -depth
         } else if depth > 0.0 {

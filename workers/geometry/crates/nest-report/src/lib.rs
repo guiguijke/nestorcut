@@ -361,8 +361,37 @@ pub const DUPLICATE_AREA_FRACTION: f64 = 0.99;
 // flottant (A15, miroir Python INSIDE_EPS).
 pub const INSIDE_EPS: f64 = 1e-6;
 
-/// verify_layout — validation physique mesurée.
+/// verify_layout — validation physique mesurée. La distance au bord suit
+/// l'espacement (rapport d'avant, octet pour octet) : voir `verify_layout_edge`.
 pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> serde_json::Value {
+    verify_layout_edge(containers, items, space, None)
+}
+
+/// verify_layout avec une DISTANCE AU BORD propre (`edge`, mm, même convention
+/// interne que `space` : valeur demandée + marge de courbe).
+///
+/// `edge = None` : rapport d'avant, strictement inchangé (l'écart au bord entre
+/// dans `smallestGapMm`, jugé contre `space`).
+///
+/// `edge = Some(e)` :
+/// - `edgeGapMm` : plus petit écart SIGNÉ d'une pièce au bord EXTÉRIEUR de la
+///   tôle (négatif = profondeur du dépassement). Rectangle : écart signé de la
+///   boîte de la pièce au rectangle de la tôle. Tôle importée : écart au contour
+///   réel, `-profondeur` quand la pièce en sort ;
+/// - `edgeOk` : `edgeGapMm >= e - 0,01` (vrai sans pièce ; null si la forme
+///   d'une tôle importée n'a pas pu être lue) ;
+/// - `smallestGapMm` / `spacingOk` ne couvrent plus que les écarts pièce-pièce
+///   et pièce-zone interdite, toujours jugés contre `space` (`smallestGapMm`
+///   null et `spacingOk` vrai quand il n'y a ni paire ni zone) ;
+/// - `insideSheet` admet un dépassement jusqu'à `max(0, -e)` : tolérance
+///   `INSIDE_EPS + max(0, -e)` sur un rectangle, `OUTLINE_TOL_MM + max(0, -e)`
+///   sur le contour d'une tôle importée (les zones interdites ne bougent pas).
+pub fn verify_layout_edge(
+    containers: &[Container],
+    items: &[Item],
+    space: f64,
+    edge: Option<f64>,
+) -> serde_json::Value {
     let by_id: std::collections::HashMap<&str, &Item> =
         items.iter().map(|i| (i.id.as_str(), i)).collect();
     let mut smallest_gap = f64::INFINITY;
@@ -378,6 +407,10 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
     let mut shape_unready = false;
     let mut zones_total = 0i64;
     let mut shape_sum = shape::ShapeChecks::default();
+    // Distance au bord propre : écart au bord tenu À PART de l'écart minimal, et
+    // dépassement admis jusqu'à `overhang`. Sans elle, rien de ceci ne sert.
+    let mut edge_gap = f64::INFINITY;
+    let overhang = edge.map_or(0.0, |e| (-e).max(0.0));
     // Broadphase : les paires plus loin que space+1 mm ne peuvent être le
     // minimum (ni violer l'espacement) — on ne paie ring_distance que sur
     // les candidates bbox (A3/D12, miroir du STRtree Python).
@@ -407,14 +440,19 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
         if let Some(r) = &ready {
             // La boîte englobante ne dit rien d'une tôle courbe : le contrôle
             // porte sur le contour réel et sur les zones interdites.
-            let ck = shape::check_sheet(&placed_polys, r, OVERLAP_EPS_MM2);
+            let ck = match edge {
+                None => shape::check_sheet(&placed_polys, r, OVERLAP_EPS_MM2),
+                Some(_) => shape::check_sheet_edge(&placed_polys, r, OVERLAP_EPS_MM2, overhang),
+            };
             zones_total += r.zones.len() as i64;
             shape_sum.parts_outside += ck.parts_outside;
             shape_sum.zone_violations += ck.zone_violations;
             shape_sum.zone_overlap_area += ck.zone_overlap_area;
             if let Some(g) = ck.min_outline_gap {
                 shape_sum.min_outline_gap = Some(shape_sum.min_outline_gap.map_or(g, |m| m.min(g)));
-                if g < smallest_gap {
+                if edge.is_some() {
+                    edge_gap = edge_gap.min(g);
+                } else if g < smallest_gap {
                     smallest_gap = g;
                 }
             }
@@ -430,14 +468,18 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                 inside_sheet = false;
             }
         } else {
+            // Sans distance au bord, `overhang` vaut 0 : `INSIDE_EPS + 0.0` est
+            // INSIDE_EPS au bit près.
+            let tol = INSIDE_EPS + overhang;
             for (o, _h) in &placed_polys {
                 let b = geom::ring_bounds(o);
-                if b[0] < -INSIDE_EPS
-                    || b[1] < -INSIDE_EPS
-                    || b[2] > sw + INSIDE_EPS
-                    || b[3] > sh + INSIDE_EPS
-                {
+                if b[0] < -tol || b[1] < -tol || b[2] > sw + tol || b[3] > sh + tol {
                     inside_sheet = false;
+                }
+                if edge.is_some() {
+                    // Mesuré ici, avant le plafond de paires : l'écart au bord ne
+                    // coûte qu'une boîte par pièce.
+                    edge_gap = edge_gap.min(ring_to_sheet_edge_dist(o, sw, sh));
                 }
             }
         }
@@ -468,7 +510,7 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
         for i in 0..n {
             // Tôle importée : l'écart au bord est celui du contour réel, déjà
             // compté plus haut (l'écart à la boîte serait un faux bord).
-            if ready.is_none() {
+            if ready.is_none() && edge.is_none() {
                 let gap_edge = ring_to_sheet_edge_dist(&placed_polys[i].0, sw, sh);
                 if gap_edge < smallest_gap {
                     smallest_gap = gap_edge;
@@ -567,6 +609,24 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
         report["smallestGapMm"] = serde_json::json!(round(smallest_gap, 3));
         report["overlapFree"] = serde_json::json!(overlap_free);
         report["spacingOk"] = serde_json::json!(smallest_gap >= (space - 0.01));
+    }
+    if let Some(e) = edge {
+        // Champs ADDITIFS : seul un job à distance au bord propre les porte.
+        if pair_checks_done && smallest_gap == f64::INFINITY {
+            // Ni paire ni zone : rien à mesurer, rien de violé.
+            report["overlapFree"] = serde_json::json!(overlap_free);
+            report["spacingOk"] = serde_json::json!(true);
+        }
+        if shape_unready {
+            report["edgeGapMm"] = serde_json::Value::Null;
+            report["edgeOk"] = serde_json::Value::Null;
+        } else if edge_gap == f64::INFINITY {
+            report["edgeGapMm"] = serde_json::Value::Null;
+            report["edgeOk"] = serde_json::json!(true);
+        } else {
+            report["edgeGapMm"] = serde_json::json!(round(edge_gap, 3));
+            report["edgeOk"] = serde_json::json!(edge_gap >= (e - 0.01));
+        }
     }
     if shaped_sheets > 0 {
         // Champs ADDITIFS (piège 19b) : seules les tôles importées les portent.
@@ -756,6 +816,9 @@ fn face_centroid(ring: &[Pt]) -> Pt {
 
 #[cfg(test)]
 mod shaped_tests;
+
+#[cfg(test)]
+mod edge_tests;
 
 #[cfg(test)]
 mod tests {

@@ -75,6 +75,20 @@ pub fn cut_sheet(json: &str) -> Result<String, JsError> {
     nest_import::sheet_cut::cut_sheet_json(json).map_err(|e| JsError::new(e.code()))
 }
 
+/// offset_ring(json {ring, distance_mm, segments_per_turn?, time_budget_ms?,
+/// keep_voids?}) -> JSON `{ring, pieces, lost_area_mm2, max_shift_mm,
+/// applied_distance_mm, voids}` : le contour d'une tôle décalé d'une vraie
+/// distance (`nest_import::sheet_offset`), positif vers l'extérieur, négatif vers
+/// l'intérieur, toujours du côté sûr (jamais plus grand que le décalage exact).
+/// Une coordonnée est un nombre ou une CHAÎNE (exacte au bit près). L'erreur est
+/// un code nommé, tel quel dans le message : `offset_bad_input`, `offset_empty`,
+/// `offset_enclosed_void`, `offset_too_complex`, `offset_failed`,
+/// `sheet_cut_time_budget`.
+#[wasm_bindgen]
+pub fn offset_ring(json: &str) -> Result<String, JsError> {
+    nest_import::sheet_offset::offset_ring_json(json).map_err(|e| JsError::new(e.code()))
+}
+
 /// import_svg(bytes, tol) -> JSON ImportResult.
 #[wasm_bindgen]
 pub fn import_svg(bytes: &[u8], tol: f64) -> Result<String, JsError> {
@@ -191,7 +205,9 @@ pub fn export_svg_sheet(json: &str) -> Result<String, JsError> {
     ))
 }
 
-/// compute_report(json {items, containers, space}) -> rapport JSON.
+/// compute_report(json {items, containers, space, edge?}) -> rapport JSON.
+/// `edge` (mm, convention interne de `space`) : distance au bord réglée à part ;
+/// absente, le rapport est celui d'avant (`nest_report::verify_layout_edge`).
 #[wasm_bindgen]
 pub fn compute_report(json: &str) -> Result<String, JsError> {
     #[derive(serde::Deserialize)]
@@ -200,11 +216,15 @@ pub fn compute_report(json: &str) -> Result<String, JsError> {
         containers: Vec<nest_report::Container>,
         #[serde(default)]
         space: f64,
+        /// Distance au bord propre (mm, convention interne de `space`). Absente :
+        /// rapport d'avant, octet pour octet.
+        #[serde(default)]
+        edge: Option<f64>,
     }
     let s: Spec = serde_json::from_str(json).map_err(|e| JsError::new(&format!("{e}")))?;
     let sheets = nest_report::per_sheet_metrics(&s.containers, &s.items);
     let totals = nest_report::report_totals(&sheets);
-    let verify = nest_report::verify_layout(&s.containers, &s.items, s.space);
+    let verify = nest_report::verify_layout_edge(&s.containers, &s.items, s.space, s.edge);
     serde_json::to_string(&serde_json::json!({
         "per_sheet": sheets,
         "totals": totals,

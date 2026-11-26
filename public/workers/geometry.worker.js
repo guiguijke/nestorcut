@@ -11,12 +11,14 @@
  * canonical_dxf_part (le DXF d'UNE pièce, par ses handles) — l'« import
  * avancé ». + import_sheet_limited (tôle importée d'un DXF : les contours du
  * dessin, mêmes bornes que import_file_limited) et cut_sheet (json string :
- * la tôle moins ses défauts dessinés). Le worker importe des symboles NOMMÉS :
+ * la tôle moins ses défauts dessinés). + offset_ring (json string : le contour
+ * d'une tôle décalé de la distance au bord). Le worker importe des symboles NOMMÉS :
  * toute op ajoutée ici exige le rebuild du bundle DANS LA MÊME PR (piège AGENTS
  * #33b).
  */
 import init, {
-    import_file, import_file_limited, import_sheet_limited, cut_sheet, open_holes, export_svg_sheet, compute_report,
+    import_file, import_file_limited, import_sheet_limited, cut_sheet, offset_ring, open_holes, export_svg_sheet,
+    compute_report,
     export_dxf_sheet,
     canonical_dxf, canonical_dxf_scaled, canonical_dxf_part, pinwheel_capacity,
 } from '/geometry/nest_geometry.js'
@@ -59,6 +61,10 @@ self.onmessage = async (event) => {
             case 'cut_sheet':
                 // Tôle moins défauts dessinés ; l'erreur est un code nommé.
                 result = cut_sheet(args.json)
+                break
+            case 'offset_ring':
+                // Contour de tôle décalé ; l'erreur est un code nommé.
+                result = offset_ring(args.json)
                 break
             case 'open_holes':
                 result = open_holes(args.json)

@@ -1,6 +1,6 @@
 //! WASM bindings (feature `wasm`) — compute_report, même sémantique native.
 
-use crate::{per_sheet_metrics, report_totals, verify_layout, Container, Item};
+use crate::{per_sheet_metrics, report_totals, verify_layout_edge, Container, Item};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 
@@ -10,6 +10,10 @@ struct Spec {
     containers: Vec<Container>,
     #[serde(default)]
     space: f64,
+    /// Distance au bord propre (mm, convention interne de `space`). Absente :
+    /// rapport d'avant, octet pour octet.
+    #[serde(default)]
+    edge: Option<f64>,
 }
 
 /// compute_report(spec_json) -> {per_sheet, totals, verify}.
@@ -19,7 +23,7 @@ pub fn compute_report(json: &str) -> Result<String, JsError> {
         serde_json::from_str(json).map_err(|e| JsError::new(&format!("bad spec: {e}")))?;
     let sheets = per_sheet_metrics(&s.containers, &s.items);
     let totals = report_totals(&sheets);
-    let verify = verify_layout(&s.containers, &s.items, s.space);
+    let verify = verify_layout_edge(&s.containers, &s.items, s.space, s.edge);
     serde_json::to_string(&serde_json::json!({
         "per_sheet": sheets,
         "totals": totals,

@@ -13,6 +13,7 @@ export const import_file: (a: number, b: number, c: number) => [number, number, 
 export const import_file_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const import_sheet_limited: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const import_svg: (a: number, b: number, c: number) => [number, number, number, number];
+export const offset_ring: (a: number, b: number) => [number, number, number, number];
 export const open_holes: (a: number, b: number) => [number, number, number, number];
 export const pinwheel_capacity: (a: number, b: number) => [number, number, number, number];
 export const wasm_memory_pages: () => number;

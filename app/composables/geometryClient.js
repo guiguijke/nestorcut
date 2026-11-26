@@ -144,6 +144,52 @@ export async function geoCutSheet(outer, holes = [], defects = [], opts = {}) {
         }),
     }))
 }
+/**
+ * Contour d'une tôle décalé de `distanceMm` (distance au bord réglée à part de
+ * l'espacement) : positif vers l'EXTÉRIEUR, négatif vers l'intérieur, vraie
+ * distance euclidienne (coins arrondis). Le conteneur rendu n'est jamais plus
+ * grand que le décalage exact.
+ *
+ * Rend `{ ring, pieces, lostAreaMm2, maxShiftMm, appliedDistanceMm, voids }` :
+ * - `ring` : anneau fermé, anti-horaire, grille 1e-4 mm, repère de l'entrée ;
+ * - `pieces` / `lostAreaMm2` : vers l'intérieur, un goulet peut séparer la
+ *   région ; le plus grand morceau est rendu, le reste est compté ;
+ * - `appliedDistanceMm` : la distance appliquée, celle demandée sauf repli sûr
+ *   (au plus 1 mm de moins en valeur absolue) ;
+ * - `voids` : vides enfermés dans le conteneur, rendus seulement avec
+ *   `opts.keepVoids` (à passer au moteur comme interdits). Sans l'option, un
+ *   vide est un refus `offset_enclosed_void`.
+ *
+ * REJETTE avec une Error dont `message` et `code` sont le code du refus :
+ * `offset_bad_input`, `offset_empty`, `offset_enclosed_void`,
+ * `offset_too_complex`, `offset_failed`, `sheet_cut_time_budget` (ou le message
+ * du worker si le calcul n'a pas pu partir). Les coordonnées partent en CHAÎNES,
+ * comme pour `geoCutSheet`.
+ */
+export async function geoOffsetRing(ring, distanceMm, opts = {}) {
+    const points = (Array.isArray(ring) ? ring : []).map((p) => [String(p?.[0]), String(p?.[1])])
+    const spec = {
+        ring: points,
+        distance_mm: String(distanceMm),
+        time_budget_ms: opts.timeBudgetMs ?? IMPORT_TIME_BUDGET_MS,
+    }
+    if (opts.segmentsPerTurn != null) spec.segments_per_turn = opts.segmentsPerTurn
+    if (opts.keepVoids) spec.keep_voids = true
+    const reply = await call('offset_ring', { json: JSON.stringify(spec) })
+    if (!reply.ok) {
+        const code = String(reply.error || 'offset_failed')
+        throw Object.assign(new Error(code), { code })
+    }
+    const out = JSON.parse(reply.result)
+    return {
+        ring: out.ring,
+        pieces: out.pieces,
+        lostAreaMm2: out.lost_area_mm2,
+        maxShiftMm: out.max_shift_mm,
+        appliedDistanceMm: out.applied_distance_mm,
+        voids: out.voids,
+    }
+}
 export async function geoOpenHoles(outer, holes, spaceMm) {
     return parse(await call('open_holes', { json: JSON.stringify({ outer, holes, space_mm: spaceMm }) }))
 }

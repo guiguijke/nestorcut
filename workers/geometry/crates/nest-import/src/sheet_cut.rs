@@ -2039,7 +2039,7 @@ fn emit(
 /// serde_json peut se tromper d'un ulp (AGENTS #33d), `str::parse` est exact.
 /// Une valeur illisible devient NaN : le refus est le même que pour un NaN.
 #[derive(Clone, Copy)]
-struct Coord(f64);
+pub(crate) struct Coord(pub(crate) f64);
 
 impl<'de> serde::Deserialize<'de> for Coord {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
