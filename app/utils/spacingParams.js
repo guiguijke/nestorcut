@@ -105,3 +105,58 @@ export function safetyPatchForTargetMm(kerfMm, targetMm) {
     if (!(targetMm > 2 * kerfMm)) return null
     return { safetyMm: targetMm - 2 * kerfMm }
 }
+
+/*
+ * ---------------------------------------------------------------------------
+ * DISTANCE AU BORD (lot du 26/11/2026, demande de Josh).
+ *
+ * Réglage séparé de l'espacement entre pièces. À l'écran c'est une chaîne en
+ * unité d'affichage, comme le kerf et la sécurité :
+ *   - '' / null / undefined : « comme l'espacement », le comportement d'avant ;
+ *   - un nombre positif : les pièces restent à cette distance du bord ;
+ *   - un nombre négatif : une pièce peut dépasser du bord d'autant.
+ *
+ * Le moteur ne connaît que l'espacement `s`, appliqué entre pièces ET au bord.
+ * La tôle lui part donc décalée de d = e − s : W − 2d × H − 2d (contour
+ * importé décalé de −d), et une pose moteur (x, y) vaut (x + d, y + d) sur la
+ * vraie tôle. d = 0 exactement quand le bord n'est pas réglé ou vaut
+ * l'espacement : le calcul est alors identique au bit près.
+ */
+
+/** Saisie acceptée pour la distance au bord : décimal signé, point ou virgule. */
+export const EDGE_DISTANCE_RE = /^-?\d+([.,]\d+)?$/
+
+/** Sous cet écart (mm), bord et espacement sont confondus : d = 0. */
+export const EDGE_EPS_MM = 1e-6
+
+/** Le champ est-il rempli ? (vide, null, undefined = comme l'espacement) */
+export function isEdgeDistanceSet(v) {
+    return v !== undefined && v !== null && String(v).trim() !== ''
+}
+
+/** Vide (= comme l'espacement) ou décimal signé valide. */
+export function isValidEdgeDistance(v) {
+    return !isEdgeDistanceSet(v) || EDGE_DISTANCE_RE.test(String(v).trim())
+}
+
+/** Chaîne de l'écran -> nombre (même unité), ou null si vide ou illisible. -0 rendu 0. */
+export function edgeDistanceNumber(v) {
+    if (!isEdgeDistanceSet(v)) return null
+    const s = String(v).trim()
+    if (!EDGE_DISTANCE_RE.test(s)) return null
+    const n = Number(s.replace(',', '.'))
+    if (!Number.isFinite(n)) return null
+    return n === 0 ? 0 : n
+}
+
+/**
+ * Décalage moteur d = bord − espacement (mm). 0 exact quand le bord n'est pas
+ * réglé (null / undefined / non fini) ou vaut l'espacement à EDGE_EPS_MM près.
+ */
+export function edgeShiftMm(spaceMm, edgeMm) {
+    if (edgeMm === null || edgeMm === undefined) return 0
+    const e = Number(edgeMm)
+    if (!Number.isFinite(e)) return 0
+    const d = e - (Number(spaceMm) || 0)
+    return Math.abs(d) < EDGE_EPS_MM ? 0 : d
+}

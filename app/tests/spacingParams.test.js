@@ -108,3 +108,34 @@ describe('défauts d\'usine (B.4, règle du 13/09)', () => {
         expect(spacingFromKerfSafety('0', '2')).toBe('2')
     })
 })
+
+describe('distance au bord (lot du 26/11)', async () => {
+    const m = await import('../utils/spacingParams.js')
+    it('vide, null, undefined = comme l\'espacement', () => {
+        for (const v of ['', '  ', null, undefined]) {
+            expect(m.isEdgeDistanceSet(v)).toBe(false)
+            expect(m.isValidEdgeDistance(v)).toBe(true)
+            expect(m.edgeDistanceNumber(v)).toBe(null)
+        }
+    })
+    it('décimal signé, point ou virgule', () => {
+        expect(m.edgeDistanceNumber('5')).toBe(5)
+        expect(m.edgeDistanceNumber('-2,5')).toBe(-2.5)
+        expect(m.edgeDistanceNumber(' 0.25 ')).toBe(0.25)
+        expect(Object.is(m.edgeDistanceNumber('-0'), 0)).toBe(true)
+        for (const bad of ['-', '-.', '1e1', 'abc', '1,2,3', '+3']) {
+            expect(m.isValidEdgeDistance(bad)).toBe(false)
+            expect(m.edgeDistanceNumber(bad)).toBe(null)
+        }
+    })
+    it('décalage moteur d = bord - espacement, 0 exact sinon', () => {
+        expect(m.edgeShiftMm(2, null)).toBe(0)
+        expect(m.edgeShiftMm(2, undefined)).toBe(0)
+        expect(m.edgeShiftMm(2, 2)).toBe(0)
+        expect(m.edgeShiftMm(2, 2 + 1e-9)).toBe(0)
+        expect(m.edgeShiftMm(2, 10)).toBe(8)
+        expect(m.edgeShiftMm(2, -5)).toBe(-7)
+        expect(m.edgeShiftMm(0, 0)).toBe(0)
+        expect(m.edgeShiftMm(0, 3)).toBe(3)
+    })
+})
