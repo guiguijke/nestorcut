@@ -4,6 +4,74 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.21
+
+*FR*
+
+- Import : des cercles, des trous ronds et des contours arrondis (lignes et arcs) pouvaient disparaître quand leurs cotes tombaient sur certaines valeurs, surtout dans les dessins en pouces (1 à 15 % des contours arrondis selon la précision du dessin). C'est corrigé, pour les pièces comme pour les tôles importées et leurs zones.
+- Rapport : le contrôle des recouvrements mesure la vraie surface commune. Une pièce en C autour d'une pièce à trous n'est plus refusée à tort, et deux pièces posées l'une sur l'autre ne passent plus en vert.
+- Fichier de coupe : un trou rond dessiné comme un arc d'un tour entier ne peut plus devenir un point dans le logiciel de coupe.
+- Coffre chiffré : un envoi de fichiers en cours n'est plus abîmé par une déconnexion ou un déverrouillage dans un autre onglet, et la déconnexion referme le coffre.
+- Tôle importée : un calcul presque plein n'est plus refusé d'avance ; le moteur décide.
+- Le bouton Nest n'est plus grisé à tort quand chaque pièce tient dans au moins une des tôles.
+- Démo : elle ne remplace plus les réglages de votre projet, et calcule avec 2 mm d'espacement comme annoncé.
+- Pouces : un fichier SheetCam .job déposé garde le bon kerf et la bonne sécurité, et la page s'affiche directement dans votre unité.
+
+*EN*
+
+- Import: circles, round holes and rounded outlines (lines and arcs) could disappear when their coordinates fell on certain values, mostly in drawings in inches (1 to 15 % of rounded outlines depending on the precision of the drawing). This is fixed, for parts as for imported sheets and their zones.
+- Report: the overlap check now measures the real common area. A C-shaped part around a part with holes is no longer refused by mistake, and two parts placed on top of each other no longer pass as green.
+- Cut file: a round hole drawn as a full-turn arc can no longer become a point in the cutting software.
+- Encrypted vault: an upload in progress is no longer damaged by a logout or an unlock in another tab, and logging out locks the vault.
+- Imported sheet: a nest that is almost full is no longer refused in advance; the engine decides.
+- The Nest button is no longer greyed out by mistake when every part fits at least one of the sheets.
+- Demo: it no longer replaces the settings of your project, and it nests with a 2 mm spacing as announced.
+- Inches: a dropped SheetCam .job keeps the right kerf and safety, and the page shows your unit right away.
+
+*PT*
+
+- Importação: círculos, furos redondos e contornos arredondados (linhas e arcos) podiam desaparecer quando suas cotas caíam em certos valores, sobretudo em desenhos em polegadas (1 a 15 % dos contornos arredondados conforme a precisão do desenho). Corrigido, para as peças e para as chapas importadas e suas zonas.
+- Relatório: a verificação de sobreposição mede a área comum real. Uma peça em C em volta de uma peça com furos não é mais recusada por engano, e duas peças uma sobre a outra não passam mais como verdes.
+- Arquivo de corte: um furo redondo desenhado como um arco de volta inteira não pode mais virar um ponto no software de corte.
+- Cofre criptografado: um envio em andamento não é mais danificado por um logout ou um desbloqueio em outra aba, e o logout tranca o cofre.
+- Chapa importada: um cálculo quase cheio não é mais recusado antecipadamente; o motor decide.
+- O botão Nest não fica mais desativado por engano quando cada peça cabe em pelo menos uma das chapas.
+- Demo: não substitui mais as configurações do seu projeto, e calcula com 2 mm de espaçamento como anunciado.
+- Polegadas: um arquivo SheetCam .job mantém o kerf e a margem corretos, e a página aparece logo na sua unidade.
+
+*IT*
+
+- Importazione: cerchi, fori tondi e contorni arrotondati (linee e archi) potevano sparire quando le loro quote cadevano su certi valori, soprattutto nei disegni in pollici (dall'1 al 15 % dei contorni arrotondati secondo la precisione del disegno). Corretto, per i pezzi come per le lamiere importate e le loro zone.
+- Rapporto: il controllo delle sovrapposizioni misura l'area comune reale. Un pezzo a C attorno a un pezzo con fori non viene più rifiutato per errore, e due pezzi uno sopra l'altro non passano più in verde.
+- File di taglio: un foro tondo disegnato come arco di un giro intero non può più diventare un punto nel software di taglio.
+- Cassaforte cifrata: un invio in corso non viene più rovinato da un logout o da uno sblocco in un'altra scheda, e il logout chiude la cassaforte.
+- Lamiera importata: un calcolo quasi pieno non viene più rifiutato in anticipo; decide il motore.
+- Il pulsante Nest non è più disattivato per errore quando ogni pezzo entra in almeno una delle lamiere.
+- Demo: non sostituisce più le impostazioni del tuo progetto, e calcola con 2 mm di distanza come annunciato.
+- Pollici: un file SheetCam .job mantiene il kerf e il margine corretti, e la pagina appare subito nella tua unità.
+
+*DE*
+
+- Import: Kreise, runde Löcher und gerundete Konturen (Linien und Bögen) konnten verschwinden, wenn ihre Maße auf bestimmte Werte fielen, vor allem in Zeichnungen in Zoll (1 bis 15 % der gerundeten Konturen je nach Genauigkeit der Zeichnung). Behoben, für Teile wie für importierte Bleche und ihre Zonen.
+- Bericht: Die Überlappungsprüfung misst die echte gemeinsame Fläche. Ein C-förmiges Teil um ein Teil mit Löchern wird nicht mehr fälschlich abgelehnt, und zwei übereinanderliegende Teile werden nicht mehr grün.
+- Schnittdatei: Ein rundes Loch, als Bogen über eine volle Umdrehung gezeichnet, kann in der Schneidsoftware nicht mehr zu einem Punkt werden.
+- Verschlüsselter Tresor: Ein laufender Upload wird durch ein Abmelden oder ein Entsperren in einem anderen Tab nicht mehr beschädigt, und das Abmelden schließt den Tresor.
+- Importiertes Blech: Eine fast volle Berechnung wird nicht mehr im Voraus abgelehnt; die Engine entscheidet.
+- Die Schaltfläche Nest ist nicht mehr fälschlich gesperrt, wenn jedes Teil in mindestens eines der Bleche passt.
+- Demo: Sie ersetzt die Einstellungen Ihres Projekts nicht mehr und rechnet wie angekündigt mit 2 mm Abstand.
+- Zoll: Eine abgelegte SheetCam-.job-Datei behält den richtigen Kerf und Sicherheitsabstand, und die Seite erscheint sofort in Ihrer Einheit.
+
+*ES*
+
+- Importación: círculos, agujeros redondos y contornos redondeados (líneas y arcos) podían desaparecer cuando sus cotas caían en ciertos valores, sobre todo en dibujos en pulgadas (del 1 al 15 % de los contornos redondeados según la precisión del dibujo). Corregido, para las piezas y para las chapas importadas y sus zonas.
+- Informe: el control de solapamientos mide el área común real. Una pieza en C alrededor de una pieza con agujeros ya no se rechaza por error, y dos piezas una encima de otra ya no pasan en verde.
+- Archivo de corte: un agujero redondo dibujado como un arco de una vuelta entera ya no puede convertirse en un punto en el software de corte.
+- Caja fuerte cifrada: un envío en curso ya no se estropea por un cierre de sesión o un desbloqueo en otra pestaña, y cerrar la sesión cierra la caja fuerte.
+- Chapa importada: un cálculo casi lleno ya no se rechaza de antemano; decide el motor.
+- El botón Nest ya no se desactiva por error cuando cada pieza cabe en al menos una de las chapas.
+- Demo: ya no sustituye los ajustes de tu proyecto, y calcula con 2 mm de separación como se anuncia.
+- Pulgadas: un archivo SheetCam .job conserva el kerf y la seguridad correctos, y la página aparece directamente en tu unidad.
+
 ## V0.9.20
 
 *FR*
