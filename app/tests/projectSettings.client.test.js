@@ -204,6 +204,8 @@ describe('dépôt d\'un .job par un compte en pouces', () => {
         // espacement = 2 × kerf + sécurité, en pouces
         expect(Number(p.space)).toBeCloseTo(4 / 25.4, 3)
         expect(Number(p.sheets[0].width)).toBeCloseTo(1000 / 25.4, 3)
+        // champ lisible : 5 décimales au plus en pouces
+        expect(p.sheets[0]).toMatchObject({ width: '39.37008', height: '78.74016' })
     })
 
     it('en millimètres : inchangé', async () => {
@@ -211,5 +213,6 @@ describe('dépôt d\'un .job par un compte en pouces', () => {
         expect(p.kerf).toBe('1.5')
         expect(p.safety).toBe('1')
         expect(p.space).toBe('4')
+        expect(p.sheets[0]).toMatchObject({ width: '1000', height: '2000' })
     })
 })

@@ -873,8 +873,10 @@ async function addSheetCamJobDrop(drop, slug) {
         const u = getUnitState()
         updateParams({
             sheets: [{
-                width: mmToDisplay(prefill.sheet.width, u),
-                height: mmToDisplay(prefill.sheet.height, u),
+                // Arrondi d'affichage fin (0,00001 pouce / 0,001 mm), comme une tôle
+                // importée : jamais 39.37007874015748 dans le champ.
+                width: shapeDisplayLength(prefill.sheet.width, u),
+                height: shapeDisplayLength(prefill.sheet.height, u),
                 count: 1,
             }],
         })
