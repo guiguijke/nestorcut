@@ -282,7 +282,7 @@ fn overlap_area_matches_a_raster_estimate_on_random_shapes() {
             })
             .collect();
         zone.push(zone[0]);
-        let exact = shape::material_zone_overlap(&outer, &[hole.clone()], &zone);
+        let exact = shape::material_zone_overlap(&outer, &[hole.clone()], &zone).expect("aire fiable");
         let step = 0.25;
         let mut hits = 0u64;
         let mut x = 0.0;

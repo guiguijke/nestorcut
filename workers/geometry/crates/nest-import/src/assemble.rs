@@ -26,6 +26,115 @@ pub fn snap_pt(p: [f64; 2]) -> [f64; 2] {
 
 pub type Pt = [f64; 2];
 
+/// Écart, en pas de grille et par axe, sous lequel deux bouts sont le MÊME
+/// point. Un pas suffit aux arrondis de calcul ; le second pas prend les
+/// dessins écrits à 4 décimales. Mesuré sur 148 dessins réels : aucun écart
+/// entre deux bouts voisins n'est compris entre 0,0005 et 0,05 mm.
+pub const JOIN_STEPS: i32 = 2;
+
+/// Ferme le tracé d'une entité fermée (règle Python : premier et dernier
+/// points à moins de `tol`) dont les deux bouts s'arrondissent sur deux points
+/// DIFFÉRENTS de la grille ; les autres ne sont pas touchés. Un cercle calculé
+/// à 0 et à 360 degrés s'ouvrait ainsi d'un pas, et le contour disparaissait.
+/// Plus loin (spline ou polyligne refermée à quelques millièmes près), le trait
+/// de fermeture est ajouté, comme le fait `Polygon` côté Python. Un tracé plus
+/// petit que `MIN_PART_WIDTH_MM` est un petit arc ouvert : il le reste.
+fn close_ring(pts: &mut Vec<Pt>) {
+    let (first, last) = (pts[0], pts[pts.len() - 1]);
+    let (a, b) = (snap_pt(first), snap_pt(last));
+    let bb = ring_bbox(pts);
+    if a == b || bb[2] - bb[0] < MIN_PART_WIDTH_MM || bb[3] - bb[1] < MIN_PART_WIDTH_MM {
+        return;
+    }
+    let near = (JOIN_STEPS as f64 + 0.5) * 1e-4; // demi-pas : marge d'arrondi
+    if (a[0] - b[0]).abs() <= near && (a[1] - b[1]).abs() <= near {
+        let n = pts.len();
+        pts[n - 1] = first;
+    } else {
+        pts.push(first);
+    }
+}
+
+/// Arêtes nodées mises sur la grille 1e-4, dégénérées retirées, puis bouts
+/// LIBRES posés sur le sommet voisin (`JOIN_STEPS`), s'il y en a un. Le bout d'un
+/// segment est écrit, celui d'un arc est calculé : sur une coordonnée à
+/// mi-chemin de deux pas (dessin en pouces au 1/32, 5 décimales) ils
+/// s'arrondissent d'un pas l'un à côté de l'autre, et le contour n'est plus
+/// fermé. Seul un bout libre (un seul voisin) bouge, et jamais vers son propre
+/// voisin : un dessin sans un tel bout rend les mêmes arêtes.
+pub fn snap_edges_until(noded: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
+    type Key = (u64, u64);
+    let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
+    let mut edges: Vec<(Pt, Pt)> = noded
+        .iter()
+        .map(|&(a, b)| (snap_pt(a), snap_pt(b)))
+        .filter(|(a, b)| a != b)
+        .collect();
+    // Sommet -> son seul voisin, None dès qu'il en a deux différents (un trait
+    // dessiné deux fois ne fait pas deux voisins).
+    let mut only: HashMap<Key, Option<Key>> = HashMap::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
+        for (p, q) in [(a, b), (b, a)] {
+            let e = only.entry(key(p)).or_insert(Some(key(q)));
+            if *e != Some(key(q)) {
+                *e = None;
+            }
+        }
+    }
+    let mut free: Vec<(Pt, Key)> = only
+        .iter()
+        .filter_map(|(k, n)| n.map(|n| ([f64::from_bits(k.0), f64::from_bits(k.1)], n)))
+        .collect();
+    free.sort_by(|p, q| p.0[0].total_cmp(&q.0[0]).then(p.0[1].total_cmp(&q.0[1])));
+    let mut moved: HashMap<Key, Pt> = HashMap::new();
+    let mut held: std::collections::HashSet<Key> = std::collections::HashSet::new();
+    for (i, &(p, own)) in free.iter().enumerate() {
+        dl.check_at(i)?;
+        if held.contains(&key(p)) {
+            continue; // un autre bout est déjà venu s'y poser
+        }
+        let (kx, ky) = ((p[0] * 1e4).round(), (p[1] * 1e4).round());
+        // Le plus proche ; à égalité un sommet déjà relié passe avant un autre
+        // bout libre, puis le plus petit (x puis y).
+        let mut best: Option<(bool, Pt)> = None;
+        for r in 1..=JOIN_STEPS {
+            for dx in -r..=r {
+                for dy in -r..=r {
+                    if dx.abs().max(dy.abs()) != r {
+                        continue;
+                    }
+                    let c = [(kx + dx as f64) / 1e4, (ky + dy as f64) / 1e4];
+                    let k = key(c);
+                    if k == key(p) || k == own || moved.contains_key(&k) {
+                        continue;
+                    }
+                    let Some(n) = only.get(&k) else { continue };
+                    let is_free = n.is_some();
+                    if best.is_none_or(|(f, _)| f && !is_free) {
+                        best = Some((is_free, c));
+                    }
+                }
+            }
+            if best.is_some() {
+                break;
+            }
+        }
+        if let Some((_, c)) = best {
+            moved.insert(key(p), c);
+            held.insert(key(c));
+        }
+    }
+    if !moved.is_empty() {
+        for (a, b) in edges.iter_mut() {
+            *a = moved.get(&key(*a)).copied().unwrap_or(*a);
+            *b = moved.get(&key(*b)).copied().unwrap_or(*b);
+        }
+        edges.retain(|(a, b)| a != b);
+    }
+    Ok(edges)
+}
+
 pub fn sub(a: Pt, b: Pt) -> Pt {
     [a[0] - b[0], a[1] - b[1]]
 }
@@ -78,7 +187,7 @@ pub fn collect_linework_until(
         dl.check_at(count)?;
         count += 1;
         let handle = p.handle().to_string();
-        let pts = flatten_primitive(p, tol);
+        let mut pts = flatten_primitive(p, tol);
         if pts.is_empty() {
             continue;
         }
@@ -86,6 +195,9 @@ pub fn collect_linework_until(
         // |first−last| < tol — décidée sur les points BRUTS (l'encre, elle,
         // est stockée snappée pour l'attachement).
         let closed = pts.len() > 2 && dist2(pts[0], pts[pts.len() - 1]).sqrt() < tol;
+        if closed {
+            close_ring(&mut pts);
+        }
         lw.footprints.push(crate::attach::Footprint {
             handle,
             ink: pts.iter().map(|&q| snap_pt(q)).collect(),
@@ -1246,12 +1358,9 @@ pub fn build_parts_stats_until(
     all_edges.extend_from_slice(&lw.segments);
     let noded_full = node_segments_until(&all_edges, dl)?;
 
-    // 2) Snap to the 1e-4 grid (set_precision) then drop degenerate edges.
-    let mut edges: Vec<(Pt, Pt)> = noded_full
-        .iter()
-        .map(|&(a, b)| (snap_pt(a), snap_pt(b)))
-        .filter(|(a, b)| a != b)
-        .collect();
+    // 2) Snap to the 1e-4 grid (set_precision), drop degenerate edges, join
+    //    the free ends that the rounding set one step apart.
+    let mut edges = snap_edges_until(&noded_full, dl)?;
     // Constat lot 2c : le linework qui ne referme rien (mesuré sur le jeu
     // d'arêtes SNAPPÉ, celui que la polygonisation voit).
     asm.dangling_paths = dangling_paths_until(&edges, dl)?;

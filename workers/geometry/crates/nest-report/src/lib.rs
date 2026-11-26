@@ -459,11 +459,10 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
             continue;
         }
         let n = placed_polys.len();
-        // Précalcul (l'ancienne boucle O(n²) recalculait les centroïdes
-        // par paire) + ordre de balayage sur x min.
+        // Précalcul + ordre de balayage sur x min.
         let bounds: Vec<[f64; 4]> = placed_polys.iter().map(|(o, _)| geom::ring_bounds(o)).collect();
-        let centroids: Vec<Pt> = placed_polys.iter().map(|(o, _)| ring_centroid(o)).collect();
-        let areas: Vec<f64> = placed_polys.iter().map(|(o, _)| geom::ring_area_abs(o)).collect();
+        let areas: Vec<f64> =
+            placed_polys.iter().map(|(o, h)| geom::material_area(o, h)).collect();
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&a, &b| bounds[a][0].partial_cmp(&bounds[b][0]).unwrap());
         for i in 0..n {
@@ -525,26 +524,28 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
                     }
                     continue;
                 }
-                // Non contenue : si un centroïde tombe tout de même dans un trou de
-                // l'autre, la pièce mord la paroi (écart nul, comme shapely).
-                let bites = placed_polys[j].1.iter().any(|h| geom::point_in_ring(centroids[i], h))
-                    || placed_polys[i].1.iter().any(|h| geom::point_in_ring(centroids[j], h));
-                if bites {
-                    smallest_gap = 0.0;
-                    overlap_free = false;
-                    continue;
-                }
+                // Non contenue : ou bien les contours sont disjoints (écart vrai), ou
+                // bien ils se touchent, se croisent ou s'emboîtent, et seule l'aire
+                // commune des deux matières décide. Le centre d'une pièce ne dit rien :
+                // celui d'un C tombe dans le trou d'une pièce posée dans son creux, sans
+                // qu'elles se touchent.
                 let d = geom::ring_distance(&placed_polys[i].0, &placed_polys[j].0);
                 if d < smallest_gap {
                     smallest_gap = d;
                 }
-                if d <= 0.0 {
-                    let inter = overlap_area(&placed_polys[i], &placed_polys[j]);
-                    if inter > OVERLAP_EPS_MM2 {
-                        overlap_free = false;
-                    }
-                    if inter > DUPLICATE_AREA_FRACTION * areas[i].min(areas[j]) {
-                        duplicate_poses += 1;
+                if d <= CONTACT_EPS_MM {
+                    match shape::material_overlap(&placed_polys[i], &placed_polys[j]) {
+                        Some(inter) => {
+                            if inter > OVERLAP_EPS_MM2 {
+                                overlap_free = false;
+                            }
+                            if inter > DUPLICATE_AREA_FRACTION * areas[i].min(areas[j]) {
+                                duplicate_poses += 1;
+                            }
+                        }
+                        // Aire non fiable (bords presque confondus) : recouvrement,
+                        // compté comme un recouvrement ; pas de doublon sans aire connue.
+                        None => overlap_free = false,
                     }
                 }
             }
@@ -620,6 +621,10 @@ fn ring_to_sheet_edge_dist(ring: &[Pt], sw: f64, sh: f64) -> f64 {
 }
 
 const WITHIN_EPS: f64 = 1e-7;
+
+/// Contours au contact : sous cet écart, l'aire commune est mesurée (une pièce
+/// posée bord à bord DANS une autre n'est pas vue par le test des arêtes).
+const CONTACT_EPS_MM: f64 = 1e-6;
 
 /// Point dans le trou, bord compris (tolérance WITHIN_EPS).
 fn point_in_closed_ring(p: Pt, ring: &[Pt]) -> bool {
@@ -747,17 +752,6 @@ fn face_centroid(ring: &[Pt]) -> Pt {
         return ring[0];
     }
     [cx / (6.0 * a), cy / (6.0 * a)]
-}
-
-fn overlap_area(a: &(Vec<Pt>, Vec<Vec<Pt>>), b: &(Vec<Pt>, Vec<Vec<Pt>>)) -> f64 {
-    if !geom::rings_overlap(&a.0, &b.0) {
-        return 0.0;
-    }
-    let ba = geom::ring_bounds(&a.0);
-    let bb = geom::ring_bounds(&b.0);
-    let ix = (ba[2].min(bb[2]) - ba[0].max(bb[0])).max(0.0);
-    let iy = (ba[3].min(bb[3]) - ba[1].max(bb[1])).max(0.0);
-    ix * iy
 }
 
 #[cfg(test)]
@@ -1082,6 +1076,79 @@ mod tests {
     }
 
     #[test]
+    fn a_washer_in_the_hollow_of_a_c_is_not_an_overlap() {
+        // Le centre du C (dans son creux) tombe dans le trou de la rondelle carrée.
+        // shapely : intersection 0, distance 1.116.
+        let c = Item {
+            id: "c".into(),
+            coords: closed(vec![
+                [0.0, 0.0], [60.0, 0.0], [60.0, 6.0], [6.0, 6.0], [6.0, 54.0], [60.0, 54.0],
+                [60.0, 60.0], [0.0, 60.0],
+            ]),
+            holes: vec![],
+        };
+        let washer = |x0: f64, id: &str| Item {
+            id: id.into(),
+            coords: closed(vec![[x0, 12.0], [x0 + 36.0, 12.0], [x0 + 36.0, 48.0], [x0, 48.0]]),
+            holes: vec![closed(vec![
+                [x0 + 4.0, 16.0], [x0 + 32.0, 16.0], [x0 + 32.0, 44.0], [x0 + 4.0, 44.0],
+            ])],
+        };
+        let o = ring_centroid(&c.coords);
+        assert!(geom::point_in_ring(o, &washer(7.116, "w").holes[0]), "précondition {o:?}");
+        for swap in [false, true] {
+            let (a, b) = (c.clone(), washer(7.116, "w"));
+            let r = if swap { same_pose_report(b, a, 1.0) } else { same_pose_report(a, b, 1.0) };
+            assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+            assert_eq!(r["smallestGapMm"], serde_json::json!(1.116), "{r}");
+            assert_eq!(r["spacingOk"], serde_json::json!(true), "{r}");
+            assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+        }
+        // La même rondelle enfoncée de 0,5 mm dans l'âme du C : 0,5 x 36 = 18 mm2.
+        let r = same_pose_report(c, washer(5.5, "w"), 1.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+    }
+
+    #[test]
+    fn two_parts_of_the_same_shape_on_the_same_place_are_an_overlap() {
+        // Bords confondus : aucune arête ne croise, aucun sommet n'est dedans.
+        for pose in [0.0, 0.3, 1.234] {
+            let mut items = [frame100(), frame100()];
+            items[1].id = "twin".into();
+            let c = Container {
+                bin_width: 400.0,
+                bin_height: 400.0,
+                transforms: items
+                    .iter()
+                    .map(|i| Transform { item_id: i.id.clone(), angle: pose, x: 200.0, y: 200.0 })
+                    .collect(),
+                ..Default::default()
+            };
+            let r = verify_layout(&[c], &items, 1.0);
+            assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+            assert_eq!(r["duplicatePoses"], serde_json::json!(1), "{r}");
+        }
+    }
+
+    #[test]
+    fn a_part_inside_another_one_along_its_edge_is_an_overlap() {
+        // shapely : intersection 1000 mm2 (la pièce entière).
+        let r = same_pose_report(square("big", 0.0, 0.0, 100.0, 100.0), square("in", 0.0, 30.0, 50.0, 50.0), 0.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(1), "{r}");
+    }
+
+    #[test]
+    fn two_parts_crossing_by_a_corner_are_not_a_duplicate() {
+        // shapely : intersection 100 mm2 sur 2500.
+        let r = same_pose_report(square("a", 0.0, 0.0, 50.0, 50.0), square("b", 40.0, 40.0, 90.0, 90.0), 0.0);
+        assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+    }
+
+    #[test]
     fn a_part_touching_the_hole_through_its_vertices_still_covers_host_material() {
         // Trou à pointe de matière (45;10)-(50;60)-(55;10) ; pièce (20;10)-(80;80).
         // shapely : intersection 250.0 mm2, distance 0.0 -> chevauchement réel.
@@ -1152,5 +1219,173 @@ mod tests {
         );
         assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
         assert_eq!(r["duplicatePoses"], serde_json::json!(1), "{r}");
+    }
+
+    // ---- Bords presque confondus (relecture du 25/11). À ~1e-7 mm d'un bord,
+    // un tronçon de contour était dit « sur le bord » à un endroit et pas à
+    // l'autre : l'aire de Green sortait négative, coupée à 0, donc « pas de
+    // recouvrement ». Vérités : shapely (intersection, distance) sur les mêmes
+    // anneaux ; poses telles quelles (angle 0, x 0, y 0), dans les deux ordres.
+
+    fn raw_item(id: &str, coords: &[Pt], holes: &[&[Pt]]) -> Item {
+        Item { id: id.into(), coords: coords.to_vec(), holes: holes.iter().map(|h| h.to_vec()).collect() }
+    }
+
+    /// Rapports de la paire dans les deux ordres de pose.
+    fn both_orders(a: &Item, b: &Item, space: f64) -> [serde_json::Value; 2] {
+        let one = |x: &Item, y: &Item| {
+            let c = Container {
+                bin_width: 4000.0,
+                bin_height: 4000.0,
+                transforms: [x, y]
+                    .iter()
+                    .map(|i| Transform { item_id: i.id.clone(), angle: 0.0, x: 0.0, y: 0.0 })
+                    .collect(),
+                ..Default::default()
+            };
+            verify_layout(&[c], &[x.clone(), y.clone()], space)
+        };
+        [one(a, b), one(b, a)]
+    }
+
+    #[test]
+    fn a_strip_inside_a_plate_one_edge_1e7_from_its_side_is_an_overlap() {
+        // Plaque 248 x 53, languette 2,78 x 45,45 dans sa matière, bord droit à
+        // ~1e-7 mm du sien. shapely : intersection 126,6 mm2 (toute la languette).
+        let plate = raw_item("plate", &[
+            [1866.0441594890724, 2661.0499764377946], [1618.0441594890724, 2661.0499764377946],
+            [1618.0441594890724, 2608.0499764377946], [1866.0441594890724, 2608.0499764377946],
+            [1866.0441594890724, 2661.0499764377946],
+        ], &[]);
+        let strip = raw_item("strip", &[
+            [1866.0441593960263, 2608.0499764377946], [1866.0441593828707, 2653.5044272047626],
+            [1863.2598924381628, 2653.5044272047626], [1863.2598924381628, 2608.0499764377946],
+            [1866.0441593960263, 2608.0499764377946],
+        ], &[]);
+        for r in both_orders(&plate, &strip, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        }
+        // Même garde pour une zone interdite de tôle, dans les deux rôles.
+        let z1 = shape::material_zone_overlap(&plate.coords, &[], &strip.coords);
+        let z2 = shape::material_zone_overlap(&strip.coords, &[], &plate.coords);
+        assert!(z1.is_none_or(|a| a > OVERLAP_EPS_MM2), "{z1:?}");
+        assert!(z2.is_none_or(|a| a > OVERLAP_EPS_MM2), "{z2:?}");
+    }
+
+    #[test]
+    fn a_sliver_seen_on_the_edge_in_both_orders_does_not_hide_a_real_overlap() {
+        // Paire construite par la relecture (91100001) : un bord croise l'autre sous
+        // un angle infime ; le même tronçon est perdu dans les deux ordres, l'aire
+        // fausse reste dans les bornes. shapely (grille 1e-9) : 1,131 mm2 communs.
+        let a = raw_item("a", &[
+            [1682.0524910637118, 3140.893513306419], [1682.0524910637118, 3700.1643966237507],
+            [1176.5871879136432, 3700.1643966237507], [1176.5871879136432, 3140.893513306419],
+            [1682.0524910637118, 3140.893513306419],
+        ], &[]);
+        let b = raw_item("b", &[
+            [1672.0524910637118, 3091.331827114955], [1672.0524910637118, 3141.047027330487],
+            [1664.6852522257034, 3141.047027330487], [1664.6852522257034, 3140.893507524324],
+            [1643.826173207107, 3140.893513306619], [1643.826173207107, 3091.331827114955],
+            [1672.0524910637118, 3091.331827114955],
+        ], &[]);
+        for r in both_orders(&a, &b, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        }
+        let z1 = shape::material_zone_overlap(&a.coords, &[], &b.coords);
+        let z2 = shape::material_zone_overlap(&b.coords, &[], &a.coords);
+        assert!(z1.is_none_or(|v| v > OVERLAP_EPS_MM2), "{z1:?}");
+        assert!(z2.is_none_or(|v| v > OVERLAP_EPS_MM2), "{z2:?}");
+    }
+
+    #[test]
+    fn a_part_in_a_hole_1e7_from_its_wall_is_judged_on_its_real_area() {
+        let host = raw_item("host", &[
+            [30.82143783569336, 502.0532531738281], [-29.382999728542345, 520.6119626541246],
+            [-54.42252839243437, 439.3837532420605], [5.781909171801338, 420.82504376176405],
+            [30.82143783569336, 502.0532531738281],
+        ], &[&[
+            [13.772644590067813, 489.5193531874746], [-22.350017948473607, 500.6545788756525],
+            [-37.373735146808826, 451.91765322841405], [-1.2510726082673997, 440.7824275402362],
+            [13.772644590067813, 489.5193531874746],
+        ]]);
+        // Posée 1e-7 mm au-delà de la paroi : shapely 0,70 mm2 sur la matière.
+        let biting = raw_item("in", &[
+            [8.222038236860037, 471.51319062050663], [-28.091749500298008, 482.7073328467172],
+            [-29.122788915870032, 479.36264187092627], [3.84630784549714, 469.19953906028775],
+            [-2.7818026831801603, 447.6979542159179], [0.5628882926107082, 446.66691480034586],
+            [8.222038236860037, 471.51319062050663],
+        ], &[]);
+        for r in both_orders(&host, &biting, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        }
+        // Posée 1e-7 mm en deçà de la paroi d'un autre trou : shapely 3,6e-7 mm2.
+        let frame = raw_item("host", &[
+            [13.630993843078613, 274.824951171875], [25.370317645351285, 192.65933624284648],
+            [165.94281547573743, 212.74348057926477], [154.20349167346475, 294.9090955082933],
+            [13.630993843078613, 274.824951171875],
+        ], &[&[
+            [44.093358169610376, 262.40865705335295], [51.13695245097398, 213.10928809593585],
+            [135.48045114920566, 225.15977469778682], [128.43685686784207, 274.45914365520395],
+            [44.093358169610376, 262.40865705335295],
+        ]]);
+        let resting = raw_item("in", &[
+            [119.3017067079566, 233.75792701004278], [120.82923317861376, 223.06649759759085],
+            [122.61113808068907, 223.32108534270037], [121.33819935514143, 232.23060985307697],
+            [134.20751253679651, 234.06929912331248], [133.952924791687, 235.85120402538777],
+            [119.3017067079566, 233.75792701004278],
+        ], &[]);
+        for r in both_orders(&frame, &resting, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+        }
+    }
+
+    #[test]
+    fn two_triangles_in_contact_on_a_slanted_edge_do_not_overlap() {
+        // Les deux moitiés d'un rectangle 60 x 80, la diagonale de b pivotée de
+        // 1e-6 mm : elle croise celle de a. L'ancien test prenait alors l'aire
+        // commune des boîtes (2 400 mm2). shapely : intersection 2e-5 mm2,
+        // distance 0,0.
+        let d = 1e-6;
+        let a = raw_item("a", &[[0.0, 0.0], [60.0, 0.0], [0.0, 80.0], [0.0, 0.0]], &[]);
+        let b = raw_item("b", &[[60.0 - d, 0.0], [60.0, 80.0], [d, 80.0], [60.0 - d, 0.0]], &[]);
+        for r in both_orders(&a, &b, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(true), "{r}");
+            assert_eq!(r["smallestGapMm"], serde_json::json!(0.0), "{r}");
+            assert_eq!(r["duplicatePoses"], serde_json::json!(0), "{r}");
+        }
+    }
+
+    #[test]
+    fn a_copy_moved_by_1e8_to_1e5_mm_is_an_overlap() {
+        // Cas tiré : copie à 3,3e-8 mm, un sommet de plus sur un bord.
+        // shapely : intersection 65 504 mm2 (toute la pièce).
+        let a = raw_item("a", &[
+            [1902.9488461355122, 2629.8901512347575], [1902.9488462529464, 2985.8901512347575],
+            [1718.9488462529464, 2985.890151295454], [1718.9488462127958, 2864.1740838025],
+            [1718.9488461355122, 2629.890151295454], [1753.9518123437701, 2629.8901512839075],
+            [1902.9488461355122, 2629.8901512347575],
+        ], &[]);
+        let b = raw_item("b", &[
+            [1902.948846102525, 2629.890151267745], [1902.948846102525, 2985.890151267745],
+            [1718.948846102525, 2985.890151267745], [1718.948846102525, 2629.890151267745],
+            [1902.948846102525, 2629.890151267745],
+        ], &[]);
+        for r in both_orders(&a, &b, 0.0) {
+            assert_eq!(r["overlapFree"], serde_json::json!(false), "{r}");
+        }
+        // Cadre à trou et sa copie décalée de 1e-8 à 1e-5 mm, dans huit directions.
+        let host = frame100();
+        let at = |id: &str, dx: f64, dy: f64| -> Item {
+            let mv = |r: &Vec<Pt>| r.iter().map(|p| [p[0] + 1234.5 + dx, p[1] + 2345.25 + dy]).collect::<Vec<Pt>>();
+            Item { id: id.into(), coords: mv(&host.coords), holes: host.holes.iter().map(mv).collect() }
+        };
+        let original = at("orig", 0.0, 0.0);
+        for e in [1e-8, 3e-8, 1e-7, 3e-7, 1e-6, 3e-6, 1e-5] {
+            for (sx, sy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (1.0, 1.0), (-1.0, 1.0), (1.0, -1.0), (-1.0, -1.0)] {
+                for r in both_orders(&original, &at("copy", sx * e, sy * e), 0.0) {
+                    assert_eq!(r["overlapFree"], serde_json::json!(false), "{e} {sx} {sy} {r}");
+                }
+            }
+        }
     }
 }

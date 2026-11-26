@@ -553,6 +553,61 @@ def main_degenerate_rings():
     print(f"piece degeneree -> {OUT}")
 
 
+# ------------------------------------------------- jonctions à mi-pas
+# Dessin en pouces sur des 1/32 impairs : 25,4/32 = 0,79375 mm, la coordonnée
+# tombe pile entre deux pas de la grille 1e-4. Le bout écrit d'un segment et le
+# bout calculé d'un arc s'y arrondissaient d'un pas l'un à côté de l'autre, un
+# cercle ne se refermait plus : pièce, trou ou zone perdus.
+# Mode : build_corpus.py jonctions
+
+
+def main_joints_on_grid():
+    os.makedirs(OUT, exist_ok=True)
+    u = 1 / 32
+
+    def rounded(msp, x, y, w, h, r):
+        msp.add_line((x + r, y), (x + w - r, y))
+        msp.add_arc((x + w - r, y + r), r, 270, 360)
+        msp.add_line((x + w, y + r), (x + w, y + h - r))
+        msp.add_arc((x + w - r, y + h - r), r, 0, 90)
+        msp.add_line((x + w - r, y + h), (x + r, y + h))
+        msp.add_arc((x + r, y + h - r), r, 90, 180)
+        msp.add_line((x, y + h - r), (x, y + r))
+        msp.add_arc((x + r, y + r), r, 180, 270)
+
+    def slot(msp, x, y, length, r):
+        msp.add_line((x, y - r), (x + length, y - r))
+        msp.add_arc((x + length, y), r, 270, 90)
+        msp.add_line((x + length, y + r), (x, y + r))
+        msp.add_arc((x, y), r, 90, 270)
+
+    doc = new_doc(1)
+    msp = doc.modelspace()
+    # Plaque : quatre trous ronds, un arrondi, un oblong, une ellipse.
+    rect(msp, 0, 0, 10, 6)
+    for k in range(4):
+        msp.add_circle((1 + (2 * k + 1) * u + k, 1 + (4 * k + 3) * u), 0.25 + 2 * k * u)
+    rounded(msp, 1 + u, 3 + 3 * u, 1.5 + u, 1 + u, 0.25 + u)
+    slot(msp, 5 + u, 3 + 5 * u, 2 + u, 0.25 + u)
+    msp.add_ellipse((8 + u, 1 + 7 * u), (0.75, 0), 0.5)
+    # Pièces seules, ordonnées d'y-min distinctes.
+    for k in range(6):
+        x, y = 12 + 4 * k + u, 10 + 4 * k + (2 * k + 1) * u
+        rounded(msp, x, y, 2 + k * u, 1 + 3 * k * u, 0.25 + k * u)
+        msp.add_circle((x + 1 + u, y + 0.5 + u), 0.125 + u)
+    # Cloison et deux arcs : trois bouts par jonction.
+    x, y, r = 40 + u, 40 + 3 * u, 0.5 + 3 * u
+    msp.add_line((x, y - r), (x, y + r))
+    msp.add_arc((x, y), r, 270, 90)
+    msp.add_arc((x, y), r, 90, 270)
+    # Arc d'un tour entier dans un bloc tourné.
+    doc.blocks.new("TOUR").add_arc((1, 0.5), 0.75, 0, 360)
+    msp.add_blockref("TOUR", (44, 46), dxfattribs={"rotation": 37.3})
+    save_new(doc, "joints_on_grid.dxf")
+
+    print(f"jonctions à mi-pas -> {OUT}")
+
+
 # ---------------------------------------------------------------- SVG corpus
 SVG_OUT = os.path.join(REPO, "workers", "geometry", "parity", "corpus_svg")
 
@@ -1190,6 +1245,8 @@ if __name__ == "__main__":
         main_open_line()
     elif sys.argv[1:] == ["anneaux"]:
         main_degenerate_rings()
+    elif sys.argv[1:] == ["jonctions"]:
+        main_joints_on_grid()
     elif sys.argv[1:] == ["tole"]:
         main_sheets()
         main_sheets_curved()
@@ -1202,3 +1259,4 @@ if __name__ == "__main__":
         main_thin_frames()
         main_open_line()
         main_degenerate_rings()
+        main_joints_on_grid()

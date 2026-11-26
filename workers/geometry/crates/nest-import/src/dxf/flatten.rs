@@ -192,9 +192,16 @@ pub fn flatten_primitive(p: &Primitive, tol: f64) -> Vec<[f64; 2]> {
             if isclose(start, stop) {
                 return Vec::new();
             }
+            // Un tour entier (0 à 360, tourné par un bloc) doit le rester : ramenés
+            // à [0, 360), ses deux angles peuvent différer d'un arrondi, et l'arc
+            // devenait un point.
+            let full = isclose(stop - start, 360.0);
             start = py_mod(start, 360.0);
             stop = py_mod(stop, 360.0);
             if stop <= start {
+                stop += 360.0;
+            }
+            if full && stop - start < 180.0 {
                 stop += 360.0;
             }
             let span = radians(stop - start);

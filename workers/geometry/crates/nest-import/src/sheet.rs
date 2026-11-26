@@ -32,6 +32,10 @@
 //! seul sommet) : chaque cycle est coupé en boucles simples, seules les boucles
 //! d'aire positive sont des contours. Les traits qui ne bordent aucune face
 //! (pendants et ponts) sont comptés par groupes connexes dans `openPaths`.
+//!
+//! Seule exception au « rien n'est nettoyé » : une boucle plus fine que
+//! `MIN_ZONE_WIDTH_MM` n'est pas un contour (voir cette constante), et ses
+//! traits comptent comme ouverts.
 
 use crate::assemble::{self, Pt};
 use crate::budget::{Deadline, Expired, Limits};
@@ -71,6 +75,34 @@ pub struct SheetResult {
 }
 
 type Key = (u64, u64);
+
+/// Largeur moyenne (2·aire/périmètre) sous laquelle une boucle n'est pas une
+/// zone : la moitié des 0,01 mm de lecture. Une polyligne OUVERTE dont les bouts
+/// sont à moins de 0,01 mm est refermée (`close_ring`, comme Python) ; si elle
+/// fait l'aller-retour (aiguille), la boucle obtenue a une largeur moyenne sous
+/// la moitié de cet écart, quelle que soit sa longueur (0,09 mm2 mesurés pour
+/// 20 mm). Un seuil d'aire ne suffit pas : à 1e-3 mm2, 2 741 aiguilles sur
+/// 3 001 restaient des zones. Toute boucle sous 7,9e-5 mm2 tombe aussi
+/// (2·A/P ≤ √(A/π)). Sur 324 dessins, les plus petits contours compacts gardés
+/// font 9,6e-4 mm2 (0,045 mm de côté, largeur 0,0136 mm).
+const MIN_ZONE_WIDTH_MM: f64 = 0.005;
+
+/// Boucle trop fine pour être une zone (aire absolue, anneau sans fermeture).
+fn too_thin_for_a_zone(ring: &[Pt], area: f64) -> bool {
+    let n = ring.len();
+    let mut perim = 0.0;
+    for k in 0..n {
+        let (a, b) = (ring[k], ring[(k + 1) % n]);
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        perim += (dx * dx + dy * dy).sqrt();
+    }
+    2.0 * area < MIN_ZONE_WIDTH_MM * perim
+}
+
+/// Demi-arêtes (sommet, suivant) d'une boucle sans point de fermeture.
+fn half_edges(ring: &[Pt]) -> impl Iterator<Item = (Key, Key)> + '_ {
+    (0..ring.len()).map(move |k| (key(ring[k]), key(ring[(k + 1) % ring.len()])))
+}
 
 fn key(p: Pt) -> Key {
     (p[0].to_bits(), p[1].to_bits())
@@ -130,9 +162,13 @@ fn rotate_to_lowest(ring: &mut Vec<Pt>) {
 /// sont regroupées par sommets communs. Un trait isolé (deux sommets) n'est
 /// rendu par la marche dans aucun cycle (moins de 3 sommets) : ses deux
 /// demi-arêtes sans cycle comptent aussi comme « ne borde aucune face ».
+/// Une arête d'une boucle trop fine (`thin`) qui ne borde aucun contour gardé
+/// (`kept`) est ouverte aussi : l'aiguille refermée reste un trait ouvert.
 fn open_stroke_groups(
     edges: &[(Pt, Pt)],
     cycles: &[Vec<Pt>],
+    thin: &HashSet<(Key, Key)>,
+    kept: &HashSet<(Key, Key)>,
     dl: &Deadline,
 ) -> Result<usize, Expired> {
     let mut owner: HashMap<(Key, Key), usize> = HashMap::new();
@@ -170,7 +206,9 @@ fn open_stroke_groups(
             (Some(x), Some(y)) => x == y,
             (None, None) => true,
             _ => false,
-        };
+        } || ((thin.contains(&(ka, kb)) || thin.contains(&(kb, ka)))
+            && !kept.contains(&(ka, kb))
+            && !kept.contains(&(kb, ka)));
         if open {
             parent.entry(ka).or_insert(ka);
             parent.entry(kb).or_insert(kb);
@@ -206,18 +244,25 @@ pub fn contours_of_edges(
     // les formes attachées par un sommet, qui sont des boucles d'aire nulle ou
     // négative).
     let cycles = assemble::polygonize_until(&[], edges, dl)?;
-    let open_paths = open_stroke_groups(edges, &cycles, dl)?;
     let mut faces: Vec<Vec<Pt>> = Vec::new();
+    let (mut thin, mut kept) = (HashSet::new(), HashSet::new());
     for (i, c) in cycles.iter().enumerate() {
         dl.check_at(i)?;
         for mut l in split_simple_loops(c) {
-            // Faces bornées = boucles d'aire strictement positive.
-            if l.len() >= 3 && assemble::ring_signed_area(&l) > 1e-10 {
+            // Faces bornées = boucles d'aire strictement positive, assez larges.
+            let area = assemble::ring_signed_area(&l);
+            if l.len() >= 3 && area > 1e-10 {
+                if too_thin_for_a_zone(&l, area) {
+                    thin.extend(half_edges(&l));
+                    continue;
+                }
+                kept.extend(half_edges(&l));
                 rotate_to_lowest(&mut l);
                 faces.push(l);
             }
         }
     }
+    let open_paths = open_stroke_groups(edges, &cycles, &thin, &kept, dl)?;
 
     // Cycles uniques (même ensemble de sommets = même cycle).
     let mut unique: Vec<Vec<Pt>> = Vec::new();
@@ -663,11 +708,8 @@ pub fn import_sheet_contours(
     all_edges.extend_from_slice(&lw.segments);
     let noded = assemble::node_segments_until(&all_edges, &dl)
         .map_err(|e| crate::out_of_time(count, limits, e))?;
-    let edges: Vec<(Pt, Pt)> = noded
-        .iter()
-        .map(|&(a, b)| (assemble::snap_pt(a), assemble::snap_pt(b)))
-        .filter(|(a, b)| a != b)
-        .collect();
+    let edges = assemble::snap_edges_until(&noded, &dl)
+        .map_err(|e| crate::out_of_time(count, limits, e))?;
     let (contours, open_paths) = contours_of_edges(&edges, &dl)
         .map_err(|e| crate::out_of_time(count, limits, e))?;
     Ok(SheetResult {

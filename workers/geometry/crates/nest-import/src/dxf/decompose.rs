@@ -536,7 +536,13 @@ fn arc_entity(
 ) -> Entity {
     if m.is_uniform() {
         let theta = libm::atan2(m.c, m.a).to_degrees();
-        let (start_angle, end_angle) = if m.mirrors() {
+        // Un tour entier garde ses angles, comme ezdxf (Arc.transform) : tournés,
+        // ils ne valaient plus le même angle à l'arrondi près, et le lecteur du
+        // fichier de coupe y voyait un point. Miroir : l'OCS -Z d'ezdxf.
+        let full = isclose((end_angle - start_angle).abs(), 360.0, 1e-9);
+        let (start_angle, end_angle) = if full {
+            if m.mirrors() { (180.0 - end_angle, 180.0 - start_angle) } else { (start_angle, end_angle) }
+        } else if m.mirrors() {
             (theta - end_angle, theta - start_angle)
         } else {
             (start_angle + theta, end_angle + theta)

@@ -252,9 +252,20 @@ struct Edge {
     bx: [f64; 4],
 }
 
+/// Appartenance à un bord pour l'aire commune de deux matières (pièce/pièce,
+/// pièce/zone). Bien plus fine que ON_EPS : à 1e-7, un tronçon posé à ~1e-7
+/// d'un bord était dit « sur le bord » à un endroit et pas à l'autre, compté
+/// deux fois ou pas du tout (aire mesurée jusqu'à -18 042 mm²). Des poses
+/// réelles qui coïncident le font à quelques ulp (~1e-12 mm à 4 000 mm).
+const AREA_ON_EPS: f64 = 1e-10;
+
 /// Marge des boîtes d'élagage : au-dessus de la tolérance d'appartenance
-/// (ON_EPS), pour qu'aucune arête proche d'au moins ON_EPS ne soit écartée.
-const PRUNE_EPS: f64 = 2.0 * ON_EPS;
+/// (AREA_ON_EPS), pour qu'aucune arête assez proche ne soit écartée.
+const PRUNE_EPS: f64 = 2.0 * AREA_ON_EPS;
+
+/// Accord exigé entre les deux ordres de calcul de l'aire commune (mm²) :
+/// même seuil que le recouvrement compté par le rapport.
+const AREA_AGREE_MM2: f64 = 0.01;
 
 fn edges_of(ring: &[Pt]) -> Vec<Edge> {
     ring.windows(2)
@@ -283,7 +294,7 @@ fn split_params(a: Pt, b: Pt, edges: &[Edge]) -> Vec<f64> {
     }
     for e in edges {
         for p in [e.a, e.b] {
-            if geom::point_seg_dist(p, a, b) <= ON_EPS {
+            if geom::point_seg_dist(p, a, b) <= AREA_ON_EPS {
                 ts.push((((p[0] - a[0]) * ab[0] + (p[1] - a[1]) * ab[1]) / l2).clamp(0.0, 1.0));
             }
         }
@@ -306,14 +317,14 @@ fn split_params(a: Pt, b: Pt, edges: &[Edge]) -> Vec<f64> {
 }
 
 fn on_edges(p: Pt, edges: &[Edge]) -> bool {
-    edges.iter().any(|e| geom::point_seg_dist(p, e.a, e.b) <= ON_EPS)
+    edges.iter().any(|e| geom::point_seg_dist(p, e.a, e.b) <= AREA_ON_EPS)
 }
 
 /// Direction (produit scalaire) de la première arête de `edges` qui porte `p`
 /// (ordre de l'anneau), par rapport à `dir` ; `None` si `p` n'est sur aucune.
 fn dot_with_edge_at(p: Pt, dir: Pt, edges: &[Edge]) -> Option<f64> {
     for e in edges {
-        if geom::point_seg_dist(p, e.a, e.b) <= ON_EPS {
+        if geom::point_seg_dist(p, e.a, e.b) <= AREA_ON_EPS {
             return Some(dir[0] * (e.b[0] - e.a[0]) + dir[1] * (e.b[1] - e.a[1]));
         }
     }
@@ -398,36 +409,95 @@ fn contour_part(
     sum
 }
 
-/// Aire de recouvrement (mm²) entre la matière d'une pièce (anneau externe
-/// moins ses trous) et une zone : Green sur les tronçons de contour, exact
-/// pour des polygones simples. Les anneaux sont orientés ici (matière : contour
-/// anti-horaire, trous horaires ; zone anti-horaire).
-pub fn material_zone_overlap(outer: &[Pt], holes: &[Vec<Pt>], zone: &[Pt]) -> f64 {
-    let o = oriented(outer, true);
-    let hs: Vec<Vec<Pt>> = holes.iter().map(|h| oriented(h, false)).collect();
-    let z = oriented(zone, true);
-    let in_zone = |p: Pt| geom::point_in_ring(p, &z);
-    // Bord de la matière dans la zone (contour ccw, trous cw).
-    let zone_ring: [&[Pt]; 1] = [&z];
-    let mut area = contour_part(&o, &zone_ring, &in_zone, true);
-    for h in &hs {
-        area += contour_part(h, &zone_ring, &in_zone, true);
-    }
-    // Bord de la zone dans la matière : dans le contour, hors de tout trou ;
-    // un tronçon sur le bord de la matière est compté (ou non) côté matière.
-    let mut material_rings: Vec<&[Pt]> = vec![&o];
-    material_rings.extend(hs.iter().map(|h| h.as_slice()));
-    // Hors de la boîte du contour (marge 1e-9), un point n'est pas dans la
-    // matière : on évite alors le balayage du contour (même verdict).
-    let ob = geom::ring_bounds(&o);
-    let in_material = |p: Pt| {
-        if p[0] < ob[0] - 1e-9 || p[0] > ob[2] + 1e-9 || p[1] < ob[1] - 1e-9 || p[1] > ob[3] + 1e-9 {
-            return false;
-        }
-        geom::point_in_ring(p, &o) && !hs.iter().any(|h| geom::point_in_ring(p, h))
+/// Matière : contour (anti-horaire) et trous (horaires), anneaux fermés.
+type Material = Vec<Vec<Pt>>;
+
+fn material_of(outer: &[Pt], holes: &[Vec<Pt>]) -> Material {
+    let mut v = vec![oriented(outer, true)];
+    v.extend(holes.iter().map(|h| oriented(h, false)));
+    v
+}
+
+fn material_area(m: &Material) -> f64 {
+    signed_area(&m[0]).abs() - m[1..].iter().map(|h| signed_area(h).abs()).sum::<f64>()
+}
+
+/// Intégrale de Green BRUTE de la matière commune : bord de `a` dans `b` (un
+/// bord commun de même sens compté de ce côté), plus bord de `b` dans `a`.
+/// Exacte pour des polygones simples, mais pas symétrique au bruit près.
+fn raw_overlap(a: &Material, b: &Material) -> f64 {
+    let inside = |m: &Material, bx: &[f64; 4], p: Pt| -> bool {
+        p[0] >= bx[0] && p[0] <= bx[2] && p[1] >= bx[1] && p[1] <= bx[3]
+            && geom::point_in_ring(p, &m[0])
+            && !m[1..].iter().any(|h| geom::point_in_ring(p, h))
     };
-    area += contour_part(&z, &material_rings, &in_material, false);
-    area.max(0.0)
+    let (ba, bb) = (geom::ring_bounds(&a[0]), geom::ring_bounds(&b[0]));
+    let va: Vec<&[Pt]> = a.iter().map(|r| r.as_slice()).collect();
+    let vb: Vec<&[Pt]> = b.iter().map(|r| r.as_slice()).collect();
+    let mut area = 0.0;
+    for r in a {
+        area += contour_part(r, &vb, &|p| inside(b, &bb, p), true);
+    }
+    for r in b {
+        area += contour_part(r, &va, &|p| inside(a, &ba, p), false);
+    }
+    area
+}
+
+/// Aire commune (mm²) à deux matières, ou `None` si le calcul n'est pas fiable.
+/// Quand deux bords sont presque confondus, un tronçon peut encore être
+/// classé des deux côtés ou d'aucun : l'intégrale sort alors de [0, aire de
+/// la plus petite matière] ou dépend de l'ordre. On la calcule dans les deux
+/// ordres ; un désaccord ou une valeur hors bornes (à 0,01 mm² près) rend
+/// `None`, que l'appelant compte comme un recouvrement. Un cas construit exprès
+/// a trompé les deux ordres à la fois : voir aussi le contrôle de fermeture.
+fn guarded_overlap(a: &Material, b: &Material) -> Option<f64> {
+    let (m1, m2) = (raw_overlap(a, b), raw_overlap(b, a));
+    let amin = material_area(a).min(material_area(b));
+    let ok = (m1 - m2).abs() <= AREA_AGREE_MM2
+        && m1.min(m2) >= -AREA_AGREE_MM2
+        && m1.max(m2) <= amin + AREA_AGREE_MM2;
+    ok.then(|| m1.max(m2).max(0.0))
+}
+
+fn shifted(m: &Material, o: Pt) -> Material {
+    m.iter().map(|r| r.iter().map(|p| [p[0] - o[0], p[1] - o[1]]).collect()).collect()
+}
+
+/// `guarded_overlap`, plus un contrôle de fermeture. Une frontière fermée a la
+/// même intégrale de Green quelle que soit l'origine ; un tronçon perdu ou compté
+/// deux fois (bords quasi confondus traités « sur le bord » des deux côtés, mal
+/// vus dans les deux ordres à la fois) la déplace de ½·(ΔO × tronçon). Trois
+/// autres origines (coins de la boîte de la paire) doivent donner la même aire,
+/// sinon `None` : non fiable, compté comme un recouvrement.
+fn guarded_overlap_closed(a: &Material, b: &Material) -> Option<f64> {
+    let g0 = guarded_overlap(a, b)?;
+    let (ba, bb) = (geom::ring_bounds(&a[0]), geom::ring_bounds(&b[0]));
+    let lo = [ba[0].min(bb[0]), ba[1].min(bb[1])];
+    let hi = [ba[2].max(bb[2]), ba[3].max(bb[3])];
+    for o in [lo, hi, [lo[0], hi[1]]] {
+        let g = guarded_overlap(&shifted(a, o), &shifted(b, o))?;
+        if (g - g0).abs() > AREA_AGREE_MM2 {
+            return None;
+        }
+    }
+    Some(g0)
+}
+
+/// Aire de recouvrement (mm²) entre la matière d'une pièce (anneau externe
+/// moins ses trous) et une zone, `None` si le calcul n'est pas fiable (voir
+/// `guarded_overlap_closed` : à compter comme une violation).
+pub fn material_zone_overlap(outer: &[Pt], holes: &[Vec<Pt>], zone: &[Pt]) -> Option<f64> {
+    guarded_overlap_closed(&material_of(outer, holes), &material_of(zone, &[]))
+}
+
+/// Aire commune (mm²) à la matière de deux pièces (contour moins trous), avec
+/// les trous des deux côtés. Aucun point témoin ne décide, donc ni le centre
+/// d'une pièce en C ni un sommet posé sur un bord ne la trompent. `None` si le
+/// calcul n'est pas fiable (voir `guarded_overlap_closed` : à compter comme un
+/// recouvrement).
+pub fn material_overlap(a: &(Vec<Pt>, Vec<Vec<Pt>>), b: &(Vec<Pt>, Vec<Vec<Pt>>)) -> Option<f64> {
+    guarded_overlap_closed(&material_of(&a.0, &a.1), &material_of(&b.0, &b.1))
 }
 
 /// Distance (mm) entre la matière d'une pièce et une zone SANS recouvrement :
@@ -528,10 +598,12 @@ pub fn check_sheet(
             if g >= best_zone && g > 0.0 {
                 continue;
             }
-            let area = if g == 0.0 { material_zone_overlap(&ring, h, z) } else { 0.0 };
-            if area > overlap_eps_mm2 {
+            // Aire non fiable (bords presque confondus) : violation, sans aire
+            // ajoutée au total puisqu'on ne la connaît pas.
+            let area = if g == 0.0 { material_zone_overlap(&ring, h, z) } else { Some(0.0) };
+            if area.is_none_or(|a| a > overlap_eps_mm2) {
                 hit = true;
-                overlap_total += area;
+                overlap_total += area.unwrap_or(0.0);
                 best_zone = 0.0;
             } else if g < best_zone {
                 let d = material_zone_distance(&ring, h, z);

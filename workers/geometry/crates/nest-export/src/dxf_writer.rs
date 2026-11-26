@@ -118,8 +118,17 @@ fn write_entity(s: &mut String, e: &Entity, aff: &Affine, handle: &str) -> bool 
             num(s, 10, c[0]);
             num(s, 20, c[1]);
             num(s, 40, a.radius * aff.scale);
-            num(s, 50, aff.rotate_deg(a.start_angle));
-            num(s, 51, aff.rotate_deg(a.end_angle));
+            // Un tour entier s'écrit 0 / 360 : tournés (185.61499999999998 /
+            // 545.615), ou d'origine comme 33.3 / 393.3, ses angles ne valent plus
+            // le même angle modulo 360 à l'arrondi près, et un lecteur y voit un point.
+            let full = ((a.end_angle - a.start_angle).abs() - 360.0).abs() <= 1e-9;
+            let (start, end) = if full {
+                (0.0, 360.0)
+            } else {
+                (aff.rotate_deg(a.start_angle), aff.rotate_deg(a.end_angle))
+            };
+            num(s, 50, start);
+            num(s, 51, end);
             true
         }
         Entity::Circle(c) => {
