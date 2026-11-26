@@ -132,6 +132,33 @@
                     data-testid="settings-safety"
                 />
                 <p class="size__rule">{{ spacingRule }}</p>
+                <!-- Distance au bord de la tôle : réglage séparé de l'espacement.
+                     Vide = comme l'espacement ; négatif = les pièces peuvent
+                     dépasser du bord. Calcul dans le navigateur seulement
+                     (phase 1) : grisé ailleurs, avec sa raison. -->
+                <InputField
+                    :prefix="t('settings.edgeDistance')"
+                    :suffix="unitLabel"
+                    :placeholder="edgePlaceholder"
+                    v-model="localEdge"
+                    :is-disable="edgeDisabled"
+                    :is-error="edgeInvalid"
+                    :disabled="edgeDisabled"
+                    inputmode="decimal"
+                    :aria-invalid="edgeInvalid ? 'true' : undefined"
+                    class="size__input"
+                    data-testid="settings-edge"
+                />
+                <p class="size__rule" data-testid="settings-edge-rule">{{ t('settings.edgeRule') }}</p>
+                <p v-if="edgeDisabled" class="size__rule" data-testid="settings-edge-local-only">
+                    {{ t('settings.edgeLocalOnly') }}
+                </p>
+                <div v-if="edgeInvalid" class="size__warning" data-testid="settings-edge-invalid">
+                    {{ t('settings.edgeInvalid') }}
+                </div>
+                <div v-else-if="edgeNegativeHint" class="size__warning" data-testid="settings-edge-overhang">
+                    {{ edgeNegativeHint }}
+                </div>
                 <!-- W10 (vérif 2026-09-04) : espacement sous le kerf laser —
                      avertissement visible (micro-chevauchements possibles). -->
                 <div
@@ -248,6 +275,8 @@
     import { DEFAULT_SHEET, SHEET_PRESETS } from '~/utils/units'
     import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
     import { holesDisabledHintVisible } from '~/utils/holesHint'
+    import { edgeDistanceNumber, isValidEdgeDistance } from '~/utils/spacingParams'
+    import { maxOverhangMm } from '~/utils/partSheetFit'
     import { DEMO_MAX_DIRECTIONS, DEMO_PROJECT_SLUG, DEMO_WALK_CHOICES, resolveDemoWalks } from '~~/shared/constants/demo.constants'
     import { displayDirectionArrow } from '~/utils/sheetView'
     import {
@@ -261,7 +290,7 @@
     const { t } = useLocale()
     const { unit, unitLabel, enabled: unitsEnabled, fmtLength, fmtLengthValue, displayToMm } = useUnit()
     const { getters, actions } = filesStore
-    const { updateParams, updateKerfSafety, updateSheet, addSheet, removeSheet } = actions
+    const { updateParams, updateKerfSafety, updateEdgeDistance, updateSheet, addSheet, removeSheet } = actions
     const params = computed(() => getters.params)
 
     // Standard sheet sizes of the current unit (a US user picks 48×96 from a
@@ -348,6 +377,30 @@
     const localSafety = computed({
         get: () => unref(params).safety ?? '0',
         set: (value) => updateKerfSafety({ safety: value }),
+    })
+
+    // Distance au bord : passe par son propre chemin d'écriture (jamais par
+    // updateKerfSafety) ; '' = comme l'espacement. Champ grisé hors des projets
+    // « Cet appareil » (le serveur refuse le réglage pour l'instant).
+    const localEdge = computed({
+        get: () => unref(params).edgeDistance ?? '',
+        set: (value) => updateEdgeDistance(value),
+    })
+    const edgeDisabled = computed(() => !isLocalProject.value)
+    const edgeInvalid = computed(() => !edgeDisabled.value && !isValidEdgeDistance(unref(params).edgeDistance))
+    const edgePlaceholder = computed(() =>
+        t('settings.edgePlaceholder', { v: unref(params).space ?? '0', unit: unitLabel.value })
+    )
+    // Bord négatif : dit jusqu'où les pièces peuvent dépasser, et le plafond
+    // (la moitié de la plus petite pièce, mesurée sur les fiches du projet).
+    const edgeNegativeHint = computed(() => {
+        if (edgeDisabled.value) return ''
+        const n = edgeDistanceNumber(unref(params).edgeDistance)
+        if (n === null || !(n < 0)) return ''
+        const x = String(Math.abs(n))
+        const maxMm = Number(maxOverhangMm(unref(getters.projectFiles) || []))
+        if (!Number.isFinite(maxMm)) return t('settings.edgeNegativeNoParts', { x, unit: unitLabel.value })
+        return t('settings.edgeNegative', { x, max: fmtLengthValue(maxMm), unit: unitLabel.value })
     })
 
     const effectiveSpace = computed(() => Number(String(unref(params).space ?? '0').replace(',', '.')) || 0)

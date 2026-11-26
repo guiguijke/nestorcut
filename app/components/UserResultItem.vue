@@ -52,6 +52,7 @@
                     :width="sheetSizeAt(svgIndex).w"
                     :height="sheetSizeAt(svgIndex).h"
                     :origin="effectiveFileOrigin"
+                    :margin="cardOverhangMm"
                     class="result__display"
                 />
             </div>
@@ -173,6 +174,7 @@ import { relativeTimeParts } from '~/utils/relativeTime'
 import { createLockedClickGuard, guardedLockedClick, resolveLockedClick, runLockedDownload } from '~/utils/userRefresh'
 import { DXF_ORIGIN_UNSUPPORTED } from '~/utils/dxfOrigin'
 import { effectiveOrigin, originChoiceOffered } from '~/utils/originChoice'
+import { overhangMarginMm } from '~/utils/overhangView'
 
 const props = defineProps({
     result: {
@@ -371,6 +373,10 @@ const downloadButtonAttrs = computed(() => {
 const hasMultipleSvgs = computed(() => {
     return (props.result?.svgs?.length ?? 0) > 1;
 });
+
+// Distance au bord négative : marge d'aperçu lue sur le record de CETTE carte
+// (sans la prop, l'aperçu lirait le résultat ouvert dans la fenêtre). 0 sinon.
+const cardOverhangMm = computed(() => overhangMarginMm(props.result?.localRecord?.requestedEdgeMm));
 
 const sheetSizeAt = (index) => {
     const sheets = props.result?.alternatives?.[0]?.report?.sheets

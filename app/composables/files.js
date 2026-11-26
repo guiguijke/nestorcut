@@ -2,7 +2,13 @@
 import { computed, customRef, reactive, readonly } from 'vue'
 import { processingType } from '~~/constants/files.constants'
 import { convertInputValue, displayToMm, mmToDisplay, DEFAULT_SHEET, equivalentSheetPreset, MM_PER_INCH, unitLabel } from '~/utils/units'
-import { spacingFromKerfSafety, withKerfDefaults } from '~/utils/spacingParams'
+import {
+    spacingFromKerfSafety,
+    withKerfDefaults,
+    isEdgeDistanceSet,
+    isValidEdgeDistance,
+    edgeDistanceNumber,
+} from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
 import { exceedsMaxSheets } from '~/utils/capacityPanel'
 import { flagOn } from '~/utils/runtimeFlag'
@@ -34,6 +40,10 @@ function factoryParams() {
         kerf: '0',
         safety: '2',
         space: '2',
+        // Distance au bord de la tôle (chaîne en unité d'affichage, signée).
+        // '' = comme l'espacement (comportement d'avant). Jamais dérivée de
+        // `space`, jamais écrite par updateKerfSafety : updateEdgeDistance.
+        edgeDistance: '',
         addOutShape: false,
         // Allow nesting smaller parts inside the cutouts of holed parts
         // (engine opens them with a hairline channel; off = sealed cutouts).
@@ -235,7 +245,11 @@ function createFilesState() {
                     !/^\d+$/.test(String(sheet.count)) ||
                     Number(sheet.count) < 1
             )
-            return invalid || !isValidNumber(state.params.space)
+            return (
+                invalid ||
+                !isValidNumber(state.params.space) ||
+                !isValidEdgeDistance(state.params.edgeDistance)
+            )
         }),
         requestBody: computed(() => {
             const sheets = normalizedSheets(state.params)
@@ -245,6 +259,12 @@ function createFilesState() {
             // at the boundary.
             const unit = state.displayUnit || getUnitState()
             const toMm = (v) => displayToMm(Number(v), unit)
+            // Distance au bord : envoyée SEULEMENT si remplie ET projet « Cet
+            // appareil » (calcul 100 % navigateur, phase 1). Absente sinon :
+            // le corps par défaut reste identique à l'octet.
+            const edgeValue = state.projectLocal
+                ? edgeDistanceNumber(state.params.edgeDistance)
+                : null
             return JSON.stringify({
                 files: state.filesToNest,
                 params: {
@@ -264,6 +284,7 @@ function createFilesState() {
                     sheetCount: Number(first.count),
                     tolerance: Number(state.params.tolerance),
                     space: toMm(state.params.space),
+                    ...(edgeValue !== null ? { edgeDistance: displayToMm(edgeValue, unit) } : {}),
                     addOutShape: state.params.addOutShape,
                     fillHoles: state.params.fillHoles !== false,
                     rotationCount: Number(state.params.rotationCount),
@@ -1130,6 +1151,20 @@ function updateKerfSafety(patch) {
     }
     scheduleSnapshotPersist()
 }
+/**
+ * Chemin d'écriture UNIQUE de la distance au bord. Ne touche ni kerf, ni
+ * sécurité, ni `space`. '' (ou null) = comme l'espacement. La saisie est
+ * gardée telle quelle (le champ est un texte : '-' ou '-1.' en cours de
+ * frappe sont admis, la validation est dans isInvalidParams).
+ */
+function updateEdgeDistance(value) {
+    const state = filesState()
+    state.params = {
+        ...state.params,
+        edgeDistance: value == null ? '' : String(value),
+    }
+    scheduleSnapshotPersist()
+}
 function updateSheet(index, patch) {
     const state = filesState()
     const sheets = normalizedSheets(state.params).map((sheet, i) => {
@@ -1230,6 +1265,13 @@ function convertSmallLength(v, fromUnit, toUnit) {
     const d = toUnit === 'inch' ? 4 : 2
     return out.toFixed(d).replace(/\.?0+$/, '')
 }
+// Distance au bord d'une unité à l'autre : vide intact, '-0' normalisé en '0'.
+function convertEdgeDistance(v, fromUnit, toUnit) {
+    if (!isEdgeDistanceSet(v)) return ''
+    if (edgeDistanceNumber(v) === null) return v
+    const out = convertSmallLength(v, fromUnit, toUnit)
+    return out === '-0' ? '0' : out
+}
 /**
  * Brings the in-progress form values to `toUnit` (called on unit switch AND
  * on init, when the cookie/DB preference differs from the mm factory
@@ -1268,8 +1310,12 @@ function syncParamsToUnit(toUnit, { restored = false, state = filesState() } = {
     }
     const kerf = convFine(p.kerf)
     const safety = convFine(p.safety)
+    // Distance au bord : '' (ou absente) reste telle quelle — convertSmallLength('')
+    // rendrait '0', un bord explicite à zéro. Une saisie illisible reste aussi.
+    const edgeDistance = convertEdgeDistance(p.edgeDistance, fromUnit, toUnit)
     state.params = {
         ...p,
+        edgeDistance,
         sheets: sheets.map(convSheet),
         kerf,
         safety,
@@ -1494,6 +1540,8 @@ export const filesStore = readonly({
             state.filesStatusDone.reduce((acc, curr) => acc + curr.count, 0)
         ),
         isNewParams: getter((state) => state.requestBody !== state.lastParams),
+        // Corps JSON de la prochaine demande de nesting (lu par les tests).
+        requestBody: getter((state) => state.requestBody),
         shapeRevision: getter((state) => state.shapeRevision),
         demoQuotaReached: getter((state) => state.demoQuotaReached),
         // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
@@ -1534,6 +1582,7 @@ export const filesStore = readonly({
         markCuratedDefaults,
         updateParams,
         updateKerfSafety,
+        updateEdgeDistance,
         updateSheet,
         // Lot E4-b/E4-c : actions « Échelle » et « Éclater » SUR LA FICHE.
         openFicheScale,

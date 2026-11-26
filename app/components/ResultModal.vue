@@ -51,6 +51,7 @@ import { composeThinPartsLine } from '~/composables/importFindings'
 import { filesStore } from '~/composables/files'
 import { altDensityPctOf, whyFirstKind } from '~/utils/resultQuality'
 import { zoneBadge } from '~/utils/reportLayout'
+import { edgeReportModel } from '~/utils/overhangView'
 import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
@@ -263,6 +264,9 @@ const isHaveError = computed(() => {
 // Plan 2026-09-05 §1.2c — verdict UNIQUE calculé depuis le rapport (plus
 // jamais de badges contradictoires « Overlap-free ✓ / Inside sheet ✗ /
 // All parts placed ✓ » sur un résultat hors tôle).
+// Distance au bord demandée (mm) par le calcul qui a produit ce résultat
+// (« Cet appareil » : le record la garde seulement quand elle diffère de l'espacement).
+const requestedEdgeMm = computed(() => unref(resultModalData)?.localRecord?.requestedEdgeMm)
 const activeVerdict = computed(() => {
     const r = unref(activeReport)
     if (!r) return 'valid'
@@ -287,8 +291,13 @@ const unfitData = computed(() => {
     // rapport (gap négatif = dépassement mesuré).
     const jobUnfit = unref(resultModalData).unfit || null
     const r = unref(activeReport) || {}
-    const overflowMm = (typeof r.smallestGapMm === 'number' && r.smallestGapMm < 0)
-        ? Math.abs(r.smallestGapMm) : null
+    // Rapport avec champs de bord : le dépassement est celui AU-DELÀ du permis
+    // (edgeGapMm), jamais un écart pièce-pièce. Sinon, le chemin d'avant.
+    const edgeModel = edgeReportModel(r, unref(requestedEdgeMm))
+    const overflowMm = edgeModel
+        ? edgeModel.outsideMm
+        : (typeof r.smallestGapMm === 'number' && r.smallestGapMm < 0)
+            ? Math.abs(r.smallestGapMm) : null
     return {
         sheetsNeeded: jobUnfit?.sheetsNeeded ?? null,
         maxParts: jobUnfit?.maxPartsAtSpacing ?? null,
@@ -626,7 +635,30 @@ const reportBadges = computed(() => {
     // des pièces fautives (rouge). Absent d'un job sans zone interdite.
     const zoneB = zoneBadge(r, t, tp)
     if (zoneB) badges.push(zoneB)
-    if (r.smallestGapMm != null && r.smallestGapMm < 0) {
+    const edgeModel = edgeReportModel(r, unref(requestedEdgeMm))
+    if (edgeModel) {
+        // Rapport avec champs de bord : l'écart pièce-pièce / zone ne parle plus du
+        // bord ; le dépassement est celui au-delà du permis.
+        const dec = unitLabel.value === '"' ? 4 : 2
+        if (edgeModel.outsideMm !== null) {
+            badges.push({ ok: false, label: t('report.outsideBy', { v: fmtLengthValue(edgeModel.outsideMm, dec), unit: unitLabel.value }) })
+        }
+        if (r.spacingOk != null) {
+            badges.push({
+                ok: r.spacingOk,
+                label: r.smallestGapMm != null
+                    ? t('report.spacing', { v: fmtLengthValue(r.smallestGapMm, dec), unit: unitLabel.value })
+                    : t('report.spacingKept'),
+            })
+        }
+        if (edgeModel.edge) {
+            const { ok, kind, valueMm } = edgeModel.edge
+            badges.push({
+                ok,
+                label: t(kind === 'overhang' ? 'report.edgeOverhang' : 'report.edgeAtLeast', { v: fmtLengthValue(valueMm, dec), unit: unitLabel.value }),
+            })
+        }
+    } else if (r.smallestGapMm != null && r.smallestGapMm < 0) {
         // §1.2c : un gap NÉGATIF est un dépassement hors tôle, pas un
         // espacement — libellé dédié, jamais « Gap ≥ −4 mm ».
         const over = fmtLengthValue(Math.abs(r.smallestGapMm), unitLabel.value === '"' ? 4 : 2)

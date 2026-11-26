@@ -79,7 +79,7 @@
                              (formats mélangés). -->
                         <defs>
                             <clipPath :id="paneClipId('m', pane.bin)">
-                                <rect x="0" y="0" :width="pane.w" :height="pane.h" />
+                                <rect :x="-edgeMargin" :y="-edgeMargin" :width="pane.w + 2 * edgeMargin" :height="pane.h + 2 * edgeMargin" />
                             </clipPath>
                         </defs>
                         <!-- Tôle importée : vrai contour (le reste de la boîte n'est
@@ -169,7 +169,7 @@
                     <span class="live__card-label">{{ t(`settings.directions.${card.cls}`) }}</span>
                     <svg
                         v-if="card.champ && sheet"
-                        :viewBox="`0 0 ${card.panes.totalW} ${card.panes.totalH}`"
+                        :viewBox="fullViewBox(card.panes.totalW, card.panes.totalH)"
                         class="live__card-sheet"
                         preserveAspectRatio="xMidYMid meet"
                     >
@@ -194,7 +194,7 @@
                                 <rect v-else x="0" y="0" :width="pane.w" :height="pane.h" class="live__sheet-bg" />
                                 <defs>
                                     <clipPath :id="paneClipId(card.cls, pane.bin)">
-                                        <rect x="0" y="0" :width="pane.w" :height="pane.h" />
+                                        <rect :x="-edgeMargin" :y="-edgeMargin" :width="pane.w + 2 * edgeMargin" :height="pane.h + 2 * edgeMargin" />
                                     </clipPath>
                                 </defs>
                                 <g :clip-path="`url(#${paneClipId(card.cls, pane.bin)})`">
@@ -259,11 +259,15 @@ import { drawingLeadShapes } from '~~/shared/sheetcamReserve.js';
 // en égalité stricte et la vue ne voyait plus que des frames déjà meilleures.
 import { frameFitsSheet as fitsSheet, frameIsBetter as isBetter, resolveLiveStage, liveBadgeKind, liveUsedLength, liveDensity, isPartialBppFrame, partialPlacedCount, PARTIAL_DELAY_SEC } from '~/utils/liveJob';
 import { formatElapsed } from '~/utils/elapsedFormat';
+import { overhangMarginMm, viewBoxWithMargin } from '~/utils/overhangView';
 import { ZONE_RED, livePaneShape, liveHatchId, liveHatchPitch } from '~/utils/sheetDraw';
 
 const props = defineProps({
     result: { type: Object, required: true },
     compact: { type: Boolean, default: false },
+    // Distance au bord négative : marge (mm) dont une pièce peut dépasser de la
+    // tôle. null = la lire sur le record du résultat ouvert ; 0 = aucune.
+    overhangMm: { type: Number, default: null },
     // Le job ENTIER est fini (posé par la page d'après l'état réel du calcul).
     // Seul ce signal autorise « Terminé » ; une frame `final` ne suffit pas.
     jobDone: { type: Boolean, default: false },
@@ -691,6 +695,14 @@ const paneClipId = (cardKey, bin) => `${clipId}-${String(cardKey).replace(/[^a-z
 const hatchViewId = `live-${clipId}`;
 const hatchId = (cardKey, bin) => liveHatchId(hatchViewId, cardKey, bin);
 
+// Marge de dépassement (mm) : élargit le découpage de chaque panneau et le cadre.
+// 0 par défaut : rendu inchangé.
+const edgeMargin = computed(() => {
+    if (props.overhangMm !== null) return Math.max(0, Number(props.overhangMm) || 0);
+    return overhangMarginMm(props.result?.localRecord?.requestedEdgeMm);
+});
+const fullViewBox = (totalW, totalH) => viewBoxWithMargin(totalW, totalH, edgeMargin.value);
+
 // Zoom onto the used region in DISPLAY space. Axes stay in frame (origin
 // is always included). Export geometry is unchanged.
 const viewBox = computed(() => {
@@ -699,7 +711,7 @@ const viewBox = computed(() => {
     const pl = mainPanes.value
     const totalW = pl.totalW
     const totalH = Math.max(pl.totalH, 1)
-    const full = `0 0 ${totalW} ${totalH}`
+    const full = fullViewBox(totalW, totalH)
     const items = mainItems.value
     if (!items.length) return full
     let minX = Infinity
@@ -734,6 +746,8 @@ const viewBox = computed(() => {
     const bh = Math.max(1, maxY - minY)
     if ((bw * bh) / (totalW * totalH) >= 0.4) return full
     const pad = Math.max(bw, bh) * 0.14 + Math.max(totalW, totalH) * 0.02
+    // Dépassement permis : le cadre peut mordre sur le négatif et au-delà du total.
+    if (edgeMargin.value > 0) return `${minX - pad} ${minY - pad} ${bw + pad * 2} ${bh + pad * 2}`
     const vx = Math.max(0, minX - pad)
     const vy = Math.max(0, minY - pad)
     const vw = Math.min(totalW - vx, bw + pad * 2)

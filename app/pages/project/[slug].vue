@@ -91,6 +91,7 @@
                     :job-done="stageJobDone"
                     :local-compute="localComputeRunning"
                     :partial-total="localPartialTotal"
+                    :overhang-mm="liveOverhangMm"
                 />
                 <!-- Calcul sur le serveur terminé : la vue live s'est retirée,
                      la scène montre la première tôle produite et invite à
@@ -101,6 +102,7 @@
                             :src="stageResult.svgs[0]"
                             :width="idleSheet.w"
                             :height="idleSheet.h"
+                            :margin="stageResultMargin"
                             class="stage__sheet"
                         />
                     </button>
@@ -228,8 +230,13 @@
             </MainButton>
             <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
                  grisé, avant tout clic (en bas de page il sortait de l'écran). -->
-            <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
-                {{ t('project.minSheet', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), unit: unitLabel }) }}
+            <p v-if="edgeOverhangMax !== null && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="edge-overhang-error" role="alert">
+                {{ t('project.edgeOverhangTooLarge', { x: fmtLengthValue(-edgeRequestedMm), max: fmtLengthValue(edgeOverhangMax), unit: unitLabel }) }}
+            </p>
+            <p v-else-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
+                {{ edgeRequestedMm !== null
+                    ? t('project.minSheetEdge', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), e: fmtLengthValue(edgeRequestedMm), unit: unitLabel })
+                    : t('project.minSheet', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), unit: unitLabel }) }}
             </p>
             <p v-if="missingSheetNames.length && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="sheet-shape-missing" role="alert">
                 {{ t('project.sheetShapeMissing', { name: missingSheetNames[0] }) }}
@@ -256,9 +263,10 @@
 import { themeType } from "~~/constants/theme.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
-import { safetyPatchForTargetMm } from "~/utils/spacingParams";
+import { safetyPatchForTargetMm, edgeDistanceNumber } from "~/utils/spacingParams";
+import { overhangMarginMm } from "~/utils/overhangView";
 import { capacityPanelModel } from "~/utils/capacityPanel";
-import { firstPartFittingNoSheet } from "~/utils/partSheetFit";
+import { firstPartFittingNoSheet, maxOverhangMm } from "~/utils/partSheetFit";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB, MAX_SHEET_FORMATS } from "~~/shared/constants/payment.constants";
@@ -461,6 +469,15 @@ const localGeomParams = computed(() =>
 // localGeom, ils viennent du registre (progressFor les expose).
 const localTooLarge = ref(null);
 const localSpacingTooLarge = ref(null);
+// Distance au bord : détail du refus du constructeur (maxOverhangMm / maxEdgeMm, en mm).
+const localEdgeDetail = ref(null);
+// Chiffres d'un refus « distance au bord » (mm -> unité d'affichage) pour la phrase.
+const edgeRefusalParams = (detail) => {
+    const mm = detail.maxOverhangMm ?? detail.maxEdgeMm
+    return Number.isFinite(Number(mm))
+        ? { max: fmtLengthValue(Number(mm)), unit: unitLabel.value }
+        : null
+};
 const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
     localOnly: unref(isLocalProject),
     params: localComputeError.value === 'item_geometry' || localComputeError.value === 'item_unplaceable'
@@ -474,7 +491,10 @@ const localErrorText = computed(() => localModeCtl.mapError(localComputeError.va
                     ? { space: localTooLarge.value.space, margin: localTooLarge.value.margin } : {}),
                 ...(localTooLarge.value.shape ? { shape: true } : {}),
             }
-        : null,
+        : (localComputeError.value === 'edge_overhang_too_large' || localComputeError.value === 'edge_too_large')
+            && localEdgeDetail.value
+            ? edgeRefusalParams(localEdgeDetail.value)
+            : null,
 }));
 // Bandeau d'échec : le registre local quand il connaît le job (il nomme la
 // pièce), sinon le flux serveur : job du worker, ou job local après rechargement.
@@ -548,6 +568,9 @@ watch(
               : p.error === 'part_too_large' ? 'part_too_large'
               : p.error === 'spacing_too_large' ? 'spacing_too_large'
               : p.error === 'strip_height' ? 'strip_height'
+              : p.error === 'edge_overhang_too_large' ? 'edge_overhang_too_large'
+              : p.error === 'edge_too_large' ? 'edge_too_large'
+              : p.error === 'edge_offset_failed' ? 'edge_offset_failed'
               : p.error === 'cancelled' ? null
               : 'crash')
             : null;
@@ -555,6 +578,7 @@ watch(
         localGeom.value = p.phase === 'error' ? (p.geom || null) : null;
         localTooLarge.value = p.phase === 'error' ? (p.tooLarge || null) : null;
         localSpacingTooLarge.value = p.phase === 'error' ? (p.spacingTooLarge || null) : null;
+        localEdgeDetail.value = p.phase === 'error' ? (p.edgeDetail || null) : null;
         if (p.phase === 'queued' || p.phase === 'running' || p.phase === 'finalizing') {
             if (!localComputeRunning.value) {
                 localComputeRunning.value = true;
@@ -599,6 +623,18 @@ const projectFilesCount = computed(() => (filesGetters.projectFiles || []).lengt
 // lecture refusée. Des nombres seulement, bruts : aucun suivi profond de Vue.
 const shapeStats = shallowRef({});
 const preflightSheets = computed(() => preflightSheetsOf(unref(currentSheets), unref(shapeStats), displayToMm));
+// Distance au bord demandée (mm), ou null : champ vide, illisible, ou projet qui
+// ne calcule pas dans le navigateur (phase 1 : le réglage n'y vaut pas, le champ
+// est grisé et la requête ne le porte pas).
+const edgeRequestedMm = computed(() => {
+    if (!unref(filesGetters.projectLocal)) return null
+    const n = edgeDistanceNumber(unref(params)?.edgeDistance)
+    return n === null ? null : displayToMm(n)
+})
+// Marge d'affichage (mm) d'une pièce qui dépasse du bord : vue live d'après les
+// réglages en cours, aperçu d'un résultat d'après le record qui l'a produit.
+const liveOverhangMm = computed(() => overhangMarginMm(unref(edgeRequestedMm)));
+const stageResultMargin = computed(() => overhangMarginMm(unref(stageResult)?.localRecord?.requestedEdgeMm));
 const preflightReport = computed(() => {
     const files = projectFiles.value || []
     if (!unref(filesCount) || !files.length) return null
@@ -612,7 +648,11 @@ const preflightReport = computed(() => {
     // espacement 0, ou une fiche de projet « cet appareil », qui n'a pas d'anneaux).
     const spaceMm = displayToMm(Number(String(p.space ?? '0').replace(',', '.')) || 0)
     const curveMargin = computeSpacingMargin(files.filter((f) => Number(f.count) > 0), spaceMm)
-    return capacityReport(parts, model.sheets, spaceMm + curveMargin)
+    // Bord réglé : même marge de courbes que l'espacement (elle s'ajoute aux deux).
+    // Non réglé : l'appel d'avant, à trois arguments.
+    const edgeMm = unref(edgeRequestedMm)
+    if (edgeMm === null) return capacityReport(parts, model.sheets, spaceMm + curveMargin)
+    return capacityReport(parts, model.sheets, spaceMm + curveMargin, { edge: edgeMm + curveMargin })
 })
 // Le chiffre « ≈ n tôles » : sans tôle importée toujours, comme avant ; avec une
 // tôle importée seulement si la forme est lue et que le rapport existe.
@@ -799,6 +839,8 @@ const applyDemoDefaults = () => {
         addOutShape: false,
         fillHoles: true,
         rotationCount: 4,
+        // La démo n'hérite jamais d'une distance au bord laissée par un autre projet.
+        edgeDistance: '',
     });
     actions.updateKerfSafety({ kerf: '0', safety: mmToDisp(DEMO_SPACE_MM) });
 };
@@ -1013,8 +1055,18 @@ const partFitsNoSheet = computed(() => firstPartFittingNoSheet({
     sheets: unref(currentSheets),
     toMm: displayToMm,
     rotationCount: unref(params)?.rotationCount,
+    ...(unref(edgeRequestedMm) !== null ? { edgeMm: unref(edgeRequestedMm) } : {}),
 }));
-const sizesIsAvailable = computed(() => partFitsNoSheet.value === null);
+// Bord négatif : une pièce ne doit jamais dépasser de plus de la moitié de sa
+// plus petite dimension (sinon elle pourrait être entièrement hors tôle).
+const edgeOverhangMax = computed(() => {
+    const e = unref(edgeRequestedMm)
+    if (e === null || !(e < 0)) return null
+    const max = Number(maxOverhangMm(projectFiles.value || []))
+    if (!Number.isFinite(max)) return null
+    return -e > max + 1e-9 ? max : null
+})
+const sizesIsAvailable = computed(() => partFitsNoSheet.value === null && unref(edgeOverhangMax) === null);
 // [slug].vue is reused across projects: load THIS slug on every change
 // (home → new local project after visiting the demo used to keep marine files).
 watch(pageSlug, async (s, prev) => {

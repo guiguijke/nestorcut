@@ -15,7 +15,9 @@
 <script setup>
 import { defaultSizeType } from "~~/constants/size.constants";
 
-const { svgContent, src, size, preserveColors } = defineProps({
+import { widenSvgDataUri, widenSvgViewBox } from '~/utils/overhangView';
+
+const { svgContent, src, size, preserveColors, margin } = defineProps({
     svgContent: {
         type: String,
         default: '',
@@ -34,13 +36,19 @@ const { svgContent, src, size, preserveColors } = defineProps({
         type: Boolean,
         default: false,
     },
+    // Marge (mm) autour de la tôle pour une pièce qui dépasse du bord
+    // (distance au bord négative) : sans elle le <img> rogne le dépassement.
+    margin: {
+        type: Number,
+        default: 0,
+    },
 });
 
 const svgDataUri = computed(() => {
     if(Boolean(src)) {
-        return src
+        return widenSvgDataUri(src, margin)
     }
-    const encodedSvg = encodeURIComponent(svgContent)
+    const encodedSvg = encodeURIComponent(widenSvgViewBox(svgContent, margin))
     .replace(/'/g, "%27")
     .replace(/"/g, "%22");
 

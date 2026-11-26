@@ -97,6 +97,19 @@ export function useLocalMode(projectSlug) {
         // La tôle est trop petite pour que le moteur y construise une zone : sa phrase
         // brute (« leaves no room for item separation 0 ») est fausse à espacement 0.
         if (err === 'strip_height') return t('localMode.stripTooSmall')
+        // Distance au bord : trois refus du constructeur, chacun dit pourquoi et,
+        // quand le détail est connu, quelle valeur passerait.
+        if (err === 'edge_overhang_too_large') {
+            return params?.max != null
+                ? t('localMode.edgeOverhangTooLarge', params)
+                : t('localMode.edgeOverhangTooLargePlain')
+        }
+        if (err === 'edge_too_large') {
+            return params?.max != null
+                ? t('localMode.edgeTooLarge', params)
+                : t('localMode.edgeTooLargePlain')
+        }
+        if (err === 'edge_offset_failed') return t('localMode.edgeOffsetFailed')
         if (err === 'crash') {
             return localOnly ? t('localMode.crashLocal') : t('localMode.crashError')
         }
