@@ -214,7 +214,7 @@ export default {
     'settings.count': 'Count',
     'settings.units': 'units',
     'settings.spacing': 'Spacing',
-    'settings.spacingKerf': 'Spacing below 0.05 mm: thinner than a laser kerf — parts may touch or micro-overlap at cutting.',
+    'settings.spacingKerf': 'Spacing below {limit} {unit}: thinner than a laser kerf — parts may touch or micro-overlap at cutting.',
     // B.4, puis étude SheetCam §9.40 (13/09) : l'espacement effectif
     // envoyé au moteur vaut 2 × kerf + sécurité — la bande de kerf déborde
     // d'un kerf entier hors de chaque pièce.
@@ -630,7 +630,7 @@ export default {
     'project.results': 'results',
     'project.nestingInProgress': 'nesting in progress',
     'project.minSheet':
-        'The biggest part needs a sheet of at least {w} × {h} {unit} — no declared sheet type is large enough.',
+        'The part "{name}" ({w} × {h} {unit}) does not fit on any declared sheet, even turned.',
     'project.sheetShapeMissing': 'The shape of the sheet "{name}" cannot be found or read in this browser. Remove this sheet from the list, then import it again.',
     'project.changeToRegenerate': 'Change settings or files to generate again',
 

@@ -26,7 +26,27 @@ export default defineConfig({
         },
     },
     test: {
-        include: ['server/tests/**/*.test.js', 'app/tests/**/*.test.js'],
         environment: 'node',
+        // Deux projets : les tests `*.client.test.js` voient le code comme dans le
+        // navigateur (`import.meta.client` vrai : instantanés de projets, unité),
+        // tous les autres comme sur le serveur (indéfini), inchangés.
+        projects: [
+            {
+                extends: true,
+                test: {
+                    name: 'node',
+                    include: ['server/tests/**/*.test.js', 'app/tests/**/*.test.js'],
+                    exclude: ['**/node_modules/**', 'app/tests/**/*.client.test.js'],
+                },
+            },
+            {
+                extends: true,
+                define: { 'import.meta.client': 'true', 'import.meta.server': 'false' },
+                test: {
+                    name: 'client',
+                    include: ['app/tests/**/*.client.test.js'],
+                },
+            },
+        ],
     },
 })

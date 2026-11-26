@@ -359,7 +359,7 @@ export function parseSheetCamJob(bytes) {
             thickness: parseNumber(getEntry(lines, 'Work', 'Thickness')),
         },
         // Kerf de l'outil : la largeur que le plasma mange. Le lot J3 en
-        // déduit l'espacement pré-rempli (kerf + 2 × sécurité).
+        // déduit l'espacement pré-rempli (2 × kerf + sécurité).
         kerfWidth: parseNumber(getEntry(lines, 'Tool0', 'Kerf width')),
         toolName: getEntry(lines, 'Tool0', 'Name') || '',
         // Les pièces ORIGINALES, dans l'ordre des rangs — cet ordre est celui

@@ -9,6 +9,10 @@ import { simplifyRing } from './localPayloadBuilder'
 
 export const REFUSE_RATIO = 0.88
 export const REFERENCE_PACKING = 0.85
+// Tôle importée : l'aire ne prédit pas le placement (le moteur pose un carré de
+// 950 dans une tôle de 1000). On ne refuse que ce qui ne peut pas tenir du tout,
+// avec une marge pour l'arrondi des aires de contour.
+export const SHAPED_REFUSE_RATIO = 1.001
 const EPS = 1e-9
 
 function ringArea(coords) {
@@ -186,6 +190,13 @@ export function capacityReport(parts, sheets, space) {
     }
 
     const constructive = constructiveFit(parts, sheets, s)
+    // Au moins une tôle importée : le moteur tranche sous l'aire totale, le
+    // résultat partiel existant couvre le reste. Rectangles seuls : inchangé
+    // (parité avec capacity.py).
+    const hasShaped = (sheets || []).some(isShapedFormat)
+    const refused = hasShaped
+        ? ratio > SHAPED_REFUSE_RATIO
+        : ratio > REFUSE_RATIO && !constructive
     return {
         ratio: Math.round(ratio * 10000) / 10000,
         totalInflatedMm2: Math.round(totalInflated * 10) / 10,
@@ -193,6 +204,6 @@ export function capacityReport(parts, sheets, space) {
         sheetsNeeded,
         maxPartsAtSpacing: maxParts,
         maxSpacingForFitMm: maxSpacing,
-        refused: ratio > REFUSE_RATIO && !constructive,
+        refused,
     }
 }

@@ -198,7 +198,7 @@ export function resolveJobDrawingSources(read, droppedFiles, projectFiles = []) 
  * Les réglages que le `.job` pré-remplit — et RIEN d'autre.
  *
  * `space` n'est jamais écrit directement : il se dérive du kerf par la règle
- * de production `kerf + 2 × sécurité` (`spacingFromKerf`), qui est le seul
+ * de production `2 × kerf + sécurité` (`spacingFromKerf`), qui est le seul
  * chemin qui garde les trois champs cohérents. Un `.job` sans kerf
  * exploitable ne pré-remplit pas l'espacement : on ne remplit pas un champ
  * avec une valeur inventée.

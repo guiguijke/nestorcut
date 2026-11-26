@@ -7,6 +7,7 @@ import { downloadAndStoreAvatar } from './avatar'
 import logger from './logger'
 import { clientIp } from './ratelimit'
 import { logRef } from './logRef'
+import { clearVaultIfNoLiveSession } from './vault'
 
 // Une adresse = une méthode de connexion (décision du propriétaire,
 // 2026-11-03) : pas de liaison automatique avec un compte e-mail + mot de
@@ -90,6 +91,7 @@ export async function createOrUpdateUser({ event, sessionId, providerId, email, 
 
     // S-4 : purge des sessions expirées avant d'ajouter la nouvelle.
     await purgeExpiredSessions(db, { id: userId })
+    await clearVaultIfNoLiveSession(db, userId)
     try {
         await db.collection('users').updateOne({ id: userId }, updateData, { upsert: true })
     } catch (err) {

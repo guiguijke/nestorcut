@@ -283,7 +283,7 @@ describe('projet ouvert avec l’unité en pouces', () => {
         await open('mm') // réglages du store encore notés en mm
         current = 'inch' // la page de la démo, elle, pose déjà des pouces
         store.actions.updateParams({ sheets: [{ width: '120', height: '60', count: '3' }] })
-        store.actions.markCuratedDefaults()
+        store.actions.markCuratedDefaults(API_ROUTES.PROJECT('demo'))
         await store.actions.getProject(API_ROUTES.PROJECT('demo'))
         expect(store.getters.params.sheets[0]).toEqual({ width: '120', height: '60', count: '3' })
     })

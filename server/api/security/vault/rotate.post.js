@@ -19,7 +19,7 @@ import {
     polygonPartsAadId,
 } from '~~/server/utils/crypto'
 import {
-    createVaultSession,
+    replaceOpenVaultSession,
     requireFileAccess,
     streamToBuffer,
     uploadToBucket,
@@ -66,7 +66,9 @@ export default defineEventHandler(async (event) => {
 
     const body = await readBody(event)
     const newDek = Buffer.from(String(body?.key || ''), 'base64')
-    if (newDek.length !== 32) {
+    // Clé nulle refusée AVANT tout : chaque fichier est effacé puis réécrit,
+    // un refus au milieu le perdrait.
+    if (newDek.length !== 32 || newDek.every((b) => b === 0)) {
         throw createError({ statusCode: 400, statusMessage: 'Invalid key' })
     }
 
@@ -108,7 +110,7 @@ export default defineEventHandler(async (event) => {
         }
     }
 
-    // 3. Flip the fingerprint and seed a session with the new key.
+    // 3. Flip the fingerprint; the open session moves to the new key.
     await db.collection('users').updateOne(
         { id: userId },
         {
@@ -119,7 +121,9 @@ export default defineEventHandler(async (event) => {
             },
         }
     )
-    const { expiresAt } = await createVaultSession(userId, newDek)
+    // Une déconnexion pendant la rotation a fermé le coffre : il reste fermé
+    // (pas de session recréée). Ouvert, il passe sur la nouvelle clé.
+    const reopened = await replaceOpenVaultSession(userId, newDek)
 
-    return { ok: true, keyId: keyIdFromFingerprint(newFingerprint), expiresAt }
+    return { ok: true, keyId: keyIdFromFingerprint(newFingerprint), expiresAt: reopened?.expiresAt ?? null }
 })

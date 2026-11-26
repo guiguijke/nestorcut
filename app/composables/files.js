@@ -10,6 +10,7 @@ import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
 import { isUntouchedFactorySheet, factorySheetOf } from '~/utils/factorySheet'
 import { SNAPSHOT_VERSION, snapshotUnit } from '~/utils/projectSnapshot'
+import { rotationAngles } from '~/utils/partSheetFit'
 
 const { actions } = globalStore
 const { getProjects, setModalNestData } = actions
@@ -84,8 +85,16 @@ loadSnapshotsFromStorage()
 // Une fois le projet chargé, le drapeau est consommé ; au RETOUR sur le
 // projet, c'est le snapshot qui gagne (les curated defaults ne repassent
 // pas par-dessus les réglages de l'utilisateur).
-function markCuratedDefaults() {
-    filesState().pendingCuratedDefaults = true
+// La page écrit ses réglages AVANT que le projet de départ ne soit quitté :
+// l'instantané du projet laissé est donc pris ici, avant l'écriture, et plus
+// aucun instantané n'est pris tant que le drapeau tient (le débounce ou le
+// pagehide rangeraient les réglages de la démo sous le slug du projet quitté).
+// `path` = chemin d'API de la démo : seuls ses réglages écrits valent pour
+// CE chemin. Si un autre projet se charge d'abord (démo lente, en échec,
+// abandonnée), il retrouve les siens.
+function markCuratedDefaults(path) {
+    snapshotCurrentProject()
+    filesState().pendingCuratedFor = path ?? null
 }
 
 function snapshotCurrentProject() {
@@ -94,6 +103,7 @@ function snapshotCurrentProject() {
     if (!import.meta.client) return
     const state = filesState()
     if (state.projectSlug == null) return
+    if (state.pendingCuratedFor != null) return
     projectSnapshots.set(state.projectSlug, {
         v: SNAPSHOT_VERSION,
         params: JSON.parse(JSON.stringify(state.params)),
@@ -178,8 +188,10 @@ function createFilesState() {
         // defaults); tracked so a unit sync is idempotent — re-applying the same
         // unit (SPA remount, DB re-sync) never double-converts user values.
         paramsUnit: 'mm',
-        // Set by markCuratedDefaults() above.
-        pendingCuratedDefaults: false,
+        // Set by markCuratedDefaults() above: API path of the demo, or null.
+        pendingCuratedFor: null,
+        // Serveur seulement : l'unité d'affichage de la requête qui porte cet état.
+        displayUnit: null,
         // m-6 (audit 2026-08-31 §R-m.6) : sur navigation rapide, la réponse la
         // plus LENTE gagnait et collait les fichiers/params d'un AUTRE projet sur
         // l'URL courante. On ne retient que la réponse de la dernière demande.
@@ -231,7 +243,7 @@ function createFilesState() {
             // Params hold DISPLAY-unit strings (the user's preferred unit) — the
             // API and the whole pipeline speak canonical mm, so convert here,
             // at the boundary.
-            const unit = getUnitState()
+            const unit = state.displayUnit || getUnitState()
             const toMm = (v) => displayToMm(Number(v), unit)
             return JSON.stringify({
                 files: state.filesToNest,
@@ -294,6 +306,12 @@ function filesState() {
     if (!state) {
         state = createFilesState()
         serverStates.set(nuxtApp, state)
+        // L'unité de CETTE requête, lue ici, dans son contexte : plus loin le contexte
+        // courant peut être celui d'une autre. Les réglages d'usine sont écrits en mm :
+        // un compte en pouces est rendu en pouces dès le HTML du serveur.
+        const unit = getUnitState(nuxtApp)
+        state.displayUnit = unit
+        syncParamsToUnit(unit, { state })
     }
     return state
 }
@@ -408,7 +426,13 @@ function setProjectFiles(files, path, state = filesState()) {
     if (!sameProject) {
         snapshotCurrentProject()
     }
-    const snap = (!sameProject && path != null)
+    // Réglages écrits par la page pour la démo : gardés pour la démo seulement.
+    // Un autre projet qui se charge pendant ce temps (même déjà ouvert) reprend
+    // son instantané ou les réglages d'usine.
+    const pending = state.pendingCuratedFor
+    const keepCurated = pending != null && path === pending
+    const strayCurated = pending != null && !keepCurated
+    const snap = ((!sameProject || strayCurated) && path != null)
         ? projectSnapshots.get(path)
         : null
     const countBySlug = new Map(
@@ -443,15 +467,17 @@ function setProjectFiles(files, path, state = filesState()) {
         state.nestError = ''
         state.factorySheetReplaced = ''
         state.factorySheetReplacedLabel = null
+    }
+    if (!sameProject || strayCurated) {
         // Params du projet visité : son snapshot s'il existe (l'utilisateur
         // était déjà passé), sinon les curated defaults posés au montage
-        // (démo), sinon les défauts d'usine.
+        // (démo, pour son seul chemin), sinon les défauts d'usine.
         if (snap) {
             // withKerfDefaults : snapshot posé avant le chantier kerf
             // (B.4) — même espacement effectif après migration.
             state.params = withKerfDefaults(JSON.parse(JSON.stringify(snap.params)))
             state.paramsUnit = snapshotUnit(snap, getUnitState())
-        } else if (!state.pendingCuratedDefaults) {
+        } else if (!keepCurated) {
             state.params = factoryParams()
             state.paramsUnit = 'mm'
         }
@@ -459,13 +485,18 @@ function setProjectFiles(files, path, state = filesState()) {
         // compte en pouces ouvrait son projet sur une tôle de 1000 × 2000 POUCES et
         // 2 pouces d'espacement (le sélecteur d'unité n'a rien à convertir tant que
         // l'unité ne change pas). Les réglages de la démo, eux, sont posés par la page
-        // déjà dans l'unité affichée. Au navigateur seulement : en SSR, le sélecteur
-        // convertit au montage.
-        if ((snap || !state.pendingCuratedDefaults) && !import.meta.server) {
-            syncParamsToUnit(getUnitState(), { restored: Boolean(snap) })
+        // déjà dans l'unité affichée. Le serveur fait la même conversion, dans l'unité
+        // de sa requête : le HTML servi porte déjà 48 × 96, pas 1000 × 2000.
+        if (snap || !keepCurated) {
+            // Serveur : l'unité de la requête portée par l'état (jamais le contexte
+            // courant, voir filesState).
+            syncParamsToUnit(state.displayUnit || getUnitState(), { restored: Boolean(snap), state })
         }
-        state.pendingCuratedDefaults = false
     }
+    // Consommé à chaque chargement, même sur le projet déjà ouvert (retour à la
+    // démo par l'accueil) : resté levé, le projet neuf suivant partait avec les
+    // tôles de la démo.
+    state.pendingCuratedFor = null
     scheduleFilesRefresh(path)
 }
 /**
@@ -800,7 +831,7 @@ async function uploadToServer(files, slug) {
  *     avant d'importer : si un dessin échoue ensuite, l'utilisateur a déjà
  *     les réglages que son fichier annonce. L'espacement passe par
  *     `updateKerfSafety`, JAMAIS par `updateParams({ space })` — c'est le
- *     seul chemin qui garde `space = kerf + 2 × sécurité` cohérent, et
+ *     seul chemin qui garde `space = 2 × kerf + sécurité` cohérent, et
  *     l'écrire directement ferait re-dériver une autre valeur à la
  *     réouverture du projet.
  *  2. RÉSOUT LA SOURCE DE GÉOMÉTRIE de chaque dessin (lot J6, §9.62) :
@@ -835,7 +866,7 @@ async function addSheetCamJobDrop(drop, slug) {
     }
 
     // 1. Les réglages que le fichier DIT.
-    // Pas de `safetyMm` : le pre-remplissage suit la REGLE (kerf + 2 x 0,25),
+    // Pas de `safetyMm` : le pre-remplissage suit la REGLE (2 x kerf + 1 mm),
     // pas la securite d'usine du projet — voir `prefillFromJob`.
     const prefill = prefillFromJob(read)
     if (prefill.sheet) {
@@ -848,7 +879,15 @@ async function addSheetCamJobDrop(drop, slug) {
             }],
         })
     }
-    if (prefill.kerf != null) updateKerfSafety({ kerf: prefill.kerf, safety: prefill.safety })
+    // Le fichier parle en mm : kerf et sécurité passent dans l'unité d'affichage,
+    // comme la tôle (sinon un kerf de 1,5 mm devenait 1,5 pouce).
+    if (prefill.kerf != null) {
+        const u = getUnitState()
+        updateKerfSafety({
+            kerf: convertSmallLength(prefill.kerf, 'mm', u),
+            safety: convertSmallLength(prefill.safety, 'mm', u),
+        })
+    }
 
     // 2. La source de géométrie de chaque dessin (lot J6).
     const sources = resolveJobDrawingSources(
@@ -1072,7 +1111,7 @@ function updateParams(param) {
 /**
  * Chemin d'écriture UNIQUE des deux réglages explicites d'espacement
  * (B.4) : maintient `space` — la clé comprise par l'API et les deux
- * moteurs — en phase avec la règle space = kerf + 2 × sécurité.
+ * moteurs — en phase avec la règle space = 2 × kerf + sécurité.
  * Écrire `space` directement reste possible (levier capacité, démo),
  * mais alors sans kerf/safety cohérents la réouverture re-dériverait :
  * passer par ici partout.
@@ -1179,6 +1218,16 @@ function replaceSheetShape(index, record) {
     scheduleSnapshotPersist()
 }
 
+// Kerf et sécurité : petites longueurs, résolution fine (0,01 mm / 0,0001").
+function convertSmallLength(v, fromUnit, toUnit) {
+    if (fromUnit === toUnit) return v
+    const n = Number(String(v).replace(',', '.'))
+    if (!Number.isFinite(n)) return v
+    const mm = fromUnit === 'inch' ? n * MM_PER_INCH : n
+    const out = toUnit === 'inch' ? mm / MM_PER_INCH : mm
+    const d = toUnit === 'inch' ? 4 : 2
+    return out.toFixed(d).replace(/\.?0+$/, '')
+}
 /**
  * Brings the in-progress form values to `toUnit` (called on unit switch AND
  * on init, when the cookie/DB preference differs from the mm factory
@@ -1190,13 +1239,12 @@ function replaceSheetShape(index, record) {
  * tôle de 1000 × 2000 ne doit pas devenir un 48 × 96 (puis 1250 × 2500 au retour) :
  * conversion numérique ; seule la tôle d'usine intacte devient celle de l'unité.
  */
-function syncParamsToUnit(toUnit, { restored = false } = {}) {
-    const state = filesState()
+function syncParamsToUnit(toUnit, { restored = false, state = filesState() } = {}) {
     if (!toUnit || state.paramsUnit === toUnit) return
     const fromUnit = state.paramsUnit
     // B.3/B.4 : kerf et sécurité sont des longueurs comme space — la
     // conversion les prend, puis space est RECALCULÉ depuis eux pour que
-    // la règle space = kerf + 2 × sécurité reste exacte après un switch
+    // la règle space = 2 × kerf + sécurité reste exacte après un switch
     // d'unité (pas d'arrondis cumulés indépendants).
     const p = withKerfDefaults(state.params)
     const sheets = normalizedSheets(p)
@@ -1205,15 +1253,7 @@ function syncParamsToUnit(toUnit, { restored = false } = {}) {
     // résolution standard des champs (0,1 mm / 0,001") ferait dériver la
     // demi-valeur héritée d'un ancien espacement (0,05 mm -> 0,1 mm au
     // retour d'inch). Résolution fine dédiée : 0,01 mm / 0,0001".
-    const convFine = (v) => {
-        if (fromUnit === toUnit) return v
-        const n = Number(String(v).replace(',', '.'))
-        if (!Number.isFinite(n)) return v
-        const mm = fromUnit === 'inch' ? n * MM_PER_INCH : n
-        const out = toUnit === 'inch' ? mm / MM_PER_INCH : mm
-        const d = toUnit === 'inch' ? 4 : 2
-        return out.toFixed(d).replace(/\.?0+$/, '')
-    }
+    const convFine = (v) => convertSmallLength(v, fromUnit, toUnit)
     const convSheet = (s) => {
         // Tôle importée : conversion numérique fine, jamais calée sur un standard.
         if (s.shapeId) {
@@ -1254,10 +1294,7 @@ function removeSheet(index) {
  * Clamped to [1, 360] to stay sane.
  */
 function buildRotationAngles(count) {
-    const n = Math.min(360, Math.max(1, Math.floor(Number(count) || 4)))
-    if (n === 1) return [0]
-    const step = 360 / n
-    return Array.from({ length: n }, (_, i) => Math.round(i * step))
+    return rotationAngles(count)
 }
 function increment(index, event) {
     const state = filesState()

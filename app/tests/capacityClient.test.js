@@ -113,3 +113,54 @@ describe('capacityClient — borne rangées Z4 (floor(W/(w+s)), orientations 0/9
         expect(r11.refused).toBe(true)
     })
 })
+
+describe('capacityClient — tôle importée : le moteur tranche sous l\'aire totale', () => {
+    const sq = (n) => [[0, 0], [n, 0], [n, n], [0, n], [0, 0]]
+    const shaped = (area, perimeter, count = 1) => ({
+        width: 1000, height: 1000, count, usableAreaMm2: area, perimeterMm: perimeter,
+    })
+
+    it('carré 950 dans une tôle importée de 1000 (ratio 0,90) : pas de refus', () => {
+        const r = capacityReport([{ coords: sq(950), count: 1 }], [shaped(1e6, 4000)], 0)
+        expect(r.ratio).toBeGreaterThan(REFUSE_RATIO)
+        expect(r.refused).toBe(false)
+    })
+
+    it('4 carrés de 490 (0,97) : pas de refus', () => {
+        const r = capacityReport([{ coords: sq(490), count: 4 }], [shaped(1e6, 4000)], 2)
+        expect(r.ratio).toBeGreaterThan(0.95)
+        expect(r.refused).toBe(false)
+    })
+
+    it('au-dessus de 1 : refus, avec les leviers', () => {
+        const r = capacityReport([{ coords: sq(450), count: 5 }], [shaped(1e6, 4000)], 0)
+        expect(r.ratio).toBeGreaterThan(1.001)
+        expect(r.refused).toBe(true)
+        expect(r.sheetsNeeded).toBeGreaterThan(1)
+    })
+
+    it('marge minuscule : 1,0005 passe, 1,01 est refusé', () => {
+        const area = (n) => n * n
+        const ok = capacityReport([{ coords: sq(100), count: 1 }], [shaped(area(100) / 1.0005, 0)], 0)
+        const no = capacityReport([{ coords: sq(100), count: 1 }], [shaped(area(100) / 1.01, 0)], 0)
+        expect(ok.refused).toBe(false)
+        expect(no.refused).toBe(true)
+    })
+
+    it('mélange rectangle + tôle importée : même règle (une tôle importée suffit)', () => {
+        const r = capacityReport(
+            [{ coords: sq(950), count: 2 }],
+            [shaped(1e6, 4000), { width: 1000, height: 1000, count: 1 }], 0)
+        expect(r.ratio).toBeGreaterThan(0.88)
+        expect(r.ratio).toBeLessThan(1)
+        expect(r.refused).toBe(false)
+    })
+
+    it('rectangles seuls : inchangé, refus dès 88 % sans exception de grille', () => {
+        const r = capacityReport([{ coords: sq(570), count: 3 }], [{ width: 1000, height: 1000, count: 1 }], 0)
+        expect(r.ratio).toBeGreaterThan(0.97)
+        expect(r.refused).toBe(true)
+        const ok = capacityReport([{ coords: sq(950), count: 1 }], [{ width: 1000, height: 1000, count: 1 }], 0)
+        expect(ok.refused).toBe(false)
+    })
+})

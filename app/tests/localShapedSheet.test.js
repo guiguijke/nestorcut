@@ -258,13 +258,19 @@ describe('capacityReport — format à aire utile', () => {
         expect(spaced.totalUsableMm2).toBe(19600 - 680)
     })
 
-    it('la grille de boîtes ne lève jamais le refus d\'une tôle à forme', () => {
-        const big = [{ coords: rect(0, 0, 10, 10), count: 15 }] // 15 pièces : ratio 0,95 de 1 600
+    it("tôle à forme : le moteur tranche sous l'aire totale, refus au-dessus seulement", () => {
+        const big = [{ coords: rect(0, 0, 10, 10), count: 15 }] // 15 pièces : ratio 0,94 de 1 600
         const shaped = [{ width: 40, height: 40, count: 1, usableAreaMm2: 1600, perimeterMm: 160 }]
-        // Boîte 40 x 40 : 16 cases de 10 x 10 => « tient » sur un rectangle...
+        // Rectangle : la grille de boîtes (16 cases) lève le refus, inchangé.
         expect(capacityReport(big, [{ width: 40, height: 40, count: 1 }], 0).refused).toBe(false)
-        // ... mais pas dérivable d'une tôle à forme : on s'en tient au ratio d'aire.
-        expect(capacityReport(big, shaped, 0).refused).toBe(true)
+        // Tôle à forme : ratio 0,94 > 0,88, plus de refus, le moteur décide.
+        const r = capacityReport(big, shaped, 0)
+        expect(r.ratio).toBeGreaterThan(0.88)
+        expect(r.refused).toBe(false)
+        // 17 pièces : l'aire ne tient pas du tout (ratio 1,06), refus, sur les deux.
+        const more = [{ coords: rect(0, 0, 10, 10), count: 17 }]
+        expect(capacityReport(more, shaped, 0).refused).toBe(true)
+        expect(capacityReport(more, [{ width: 40, height: 40, count: 1 }], 0).refused).toBe(true)
     })
 })
 

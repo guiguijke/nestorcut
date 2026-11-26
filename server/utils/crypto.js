@@ -31,11 +31,26 @@ export function fingerprintKey(dekBuffer) {
 }
 
 /**
+ * Refuse une clé nulle (32 octets à zéro) ou de mauvaise taille : c'est ce
+ * que laissait une session effacée pendant un envoi, et un fichier chiffré
+ * avec elle est lisible par quiconque tient la base. Rien n'est écrit.
+ */
+export function assertUsableKey(dek) {
+    if (!Buffer.isBuffer(dek) || dek.length !== 32) {
+        throw new Error('vault key must be 32 bytes')
+    }
+    if (dek.every((b) => b === 0)) {
+        throw new Error('vault key is all zero: refused')
+    }
+}
+
+/**
  * One-shot frame-format encryption (same wire format as the streams — used
  * for small payloads like the encrypted polygonParts blob, and mirrored by
  * the Python workers).
  */
 export function encryptBuffer(dek, aadId, ownerId, plain) {
+    assertUsableKey(dek)
     const out = []
     let frameIndex = 0
     for (let off = 0; off < plain.length; off += PLAINTEXT_BLOCK) {
@@ -97,12 +112,16 @@ export function fingerprintsEqual(a, b) {
 
 /** Transform: plaintext in, framed ciphertext out. */
 export function createEncryptStream(dek, fileId, ownerId) {
+    assertUsableKey(dek)
+    // Copie prise à la création : effacer le tampon de l'appelant ensuite ne
+    // change plus la clé au milieu du fichier.
+    const key = Buffer.from(dek)
     let buffer = Buffer.alloc(0)
     let frameIndex = 0
 
     function seal(block) {
         const nonce = crypto.randomBytes(NONCE_SIZE)
-        const cipher = crypto.createCipheriv('aes-256-gcm', dek, nonce, { authTagLength: TAG_SIZE })
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, nonce, { authTagLength: TAG_SIZE })
         cipher.setAAD(aadFor(fileId, ownerId, frameIndex))
         frameIndex += 1
         const ct = Buffer.concat([cipher.update(block), cipher.final()])
@@ -123,7 +142,12 @@ export function createEncryptStream(dek, fileId, ownerId) {
                 this.push(seal(buffer))
                 buffer = Buffer.alloc(0)
             }
+            key.fill(0)
             cb()
+        },
+        destroy(err, cb) {
+            key.fill(0)
+            cb(err)
         },
     })
 }

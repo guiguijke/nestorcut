@@ -154,34 +154,61 @@ describe('vault session RAM cache (D-PRV-7 — no Mongo, no wrap)', () => {
         await realVault.clearVaultSessions('ram-u3')
     })
 
-    it('returns null after expiry AND wipes the buffer', async () => {
+    // Tampons de 32 octets remis à zéro pendant fn() : la clé interne de la
+    // session, invisible de l'extérieur depuis que getVaultSession rend une copie.
+    async function wipedKeysDuring(fn) {
+        const fill = vi.spyOn(Buffer.prototype, 'fill')
+        try {
+            await fn()
+            return fill.mock.contexts.filter((b, i) => b.length === 32 && fill.mock.calls[i][0] === 0)
+        } finally {
+            fill.mockRestore()
+        }
+    }
+
+    it('getVaultSession rend une copie : effacer la session ne touche pas la clé déjà rendue', async () => {
+        await realVault.createVaultSession('ram-copy', dek())
+        const held = (await realVault.getVaultSession('ram-copy')).dek
+        held.fill(7) // la copie de l'appelant ne change pas la session non plus
+        expect((await realVault.getVaultSession('ram-copy')).dek.equals(dek())).toBe(true)
+        const again = (await realVault.getVaultSession('ram-copy')).dek
+        await realVault.clearVaultSessions('ram-copy')
+        expect(again.equals(dek())).toBe(true)
+    })
+
+    it('returns null after expiry AND wipes the session buffer (not the copies already handed out)', async () => {
         const t0 = 2_000_000
         const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(t0)
         await realVault.createVaultSession('ram-u4', dek())
-        const session = await realVault.getVaultSession('ram-u4')
-        const mapBuffer = session.dek // the session's own buffer
+        const held = (await realVault.getVaultSession('ram-u4')).dek
 
         nowSpy.mockReturnValue(t0 + realVault.VAULT_SESSION_TTL_MS + 1)
-        expect(await realVault.getVaultSession('ram-u4')).toBeNull()
-        // The wiped buffer is all zeros — the DEK is gone even for anyone
-        // still holding a reference.
-        expect(mapBuffer.every((b) => b === 0)).toBe(true)
+        let after = 'unset'
+        const wiped = await wipedKeysDuring(async () => {
+            after = await realVault.getVaultSession('ram-u4')
+        })
+        expect(after).toBeNull()
+        expect(wiped).toHaveLength(1)
+        expect(wiped[0].every((b) => b === 0)).toBe(true)
+        expect(held.equals(dek())).toBe(true)
     })
 
     it('clearVaultSessions wipes and removes the session', async () => {
         await realVault.createVaultSession('ram-u5', dek())
-        const session = await realVault.getVaultSession('ram-u5')
-        const mapBuffer = session.dek
-        await realVault.clearVaultSessions('ram-u5')
+        const held = (await realVault.getVaultSession('ram-u5')).dek
+        const wiped = await wipedKeysDuring(() => realVault.clearVaultSessions('ram-u5'))
         expect(await realVault.getVaultSession('ram-u5')).toBeNull()
-        expect(mapBuffer.every((b) => b === 0)).toBe(true)
+        expect(wiped).toHaveLength(1)
+        expect(wiped[0].every((b) => b === 0)).toBe(true)
+        expect(held.equals(dek())).toBe(true)
     })
 
     it('re-creating a session wipes the previous buffer', async () => {
         await realVault.createVaultSession('ram-u6', dek())
         const first = (await realVault.getVaultSession('ram-u6')).dek
-        await realVault.createVaultSession('ram-u6', Buffer.alloc(32, 9))
-        expect(first.every((b) => b === 0)).toBe(true)
+        const wiped = await wipedKeysDuring(() => realVault.createVaultSession('ram-u6', Buffer.alloc(32, 9)))
+        expect(wiped).toHaveLength(1)
+        expect(first.equals(dek())).toBe(true)
         const session = await realVault.getVaultSession('ram-u6')
         expect(session.dek.equals(Buffer.alloc(32, 9))).toBe(true)
         await realVault.clearVaultSessions('ram-u6')
@@ -193,12 +220,28 @@ describe('vault session RAM cache (D-PRV-7 — no Mongo, no wrap)', () => {
     })
 
     it('requireFileAccess returns the DEK with an active session', async () => {
-        state.db = fakeDb({ users: [{ id: 'ram-u8', encryption: { enabled: true } }] })
+        state.db = fakeDb({ users: [{ id: 'ram-u8', encryption: { enabled: true }, sessions: [{ sessionHash: 'h', expiresAt: new Date(Date.now() + 86_400_000) }] }] })
         await realVault.createVaultSession('ram-u8', dek())
         const { dek: granted } = await realVault.requireFileAccess('ram-u8')
         expect(granted.equals(dek())).toBe(true)
         await realVault.clearVaultSessions('ram-u8')
     })
+
+    // Admin (autre processus) : bannir efface le champ sessions, « déconnecter
+    // partout » le vide. La clé gardée ici est alors effacée au premier accès.
+    for (const [label, extra] of [
+        ['banni', { banned: true, sessions: [{ sessionHash: 'h', expiresAt: new Date(Date.now() + 86_400_000) }] }],
+        ['sessions révoquées (liste vide)', { sessions: [] }],
+        ['banni, champ sessions retiré', { banned: true }],
+        ['seules des sessions expirées', { sessions: [{ sessionHash: 'h', expiresAt: new Date(Date.now() - 1000) }] }],
+    ]) {
+        it(`requireFileAccess : compte ${label} → 403 vault_locked et clé effacée`, async () => {
+            state.db = fakeDb({ users: [{ id: 'ram-rev', encryption: { enabled: true }, ...extra }] })
+            await realVault.createVaultSession('ram-rev', dek())
+            await expectErr(realVault.requireFileAccess('ram-rev'), 403, 'vault_locked')
+            expect(await realVault.getVaultSession('ram-rev')).toBeNull()
+        })
+    }
 
     it('requireFileAccess returns dek: null when encryption is disabled (legacy plaintext path)', async () => {
         state.db = fakeDb({ users: [{ id: 'ram-u9' }] })

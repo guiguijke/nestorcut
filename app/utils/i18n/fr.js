@@ -213,7 +213,7 @@ export default {
     'settings.count': 'Qté',
     'settings.units': 'unités',
     'settings.spacing': 'Espacement',
-    'settings.spacingKerf': 'Espacement < 0,05 mm : plus fin qu’un kerf laser — des pièces peuvent se toucher ou micro-chevaucher à la découpe.',
+    'settings.spacingKerf': 'Espacement < {limit} {unit} : plus fin qu’un kerf laser — des pièces peuvent se toucher ou micro-chevaucher à la découpe.',
     // B.4, puis étude SheetCam §9.40 (13/09) : l'espacement effectif
     // envoyé au moteur vaut 2 × kerf + sécurité — la bande de kerf déborde
     // d'un kerf entier hors de chaque pièce.
@@ -613,7 +613,7 @@ export default {
     'project.results': 'résultats',
     'project.nestingInProgress': 'calcul en cours',
     'project.minSheet':
-        "La plus grande pièce nécessite une tôle d'au moins {w} × {h} {unit} — aucun type de tôle déclaré n'est assez grand.",
+        "La pièce « {name} » ({w} × {h} {unit}) ne tient dans aucune tôle déclarée, même tournée.",
     'project.sheetShapeMissing': 'La forme de la tôle « {name} » est introuvable ou illisible dans ce navigateur. Retirez cette tôle de la liste, puis réimportez-la.',
     'project.changeToRegenerate': 'Modifiez les réglages ou les fichiers pour relancer',
 

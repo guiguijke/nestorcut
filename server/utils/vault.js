@@ -60,20 +60,40 @@ export async function createVaultSession(userId, dekBuffer) {
 }
 
 /**
- * Returns the live DEK when an active session exists (sliding TTL refresh),
- * null otherwise. Expired entries are wiped on the way.
+ * Returns a COPY of the live DEK when an active session exists (sliding TTL
+ * refresh), null otherwise. Expired entries are wiped on the way.
  *
- * ⚠️ The returned Buffer IS the session's buffer: callers must NEVER mutate
- * or wipe it. Wiping happens exclusively here, on expiry or via
- * clearVaultSessions().
+ * Une copie : une requête garde sa clé jusqu'au bout. Rendue partagée, une
+ * déconnexion, un déverrouillage depuis un autre onglet ou l'expiration la
+ * remettait à zéro pendant un envoi, et les fichiers partaient chiffrés avec
+ * une clé nulle (illisibles avec la clé de l'utilisateur, lisibles par tous).
  */
 export async function getVaultSession(userId) {
+    const entry = touchSession(userId)
+    if (!entry) return null
+    return { dek: Buffer.from(entry.dek), expiresAt: new Date(entry.expiresAt) }
+}
+
+// Session vivante (TTL glissant) sans copier la clé : le statut, interrogé
+// souvent, n'a pas à semer des copies dans la mémoire.
+function touchSession(userId) {
     const now = Date.now()
     sweepExpired(now)
     const entry = sessions.get(userId)
     if (!entry) return null
     entry.expiresAt = now + VAULT_SESSION_TTL_MS
-    return { dek: entry.dek, expiresAt: new Date(entry.expiresAt) }
+    return entry
+}
+
+/**
+ * Remplace la clé d'une session OUVERTE (fin de rotation). Sans session, rien
+ * n'est créé et la réponse est null : une déconnexion survenue pendant la
+ * rotation laisse le coffre verrouillé.
+ */
+export async function replaceOpenVaultSession(userId, dekBuffer) {
+    sweepExpired(Date.now())
+    if (!sessions.has(userId)) return null
+    return createVaultSession(userId, dekBuffer)
 }
 
 export async function clearVaultSessions(userId) {
@@ -84,6 +104,28 @@ export async function clearVaultSessions(userId) {
     }
 }
 
+/**
+ * Compte banni ou sans aucune session valide : l'admin (autre processus) a
+ * révoqué les sessions sans pouvoir effacer la clé gardée ici.
+ */
+export function vaultAccessRevoked(user, now = new Date()) {
+    if (!user || user.banned) return true
+    const live = (user.sessions || []).some((s) => !s?.expiresAt || new Date(s.expiresAt) > now)
+    return !live
+}
+
+/**
+ * À la connexion, AVANT d'ajouter la nouvelle session : si le compte n'a plus
+ * aucune session valide (sessions révoquées ou bannissement levé depuis l'admin,
+ * mot de passe changé ailleurs), la clé gardée ici date d'avant la révocation :
+ * elle est effacée, le coffre se redéverrouille. Une connexion sur un autre
+ * appareil pendant qu'une session vit ne touche pas au coffre.
+ */
+export async function clearVaultIfNoLiveSession(db, userId, now = new Date()) {
+    const user = await db.collection('users').findOne({ id: userId }, { projection: { sessions: 1 } })
+    if (vaultAccessRevoked(user ? { sessions: user.sessions } : null, now)) await clearVaultSessions(userId)
+}
+
 export async function getVaultStatus(userId) {
     const db = await connectDB()
     const user = await db.collection('users').findOne(
@@ -91,11 +133,11 @@ export async function getVaultStatus(userId) {
         { projection: { encryption: 1 } }
     )
     const enabled = Boolean(user?.encryption?.enabled)
-    const session = enabled ? await getVaultSession(userId) : null
+    const entry = enabled ? touchSession(userId) : null
     return {
         enabled,
-        locked: enabled && !session,
-        expiresAt: session?.expiresAt || null,
+        locked: enabled && !entry,
+        expiresAt: entry ? new Date(entry.expiresAt) : null,
         keyId: user?.encryption?.keyId || null,
         createdAt: user?.encryption?.createdAt || null,
     }
@@ -111,9 +153,15 @@ export async function requireFileAccess(userId) {
     const db = await connectDB()
     const user = await db.collection('users').findOne(
         { id: userId },
-        { projection: { encryption: 1 } }
+        { projection: { encryption: 1, banned: 1, sessions: 1 } }
     )
     if (!user?.encryption?.enabled) return { dek: null }
+
+    // Banni ou déconnecté partout depuis l'admin : la clé est effacée ici.
+    if (vaultAccessRevoked(user)) {
+        await clearVaultSessions(userId)
+        throw createError({ statusCode: 403, statusMessage: 'vault_locked' })
+    }
 
     const session = await getVaultSession(userId)
     if (!session) {
@@ -132,10 +180,12 @@ export async function uploadToBucket(bucket, filename, buffer, { ownerId, dek = 
     const metadata = { ownerId, ...extraMetadata }
     if (dek) metadata.enc = ENC_FLAG
 
+    // Le chiffreur d'abord : une clé refusée lève avant que GridFS n'ouvre le fichier.
+    const encrypt = dek ? createEncryptStream(dek, filename, ownerId) : null
     const uploadStream = bucket.openUploadStream(filename, { metadata })
     const source = Readable.from(buffer)
-    if (dek) {
-        await pipeline(source, createEncryptStream(dek, filename, ownerId), uploadStream)
+    if (encrypt) {
+        await pipeline(source, encrypt, uploadStream)
     } else {
         await pipeline(source, uploadStream)
     }

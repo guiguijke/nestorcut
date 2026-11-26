@@ -36,6 +36,8 @@ function makeWorkerKeys() {
 }
 
 const ev = (body) => ({ context: {}, _body: body })
+// Propriétaire connecté quelque part (job-dek refuse un compte banni ou sans session).
+const liveOwner = (id, extra = {}) => ({ id, sessions: [{ sessionHash: 'h', expiresAt: new Date(Date.now() + 86_400_000) }], ...extra })
 
 async function expectErr(promise, statusCode, statusMessage) {
     await expect(promise).rejects.toMatchObject({ statusCode, statusMessage })
@@ -86,6 +88,7 @@ describe('POST /api/security/vault/job-dek (D-PRV-7)', () => {
         const worker = makeWorkerKeys()
         state.db = fakeDb({
             user_dxf_files: [{ slug: 'job-5', ownerId: 'w5', workerKeyPub: worker.pubB64 }],
+            users: [liveOwner('w5')],
         })
         await realVault.createVaultSession('w5', crypto.randomBytes(32))
         const res = await jobDekHandler(ev({ jobSlug: 'job-5' }))
@@ -99,6 +102,7 @@ describe('POST /api/security/vault/job-dek (D-PRV-7)', () => {
         const dek = crypto.randomBytes(32)
         state.db = fakeDb({
             nesting_jobs: [{ slug: 'job-happy', ownerId: 'w6', workerKeyPub: worker.pubB64 }],
+            users: [liveOwner('w6')],
         })
         await realVault.createVaultSession('w6', dek)
 
@@ -137,5 +141,37 @@ describe('POST /api/security/vault/job-dek (D-PRV-7)', () => {
         const session = await realVault.getVaultSession('w6')
         expect(session.dek.equals(dek)).toBe(true)
         await realVault.clearVaultSessions('w6')
+    })
+
+    // Admin (autre processus) : bannir retire les sessions, « déconnecter
+    // partout » les vide ; la clé restait ici jusqu'à deux heures, renouvelée
+    // par chaque demande du worker.
+    for (const [label, owner] of [
+        ['banni', liveOwner('w-rev', { banned: true })],
+        ['banni, champ sessions retiré', { id: 'w-rev', banned: true }],
+        ['sessions révoquées', { id: 'w-rev', sessions: [] }],
+        ['compte introuvable', null],
+    ]) {
+        it(`409 vault_locked et clé effacée : ${label}`, async () => {
+            const worker = makeWorkerKeys()
+            state.db = fakeDb({
+                nesting_jobs: [{ slug: 'job-rev', ownerId: 'w-rev', workerKeyPub: worker.pubB64 }],
+                users: owner ? [owner] : [],
+            })
+            await realVault.createVaultSession('w-rev', crypto.randomBytes(32))
+            await expectErr(jobDekHandler(ev({ jobSlug: 'job-rev' })), 409, 'vault_locked')
+            expect(await realVault.getVaultSession('w-rev')).toBeNull()
+        })
+    }
+
+    it('409 vault_locked : jamais une clé nulle vers un worker', async () => {
+        const worker = makeWorkerKeys()
+        state.db = fakeDb({
+            nesting_jobs: [{ slug: 'job-zero', ownerId: 'w-zero', workerKeyPub: worker.pubB64 }],
+            users: [liveOwner('w-zero')],
+        })
+        await realVault.createVaultSession('w-zero', Buffer.alloc(32))
+        await expectErr(jobDekHandler(ev({ jobSlug: 'job-zero' })), 409, 'vault_locked')
+        await realVault.clearVaultSessions('w-zero')
     })
 })

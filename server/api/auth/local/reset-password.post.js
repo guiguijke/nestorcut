@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { connectDB } from '~~/server/db/mongo'
 import { assertRateLimit } from '~~/server/utils/ratelimit'
+import { clearVaultSessions } from '~~/server/utils/vault'
 
 export default defineEventHandler(async (event) => {
     const config = useRuntimeConfig(event)
@@ -44,6 +45,8 @@ export default defineEventHandler(async (event) => {
         { id: reset.userId },
         { $set: { passwordHash, sessions: [], emailVerified: true }, $min: { emailVerifiedAt: new Date() } }
     )
+    // Toutes les sessions sautent : la clé du coffre gardée en mémoire saute avec.
+    await clearVaultSessions(reset.userId)
     await db.collection('passwordResets').deleteMany({ userId: reset.userId })
     await db.collection('emailVerifications').deleteMany({ userId: reset.userId })
 

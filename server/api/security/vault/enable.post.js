@@ -40,7 +40,8 @@ export default defineEventHandler(async (event) => {
 
     const body = await readBody(event)
     const dek = Buffer.from(String(body?.key || ''), 'base64')
-    if (dek.length !== 32) {
+    // Une clé nulle ne chiffrerait rien (refusée à l'écriture des fichiers).
+    if (dek.length !== 32 || dek.every((b) => b === 0)) {
         throw createError({ statusCode: 400, statusMessage: 'Invalid key' })
     }
 

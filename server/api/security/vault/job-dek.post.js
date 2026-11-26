@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { connectDB } from '~~/server/db/mongo'
-import { getVaultSession } from '~~/server/utils/vault'
+import { clearVaultSessions, getVaultSession, vaultAccessRevoked } from '~~/server/utils/vault'
 import { assertRateLimit } from '~~/server/utils/ratelimit'
 
 /**
@@ -80,8 +80,24 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, statusMessage: 'invalid worker_key' })
     }
 
+    // Banni ou déconnecté partout depuis l'admin (autre processus, qui ne peut
+    // pas effacer la clé d'ici) : la clé est effacée et refusée, comme après
+    // une déconnexion.
+    const owner = await db.collection('users').findOne(
+        { id: doc.ownerId },
+        { projection: { banned: 1, sessions: 1 } }
+    )
+    if (vaultAccessRevoked(owner)) {
+        await clearVaultSessions(doc.ownerId)
+        throw createError({ statusCode: 409, statusMessage: 'vault_locked' })
+    }
+
     const session = await getVaultSession(doc.ownerId)
     if (!session) {
+        throw createError({ statusCode: 409, statusMessage: 'vault_locked' })
+    }
+    // Jamais de clé nulle vers un worker : il chiffrerait ses sorties avec.
+    if (session.dek.every((b) => b === 0)) {
         throw createError({ statusCode: 409, statusMessage: 'vault_locked' })
     }
 
@@ -96,7 +112,6 @@ export default defineEventHandler(async (event) => {
         const nonce = crypto.randomBytes(12)
         const cipher = crypto.createCipheriv('aes-256-gcm', transportKey, nonce, { authTagLength: 16 })
         cipher.setAAD(Buffer.from(jobSlug, 'utf8'))
-        // session.dek is the vault session's own buffer — NEVER wiped here.
         const parcel = Buffer.concat([nonce, cipher.update(session.dek), cipher.final(), cipher.getAuthTag()])
 
         return {
@@ -107,5 +122,7 @@ export default defineEventHandler(async (event) => {
         // Ephemeral key material never outlives the request.
         if (shared) shared.fill(0)
         if (transportKey) transportKey.fill(0)
+        // Copie propre à cette requête (getVaultSession) : effacée ici.
+        session.dek.fill(0)
     }
 })

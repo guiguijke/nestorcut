@@ -30,7 +30,7 @@ describe('réglages gardés par un onglet de la V0.9.19 (chiffres en pouces not�
         const store = read('../composables/files.js')
         expect(store).toMatch(/projectSnapshots\.set\(state\.projectSlug, \{\s*v: SNAPSHOT_VERSION,/)
         expect(store).toMatch(/state\.paramsUnit = snapshotUnit\(snap, getUnitState\(\)\)/)
-        expect(store).toMatch(/syncParamsToUnit\(getUnitState\(\), \{ restored: Boolean\(snap\) \}\)/)
+        expect(store).toMatch(/syncParamsToUnit\(state\.displayUnit \|\| getUnitState\(\), \{ restored: Boolean\(snap\), state \}\)/)
     })
 })
 

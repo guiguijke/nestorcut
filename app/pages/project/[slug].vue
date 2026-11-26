@@ -229,7 +229,7 @@
             <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
                  grisé, avant tout clic (en bas de page il sortait de l'écran). -->
             <p v-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
-                {{ t('project.minSheet', { w: fmtLengthValue(biggestPartSizes.width), h: fmtLengthValue(biggestPartSizes.height), unit: unitLabel }) }}
+                {{ t('project.minSheet', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), unit: unitLabel }) }}
             </p>
             <p v-if="missingSheetNames.length && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="sheet-shape-missing" role="alert">
                 {{ t('project.sheetShapeMissing', { name: missingSheetNames[0] }) }}
@@ -258,6 +258,7 @@ import { themeType } from "~~/constants/theme.constants";
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { safetyPatchForTargetMm } from "~/utils/spacingParams";
 import { capacityPanelModel } from "~/utils/capacityPanel";
+import { firstPartFittingNoSheet } from "~/utils/partSheetFit";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB, MAX_SHEET_FORMATS } from "~~/shared/constants/payment.constants";
@@ -783,23 +784,23 @@ const applyDemoDefaults = () => {
             width: mmToDisp(sheet.width),
             height: mmToDisp(sheet.height),
         };
+    // D'abord : range les réglages du projet quitté avant que la démo ne les écrase.
+    // Ils ne vaudront que pour le chemin de la démo.
+    actions.markCuratedDefaults(API_ROUTES.PROJECT(DEMO_PROJECT_SLUG));
     actions.updateParams({
         sheets: DEMO_SHEETS.map((sheet) => ({
             ...sheetDims(sheet),
             count: String(sheet.count),
         })),
         // B.4 : la démo règle les deux causes de l'espacement (kerf nul +
-        // sécurité 1 mm) — l'effectif DEMO_SPACE_MM (2 mm) est reconstitué
-        // par updateKerfSafety, pas écrit en dur.
+        // sécurité de DEMO_SPACE_MM) — espacement = 2 × kerf + sécurité, donc
+        // l'effectif DEMO_SPACE_MM (2 mm) est reconstitué par updateKerfSafety,
+        // pas écrit en dur.
         addOutShape: false,
         fillHoles: true,
         rotationCount: 4,
     });
-    actions.updateKerfSafety({ kerf: '0', safety: mmToDisp(DEMO_SPACE_MM / 2) });
-    // Cloisonnement projets : ces curated defaults ne valent que pour la
-    // PREMIÈRE visite de la démo — setProjectFiles ne les écrasera pas
-    // (drapeau), mais au retour c'est le snapshot utilisateur qui gagne.
-    actions.markCuratedDefaults();
+    actions.updateKerfSafety({ kerf: '0', safety: mmToDisp(DEMO_SPACE_MM) });
 };
 watch(isDemo, (val) => {
     if (val && unref(pageSlug) === DEMO_PROJECT_SLUG && !demoDefaultsApplied.value) {
@@ -914,28 +915,6 @@ const projectFiles = computed(() => {
     if (filesGetters.projectSlug !== unref(apiPath)) return []
     return filesGetters.projectFiles || []
 })
-const biggestPartSizes = computed(() => {
-    // Lot A1 (audit P3-4) : une fiche-BLOC est UN item moteur de l'étendue
-    // de son enveloppe — la garde « tôle assez grande » doit la mesurer sur
-    // le BLOC (champ additif `block`, E4-a), pas sur sa plus grande pièce.
-    // Mesuré sur le dessin du collègue : enveloppe 2834 × 689, plus grande
-    // pièce 1612 × 231 — la garde pièce laissait le clic passer et l'échec
-    // repartait sur le message générique « arrêté de façon inattendue ».
-    const parts = projectFiles.value
-        .filter(file => file.count !== 0) // skip files with count 0
-        .reduce((acc, file) => file.block
-            ? [...acc, { width: file.block.width, height: file.block.height }]
-            : [...acc, ...file.parts], [])
-        .map(part => ({
-            width: part.width > part.height ? part.width : part.height,
-            height: part.width > part.height ? part.height : part.width
-        }));
-
-    return {
-        width: Math.max(...parts.map(part => part.width), 0),
-        height: Math.max(...parts.map(part => part.height), 0)
-    };
-})
 const currentSheets = computed(() => {
     const p = unref(params);
     if (Array.isArray(p.sheets) && p.sheets.length > 0) return p.sheets;
@@ -1026,16 +1005,16 @@ watch(
     },
     { immediate: true }
 );
-// A part fits if it fits inside at least one sheet type, in either orientation.
-const sizesIsAvailable = computed(() => {
-    const { width: partWidth, height: partHeight } = unref(biggestPartSizes);
-    return unref(currentSheets).some((sheet) => {
-        // Sheet params hold display-unit strings; parts are mm. Compare in mm.
-        const width = Math.max(displayToMm(Number(sheet.width) || 0), displayToMm(Number(sheet.height) || 0));
-        const height = Math.min(displayToMm(Number(sheet.width) || 0), displayToMm(Number(sheet.height) || 0));
-        return width >= partWidth && height >= partHeight;
-    });
-})
+// Chaque pièce (un bloc = une pièce) doit tenir dans au moins une tôle avec
+// quantité, dans un sens ou l'autre : la plus grande largeur et la plus grande
+// hauteur de pièces différentes ne se posent pas ensemble sur une tôle.
+const partFitsNoSheet = computed(() => firstPartFittingNoSheet({
+    files: projectFiles.value,
+    sheets: unref(currentSheets),
+    toMm: displayToMm,
+    rotationCount: unref(params)?.rotationCount,
+}));
+const sizesIsAvailable = computed(() => partFitsNoSheet.value === null);
 // [slug].vue is reused across projects: load THIS slug on every change
 // (home → new local project after visiting the demo used to keep marine files).
 watch(pageSlug, async (s, prev) => {

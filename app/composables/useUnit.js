@@ -27,27 +27,70 @@ import {
  * Everything internal stays mm — this composable only drives display and
  * input conversion at the UI boundary.
  */
-const unitState = ref(DEFAULT_UNIT)
+// L'unité de CHAQUE requête vit dans un useState (par requête côté serveur, repris
+// du payload côté navigateur) : le serveur rend dans l'unité du cookie / du compte
+// de CETTE requête, et le navigateur démarre sur la même valeur (pas d'écart à
+// l'hydratation). Aucun état de module ne porte l'unité d'un utilisateur : un
+// processus Nitro rend les requêtes de tous.
+const UNIT_KEY = 'unit'
 let enabledState = false
 let initialized = false
+// Navigateur seulement : la référence de l'onglet, lue par les modules hors setup.
+let clientUnitRef = null
 // Jalon A (réserve) : la locale de l'app pour fmtArea — via useState comme
 // useLocale (par requête en SSR, jamais partagé).
 const localeState = () => useState('locale', () => 'en')
+
+function flagEnabled() {
+    const config = useRuntimeConfig()
+    // Env overrides arrive as strings ('true'), not booleans.
+    return config.public.unitSwitchEnabled === true || config.public.unitSwitchEnabled === 'true'
+}
+
+// Valeur de départ : le compte l'emporte sur le cookie (comme le watcher
+// client plus bas), sans compte connu le cookie, sinon le millimètre.
+function initialUnit(flagOn, cookieValue, userData) {
+    if (!flagOn) return DEFAULT_UNIT
+    let preferred = userData?.value?.preferredUnit
+    if (!isValidUnit(preferred)) {
+        try { preferred = authStore.getters.user.value?.preferredUnit } catch { preferred = null }
+    }
+    if (isValidUnit(preferred)) return preferred
+    return isValidUnit(cookieValue) ? cookieValue : DEFAULT_UNIT
+}
 
 /**
  * Non-composable accessor for module-level stores (files.js)
  * whose computed request bodies run outside component setup. Honors the
  * master switch: 'mm' whenever the feature is disabled.
+ *
+ * Navigateur : l'unité de l'onglet. Serveur : l'unité de la requête `nuxtApp`,
+ * lue seulement quand son contexte est le contexte COURANT (filesState l'appelle
+ * de façon synchrone, à la création de l'état de la requête). Sinon (code qui a
+ * passé un await : le contexte courant peut être celui d'une autre requête) la
+ * réponse est 'mm', jamais l'unité d'un autre.
  */
-export function getUnitState() {
-    return enabledState ? unitState.value : DEFAULT_UNIT
+export function getUnitState(nuxtApp) {
+    if (import.meta.client) return enabledState ? (clientUnitRef?.value ?? DEFAULT_UNIT) : DEFAULT_UNIT
+    if (!nuxtApp) return DEFAULT_UNIT
+    try {
+        // Lecture directe, sans runWithContext : sur le serveur il passe par
+        // callAsync et rend une Promise, l'unité valait alors toujours 'mm'.
+        if (tryUseNuxtApp() !== nuxtApp) return DEFAULT_UNIT
+        // L'interrupteur se lit dans la config, pas dans l'état de module (posé
+        // seulement par le premier useUnit() du processus).
+        if (!flagEnabled()) return DEFAULT_UNIT
+        const cookie = useCookie('unit')
+        const { data } = useNuxtData('user')
+        const v = useState(UNIT_KEY, () => initialUnit(true, cookie.value, data)).value
+        return isValidUnit(v) ? v : DEFAULT_UNIT
+    } catch {
+        return DEFAULT_UNIT
+    }
 }
 
 export function useUnit() {
-    const config = useRuntimeConfig()
-    // Env overrides arrive as strings ('true'), not booleans.
-    const flagOn =
-        config.public.unitSwitchEnabled === true || config.public.unitSwitchEnabled === 'true'
+    const flagOn = flagEnabled()
     const enabled = computed(() => flagOn)
     enabledState = flagOn
     const cookie = useCookie('unit', { maxAge: 60 * 60 * 24 * 365, sameSite: 'lax' })
@@ -58,12 +101,13 @@ export function useUnit() {
     // quick unit switch would silently skip the PATCH — and the watcher
     // would flip the unit back to the stale DB value seconds later.
     const { data: userData } = useNuxtData('user')
+    const unitState = useState(UNIT_KEY, () => initialUnit(flagOn, cookie.value, userData))
 
+    if (import.meta.client) {
+        clientUnitRef = unitState
+    }
     if (import.meta.client && !initialized) {
         initialized = true
-        if (enabled.value && isValidUnit(cookie.value)) {
-            unitState.value = cookie.value
-        }
         // DB wins over the cookie once the user is known. Watch the SHARED
         // asyncData cache (hydrated from the SSR payload, refreshed by
         // setUser on every navigation) with the auth store as fallback —

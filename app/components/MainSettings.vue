@@ -114,7 +114,7 @@
                 <!-- B.4 / masterplan 3.10 : l'espacement se règle par ses deux
                      causes — kerf (largeur de coupe) et sécurité (marge par
                      pièce). L'espacement effectif (clé moteur `space`) vaut
-                     toujours kerf + 2 × sécurité, règle affichée dessous. -->
+                     toujours 2 × kerf + sécurité, règle affichée dessous. -->
                 <section class="settings__section" data-testid="settings-spacing">
                     <h3 class="settings__h">{{ t('settings.section.spacing') }}<HelpDot topic="spacing" /></h3>
                 <InputField
@@ -138,7 +138,7 @@
                     v-if="spacingBelowKerf"
                     class="size__warning"
                 >
-                    {{ t('settings.spacingKerf') }}
+                    {{ t('settings.spacingKerf', { limit: fmtLengthValue(0.05, 4), unit: unitLabel }) }}
                 </div>
                 <!-- B.4 : dès 2,38 mm d'espacement le moteur ne peut plus
                      ouvrir les trous pour y nicher (limite canal, D-MOT-2). -->
@@ -259,7 +259,7 @@
     } from '~/utils/rotationChoice'
 
     const { t } = useLocale()
-    const { unit, unitLabel, enabled: unitsEnabled, fmtLength, displayToMm } = useUnit()
+    const { unit, unitLabel, enabled: unitsEnabled, fmtLength, fmtLengthValue, displayToMm } = useUnit()
     const { getters, actions } = filesStore
     const { updateParams, updateKerfSafety, updateSheet, addSheet, removeSheet } = actions
     const params = computed(() => getters.params)
@@ -338,7 +338,7 @@
     })
 
     // B.4 : les deux réglages explicites passent par updateKerfSafety —
-    // l'unique chemin qui maintient `space` (= kerf + 2 × sécurité), la
+    // l'unique chemin qui maintient `space` (= 2 × kerf + sécurité), la
     // clé comprise par l'API et les deux moteurs.
     const localKerf = computed({
         get: () => unref(params).kerf ?? '0',
@@ -352,8 +352,8 @@
 
     const effectiveSpace = computed(() => Number(String(unref(params).space ?? '0').replace(',', '.')) || 0)
 
-    // Règle affichée (B.4/3.10) : « espacement entre pièces = kerf +
-    // 2 × sécurité = {v} » — l'utilisateur voit la décomposition ET le
+    // Règle affichée (B.4/3.10) : « espacement entre pièces = 2 × kerf +
+    // sécurité = {v} » — l'utilisateur voit la décomposition ET le
     // chiffre effectivement envoyé au moteur.
     const spacingRule = computed(() =>
         t('settings.spacingRule', {
