@@ -9,6 +9,8 @@ const LOCAL_FAIL_CODES = new Set([
     'all_alternatives_invalid', 'capacity_exceeded', 'item_geometry',
     'item_unplaceable',
     'part_too_large', 'spacing_too_large', 'strip_height', 'crash', 'payload_build',
+    // Distance au bord : refus du constructeur, chacun avec son propre code.
+    'edge_overhang_too_large', 'edge_too_large', 'edge_offset_failed',
     'pool_failed', 'merge_failed', 'merge_parse', 'local_interrupted',
     'local_unknown', 'engine_error',
 ])

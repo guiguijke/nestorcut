@@ -18,6 +18,8 @@ import { MAX_SHEET_FORMATS } from '../../../../shared/constants/payment.constant
 // Forme exacte des slugs de tôle importée (newSheetSlug, app/utils/
 // sheetImportModel.js) : « sheet-<horodatage base 36>-<6 caractères base 36> ».
 const SHEET_SHAPE_ID = /^sheet-[0-9a-z]{1,12}-[0-9a-z]{6}$/
+// Borne de la distance au bord (mm), valeur absolue : au-delà, une faute de frappe.
+const MAX_EDGE_DISTANCE_MM = 5000
 
 const concurrentLimitError = (activeJobs) =>
     createError({
@@ -266,6 +268,32 @@ export default defineEventHandler(async (event) => {
         })
     }
 
+    // Distance au bord de tôle (mm, négative = débordement admis). Absente ou
+    // null : rien du tout (document du job identique à avant). Strictement un
+    // nombre fini borné : une chaîne vide ou un texte ne devient jamais 0.
+    // Phase 1 : réservée aux projets « cet appareil » (le worker Python ne
+    // sait pas la lire) ; refus 400 AVANT toute charge de quota, comme
+    // imported_sheet_not_local.
+    let edgeDistance = null
+    if (params.edgeDistance != null) {
+        const e = params.edgeDistance
+        if (typeof e !== 'number' || !Number.isFinite(e) || Math.abs(e) > MAX_EDGE_DISTANCE_MM) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'edge_distance_invalid',
+                data: { reason: 'edge_distance_invalid' },
+            })
+        }
+        if (isDemo || !project.local) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'edge_distance_local_only',
+                data: { reason: 'edge_distance_local_only' },
+            })
+        }
+        edgeDistance = e
+    }
+
     // ------------------------------------------------------------------
     // Plan 2026-09-05 §1.2a — pré-contrôle de capacité AVEC espacement.
     // Le test « tout tient sur une tôle » ignorait le gonflement
@@ -292,6 +320,8 @@ export default defineEventHandler(async (event) => {
     }
     // d6 : borne technique, tous paliers, démo comprise — avant le 422 et toute charge.
     assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (Number(s.count) || 0), 0))
+    // (La distance au bord ne peut pas arriver ici : elle est refusée plus haut
+    // hors projet local, donc ce pré-contrôle serveur n'en tient jamais compte.)
     if (!project.local) {
         const partsBySlug = new Map(
             userDxfFilesDatabase.map((f) => [f.slug, f.polygonParts || []]),
@@ -416,6 +446,7 @@ export default defineEventHandler(async (event) => {
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
+            if (edgeDistance !== null) dbParams.edgeDistance = edgeDistance
             // Quota puis profil par palier (quota consommé une fois la requête
             // validée ; refundé si échec).
             const tier = await getComputeTier(userId, null)

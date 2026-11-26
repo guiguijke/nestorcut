@@ -1392,6 +1392,39 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     `partEntities`, `partPositions`, `positionsFinalize`, `positionsJob`,
     `localDownloadsOrigin`, `sheetAxesOrigin`.
 
+68. **Distance au bord : deux repères, UN seul passage de l'un à l'autre.** Le
+    moteur ne connaît que l'espacement `s` (entre pièces ET au bord). Pour tenir
+    les pièces à `e` du bord, le constructeur lui donne une tôle décalée de
+    `d = e − s` (`edgeShiftMm`, valeurs DEMANDÉES : la marge de courbes s'ajoute
+    aux deux et s'annule) : rectangle (W − 2d) × (H − 2d), bande H − 2d / W − 2d,
+    contour importé décalé de −d (`offset_ring`, zones et défauts NON décalés :
+    ils gardent `s`) puis tout translaté de (−d, −d). Une pose moteur (x, y) vaut
+    (x + d, y + d) sur la vraie tôle. Règles :
+    - **d = 0 ⇒ rien** : aucune clé de payload, `engineSheets === sheets`, même
+      chemin au bit près. Verrou : `edgeDistanceEndToEnd` (empreinte du chemin par
+      défaut mesurée au commit d'avant le lot, vrai moteur et vrai bundle).
+    - **Les passes d'après calcul restent dans le repère MOTEUR** (`sheetDims`,
+      grille, bandes, hole-fill, finition, fusion, frames décorées) ; le retour au
+      repère réel se fait en UN point, `layoutsToRealFrame` dans
+      `buildAlternativeArtifacts`, avant containers, SVG, rapport, DXF, CSV,
+      `.job` et record (`realSheetDims`, `sheetFrames`). Les frames live passent
+      par `liveFrameToReal` ; une frame ou un layout déjà passé porte `edgeReal` :
+      ne jamais décaler deux fois. Le champion du pool (`preferChampion`) lit les
+      frames BRUTES du moteur, jamais celles de l'écran.
+    - Bande : longueur réelle = largeur moteur + d ; `stripMaxWidth` (moteur + d)
+      remplace la largeur de tôle dans `frameFitsSheet`.
+    - Rapport : `edge` (convention interne, comme `space`) seulement si d ≠ 0 ;
+      `applySpacingMargin` ôte la marge de `edgeGapMm` SANS plancher (négatif =
+      dépassement permis jusqu'à |e|).
+    - Phase 1 : projets « Cet appareil » seulement ; le serveur refuse le réglage
+      ailleurs (`edge_distance_local_only`), le worker Python ne le lit pas.
+    - Avec d < 0, une encoche plus étroite que 2|d| est comblée par le décalage
+      vers l'extérieur : le moteur peut y poser une pièce trop près ou trop
+      dehors ; le rapport le voit (`edgeOk` faux, ou alternative écartée).
+    - Toute op ajoutée au worker géométrie : rebuild `build-wasm.sh` DANS LA MÊME
+      PR (piège 33b), avec `wasm-opt` (binaryen) sur le PATH : sans lui le script
+      installe un binaire non optimisé.
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :

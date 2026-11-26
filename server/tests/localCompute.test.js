@@ -344,7 +344,8 @@ describe('local-payload / local-result / local-fail routes (flag-gated)', () => 
 
     it('local-fail: item_unplaceable et merge_failed sont des codes connus (conservés tels quels, pas engine_error)', async () => {
         state.config = { public: { localComputeEnabled: true } }
-        for (const [i, code] of ['item_unplaceable', 'merge_failed', 'merge_parse'].entries()) {
+        for (const [i, code] of ['item_unplaceable', 'merge_failed', 'merge_parse',
+            'edge_overhang_too_large', 'edge_too_large', 'edge_offset_failed'].entries()) {
             const slug = `job-code-${i}`
             const j = localJob({ slug })
             state.db = fakeDb({ nesting_jobs: [j], users: [freeUser({ freeNestingUsed: 1 })] })

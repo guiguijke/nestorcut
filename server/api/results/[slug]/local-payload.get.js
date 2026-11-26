@@ -75,6 +75,10 @@ export default defineEventHandler(async (event) => {
                 height: p.height ?? null,
                 sheetCount: p.sheetCount ?? null,
                 space: p.space ?? 0,
+                // Distance au bord (mm) : clé présente seulement si le job la porte.
+                ...(typeof p.edgeDistance === 'number' && Number.isFinite(p.edgeDistance)
+                    ? { edgeDistance: p.edgeDistance }
+                    : {}),
                 fillHoles: p.fillHoles !== false,
                 addOutShape: Boolean(p.addOutShape),
                 outputUnit: p.outputUnit || 'mm',
