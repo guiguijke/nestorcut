@@ -85,9 +85,22 @@ export function pickFinishedServerJob(list, projectSlug) {
 // as presentable — otherwise the champion locks on over-width garbage.
 export function frameFitsSheet(s) {
     if (!s?.feasible) return false
-    const w = s.sheets?.[0]?.[0]
+    const w = stripLimitOf(s)
     if (w != null && s.strip_width != null) return s.strip_width <= w + 0.5
     return true
+}
+
+/**
+ * Plus grande longueur de bande qui tient pour une frame : la largeur de la
+ * tôle, ou — distance au bord réglée, frame dans le repère réel —
+ * `stripMaxWidth` (largeur maximale du moteur + d : avec un bord négatif la
+ * coupe de fin peut passer au-delà de la tôle, avec un bord positif elle doit
+ * s'arrêter avant). Frame sans ce champ : exactement la règle d'avant.
+ */
+function stripLimitOf(s) {
+    const lim = Number(s?.stripMaxWidth)
+    if (s?.stripMaxWidth != null && Number.isFinite(lim)) return lim
+    return s?.sheets?.[0]?.[0]
 }
 
 /**
@@ -248,7 +261,7 @@ export function liveUsedLength(frame, stage) {
     if (!frameFitsSheet(frame)) return null
     const n = Number(frame.strip_width)
     if (frame.strip_width == null || !Number.isFinite(n) || n <= 0) return null
-    const w = Number(frame.sheets?.[0]?.[0])
+    const w = Number(stripLimitOf(frame))
     if (Number.isFinite(w) && w > 0 && n > w + 0.5) return null
     return n
 }

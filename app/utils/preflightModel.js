@@ -1,4 +1,4 @@
-import { engineBinShape } from './sheetShape'
+import { engineBinShape, perimeterSplitOf } from './sheetShape'
 
 /**
  * Modèle PUR de l'estimation « ≈ n tôles » de la page projet : les tôles et les
@@ -31,13 +31,18 @@ export function partCoords(p) {
     )
 }
 
-/** Les seuls nombres que l'estimation garde d'une forme (jamais le contour). */
+/** Les seuls nombres que l'estimation garde d'une forme (jamais le contour).
+ * Avec des zones, le périmètre est aussi dit en deux parts (contour, zones) pour
+ * la distance au bord ; sans zone il est tout entier celui du contour : rien de
+ * plus, l'objet d'avant. */
 export function shapeStatsFromShape(s) {
+    const split = Array.isArray(s?.outer) ? perimeterSplitOf(s) : null
     return {
         widthMm: s.widthMm,
         heightMm: s.heightMm,
         usableAreaMm2: s.usableAreaMm2,
         perimeterMm: s.perimeterMm,
+        ...(split && split.zonesPerimeterMm > 0 ? split : {}),
     }
 }
 
@@ -101,6 +106,9 @@ export function preflightSheetsOf(settings, shapeStats, toMm) {
                 count: Number(row.count) || 1,
                 usableAreaMm2: st.usableAreaMm2,
                 perimeterMm: st.perimeterMm,
+                // Distance au bord : partage contour / zones, quand la forme en a.
+                ...(Number.isFinite(st.outlinePerimeterMm) ? { outlinePerimeterMm: st.outlinePerimeterMm } : {}),
+                ...(Number.isFinite(st.zonesPerimeterMm) ? { zonesPerimeterMm: st.zonesPerimeterMm } : {}),
             })
         }
     }

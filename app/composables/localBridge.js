@@ -53,6 +53,126 @@ export function sheetDims(payload, containerId) {
     ]
 }
 
+// ---------------------------------------------------------------------------
+// Distance au bord (lot du 26/11/2026) : repère MOTEUR et repère RÉEL.
+//
+// Le moteur reçoit une tôle décalée de d = e − s (localPayloadBuilder) : une
+// pose moteur (x, y) vaut (x + d, y + d) sur la vraie tôle, rotation inchangée.
+// `sheetDims` reste le repère MOTEUR (les passes d'après-calcul y tiennent leur
+// marge `space` du conteneur moteur, soit la distance au bord de la vraie
+// tôle) ; tout ce qui est livré ou montré (containers, SVG, rapport, DXF, CSV,
+// .job, record, vue live) lit le repère RÉEL. Le passage d'un repère à l'autre
+// se fait en UN point : `layoutsToRealFrame`, après toutes les passes.
+// d = 0 (payload sans `edgeShift`) : aucune de ces fonctions ne change rien.
+// ---------------------------------------------------------------------------
+
+/** Décalage moteur d (mm) d'un job à distance au bord ; 0 sinon. */
+export function edgeShiftOf(payload) {
+    const d = Number(payload?.edgeShift)
+    return Number.isFinite(d) && d !== 0 ? d : 0
+}
+
+/** Repère réel du conteneur moteur `containerId` (payload.sheetFrames), ou null. */
+function _sheetFrame(payload, containerId) {
+    if (!edgeShiftOf(payload)) return null
+    const frames = payload?.sheetFrames
+    if (!Array.isArray(frames) || !frames.length) return null
+    return frames[containerId] || frames[0] || null
+}
+
+/** Dimensions (mm) de la VRAIE tôle d'un layout : celles du repère réel à
+ * distance au bord réglée, sinon exactement `sheetDims`. */
+export function realSheetDims(payload, containerId) {
+    const f = _sheetFrame(payload, containerId)
+    if (f && Number.isFinite(Number(f.width)) && Number.isFinite(Number(f.height))) {
+        return [Number(f.width), Number(f.height)]
+    }
+    return sheetDims(payload, containerId)
+}
+
+/** Anneaux RÉELS (contour d'origine + zones/défauts) d'un conteneur de tôle
+ * importée : le repère réel s'il existe, sinon ceux du conteneur moteur (les
+ * mêmes quand d = 0). null si illisible. */
+function _realBinRings(payload, containerId, bin) {
+    const f = _sheetFrame(payload, containerId)
+    const data = f ? f : bin?.shape?.data
+    if (!Array.isArray(data?.outer)) return null
+    return { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+}
+
+/**
+ * Passe les layouts du repère MOTEUR au repère RÉEL, EN PLACE : (x, y) →
+ * (x + d, y + d) sur chaque pose. Idempotent : un layout déjà passé
+ * (`edgeReal`) ou une pose déjà vue (`moved`, partagé entre alternatives) n'est
+ * jamais décalé deux fois. d = 0 : rien.
+ */
+export function layoutsToRealFrame(layouts, d, moved = new WeakSet()) {
+    if (!d) return layouts
+    for (const layout of layouts || []) {
+        if (!layout || layout.edgeReal) continue
+        for (const pi of layout.placed_items || []) {
+            if (!pi || moved.has(pi)) continue
+            moved.add(pi)
+            const t = pi.transformation || {}
+            const tr = t.translation || [0, 0]
+            pi.transformation = { ...t, translation: [(tr[0] ?? 0) + d, (tr[1] ?? 0) + d] }
+        }
+        layout.edgeReal = true
+    }
+    return layouts
+}
+
+/** Poses live ([id, rot, x, y] ou [id, bin, rot, x, y]) décalées de (d, d). */
+export function shiftLiveItems(items, d) {
+    if (!d || !Array.isArray(items)) return items
+    return items.map((raw) => {
+        if (!Array.isArray(raw)) return raw
+        const out = raw.slice()
+        const ix = raw.length >= 5 ? 3 : 2
+        out[ix] = (Number(raw[ix]) || 0) + d
+        out[ix + 1] = (Number(raw[ix + 1]) || 0) + d
+        return out
+    })
+}
+
+/** Longueur utilisée RÉELLE d'une bande : la valeur moteur + d (le bord gauche
+ * passe de s à e ; la coupe de fin garde l'espacement après la dernière pièce).
+ * Même règle pour la hauteur utilisée. null / non fini : rendu tel quel. */
+export function realStripExtent(value, d) {
+    if (!d || value === null || value === undefined) return value
+    const n = Number(value)
+    return Number.isFinite(n) ? n + d : value
+}
+
+/**
+ * Frame live (moteur décorée) → repère RÉEL, pour la vue et le registre :
+ * poses décalées de (d, d), largeur et hauteur de bande réelles, tôles réelles
+ * (par format quand la frame dit `binFormats`), et `stripMaxWidth` = la plus
+ * grande longueur réelle qui tient (moteur max_strip_width + d), que
+ * `frameFitsSheet` compare à la place de la largeur de tôle. Une frame déjà
+ * réelle (`edgeReal`, frame finale de buildLiveLayout) ne bouge pas ; un
+ * évènement sans poses (compteurs `evals`, zones) non plus — les frames du
+ * moteur sont `type: 'layout'`. d = 0 : la frame telle quelle.
+ */
+export function liveFrameToReal(frame, payload) {
+    const d = edgeShiftOf(payload)
+    if (!d || !frame || (frame.type && frame.type !== 'layout') || !Array.isArray(frame.items)) return frame
+    const out = { ...frame }
+    if (!frame.edgeReal) {
+        out.items = shiftLiveItems(frame.items, d)
+        if ('strip_width' in frame) out.strip_width = realStripExtent(frame.strip_width, d)
+        if ('used_height' in frame) out.used_height = realStripExtent(frame.used_height, d)
+    }
+    if (Array.isArray(frame.binFormats)) {
+        out.sheets = frame.binFormats.map((f) => realSheetDims(payload, Number.isInteger(f) ? f : 0))
+    }
+    const isSpp = !Array.isArray(payload?.instance?.bins)
+    const mw = Number(payload?.engineConfig?.max_strip_width)
+    if (isSpp && Number.isFinite(mw)) out.stripMaxWidth = mw + d
+    out.edgeReal = true
+    return out
+}
+
 /** Transforms d'un layout (forme Placement du bundle : angle en RADIANS). */
 export function layoutTransforms(layout, partsById) {
     return (layout.placed_items || []).map((pi) => {
@@ -1050,9 +1170,12 @@ export function reportSheetShapes(payload, layouts) {
         const bin = bins[l.container_id ?? 0]
         if (!bin) return { unresolved: true }
         if (!ids.has(bin.id)) return null
-        const data = bin.shape?.data
+        // Repère RÉEL : les layouts livrés le sont (distance au bord : contour
+        // d'origine et zones de `sheetFrames`, jamais le contour moteur décalé ;
+        // sans distance au bord, c'est le conteneur moteur lui-même).
+        const data = _realBinRings(payload, l.container_id ?? 0, bin)
         if (!Array.isArray(data?.outer) || data.outer.length < 4) return { unresolved: true }
-        const engine = { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+        const engine = { outer: data.outer, inner: data.inner }
         // Défauts dessinés : `bins` porte la forme du MOTEUR (contour original +
         // dangers) ; la forme LIVRÉE (coupée) est celle des aires, de la densité,
         // du DXF et des dessins. Une forme livrée illisible n'est JAMAIS remplacée
@@ -1083,6 +1206,9 @@ function _unverifiedCopy(report) {
         verify: {
             ...report.verify,
             insideSheet: null, zoneClear: null, shapeVerified: false, verifyStatus: 'skipped',
+            // Distance au bord (champ présent seulement quand elle est réglée) :
+            // jamais verte sur une forme non vérifiée.
+            ...('edgeOk' in (report.verify || {}) ? { edgeOk: null } : {}),
         },
     }
 }
@@ -1125,6 +1251,15 @@ export function mergeShapeVerify(deliverReport, engineReport) {
             overlapFree: _bothTrue(d.overlapFree, e.overlapFree),
             shapeVerified: Boolean(d.shapeVerified) && Boolean(e.shapeVerified),
             verifyStatus: _worseStatus(d.verifyStatus, e.verifyStatus),
+            // Distance au bord (champs présents seulement quand elle est réglée) :
+            // jugée sur le contour ORIGINAL (rapport de la forme du moteur), où les
+            // défauts sont des zones tenues à l'espacement ; sur la forme livrée,
+            // une entaille de défaut compterait comme bord.
+            ...(('edgeGapMm' in e || 'edgeOk' in e)
+                ? { edgeGapMm: e.edgeGapMm ?? null, edgeOk: e.edgeOk ?? null }
+                : ('edgeGapMm' in d || 'edgeOk' in d)
+                    ? { edgeGapMm: d.edgeGapMm ?? null, edgeOk: d.edgeOk ?? null }
+                    : {}),
         },
     }
 }
@@ -1146,6 +1281,7 @@ export function markUnresolvedShapes(report, shapes) {
     if (!unresolved || !report.verify) return report
     Object.assign(report.verify, {
         insideSheet: null, zoneClear: null, shapeVerified: false, verifyStatus: 'skipped',
+        ...('edgeOk' in report.verify ? { edgeOk: null } : {}),
     })
     return report
 }
@@ -1464,8 +1600,17 @@ export function enginePlacedById(alt) {
  * demandé (tolérance 0,01 comme nest-report). Un écart mesuré NÉGATIF est un
  * dépassement hors tôle, pas un espacement : laissé tel quel (ResultModal).
  */
-export function applySpacingMargin(report, margin, requested) {
+export function applySpacingMargin(report, margin, requested, requestedEdge = null) {
     const v = report && !report.error ? report.verify : null
+    // Distance au bord (réglée seulement) : écart au bord annoncé = mesuré −
+    // marge, SANS plancher à 0 (négatif = profondeur du dépassement, permis
+    // jusqu'à |e|), jugé contre le bord DEMANDÉ (tolérance 0,01 comme nest-report).
+    const edgeReq = requestedEdge === null || requestedEdge === undefined ? null : Number(requestedEdge)
+    if (v && edgeReq !== null && Number.isFinite(edgeReq) && typeof v.edgeGapMm === 'number') {
+        const m = margin > 0 ? margin : 0
+        v.edgeGapMm = Math.round((v.edgeGapMm - m) * 1000) / 1000
+        if (v.edgeOk !== null) v.edgeOk = v.edgeGapMm >= edgeReq - 0.01
+    }
     if (!v || typeof v.smallestGapMm !== 'number' || !(margin > 0) || v.smallestGapMm < 0) return report
     v.smallestGapMm = Math.max(0, Math.round((v.smallestGapMm - margin) * 1000) / 1000)
     v.spacingOk = v.smallestGapMm >= (Number(requested) || 0) - 0.01
@@ -1551,6 +1696,20 @@ function _layoutsToLiveItems(layouts, bins, isBpp) {
  * *during* the search (not only after finalization).
  */
 export function decorateLiveLayout(evt, payload) {
+    // Distance au bord : la décoration (expansion, hole-fill contre les formes du
+    // conteneur moteur) travaille dans le repère MOTEUR. Une frame déjà réelle
+    // (frame finale, `edgeReal`) y est ramenée le temps de la décorer, puis rendue
+    // dans son repère. Les autres restent moteur : `liveFrameToReal` les passe
+    // au repère réel ensuite, une fois.
+    const d = edgeShiftOf(payload)
+    if (d && evt?.edgeReal && Array.isArray(evt.items) && evt.items.length) {
+        const out = _decorateLiveLayout({ ...evt, items: shiftLiveItems(evt.items, -d) }, payload)
+        return { ...out, items: shiftLiveItems(out.items, d) }
+    }
+    return _decorateLiveLayout(evt, payload)
+}
+
+function _decorateLiveLayout(evt, payload) {
     if (!evt || !Array.isArray(evt.items) || !evt.items.length) return evt
     const parts = payload?.parts || []
     if (!parts.length) return evt
@@ -1670,6 +1829,17 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
         }
         const space = Number(payload?.engineConfig?.min_item_separation) || 0
         const requestedSpace = Number(payload?.requestedSpace ?? space) || 0
+        // Distance au bord : décalage moteur d (0 = job ordinaire, rien ne change),
+        // bord demandé, et bord INTERNE donné au rapport (demandé + la marge de
+        // courbes de l'espacement, la convention de `space`).
+        const edgeD = edgeShiftOf(payload)
+        const requestedEdge = edgeD && Number.isFinite(Number(payload?.requestedEdge))
+            ? Number(payload.requestedEdge)
+            : null
+        const reportEdge = requestedEdge !== null ? { edge: requestedEdge + (space - requestedSpace) } : {}
+        // Poses déjà passées au repère réel (partagé entre alternatives : une
+        // pose n'est jamais décalée deux fois).
+        const movedPoses = new WeakSet()
 
         const out = []
         // §17.2 : la géométrie des pièces, une fois — les deux états
@@ -1853,6 +2023,12 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     }
                 }
             }
+            // Distance au bord : LE point de retour au repère réel, une fois,
+            // pour TOUTE alternative (moteur, grille structurelle, grille BPP),
+            // après TOUTES les passes (elles travaillent dans le repère moteur)
+            // et avant tout ce qui se livre (containers, SVG, rapport, DXF, CSV,
+            // .job, frame finale). d = 0 : rien.
+            if (edgeD) layoutsToRealFrame(layouts, edgeD, movedPoses)
             const containers = []
             const sheets = []
             // Tôle importée : forme (contour + zones) de chaque layout, pour le
@@ -1860,7 +2036,8 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             const reportShapes = reportSheetShapes(payload, layouts)
             for (const layout of layouts) {
                 const containerId = layout.container_id ?? 0
-                const [binWidth, binHeight] = sheetDims(payload, containerId)
+                // La VRAIE tôle (identique à sheetDims sans distance au bord).
+                const [binWidth, binHeight] = realSheetDims(payload, containerId)
                 const transforms = layoutTransforms(layout, partsById)
                 containers.push({
                     bin_width: binWidth,
@@ -1927,6 +2104,10 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 items: reportItems,
                 containers: reportContainers,
                 space,
+                // Distance au bord réglée seulement (spec d'avant sinon) : le
+                // rapport juge le bord à part (edgeGapMm/edgeOk) et tolère le
+                // dépassement permis dans « dans la tôle ».
+                ...reportEdge,
             })
             // Défauts dessinés : second calcul sur les formes du MOTEUR, fusionné
             // sur `verify` seulement (avant applySpacingMargin, qui ne passe qu'une fois).
@@ -1939,6 +2120,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                             ? { ...c, shape: reportShapes[i].engineShape }
                             : c)),
                         space,
+                        ...reportEdge,
                     })
                 } catch {
                     engineReport = null
@@ -1946,7 +2128,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 report0 = mergeShapeVerify(report0, engineReport)
             }
             const report = markUnresolvedShapes(report0, reportShapes)
-            applySpacingMargin(report, space - requestedSpace, requestedSpace)
+            applySpacingMargin(report, space - requestedSpace, requestedSpace, requestedEdge)
             applyTrueAreasToReport(report, containers, partsById)
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout
             // d57cbea) : le bundle wasm compte sans plafond — un double-
@@ -2161,9 +2343,10 @@ export function binShapeForDxf(payload, container) {
         }
         return { outer: d.outer, inner: d.inner }
     }
-    const data = bin.shape?.data
+    // Repère réel (distance au bord : contour d'origine, jamais le décalé).
+    const data = _realBinRings(payload, id, bin)
     if (!Array.isArray(data?.outer) || data.outer.length < 4) return null
-    return { outer: data.outer, inner: Array.isArray(data.inner) ? data.inner : [] }
+    return { outer: data.outer, inner: data.inner }
 }
 
 /** Clé `bin_shape` du spec wasm (ou rien). Les anneaux partent en CHAÎNES

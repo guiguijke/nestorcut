@@ -16,9 +16,12 @@ import { markRaw } from 'vue'
 import { saveLocalResult } from './localResultsStore'
 import {
     normalizeLayouts,
-    sheetDims,
+    realSheetDims,
     decorateLiveLayout,
     expandMeta,
+    edgeShiftOf,
+    shiftLiveItems,
+    liveFrameToReal,
 } from './localBridge'
 import { assembleBrowserArtifactsOffThread } from './finalizeClient'
 import { dropPositionsUnlessBrowserBuilt } from './finalizeLocal'
@@ -31,6 +34,33 @@ import { ZONE_CANCELLED } from './structureClient'
 import { serverRefusalCode } from '~/utils/failureReason'
 import { liveShapeFields, withLiveShapes } from '~~/app/utils/sheetDraw.js'
 import { liveFormatFields } from '~~/app/utils/liveSheetFormats.js'
+import { perimeterSplitOf } from '~~/app/utils/sheetShape.js'
+
+/** Refus « distance au bord » du builder : ils gardent leur PROPRE code jusqu'à
+ * la page (comme `strip_height`), avec leur détail chiffré (`edgeDetail`). */
+const EDGE_REFUSALS = new Set(['edge_overhang_too_large', 'edge_too_large', 'edge_offset_failed'])
+
+/**
+ * Distance au bord : les VRAIES tôles d'un payload pour capacityReport (option
+ * `edge`), indexées comme les conteneurs moteur — dimensions de `sheetFrames`,
+ * stock du conteneur ; tôle importée : aire utile réelle (`shapedSheets`) et
+ * périmètre partagé contour / zones, mesuré sur la forme livrée comme
+ * `perimeterMm`.
+ */
+export function edgeCapacitySheets(payload) {
+    const frames = Array.isArray(payload?.sheetFrames) ? payload.sheetFrames : []
+    const bins = payload?.instance?.bins
+    return frames.map((f, i) => {
+        const bin = Array.isArray(bins) ? bins[i] : null
+        const shaped = (payload?.shapedSheets || []).find((s) => s.id === i)
+        const base = { width: Number(f.width), height: Number(f.height), count: bin ? (Number(bin.stock) || 1) : 1 }
+        if (!shaped) return base
+        const split = perimeterSplitOf(shaped.shape
+            ? { outer: f.outer, inner: f.inner, deliver: shaped.shape }
+            : { outer: f.outer, inner: f.inner })
+        return { ...base, usableAreaMm2: shaped.usableAreaMm2, perimeterMm: shaped.perimeterMm, ...split }
+    })
+}
 
 /**
  * Pass structurel navigateur (miroir de core/structure.py + intégration
@@ -344,7 +374,7 @@ async function fetchSources(payload) {
  * les bytes sources pour l'export DXF viennent du store local.
  */
 async function buildClientPayload(meta) {
-    const [{ buildLocalPayload, attachRingHulls }, { getLocalFile }, { geoOpenHoles, geoPinwheelCapacity }] = await Promise.all([
+    const [{ buildLocalPayload, attachRingHulls }, { getLocalFile }, { geoOpenHoles, geoPinwheelCapacity, geoOffsetRing }] = await Promise.all([
         import('./localPayloadBuilder'),
         import('./localFilesStore'),
         import('./geometryClient'),
@@ -379,6 +409,13 @@ async function buildClientPayload(meta) {
         {
             openHoles: (coords, holes, spaceMm) => geoOpenHoles(coords, holes, spaceMm),
             pinwheelCapacity: (ring, coords, spaceMm, allowed) => geoPinwheelCapacity(ring, coords, spaceMm, allowed),
+            // Distance au bord sur une tôle importée : contour décalé par le wasm
+            // géométrie (distance positive = vers l'extérieur). Appelé seulement
+            // à bord réglé ; un échec est un refus (edge_offset_failed).
+            offsetRing: (ring, distanceMm) => {
+                if (typeof geoOffsetRing !== 'function') throw new Error('offset_unavailable')
+                return geoOffsetRing(ring, distanceMm)
+            },
             // Tôle importée : la forme se relit dans le navigateur (jamais du
             // serveur). Importé seulement si un shapeId est présent.
             getSheetRecord: async (slug) => {
@@ -492,12 +529,16 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const isCapacity = e?.message === 'capacity_exceeded'
             const tooLarge = e?.__tooLarge || null
             const spacingTooLarge = e?.__spacingTooLarge || null
+            // Distance au bord : refus chiffré du builder (code + détail :
+            // { maxOverhangMm, part } / { maxEdgeMm } / { reason }).
+            const edgeDetail = e?.__edge && EDGE_REFUSALS.has(e?.message) ? e.__edge : null
             const errorCode = e?.message === 'local_geometry_missing' ? 'geometry_missing'
                 : e?.message === 'sheet_shape_missing' ? 'sheet_shape_missing'
                 : e?.message === 'sheet_shape_unreadable' ? 'sheet_shape_unreadable'
                 : isCapacity ? 'capacity_exceeded'
                 : tooLarge ? 'part_too_large'
                 : spacingTooLarge ? 'spacing_too_large'
+                : edgeDetail ? e.message
                 : 'payload_build'
             await $fetch(`/api/results/${jobSlug}/local-fail`, {
                 method: 'POST',
@@ -515,6 +556,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                 unfit: isCapacity ? e.__unfit : undefined,
                 ...(tooLarge ? { tooLarge } : {}),
                 ...(spacingTooLarge ? { spacingTooLarge } : {}),
+                ...(edgeDetail ? { edgeDetail } : {}),
             }
         }
     } else {
@@ -555,9 +597,17 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                   ? (evt?.items || []).map((it) => [idMap[it[0]] ?? it[0], ...it.slice(1)])
                   : evt?.items
               const decorated = decorateLiveLayout({ ...evt, items: remapped }, payload)
-              onLive({
+              // Distance au bord : le format de chaque rang se déduit contre les
+              // conteneurs MOTEUR, donc sur les poses du repère moteur (une frame
+              // déjà réelle y est ramenée pour la déduction seulement) ; la frame
+              // passe ensuite au repère réel, une fois (`liveFrameToReal`).
+              const edgeD = edgeShiftOf(payload)
+              const formatItems = edgeD && decorated?.edgeReal
+                  ? shiftLiveItems(decorated.items, -edgeD)
+                  : decorated?.items
+              onLive(liveFrameToReal({
                   ...decorated,
-                  ...liveFormatFields(payload, decorated?.items, formatHints, evt?.worker ?? 0),
+                  ...liveFormatFields(payload, formatItems, formatHints, evt?.worker ?? 0),
                   // Tôle importée : contour + zones (chemins prêts à dessiner,
                   // par format) pour la vue live ; {} pour un job rectangulaire.
                   // Reste dans le navigateur : jamais envoyé, jamais stocké.
@@ -570,7 +620,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                   // Pièces demandées au total : la vue live en tire « n sur m
                   // pièces posées » tant qu'aucune disposition ne tient.
                   requested: requestedTotal,
-              })
+              }, payload))
           }
 
     // J-093 : pool de walks (taille imposée serveur, 1 = chemin mono-walk
@@ -757,7 +807,9 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         return { ok: false, error: 'all_alternatives_invalid' }
     }
 
-    const [sheetWidth, sheetHeight] = sheetDims(payload, 0)
+    // La VRAIE tôle (distance au bord : `sheetFrames` ; sinon sheetDims, inchangé).
+    const [sheetWidth, sheetHeight] = realSheetDims(payload, 0)
+    const edgeD = edgeShiftOf(payload)
     // Z3 (vérif 2026-09-05) : solution partielle UTILE → leviers structurés
     // (miroir du serveur) : « n pièces non posées » + tôles nécessaires,
     // pièces max, espacement max. Aucun refund (décision propriétaire).
@@ -767,7 +819,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const { capacityReport } = await import('./capacityClient')
             const { userMaxSpacing } = await import('./localPayloadBuilder')
             const inst = payload?.instance || {}
-            const sheets = Array.isArray(inst.bins)
+            // Distance au bord réglée : leviers sur les VRAIES tôles à BORD FIXE
+            // (option `edge`, convention interne) — l'espacement max ne fait pas
+            // bouger le bord. Sinon : le calcul d'avant, sur les conteneurs.
+            const sheets = edgeD
+                ? edgeCapacitySheets(payload)
+                : Array.isArray(inst.bins)
                 ? inst.bins.map((b, bi) => {
                     const outer = b.shape?.data?.outer || []
                     let w = 0, h = 0
@@ -786,9 +843,11 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
                 : [{ width: sheetWidth, height: sheetHeight, count: 1 }]
             const spaceMm = Number(payload?.engineConfig?.min_item_separation) || 0
             const requestedMm = Number(payload?.requestedSpace ?? spaceMm) || 0
-            const cap = capacityReport(
-                (payload?.parts || []).map((p) => ({ coords: p.coords, count: p.count })),
-                sheets, spaceMm)
+            const capParts = (payload?.parts || []).map((p) => ({ coords: p.coords, count: p.count }))
+            const cap = edgeD
+                ? capacityReport(capParts, sheets, spaceMm,
+                    { edge: Number(payload.requestedEdge) + (spaceMm - requestedMm) })
+                : capacityReport(capParts, sheets, spaceMm)
             partialUnfit = {
                 reason: 'partial',
                 unplaced: requested - placed,
@@ -915,6 +974,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             problem: result?.problem || payload?.problem || null,
             isSpp: (result?.problem || payload?.problem) === 'spp',
             sheets: [[sheetWidth, sheetHeight]],
+            // Distance au bord DEMANDÉE (mm), seulement quand elle diffère de
+            // l'espacement (sinon aucune clé, record d'avant) : l'aperçu élargit
+            // son cadre du dépassement permis.
+            ...(edgeD && Number.isFinite(Number(payload?.requestedEdge))
+                ? { requestedEdgeMm: Number(payload.requestedEdge) }
+                : {}),
             requested,
             placed,
             alternatives,

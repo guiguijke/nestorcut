@@ -8,18 +8,25 @@ import {
     toServerShapeAlternatives,
     buildSheetDxf,
     normalizeLayouts,
-    sheetDims,
+    realSheetDims,
+    edgeShiftOf,
+    realStripExtent,
 } from './localBridge'
 import { sheetCentre, sheetPositions } from '../utils/partPositions.js'
 import { entityIndexOf } from '../utils/dxfEntities.js'
 
-/** Contour d'une tôle importée (repère de la tôle, celui du moteur : la tôle
- * ENTIÈRE), ou null pour un rectangle. Ne sort jamais d'ici. */
+/** Contour d'une tôle importée (repère de la tôle : la tôle ENTIÈRE, la
+ * VRAIE — à distance au bord, le contour d'origine de `sheetFrames`, jamais le
+ * contour moteur décalé), ou null pour un rectangle. Ne sort jamais d'ici. */
 function importedOutline(container, payload) {
-    const bin = payload?.instance?.bins?.[container?.container_id]
+    const id = container?.container_id
+    const bin = payload?.instance?.bins?.[id]
     const shaped = Array.isArray(payload?.shapedSheets)
         && payload.shapedSheets.some((s) => s.id === bin?.id)
-    return shaped ? bin.shape?.data?.outer ?? null : null
+    if (!shaped) return null
+    const frame = edgeShiftOf(payload) ? payload?.sheetFrames?.[id] : null
+    if (frame) return Array.isArray(frame.outer) ? frame.outer : null
+    return bin.shape?.data?.outer ?? null
 }
 
 /** Centre (mm) de la tôle d'un container : celui que « Centre de la tôle » met
@@ -67,19 +74,28 @@ export function dropPositionsUnlessBrowserBuilt(alternatives, mode) {
  * serveur : [item_id, bin, rot_deg, x, y]). */
 export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null) {
     const layouts = normalizeLayouts(bestAlt?.solution)
+    // Distance au bord : la frame finale est dans le repère RÉEL. Les layouts
+    // y sont déjà (buildAlternativeArtifacts, `edgeReal`) ; un layout qui n'y
+    // serait pas passé est décalé ici, jamais deux fois. La largeur et la
+    // hauteur de bande du moteur deviennent les longueurs réelles (+ d).
+    const d = edgeShiftOf(payload)
     const items = []
     layouts.forEach((layout, bin) => {
+        const shift = d && !layout?.edgeReal ? d : 0
         for (const pi of layout.placed_items || []) {
+            const x = pi.transformation?.translation?.[0] ?? 0
+            const y = pi.transformation?.translation?.[1] ?? 0
             items.push([
                 pi.item_id,
                 bin,
                 pi.transformation?.rotation ?? 0,
-                pi.transformation?.translation?.[0] ?? 0,
-                pi.transformation?.translation?.[1] ?? 0,
+                shift ? x + shift : x,
+                shift ? y + shift : y,
             ])
         }
     })
-    const [w, h] = sheetDims(payload, 0)
+    const [w, h] = realSheetDims(payload, 0)
+    const sheetOf = (l) => realSheetDims(payload, l.container_id ?? 0)
     return {
         stage: 'final',
         feasible: true,
@@ -88,8 +104,8 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
         // du moteur (pièces / bande) n'est jamais montrée.
         density: measuredDensity,
         densityMeasured: true,
-        strip_width: bestAlt?.solution?.strip_width ?? bestAlt?.strip_width ?? null,
-        used_height: bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null,
+        strip_width: realStripExtent(bestAlt?.solution?.strip_width ?? bestAlt?.strip_width ?? null, d),
+        used_height: realStripExtent(bestAlt?.used_height ?? bestAlt?.solution?.used_height ?? null, d),
         bins: layouts.length,
         sheets: [[w, h]],
         // Tôle importée : le format de CHAQUE tôle de la frame finale (le
@@ -98,17 +114,28 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
         ...(Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length
             ? {
                 binFormats: layouts.map((l) => l.container_id ?? 0),
-                sheets: layouts.map((l) => sheetDims(payload, l.container_id ?? 0)),
+                sheets: layouts.map(sheetOf),
             }
             // Plusieurs formats rectangulaires : la boîte de CHAQUE tôle aussi.
             // Avec la seule boîte du premier format, l'image finale dessinait
             // toutes les tôles à sa taille et coupait les pièces des plus
             // grandes (défaut ancien). Un seul format : frame inchangée.
             : (payload?.instance?.bins?.length || 0) > 1
-                ? { sheets: layouts.map((l) => sheetDims(payload, l.container_id ?? 0)) }
+                ? { sheets: layouts.map(sheetOf) }
                 : {}),
         isSpp: (result?.problem || payload?.problem) === 'spp',
         items,
+        // Distance au bord seulement : frame déjà dans le repère réel (la vue
+        // live ne la décale plus) et plus grande longueur de bande qui tient.
+        ...(d
+            ? {
+                edgeReal: true,
+                ...(Number.isFinite(Number(payload?.engineConfig?.max_strip_width))
+                    && !Array.isArray(payload?.instance?.bins)
+                    ? { stripMaxWidth: Number(payload.engineConfig.max_strip_width) + d }
+                    : {}),
+            }
+            : {}),
     }
 }
 
@@ -165,7 +192,15 @@ async function appendBppGrid(result, payload) {
         const holesArea = (p.holes || []).reduce((s, h) => s + ringArea(h), 0)
         material += Math.max(0, ringArea(p.coords) - holesArea) * (Number(p.count) || 0)
     }
+    // La grille se construit dans le repère MOTEUR (`sheets` ci-dessus : sa marge
+    // `space` du conteneur moteur est la distance au bord de la vraie tôle) ;
+    // ses poses passent au repère réel avec les autres, dans
+    // buildAlternativeArtifacts. Sa densité, elle, se rapporte à la VRAIE tôle.
     const usedArea = gridLayouts.reduce((s, l) => {
+        if (edgeShiftOf(payload)) {
+            const [rw, rh] = realSheetDims(payload, l.container_id ?? 0)
+            return s + rw * rh
+        }
         const b = inst.bins[l.container_id ?? 0]
         const outer = b?.shape?.data?.outer || []
         let w = 0, h = 0

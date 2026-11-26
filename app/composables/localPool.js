@@ -109,8 +109,13 @@ export function effectiveWalks(walks, nav = globalThis.navigator) {
 const pools = new Map()
 
 /** Miroir de localCompute.liveSheets (gardé en sync) : cadre des frames
- * live — SPP = bande unique, BPP = bboxes des bins. */
+ * live — SPP = bande unique, BPP = bboxes des bins. Distance au bord réglée :
+ * les VRAIES tôles (`sheetFrames`), la vue dessine le repère réel. */
 function liveSheets(payload) {
+    const frames = payload?.sheetFrames
+    if (Number(payload?.edgeShift) && Array.isArray(frames) && frames.length) {
+        return frames.map((f) => [Number(f?.width) || 0, Number(f?.height) || 0])
+    }
     const instance = payload?.instance || {}
     if (Array.isArray(instance.bins) && instance.bins.length) {
         return instance.bins.map((b) => {

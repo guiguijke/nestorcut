@@ -67,18 +67,60 @@ function isShapedFormat(sh) {
     return sh != null && sh.usableAreaMm2 !== undefined && sh.usableAreaMm2 !== null
 }
 
-function formatUsableArea(sh, s) {
+function formatUsableArea(sh, s, edge = null) {
     // Une tôle importée ne retombe JAMAIS sur sa boîte englobante : aire
     // utile nulle, négative ou non finie = aucune capacité.
     if (isShapedFormat(sh)) {
         const shaped = Number(sh.usableAreaMm2)
         if (!Number.isFinite(shaped) || shaped <= 0) return 0
-        return Math.max(0, shaped - (Number(sh?.perimeterMm) || 0) * s / 2)
+        if (edge === null) return Math.max(0, shaped - (Number(sh?.perimeterMm) || 0) * s / 2)
+        // Distance au bord : le CONTOUR perd e − s/2 de métal (pièce gonflée de
+        // s/2, tenue à e du bord), les ZONES gardent s/2. Sans le partage
+        // (forme sans zone, ou lue avant), tout le périmètre est celui du contour.
+        const { outline, zones } = perimeterSplit(sh)
+        return Math.max(0, shaped - outline * (edge - s / 2) - zones * (s / 2))
     }
-    return sheetUsableArea(sh?.width, sh?.height, s)
+    if (edge === null) return sheetUsableArea(sh?.width, sh?.height, s)
+    return edgeRectUsableArea(sh?.width, sh?.height, s, edge)
 }
 
-function bboxGridCapacity(part, width, height, space) {
+/**
+ * Distance au bord `e` (mm, convention INTERNE comme `space`) : la pièce gonflée
+ * de s/2 doit tenir dans la tôle rétrécie de e − s/2 par côté, soit
+ * (L − 2e + s)(H − 2e + s), borné à 0. e = s redonne (L − s)(H − s) ; e < 0
+ * agrandit la surface (la pièce peut dépasser du bord).
+ */
+export function edgeRectUsableArea(width, height, space, edge) {
+    const s = Math.max(0, Number(space) || 0)
+    const e = Number(edge) || 0
+    const a = Number(width) - 2 * e + s
+    const b = Number(height) - 2 * e + s
+    if (!(a > 0) || !(b > 0)) return 0
+    return a * b
+}
+
+/** Périmètres du contour et des zones d'une tôle importée (mm). */
+function perimeterSplit(sh) {
+    const total = Number(sh?.perimeterMm) || 0
+    const outlineRaw = Number(sh?.outlinePerimeterMm)
+    const zonesRaw = Number(sh?.zonesPerimeterMm)
+    if (Number.isFinite(outlineRaw) && outlineRaw >= 0) {
+        const zones = Number.isFinite(zonesRaw) && zonesRaw >= 0 ? zonesRaw : Math.max(0, total - outlineRaw)
+        return { outline: outlineRaw, zones }
+    }
+    if (Number.isFinite(zonesRaw) && zonesRaw >= 0) return { outline: Math.max(0, total - zonesRaw), zones: zonesRaw }
+    return { outline: total, zones: 0 }
+}
+
+/** Distance au bord de `opts` (mm, interne), ou null : comportement d'avant. */
+function edgeOption(opts) {
+    const e = opts?.edge
+    if (e === null || e === undefined || e === '') return null
+    const n = Number(e)
+    return Number.isFinite(n) ? n : null
+}
+
+function bboxGridCapacity(part, width, height, space, edge = null) {
     const coords = (part && part.coords) || []
     if (coords.length < 3) return 0
     let minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity
@@ -95,11 +137,15 @@ function bboxGridCapacity(part, width, height, space) {
     const H = Number(height) || 0
     // Z4 (vérif 2026-09-05) : conteneur déflaté de s/2 par côté (piège #49)
     // → floor(W/(w+s)) exact ; orientations 0° et 90° essayées.
+    // Distance au bord e : n pièces de largeur w tiennent si
+    // n·w + (n − 1)·s + 2e ≤ L, soit n = floor((L − 2e + s)/(w + s)).
+    const spanW = edge === null ? W : W - 2 * edge + s
+    const spanH = edge === null ? H : H - 2 * edge + s
     let best = 0
     for (const [bw, bh] of [[w, h], [h, w]]) {
         if (bw + s <= 0 || bh + s <= 0) continue
-        const cols = Math.floor(W / (bw + s))
-        const rows = Math.floor(H / (bh + s))
+        const cols = Math.floor(spanW / (bw + s))
+        const rows = Math.floor(spanH / (bh + s))
         best = Math.max(best, Math.max(0, cols) * Math.max(0, rows))
     }
     return best
@@ -108,7 +154,7 @@ function bboxGridCapacity(part, width, height, space) {
 // Miroit _constructive_fit : une instance qui tient par construction en
 // grilles (bbox + space) est faisable — dérogation du garde #49 (le
 // ratio statistique ne refuse jamais un carré 8×8 exact dans sa tôle).
-function constructiveFit(parts, sheets, space) {
+function constructiveFit(parts, sheets, space, edge = null) {
     if (!parts?.length || !sheets?.length) return false
     // Une tôle importée n'est pas un rectangle : la grille de boîtes ne
     // prouve rien sur elle, elle ne compte ni en capacité ni en stock.
@@ -120,7 +166,7 @@ function constructiveFit(parts, sheets, space) {
         if (count <= 0) continue
         let bestCap = 0
         for (const sh of rect) {
-            bestCap = Math.max(bestCap, bboxGridCapacity(p, sh?.width, sh?.height, space))
+            bestCap = Math.max(bestCap, bboxGridCapacity(p, sh?.width, sh?.height, space, edge))
         }
         if (bestCap <= 0) return false
         sheetsNeeded += Math.ceil(count / bestCap)
@@ -130,8 +176,17 @@ function constructiveFit(parts, sheets, space) {
     return sheetsNeeded <= stock
 }
 
-export function capacityReport(parts, sheets, space) {
+/**
+ * @param {object} [opts]
+ * @param {number|null} [opts.edge] distance au bord (mm, convention INTERNE :
+ *   demandée + marge de courbes, comme `space`). Absente / null : le bord suit
+ *   l'espacement, chaque chiffre est celui d'avant. Donnée : aire utile et
+ *   grille de boîtes la prennent pour les bords de la tôle, et la recherche de
+ *   l'espacement maximal (`maxSpacingForFitMm`) garde le bord FIXE.
+ */
+export function capacityReport(parts, sheets, space, opts = {}) {
     const s = Math.max(0, Number(space) || 0)
+    const edge = edgeOption(opts)
     let totalInflated = 0
     const counts = []
     for (const p of parts || []) {
@@ -143,7 +198,7 @@ export function capacityReport(parts, sheets, space) {
     let stock = 0
     for (const sh of sheets || []) {
         const n = Math.trunc(Number(sh?.count) || 1)
-        totalUsable += formatUsableArea(sh, s) * n
+        totalUsable += formatUsableArea(sh, s, edge) * n
         stock += n
     }
     if (totalInflated <= 0 || totalUsable <= 0) return null
@@ -168,7 +223,7 @@ export function capacityReport(parts, sheets, space) {
         }
         let den = 0
         for (const sh of sheets || []) {
-            den += formatUsableArea(sh, sp)
+            den += formatUsableArea(sh, sp, edge)
                 * (Math.trunc(Number(sh?.count) || 1))
         }
         return den > 0 ? num / den : Infinity
@@ -189,7 +244,7 @@ export function capacityReport(parts, sheets, space) {
         maxSpacing = Math.round(lo * 100) / 100
     }
 
-    const constructive = constructiveFit(parts, sheets, s)
+    const constructive = constructiveFit(parts, sheets, s, edge)
     // Au moins une tôle importée : le moteur tranche sous l'aire totale, le
     // résultat partiel existant couvre le reste. Rectangles seuls : inchangé
     // (parité avec capacity.py).

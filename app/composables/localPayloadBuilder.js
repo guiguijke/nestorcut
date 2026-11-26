@@ -87,8 +87,10 @@
 import { partWithReserve } from '~~/shared/sheetcamReserve.js'
 // Tôle importée d'un DXF : géométrie pure (aucune dépendance), même règle
 // d'alias que ci-dessus.
-import { engineBinShape } from '~~/app/utils/sheetShape.js'
+import { engineBinShape, perimeterSplitOf } from '~~/app/utils/sheetShape.js'
 import { partMayFitSheet } from '~~/app/utils/partFit.js'
+// Distance au bord : règle partagée (lecture, décalage moteur d = e − s).
+import { edgeShiftMm } from '~~/app/utils/spacingParams.js'
 
 /**
  * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
@@ -710,6 +712,252 @@ function metaSlots(inputItems, hostId, fillId, capacity) {
 }
 
 // ---------------------------------------------------------------------------
+// Distance au bord (lot du 26/11/2026) — tôle MOTEUR décalée de d = e − s
+// ---------------------------------------------------------------------------
+//
+// Le moteur ne connaît que l'espacement s, entre pièces ET au bord. Pour tenir
+// les pièces à e du bord, on lui donne une tôle décalée de d = e − s (`edgeShiftMm`,
+// la marge de courbes s'ajoute aux deux et s'annule dans d) :
+//   - rectangle : (W − 2d) × (H − 2d) à l'origine ; bande : hauteur H − 2d,
+//     largeur maximale W − 2d ;
+//   - tôle importée : contour EXTÉRIEUR décalé de −d (vers l'extérieur si
+//     d < 0, vers l'intérieur si d > 0, `deps.offsetRing`), zones et défauts NON
+//     décalés (ils gardent l'espacement), puis tous les anneaux translatés de
+//     (−d, −d).
+// Une seule translation pour toutes les tôles : une pose moteur (x, y) vaut
+// (x + d, y + d) sur la vraie tôle (rotation inchangée : la translation vient
+// après la rotation autour de l'origine). d = 0 : rien de ce bloc ne tourne,
+// le payload est celui d'avant au bit près.
+
+/** Distance au bord demandée (mm) des params, ou null (vide = comme l'espacement). */
+function edgeRequestOf(params) {
+    const v = params?.edgeDistance
+    if (v === null || v === undefined || v === '') return null
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+}
+
+/** Refus « distance au bord » : code dans le message, détail chiffré à côté
+ * (`__edge`), comme les autres refus actionnables du constructeur. */
+function edgeRefusal(code, detail) {
+    const err = new Error(code)
+    err.__edge = { ...detail }
+    return err
+}
+
+/** Arrondi PAR DÉFAUT au centième : la valeur annoncée doit passer. */
+const floorCenti = (x) => Math.floor(x * 100 + 1e-9) / 100
+
+function ringBounds(ring) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (const p of ring) {
+        if (p[0] < minX) minX = p[0]
+        if (p[1] < minY) minY = p[1]
+        if (p[0] > maxX) maxX = p[0]
+        if (p[1] > maxY) maxY = p[1]
+    }
+    return [minX, minY, maxX, maxY]
+}
+
+function ringLength(ring) {
+    let sum = 0
+    for (let i = 1; i < ring.length; i++) {
+        sum += Math.hypot(ring[i][0] - ring[i - 1][0], ring[i][1] - ring[i - 1][1])
+    }
+    return sum
+}
+
+/** Point dans un anneau (lancer de rayon, anneau fermé ou non). */
+function pointInRing(p, ring) {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i]
+        const [xj, yj] = ring[j]
+        if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside
+    }
+    return inside
+}
+
+/** Une zone ENTIÈREMENT hors du contour moteur (aucun sommet dedans, aucun
+ * croisement d'arêtes, contour pas dans la zone) : le moteur n'a rien à y
+ * éviter, et une zone hors de son conteneur ne doit pas lui partir. */
+function ringEntirelyOutside(zone, outer) {
+    const zb = ringBounds(zone)
+    const ob = ringBounds(outer)
+    if (zb[2] < ob[0] || zb[0] > ob[2] || zb[3] < ob[1] || zb[1] > ob[3]) return true
+    if (zone.some((p) => pointInRing(p, outer))) return false
+    if (outer.some((p) => pointInRing(p, zone))) return false
+    for (let i = 0; i + 1 < zone.length; i++) {
+        const a = zone[i]
+        const b = zone[i + 1]
+        const ex0 = Math.min(a[0], b[0])
+        const ex1 = Math.max(a[0], b[0])
+        const ey0 = Math.min(a[1], b[1])
+        const ey1 = Math.max(a[1], b[1])
+        if (ex1 < ob[0] || ex0 > ob[2] || ey1 < ob[1] || ey0 > ob[3]) continue
+        for (let j = 0; j + 1 < outer.length; j++) {
+            if (segmentsIntersect(a, b, outer[j], outer[j + 1])) return false
+        }
+    }
+    return true
+}
+
+/** Anneau rendu par `offsetRing` : fermé, fini, d'aire non nulle — ou null. */
+function closedFiniteRing(ring) {
+    if (!Array.isArray(ring) || ring.length < 3) return null
+    const pts = []
+    for (const p of ring) {
+        const x = Number(p?.[0])
+        const y = Number(p?.[1])
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return null
+        pts.push([x, y])
+    }
+    const first = pts[0]
+    const last = pts[pts.length - 1]
+    if (first[0] !== last[0] || first[1] !== last[1]) pts.push([first[0], first[1]])
+    if (pts.length < 4 || !(ringAreaAbs(pts) > 0)) return null
+    return pts
+}
+
+/** Plus grande distance au bord DEMANDÉE (mm) qui laisse chaque pièce tenir
+ * dans au moins une tôle active (boîte tournée, w + 2e ≤ W et h + 2e ≤ H), et
+ * chaque tôle active non dégénérée. Convention demandée : marge de courbes ôtée. */
+function maxEdgeForFit(inputItems, sheets, margin) {
+    const active = sheets.filter((s) => (Number(s.count) || 0) > 0)
+    const pool = active.length ? active : sheets
+    let bound = Infinity
+    for (const s of pool) bound = Math.min(bound, Math.min(Number(s.width), Number(s.height)) / 2)
+    for (const item of inputItems) {
+        if (!((Number(item.count) || 0) > 0)) continue
+        const rots = item.rotations?.length ? item.rotations : [0]
+        let best = -Infinity
+        for (const angle of rots) {
+            const [w, h] = rotatedBBoxSize(item.coords, Number(angle) || 0)
+            for (const s of pool) {
+                best = Math.max(best, Math.min((Number(s.width) - w) / 2, (Number(s.height) - h) / 2))
+            }
+        }
+        bound = Math.min(bound, best)
+    }
+    return Math.max(0, floorCenti(bound - margin))
+}
+
+/**
+ * Tôles MOTEUR d'un job à distance au bord (d ≠ 0), alignées index par index
+ * sur `sheets` (les vraies tôles). Refuse AVANT tout calcul lourd :
+ * surplomb plus grand que la moitié de la plus petite pièce
+ * (`edge_overhang_too_large`), tôle moteur vide (`edge_too_large`), décalage
+ * du contour impossible (`edge_offset_failed` — jamais de repli sur le contour
+ * non décalé).
+ */
+async function edgeEngineSheets({ sheets, inputItems, files, requestedEdge, margin, d, deps }) {
+    const nameOf = (slug) => (files || []).find((f) => f.slug === slug)?.name || slug
+    // Surplomb : |e| ≤ min sur les pièces de min(largeur, hauteur) / 2 (boîte de
+    // l'item : un bloc compte pour sa boîte, comme la garde de la page).
+    if (requestedEdge < 0) {
+        let maxOverhang = Infinity
+        let limiting = null
+        for (const item of inputItems) {
+            if (!((Number(item.count) || 0) > 0)) continue
+            const [w, h] = ringBBoxSize(item.coords)
+            const m = Math.min(w, h) / 2
+            if (m < maxOverhang) {
+                maxOverhang = m
+                limiting = item.file_slug
+            }
+        }
+        if (Number.isFinite(maxOverhang) && -requestedEdge > maxOverhang + 1e-9) {
+            throw edgeRefusal('edge_overhang_too_large', {
+                maxOverhangMm: Math.floor(maxOverhang * 100 + 1e-9) / 100,
+                part: nameOf(limiting),
+            })
+        }
+    }
+    // Tôle moteur dégénérée (bord plus grand que la demi-tôle) : refus chiffré.
+    // Les tôles actives (quantité > 0) comptent ; aucune active : toutes.
+    const active = sheets.filter((s) => (Number(s.count) || 0) > 0)
+    if (d > 0 && (active.length ? active : sheets).some((s) =>
+        !(Number(s.width) - 2 * d > 0) || !(Number(s.height) - 2 * d > 0))) {
+        throw edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, margin) })
+    }
+    const offsets = new Map()
+    const out = []
+    for (const s of sheets) {
+        if (!s.shaped) {
+            out.push({ width: s.width - 2 * d, height: s.height - 2 * d, count: s.count })
+            continue
+        }
+        let engine = offsets.get(s.shaped)
+        if (!engine) {
+            if (typeof deps.offsetRing !== 'function') {
+                throw edgeRefusal('edge_offset_failed', { reason: 'offset_unavailable' })
+            }
+            // Contour rentré qui disparaît (bord plus grand que la tôle ne le
+            // permet) : c'est un bord trop grand, dit comme pour un rectangle.
+            const tooLarge = () => edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, margin) })
+            let res
+            try {
+                res = await deps.offsetRing(s.shaped.outer, -d)
+            } catch (e) {
+                const reason = String(e?.code || e?.message || e || 'offset_failed').slice(0, 120)
+                if (d > 0 && reason === 'offset_empty') throw tooLarge()
+                throw edgeRefusal('edge_offset_failed', { reason })
+            }
+            const ring = closedFiniteRing(res?.ring)
+            if (!ring) {
+                if (d > 0) throw tooLarge()
+                throw edgeRefusal('edge_offset_failed', { reason: 'offset_empty' })
+            }
+            // Repli du décalage (distance appliquée plus petite que demandée) :
+            // vers l'extérieur il ne fait que réduire le dépassement (prudent) ;
+            // vers l'intérieur il rapprocherait les pièces du bord — refus.
+            const applied = Number(res?.appliedDistanceMm ?? res?.applied_distance_mm)
+            if (d > 0 && Number.isFinite(applied) && applied > -d + 1e-6) {
+                throw edgeRefusal('edge_offset_failed', { reason: 'offset_short' })
+            }
+            const outer = ring.map(([x, y]) => [x - d, y - d])
+            const innerAll = (s.shaped.inner || []).map((r) => r.map(([x, y]) => [x - d, y - d]))
+            const kept = []
+            const dropped = []
+            for (const r of innerAll) (ringEntirelyOutside(r, outer) ? dropped : kept).push(r)
+            const [x0, y0, x1, y1] = ringBounds(outer)
+            // Aire utile moteur : l'aire utile réelle, plus ce que le décalage
+            // ajoute (ou retire) au contour, plus les zones abandonnées (déjà
+            // ôtées de l'aire réelle, et hors de la bande que le décalage retire).
+            const usable = Math.min(
+                ringAreaAbs(outer),
+                Math.max(0, Number(s.shaped.usableAreaMm2)
+                    + ringAreaAbs(outer) - ringAreaAbs(s.shaped.outer)
+                    + dropped.reduce((a, r) => a + ringAreaAbs(r), 0)),
+            )
+            engine = {
+                outer,
+                inner: kept,
+                widthMm: x1 - x0,
+                heightMm: y1 - y0,
+                usableAreaMm2: usable,
+                perimeterMm: ringLength(outer) + kept.reduce((a, r) => a + ringLength(r), 0),
+                ...(Number(res?.pieces) > 1 ? { lostAreaMm2: Number(res.lostAreaMm2 ?? res.lost_area_mm2) || 0 } : {}),
+            }
+            offsets.set(s.shaped, engine)
+        }
+        out.push({ width: engine.widthMm, height: engine.heightMm, count: s.count, shaped: engine })
+    }
+    return out
+}
+
+/** Repère RÉEL d'une tôle (payload.sheetFrames) : dimensions, et anneaux réels
+ * (contour d'origine + zones/défauts) pour une tôle importée. */
+function sheetFrameOf(sheet) {
+    return sheet.shaped
+        ? { width: sheet.width, height: sheet.height, outer: sheet.shaped.outer, inner: sheet.shaped.inner || [] }
+        : { width: sheet.width, height: sheet.height }
+}
+
+// ---------------------------------------------------------------------------
 // Construction principale
 // ---------------------------------------------------------------------------
 
@@ -726,8 +974,14 @@ function metaSlots(inputItems, hostId, fillId, capacity) {
  *                              { timeBudgetSec?, vcores?, maxDirections?,
  *                              level? } — 13 s / 1 vcore / 1 direction par
  *                              défaut.
+ *                              `params.edgeDistance` : distance au bord (mm,
+ *                              demandée) ; null / absente = comme l'espacement.
  * @param {object} deps         { openHoles, pinwheelCapacity } — async, voir
  *                              l'en-tête (geoClient en prod, stubs en test).
+ *                              `offsetRing(ring, distanceMm)` → { ring, pieces,
+ *                              lostAreaMm2 } (distance positive = vers
+ *                              l'extérieur) : seulement pour une tôle importée
+ *                              à distance au bord réglée.
  * @returns {Promise<{ payload: { problem, instance, meta, engineConfig,
  *   parts, outputUnit, addOutShape }, seed: string, itemMap: Array }>}
  *   - payload : la forme EXACTE du localPayload Python ;
@@ -997,17 +1251,42 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         perFileCounter.set(item.file_slug, part + 1)
     }
 
+    // Distance au bord : d = e − s (0 = non réglée ou égale à l'espacement).
+    // `engineSheets` = les tôles que le MOTEUR reçoit ; elles sont `sheets`
+    // elles-mêmes quand d = 0 (même objet, chemin d'avant au bit près). Toute
+    // décision moteur (gardes, capacité, bande ou multi-tôles, coût, conteneurs)
+    // lit `engineSheets` ; les messages et le repère réel lisent `sheets`.
+    const requestedEdge = edgeRequestOf(params)
+    const edgeShift = edgeShiftMm(requestedSpace, requestedEdge)
+    const curveMargin0 = space - requestedSpace
+    const engineSheets = edgeShift === 0
+        ? sheets
+        : await edgeEngineSheets({
+            sheets, inputItems, files, requestedEdge, margin: curveMargin0, d: edgeShift, deps,
+        })
+
     // c) Feasibility pre-check : une pièce dont la bbox (+ l'espacement,
     //    appliqué par le moteur de chaque côté) ne rentre dans AUCUNE tôle
     //    dans AUCUNE rotation permise ne sera jamais placée — échec immédiat
     //    avec le message EXACT du worker Python.
     const unplaceable = []
     for (const item of inputItems) {
-        const { fits, boxFits } = itemFitsSheets(item.coords, item.rotations, sheets, space)
+        const { fits, boxFits } = itemFitsSheets(item.coords, item.rotations, engineSheets, space)
         if (!fits) {
             const [w, h] = ringBBoxSize(item.coords)
             // `shape` : la boîte passait, c'est le CONTOUR de la tôle importée qui refuse.
             unplaceable.push({ name: item.file_slug, width: w, height: h, count: item.count, shape: boxFits })
+        }
+    }
+    // Distance au bord plus grande que l'espacement : une pièce qui tenait sur la
+    // vraie tôle à l'espacement et ne tient plus sur la tôle moteur ne tient pas
+    // à CETTE distance au bord — le refus le dit, avec la valeur qui passerait.
+    // Une pièce trop grande même sans distance au bord garde le refus d'avant
+    // (c'est elle qu'il faut changer d'abord).
+    if (unplaceable.length && edgeShift > 0) {
+        const failing = inputItems.filter((item) => !itemFitsSheets(item.coords, item.rotations, engineSheets, space).fits)
+        if (failing.every((item) => itemFitsSheets(item.coords, item.rotations, sheets, space).fits)) {
+            throw edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, curveMargin0) })
         }
     }
     if (unplaceable.length) {
@@ -1091,7 +1370,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // → BPP : sparrow ne peut pas répartir sur plusieurs tôles, et un job
     // démo 3×3000×1500 en SPP échoue (« no feasible solution in directions
     // mode ») même quand l'aire tient statistiquement sur une tôle.
-    const sheetArea = sheets[0].width * sheets[0].height
+    const sheetArea = engineSheets[0].width * engineSheets[0].height
     const totalStock = sheets.reduce((n, s) => n + (Number(s.count) || 1), 0)
     // –X (left seul) = strip : on minimise la largeur même si le stock
     // déclaré est > 1 (défaut UI historique 100 tôles → BPP, packing en
@@ -1103,20 +1382,22 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // par l'espacement (Minkowski — miroit main.py) ; l'aire nue
     // faisait partir des jobs infaisables en bande mono-tôle.
     const { capacityReport, inflatedArea } = await import('./capacityClient')
-    const cap = capacityReport(
-        inputItems.map((it) => ({ coords: it.coords, count: it.count || 0 })),
-        hasShaped
-            ? sheets.map((s) => (s.shaped
-                ? {
-                    width: s.width,
-                    height: s.height,
-                    count: s.count,
-                    usableAreaMm2: s.shaped.usableAreaMm2,
-                    perimeterMm: s.shaped.perimeterMm,
-                }
-                : s))
-            : sheets,
-        space)
+    // Capacité sur les tôles MOTEUR, sans option de bord : à d ≠ 0 la tôle
+    // moteur porte déjà la distance au bord (miroir exact du moteur).
+    const capacitySheetsOf = (list, withSplit = false) => (hasShaped
+        ? list.map((s) => (s.shaped
+            ? {
+                width: s.width,
+                height: s.height,
+                count: s.count,
+                usableAreaMm2: s.shaped.usableAreaMm2,
+                perimeterMm: s.shaped.perimeterMm,
+                ...(withSplit ? perimeterSplitOf(s.shaped) : {}),
+            }
+            : s))
+        : list)
+    const capParts = inputItems.map((it) => ({ coords: it.coords, count: it.count || 0 }))
+    const cap = capacityReport(capParts, capacitySheetsOf(engineSheets), space)
     // Plan 2026-09-05 §1.2a (défense navigateur) : refus AVANT le calcul
     // — quelques millisecondes au lieu de 4 min de wasm, aucune pose
     // invalide, les trois leviers partent avec l'erreur (local-fail →
@@ -1124,6 +1405,12 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     if (cap && cap.refused) {
         const totalMax = Object.values(cap.maxPartsAtSpacing || {})
             .reduce((n, v) => n + Number(v || 0), 0)
+        // Levier « espacement max » : à distance au bord réglée, il se cherche
+        // à BORD FIXE (vraies tôles + option de bord, interne = demandé + marge) ;
+        // sur la tôle moteur, il ferait bouger le bord avec l'espacement.
+        const lever = edgeShift === 0
+            ? cap
+            : (capacityReport(capParts, capacitySheetsOf(sheets, true), space, { edge: requestedEdge + curveMargin0 }) || cap)
         const err = new Error('capacity_exceeded')
         err.__unfit = {
             reason: 'capacity',
@@ -1131,7 +1418,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             sheetsNeeded: cap.sheetsNeeded,
             maxPartsAtSpacing: totalMax,
             // Sortie : l'espacement max est dit en espacement DEMANDÉ.
-            ...userMaxSpacing(cap.maxSpacingForFitMm, space - requestedSpace),
+            ...userMaxSpacing(lever.maxSpacingForFitMm, space - requestedSpace),
         }
         throw err
     }
@@ -1159,23 +1446,27 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // refusait avant : tout job qui passait garde un payload identique
     // (verrous : la suite SPP/BPP et les goldens de replay ci-dessous).
     const stripTooNarrow = isSpp && space > 0
-        && totalOuterArea / sheets[0].height <= space
+        && totalOuterArea / engineSheets[0].height <= space
     if (stripTooNarrow) isSpp = false
 
     let instance
     let containerMapBack = null
     let shapedSheets = null
     let maxStripWidth
+    // Distance au bord : repère RÉEL de chaque conteneur moteur (indexé comme
+    // instance.bins ; une seule entrée en bande). Rempli seulement à d ≠ 0.
+    let sheetFrames = null
     if (isSpp) {
-        instance = { name, items: jaguarItems, strip_height: sheets[0].height }
-        maxStripWidth = sheets[0].width
+        instance = { name, items: jaguarItems, strip_height: engineSheets[0].height }
+        maxStripWidth = engineSheets[0].width
+        if (edgeShift !== 0) sheetFrames = [sheetFrameOf(sheets[0])]
     } else {
         // C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS —
         // une tôle `count: 0` au milieu cassait l'import. Formats vides
         // filtrés ; containerMapBack (UNIQUEMENT si filtrage, parité exacte
         // du payload sinon) retraduit les container_id moteur vers les ids
         // de formats d'origine (miroir main.py).
-        const nonEmpty = sheets
+        const nonEmpty = engineSheets
             .map((s, i) => ({ ...s, formatId: i }))
             .filter((s) => (Number(s.count) || 0) > 0)
         // V11 (vérif 2026-09-04) : coût ∝ surface (round(aire/aire_min × 100)),
@@ -1199,20 +1490,33 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             })),
         }
         if (hasShaped) {
+            // Toujours la VRAIE tôle (aires, densité, forme livrée) : à d ≠ 0 le
+            // moteur a la sienne dans `bins`, le repère réel est `sheetFrames`.
             shapedSheets = nonEmpty
-                .map((s, i) => (s.shaped
-                    ? {
-                        id: i,
-                        usableAreaMm2: s.shaped.usableAreaMm2,
-                        perimeterMm: s.shaped.perimeterMm,
-                        // Défauts dessinés seulement : la forme LIVRÉE (coupée), pour le
-                        // rapport, le DXF et les dessins ; le moteur garde `bins`.
-                        ...(s.shaped.deliver
-                            ? { shape: { outer: s.shaped.deliver.outer, inner: s.shaped.deliver.inner } }
-                            : {}),
-                    }
-                    : null))
+                .map((es, i) => {
+                    const s = sheets[es.formatId]
+                    return s.shaped
+                        ? {
+                            id: i,
+                            usableAreaMm2: s.shaped.usableAreaMm2,
+                            perimeterMm: s.shaped.perimeterMm,
+                            // Défauts dessinés seulement : la forme LIVRÉE (coupée), pour le
+                            // rapport, le DXF et les dessins ; le moteur garde `bins`.
+                            ...(s.shaped.deliver
+                                ? { shape: { outer: s.shaped.deliver.outer, inner: s.shaped.deliver.inner } }
+                                : {}),
+                        }
+                        : null
+                })
                 .filter(Boolean)
+        }
+        if (edgeShift !== 0) {
+            sheetFrames = nonEmpty.map((es) => ({
+                ...sheetFrameOf(sheets[es.formatId]),
+                // Contour rentré qui se coupe en morceaux : le plus grand est gardé
+                // (prudent), l'aire perdue est dite.
+                ...(es.shaped?.lostAreaMm2 > 0 ? { offsetLostAreaMm2: es.shaped.lostAreaMm2 } : {}),
+            }))
         }
         containerMapBack = nonEmpty.length !== sheets.length
             ? nonEmpty.map((s, eid) => [eid, s.formatId])
@@ -1292,7 +1596,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             meta = reduced.meta
             if (reduced.reduced.length) {
                 solveInstance = isSpp
-                    ? { name, items: reduced.reduced, strip_height: sheets[0].height }
+                    ? { name, items: reduced.reduced, strip_height: engineSheets[0].height }
                     : { name, items: reduced.reduced, bins: instance.bins }
             } else {
                 meta = null
@@ -1413,6 +1717,13 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // job sans `.job` : le champ n'existe même pas, donc rien ne change
         // pour les jobs ordinaires ni pour les anciens résultats relus.
         ...(reserveNotes.length ? { leadInReserve: reserveNotes } : {}),
+        // Distance au bord (d ≠ 0 seulement — aucune clé sinon) : bord DEMANDÉ
+        // (mm), décalage moteur d, et le repère RÉEL de chaque conteneur moteur
+        // (vraies dimensions ; vrais anneaux d'une tôle importée). Une pose
+        // moteur (x, y) vaut (x + d, y + d) sur la vraie tôle.
+        ...(edgeShift !== 0
+            ? { requestedEdge, edgeShift, sheetFrames }
+            : {}),
     }
     // Enveloppe de l'anneau ORIGINAL de chaque pièce simple (id -> anneau) : à part
     // du payload (la parité exacte avec le payload du worker Python ne doit pas

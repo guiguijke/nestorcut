@@ -61,8 +61,14 @@ function getWorker() {
 }
 
 /** Frames de la tôle pour la vue live : SPP = bande unique, BPP = bboxes
- * des bins. LiveNestingView dessine `sheets[0]` et filtre via fitsSheet. */
+ * des bins. LiveNestingView dessine `sheets[0]` et filtre via fitsSheet.
+ * Distance au bord réglée : les VRAIES tôles (`sheetFrames`, miroir de
+ * localPool.liveSheets). */
 function liveSheets(payload) {
+    const frames = payload?.sheetFrames
+    if (Number(payload?.edgeShift) && Array.isArray(frames) && frames.length) {
+        return frames.map((f) => [Number(f?.width) || 0, Number(f?.height) || 0])
+    }
     const instance = payload?.instance || {}
     if (Array.isArray(instance.bins) && instance.bins.length) {
         return instance.bins.map((b) => {

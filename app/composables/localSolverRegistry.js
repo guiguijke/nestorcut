@@ -152,6 +152,9 @@ async function launch(jobSlug, projectSlug, itemMap) {
         // trop grand. Scalaires légers, gardés comme `unfit`.
         job.tooLarge = res?.ok ? null : (res?.tooLarge || null)
         job.spacingTooLarge = res?.ok ? null : (res?.spacingTooLarge || null)
+        // Distance au bord : détail chiffré du refus du builder ({ maxOverhangMm,
+        // part } / { maxEdgeMm } / { reason }), scalaires gardés comme `unfit`.
+        job.edgeDetail = res?.ok ? null : (res?.edgeDetail || null)
         job.phase = res?.ok ? 'done' : (res?.error === 'cancelled' ? 'cancelled' : 'error')
     } catch (e) {
         job.ok = false

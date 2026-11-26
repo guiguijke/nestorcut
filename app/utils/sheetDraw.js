@@ -153,10 +153,16 @@ export function liveShapeTable(payload) {
     const cached = _tables.get(bins)
     if (cached) return cached
     const ids = new Set(shaped.map((s) => s.id))
-    const table = bins.map((bin) => {
+    // Distance au bord réglée : le conteneur moteur est décalé ; la vue dessine
+    // la VRAIE tôle (contour d'origine et zones de `sheetFrames`, ses dimensions).
+    const frames = Number(payload?.edgeShift) && Array.isArray(payload?.sheetFrames) ? payload.sheetFrames : null
+    const table = bins.map((bin, i) => {
         if (!ids.has(bin?.id)) return null
-        const data = bin?.shape?.data
-        const size = outlineSize(data?.outer)
+        const frame = frames ? frames[i] : null
+        const data = frame && Array.isArray(frame.outer) ? frame : bin?.shape?.data
+        const size = frame && Number(frame.width) > 0 && Number(frame.height) > 0
+            ? [Number(frame.width), Number(frame.height)]
+            : outlineSize(data?.outer)
         if (!size) return null
         // Tôle avec défauts : la taille est celle du moteur (contour original), les
         // chemins ceux de la forme livrée (coupée).

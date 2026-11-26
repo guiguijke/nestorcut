@@ -546,6 +546,20 @@ export function displayShape(binShape) {
     return binShape?.deliver ?? { outer: binShape?.outer, inner: binShape?.inner }
 }
 
+/**
+ * Distance au bord : la capacité sépare le périmètre du CONTOUR (tenu à la
+ * distance au bord) de celui des ZONES (tenues à l'espacement). Mesuré sur la
+ * même forme que `perimeterMm` (la forme livrée quand il y a des défauts) :
+ * `outlinePerimeterMm + zonesPerimeterMm` = `perimeterMm`.
+ */
+export function perimeterSplitOf(binShape) {
+    const shape = displayShape(binShape)
+    const outline = Array.isArray(shape?.outer) ? ringPerimeter(shape.outer) : 0
+    const zones = (Array.isArray(shape?.inner) ? shape.inner : [])
+        .reduce((sum, r) => sum + (Array.isArray(r) ? ringPerimeter(r) : 0), 0)
+    return { outlinePerimeterMm: outline, zonesPerimeterMm: zones }
+}
+
 /** Vrai si le payload moteur porte au moins un conteneur issu d'une tôle importée. */
 export function payloadHasShapedSheet(payload) {
     return Array.isArray(payload?.shapedSheets) && payload.shapedSheets.length > 0
