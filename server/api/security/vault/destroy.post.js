@@ -8,7 +8,7 @@ import {
     getUserDxfFilesSvgBucket,
     getValidUserDxfBucket,
 } from '~~/server/db/mongo'
-import { clearVaultSessions } from '~~/server/utils/vault'
+import { beginVaultOperation, clearVaultSessions } from '~~/server/utils/vault'
 import { assertRateLimit } from '~~/server/utils/ratelimit'
 
 /**
@@ -62,7 +62,20 @@ export default defineEventHandler(async (event) => {
     }
 
     const db = await connectDB()
+    // Coffre occupé : un envoi en cours finit avant l'effacement (sinon il
+    // laisserait après coup un fichier chiffré et sa fiche, illisibles), les
+    // suivants attendent et partent en clair. Un worker au travail ne bloque
+    // PAS cette route de secours : ses jobs et fiches sont effacés ici, ce
+    // qu'il écrirait ensuite n'est rattaché à rien.
+    const end = await beginVaultOperation(userId, 'destroy', { db, checkWorkers: false })
+    try {
+        return await destroyEverything(db, userId)
+    } finally {
+        end()
+    }
+})
 
+async function destroyEverything(db, userId) {
     // 1. Delete every user file across all owner-carrying GridFS buckets.
     //    No DEK involved — crypto-shredding just deletes the ciphertext.
     for (const getBucket of BUCKET_GETTERS) {
@@ -90,4 +103,4 @@ export default defineEventHandler(async (event) => {
     )
 
     return { ok: true, destroyed: true }
-})
+}

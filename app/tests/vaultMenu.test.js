@@ -197,6 +197,16 @@ describe('rotate', () => {
         expect(controls.error.value).toBe('vault.error.rotate')
         expect(controls.loading.value).toBe(false)
     })
+
+    it('coffre occupé (409 vault_busy) → message traduit propre au renouvellement, pas le code brut', async () => {
+        globalThis.$fetch = vi.fn(async () => {
+            throw Object.assign(new Error('409'), { data: { statusCode: 409, statusMessage: 'vault_busy' } })
+        })
+        const controls = useVaultControls()
+        await controls.rotate()
+        expect(controls.errorKey.value).toBe('vault.error.rotateBusy')
+        expect(controls.error.value).toBe('vault.error.rotateBusy')
+    })
 })
 
 describe('forgetBrowser', () => {

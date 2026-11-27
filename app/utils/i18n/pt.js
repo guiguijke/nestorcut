@@ -735,6 +735,8 @@ export default {
     "vault.error.rotate": "Falha na troca. Seus arquivos continuam criptografados com a chave antiga.",
     "vault.error.disable": "Falha na desativação. Tente novamente.",
     "vault.error.destroy": "Falha na destruição. Tente novamente.",
+    "vault.error.busy": "Cofre ocupado — outra operação do cofre está em andamento (envio de arquivos, trabalho de nesting, troca de chave ou desativação). Nada foi alterado. Tente novamente quando terminar.",
+    "vault.error.rotateBusy": "Cofre ocupado — um envio de arquivos, um trabalho de nesting ou outra operação do cofre está em andamento. A chave não foi trocada: sua chave atual continua válida, o arquivo-chave recém-baixado não é usado. Tente novamente quando terminar.",
     "account.title": "Conta",
     "account.alternativesTitle": "Antes de ir…",
     "account.alternativesDesc": "Você tem uma assinatura ativa. Excluir a conta a cancela imediatamente, sem reembolso. Você também pode simplesmente mudar de plano.",

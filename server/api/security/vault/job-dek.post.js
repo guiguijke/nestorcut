@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { connectDB } from '~~/server/db/mongo'
-import { clearVaultSessions, getVaultSession, vaultAccessRevoked } from '~~/server/utils/vault'
+import { clearVaultSessions, getVaultSessionWhenIdle, vaultAccessRevoked } from '~~/server/utils/vault'
 import { assertRateLimit } from '~~/server/utils/ratelimit'
 
 /**
@@ -92,7 +92,11 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 409, statusMessage: 'vault_locked' })
     }
 
-    const session = await getVaultSession(doc.ownerId)
+    // Coffre occupé (rotation, retrait) : aucune clé ne part pendant
+    // l'opération, le worker écrirait avec l'ancienne. On attend sa fin
+    // (moins que les 15 s du worker), puis on lit la session : nouvelle clé
+    // après une rotation, coffre fermé (409) après un retrait.
+    const session = await getVaultSessionWhenIdle(doc.ownerId)
     if (!session) {
         throw createError({ statusCode: 409, statusMessage: 'vault_locked' })
     }

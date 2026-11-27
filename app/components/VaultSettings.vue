@@ -173,6 +173,13 @@ const {
 // Full-destroy confirmation: user must retype their keyId to enable the button.
 const destroyConfirm = ref('')
 
+// Coffre occupé (envoi, calcul ou autre opération en cours) : message traduit.
+function vaultErrorText(err, fallbackKey) {
+    const code = err?.data?.statusMessage
+    if (code === 'vault_busy') return t('vault.error.busy')
+    return code || t(fallbackKey)
+}
+
 async function disable(mode) {
     const message = mode === 'destroy'
         ? t('vault.confirmDisableDestroy')
@@ -191,7 +198,7 @@ async function disable(mode) {
         await refresh()
         await authStore.actions.setUser()
     } catch (err) {
-        error.value = err?.data?.statusMessage || t('vault.error.disable')
+        error.value = vaultErrorText(err, 'vault.error.disable')
     } finally {
         loading.value = false
     }
@@ -214,7 +221,7 @@ async function destroyVault() {
         await refresh()
         await authStore.actions.setUser()
     } catch (err) {
-        error.value = err?.data?.statusMessage || t('vault.error.destroy')
+        error.value = vaultErrorText(err, 'vault.error.destroy')
     } finally {
         loading.value = false
     }

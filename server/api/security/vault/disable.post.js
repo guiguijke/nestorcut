@@ -8,12 +8,12 @@ import {
     getUserDxfFilesSvgBucket,
     getValidUserDxfBucket,
 } from '~~/server/db/mongo'
-import { Readable } from 'node:stream'
-import { createDecryptStream, decryptBuffer, polygonPartsAadId } from '~~/server/utils/crypto'
+import { decryptBuffer, polygonPartsAadId } from '~~/server/utils/crypto'
 import {
+    beginVaultOperation,
     clearVaultSessions,
+    readDecryptedFile,
     requireFileAccess,
-    streamToBuffer,
     uploadToBucket,
 } from '~~/server/utils/vault'
 
@@ -48,6 +48,19 @@ export default defineEventHandler(async (event) => {
     }
 
     const db = await connectDB()
+    // Coffre occupé pendant tout le retrait : les envois en cours finissent
+    // d'abord, les suivants attendent (et partent en clair), un worker qui
+    // tient la clé fait refuser le retrait (409 vault_busy) : il écrirait
+    // ensuite des fichiers chiffrés que plus personne ne pourrait ouvrir.
+    const end = await beginVaultOperation(userId, 'disable', { db })
+    try {
+        return await disableVault(db, userId, mode)
+    } finally {
+        end()
+    }
+})
+
+async function disableVault(db, userId, mode) {
     const user = await db.collection('users').findOne(
         { id: userId },
         { projection: { encryption: 1 } }
@@ -62,7 +75,14 @@ export default defineEventHandler(async (event) => {
     // out of their vault (lost key, misconfigured master key) can never
     // recover. Only gate 'decrypt' behind requireFileAccess.
     const dek = mode === 'decrypt' ? (await requireFileAccess(userId)).dek : null
+    try {
+        return await removeVault(db, userId, mode, dek)
+    } finally {
+        dek?.fill(0)
+    }
+}
 
+async function removeVault(db, userId, mode, dek) {
     for (const getBucket of BUCKET_GETTERS) {
         const bucket = await getBucket()
         const files = await bucket.find({ 'metadata.ownerId': userId }).toArray()
@@ -70,11 +90,9 @@ export default defineEventHandler(async (event) => {
             if (mode === 'destroy') {
                 await bucket.delete(file._id)
             } else if (file.metadata?.enc) {
-                const plain = await streamToBuffer(
-                    bucket.openDownloadStream(file._id).pipe(
-                        createDecryptStream(dek, file.filename, userId)
-                    )
-                )
+                const plain = await readDecryptedFile(bucket, file, dek, userId)
+                // Supprimé entre-temps (autre onglet, purge) : rien à réécrire.
+                if (!plain) continue
                 await bucket.delete(file._id)
                 await uploadToBucket(bucket, file.filename, plain, { ownerId: userId })
             }
@@ -112,4 +130,4 @@ export default defineEventHandler(async (event) => {
     await db.collection('users').updateOne({ id: userId }, { $unset: { encryption: '' } })
 
     return { ok: true, mode }
-})
+}

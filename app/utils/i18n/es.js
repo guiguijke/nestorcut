@@ -743,6 +743,8 @@ export default {
     "vault.error.rotate": "Fallo en la rotación. Tus archivos siguen cifrados con la clave antigua.",
     "vault.error.disable": "Fallo en la desactivación. Inténtalo de nuevo.",
     "vault.error.destroy": "Fallo en la destrucción. Inténtalo de nuevo.",
+    "vault.error.busy": "Caja fuerte ocupada — hay otra operación de la caja fuerte en curso (subida de archivos, trabajo de nesting, cambio de clave o desactivación). No se ha cambiado nada. Inténtalo de nuevo cuando termine.",
+    "vault.error.rotateBusy": "Caja fuerte ocupada — hay una subida de archivos, un trabajo de nesting u otra operación de la caja fuerte en curso. La clave no se ha cambiado: tu clave actual sigue siendo válida, el archivo de clave recién descargado no se usa. Inténtalo de nuevo cuando termine.",
     "account.title": "Cuenta",
     "account.alternativesTitle": "Antes de irte…",
     "account.alternativesDesc": "Tienes una suscripción activa. Eliminar la cuenta la cancela de inmediato, sin reembolso. También puedes simplemente cambiar de plan y conservar tus datos.",

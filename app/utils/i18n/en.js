@@ -842,6 +842,8 @@ export default {
     'vault.error.rotate': 'Rotation failed. Your files are still encrypted with the old key.',
     'vault.error.disable': 'Disable failed. Please try again.',
     'vault.error.destroy': 'Destruction failed. Please try again.',
+    'vault.error.busy': 'Vault busy: another vault operation is in progress (file upload, nesting job, key change or removal). Nothing was changed. Try again once it has finished.',
+    'vault.error.rotateBusy': 'Vault busy: a file upload, a nesting job or another vault operation is in progress. The key was not changed: your current key is still valid, the key file just downloaded is not used. Try again once it has finished.',
 
     // ── Account deletion & plan switch (DeleteAccount.vue) ──
     'account.title': 'Account',

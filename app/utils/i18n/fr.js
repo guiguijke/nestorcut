@@ -821,6 +821,8 @@ export default {
     'vault.error.rotate': 'Échec du renouvellement. Vos fichiers sont toujours chiffrés avec l\'ancienne clé.',
     'vault.error.disable': 'Échec de la désactivation. Veuillez réessayer.',
     'vault.error.destroy': 'Échec de la destruction. Veuillez réessayer.',
+    'vault.error.busy': 'Coffre occupé : une autre opération sur le coffre est en cours (envoi de fichiers, calcul, changement de clé ou retrait). Rien n\'a été modifié. Réessayez quand elle sera terminée.',
+    'vault.error.rotateBusy': 'Coffre occupé : un envoi de fichiers, un calcul ou une autre opération sur le coffre est en cours. La clé n\'a pas été changée : votre clé actuelle reste valable, le fichier-clé qui vient d\'être téléchargé n\'est pas utilisé. Réessayez quand ce sera terminé.',
 
     // ── Suppression de compte & changement d'offre (DeleteAccount.vue) ──
     'account.title': 'Compte',

@@ -96,6 +96,9 @@ async function unlockWithKey(base64Key, { silent = false } = {}) {
         const message = err?.data?.statusMessage || ''
         if (message === 'wrong_key') {
             error.value = t('vault.wrongKey')
+        } else if (message === 'vault_busy') {
+            // Rotation ou retrait en cours dans un autre onglet.
+            error.value = t('vault.error.busy')
         } else if (message) {
             error.value = message
                 .replace(/_/g, ' ')

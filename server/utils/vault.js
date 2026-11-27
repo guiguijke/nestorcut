@@ -104,6 +104,216 @@ export async function clearVaultSessions(userId) {
     }
 }
 
+/*
+ * Coffre occupé. Une rotation de clé, un retrait ou une destruction réécrit
+ * ou efface TOUS les fichiers chiffrés de l'utilisateur. Un envoi d'un autre
+ * onglet ou un worker qui tient déjà la clé écrivait pendant ce temps avec
+ * l'ANCIENNE clé : ces fichiers ne s'ouvraient plus (reproduit en production
+ * le 26/11). Règles :
+ *  - l'opération marque le coffre occupé, puis attend la fin des envois déjà
+ *    partis (ils tiennent l'ancienne clé) ;
+ *  - un envoi qui arrive pendant l'opération attend sa fin, puis relit la
+ *    clé (nouvelle clé, ou envoi en clair après un retrait) ;
+ *  - un worker qui tient la clé (job réclamé, battement récent) fait refuser
+ *    la rotation et le retrait : il garde sa clé jusqu'au bout du job ;
+ *  - /job-dek ne remet aucune clé pendant l'opération ; il attend sa fin.
+ * Tout est en mémoire, comme les sessions : une seule instance d'app.
+ */
+
+/** Un envoi qui arrive pendant une rotation ou un retrait attend au plus ce délai. */
+export const VAULT_BUSY_WAIT_MS = 30_000
+/** Une rotation ou un retrait attend au plus ce délai la fin des envois en cours. */
+export const VAULT_DRAIN_WAIT_MS = 30_000
+/** /job-dek attend au plus ce délai : sous les 15 s d'attente du worker (crypto.py). */
+export const JOB_DEK_BUSY_WAIT_MS = 12_000
+/** Battement du worker toutes les 10 s (worker_loop.py) : au-delà, il est mort. */
+export const WORKER_STALE_MS = 15 * 60 * 1000
+// Collections des jobs dont un worker peut tenir la clé (mêmes que job-dek).
+const WORKER_COLLECTIONS = ['nesting_jobs', 'user_dxf_files']
+
+/** @type {Map<string, { op: string, done: Promise<void> }>} */
+const busyOps = new Map()
+/** @type {Map<string, { count: number, waiters: Set<() => void> }>} */
+const writeLeases = new Map()
+// Une unité de plus à chaque opération commencée : un déverrouillage qui a lu
+// l'empreinte avant une rotation ne rouvre pas la session sur l'ancienne clé.
+/** @type {Map<string, number>} */
+const generations = new Map()
+
+function vaultBusyError() {
+    return createError({
+        statusCode: 409,
+        statusMessage: 'vault_busy',
+        message: 'Your vault is busy (key change, removal, upload or job in progress). Try again in a moment.',
+    })
+}
+
+/** Numéro de la dernière opération commencée sur le coffre de l'utilisateur. */
+export function vaultGeneration(userId) {
+    return generations.get(userId) || 0
+}
+
+/**
+ * Déverrouillage : à appeler juste avant createVaultSession, dans le même
+ * segment synchrone. 409 vault_busy si une opération tourne ou a commencé
+ * depuis `generation` (relevé avant de lire l'empreinte) : l'empreinte lue
+ * est peut-être celle d'une clé remplacée ou d'un coffre retiré.
+ */
+export function assertVaultUnchangedSince(userId, generation) {
+    if (busyOps.has(userId) || vaultGeneration(userId) !== generation) throw vaultBusyError()
+}
+
+// Attend la fin de l'opération en cours, sans dépasser `deadline`. Rend false
+// à l'échéance. L'appelant reteste `busyOps` APRÈS, dans le même segment
+// synchrone que son action : aucune opération ne peut commencer entre les deux.
+async function waitForVaultOperation(userId, deadline) {
+    const current = busyOps.get(userId)
+    if (!current) return true
+    const left = deadline - Date.now()
+    if (left <= 0) return false
+    let timer
+    const finished = await Promise.race([
+        current.done.then(() => true),
+        new Promise((resolve) => { timer = setTimeout(() => resolve(false), left) }),
+    ])
+    clearTimeout(timer)
+    return finished
+}
+
+function takeWriteLease(userId) {
+    let lease = writeLeases.get(userId)
+    if (!lease) {
+        lease = { count: 0, waiters: new Set() }
+        writeLeases.set(userId, lease)
+    }
+    lease.count += 1
+    let released = false
+    return () => {
+        if (released) return
+        released = true
+        lease.count -= 1
+        if (lease.count === 0) {
+            if (writeLeases.get(userId) === lease) writeLeases.delete(userId)
+            for (const wake of lease.waiters) wake()
+        }
+    }
+}
+
+// Le coffre est déjà marqué occupé : aucun envoi nouveau ne commence, le
+// compteur ne peut que descendre.
+async function waitWritesDrained(userId, deadline) {
+    const lease = writeLeases.get(userId)
+    if (!lease || lease.count === 0) return true
+    const left = deadline - Date.now()
+    if (left <= 0) return false
+    let timer
+    let wake
+    const drained = await new Promise((resolve) => {
+        wake = () => resolve(true)
+        lease.waiters.add(wake)
+        timer = setTimeout(() => resolve(false), left)
+    })
+    clearTimeout(timer)
+    lease.waiters.delete(wake)
+    return drained
+}
+
+/**
+ * Un worker tient-il la clé de l'utilisateur ? `workerKeyPub` est posé avant
+ * la demande de clé et retiré à la fin du job (crypto.py). Le statut
+ * « processing » compte aussi : un worker qui remet une fiche en file retire
+ * le marqueur sans condition, même si un autre worker l'a réclamée entre-temps.
+ * Le battement `update_ts` écarte un worker mort.
+ */
+export async function workerHoldsVaultKey(db, userId, now = Date.now()) {
+    const since = new Date(now - WORKER_STALE_MS)
+    for (const name of WORKER_COLLECTIONS) {
+        const doc = await db.collection(name).findOne(
+            {
+                ownerId: userId,
+                update_ts: { $gte: since },
+                $or: [
+                    { workerKeyPub: { $exists: true } },
+                    { status: 'processing' },
+                    { processingStatus: 'processing' },
+                ],
+            },
+            { projection: { _id: 1 } }
+        )
+        if (doc) return true
+    }
+    return false
+}
+
+/**
+ * Marque le coffre occupé pour une rotation, un retrait ou une destruction.
+ * 409 vault_busy si une autre opération tourne, si un worker tient la clé
+ * (`checkWorkers`) ou si un envoi en cours ne finit pas à temps. Rend `end()`,
+ * à appeler dans un `finally`.
+ */
+export async function beginVaultOperation(userId, op, { db = null, checkWorkers = true, drainMs = VAULT_DRAIN_WAIT_MS } = {}) {
+    if (busyOps.has(userId)) throw vaultBusyError()
+    let resolveDone
+    const entry = { op, done: new Promise((resolve) => { resolveDone = resolve }) }
+    busyOps.set(userId, entry)
+    generations.set(userId, vaultGeneration(userId) + 1)
+    let ended = false
+    const end = () => {
+        if (ended) return
+        ended = true
+        if (busyOps.get(userId) === entry) busyOps.delete(userId)
+        resolveDone()
+    }
+    try {
+        // Après le marquage : un worker qui demande sa clé désormais attend.
+        if (checkWorkers && (await workerHoldsVaultKey(db ?? (await connectDB()), userId))) {
+            throw vaultBusyError()
+        }
+        if (!(await waitWritesDrained(userId, Date.now() + drainMs))) throw vaultBusyError()
+    } catch (error) {
+        end()
+        throw error
+    }
+    return end
+}
+
+/**
+ * Écriture de fichiers avec la clé du coffre (envoi). Attend la fin d'une
+ * rotation ou d'un retrait en cours, puis tient un bail pendant toute
+ * l'écriture : une opération lancée entre-temps attend qu'elle finisse.
+ * `fn` reçoit la clé (null sans coffre), effacée à la fin.
+ */
+export async function withVaultWrite(userId, fn, { waitMs = VAULT_BUSY_WAIT_MS } = {}) {
+    const deadline = Date.now() + waitMs
+    while (busyOps.has(userId)) {
+        if (!(await waitForVaultOperation(userId, deadline))) throw vaultBusyError()
+    }
+    // Même segment synchrone que le dernier test de la boucle.
+    const release = takeWriteLease(userId)
+    let dek = null
+    try {
+        ;({ dek } = await requireFileAccess(userId))
+        return await fn(dek)
+    } finally {
+        release()
+        dek?.fill(0)
+    }
+}
+
+/**
+ * Copie de la clé pour /job-dek, jamais pendant une rotation ou un retrait :
+ * attend sa fin (409 vault_busy à l'échéance), puis copie la session dans le
+ * même segment synchrone que le dernier test.
+ */
+export async function getVaultSessionWhenIdle(userId, { waitMs = JOB_DEK_BUSY_WAIT_MS } = {}) {
+    const deadline = Date.now() + waitMs
+    while (busyOps.has(userId)) {
+        if (!(await waitForVaultOperation(userId, deadline))) throw vaultBusyError()
+    }
+    // getVaultSession copie la clé avant tout await.
+    return getVaultSession(userId)
+}
+
 /**
  * Compte banni ou sans aucune session valide : l'admin (autre processus) a
  * révoqué les sessions sans pouvoir effacer la clé gardée ici.
@@ -210,6 +420,31 @@ export async function streamToBuffer(stream) {
     const chunks = []
     for await (const chunk of stream) {
         chunks.push(chunk)
+    }
+    return Buffer.concat(chunks)
+}
+
+/**
+ * Lit et déchiffre un fichier GridFS entier (rotation, retrait du coffre).
+ * `pipeline` et non `.pipe()` : une erreur du flux GridFS remonte ; avec
+ * `.pipe()`, le déchiffreur attendait sans fin et le coffre restait occupé.
+ * Rend null si le fichier a été supprimé entre-temps (autre onglet, purge) :
+ * il n'y a plus rien à réécrire.
+ */
+export async function readDecryptedFile(bucket, file, dek, ownerId) {
+    const chunks = []
+    try {
+        await pipeline(
+            bucket.openDownloadStream(file._id),
+            createDecryptStream(dek, file.filename, ownerId),
+            async (source) => {
+                for await (const chunk of source) chunks.push(chunk)
+            }
+        )
+    } catch (error) {
+        const still = await bucket.find({ _id: file._id }).toArray()
+        if (still.length === 0) return null
+        throw error
     }
     return Buffer.concat(chunks)
 }

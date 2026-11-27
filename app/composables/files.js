@@ -815,6 +815,8 @@ async function uploadToServer(files, slug) {
     const list = [...files]
     const failedNames = []
     const reasons = new Set()
+    let busyLots = 0
+    let failedLots = 0
     for (let i = 0; i < list.length; i += MAX_UPLOAD_FILES) {
         const lot = list.slice(i, i + MAX_UPLOAD_FILES)
         const formData = new FormData()
@@ -829,6 +831,8 @@ async function uploadToServer(files, slug) {
                 error?.data?.message || error?.message
                 || `HTTP ${error?.status ?? error?.statusCode ?? '?'}`,
             ))
+            failedLots += 1
+            if (error?.data?.statusMessage === 'vault_busy') busyLots += 1
             failedNames.push(...lot.map((f) => f?.name || '?'))
         }
     }
@@ -838,6 +842,9 @@ async function uploadToServer(files, slug) {
             n: failedNames.length,
             names: failedNames.join(', '),
             reasons: [...reasons].join(' · '),
+            // Coffre occupé pour tous les lots refusés : la raison traduite
+            // (la page traduit les `reasonCodes`) plutôt que le texte anglais.
+            ...(busyLots && busyLots === failedLots ? { reasonCodes: ['vault.error.busy'] } : {}),
         }
     }
     await getProject(API_ROUTES.PROJECT(slug))

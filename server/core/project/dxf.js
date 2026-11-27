@@ -2,7 +2,7 @@ import { createError, readMultipartFormData } from "h3";
 
 import { connectDB, getBucket } from "~~/server/db/mongo";
 import { makeOpaqueFileSlug } from "~~/server/utils/strings";
-import { requireFileAccess, uploadToBucket } from "~~/server/utils/vault";
+import { uploadToBucket, withVaultWrite } from "~~/server/utils/vault";
 import { trackEvent } from "~~/server/tracking/add";
 import {
   MAX_UPLOAD_FILE_BYTES,
@@ -77,8 +77,15 @@ export async function saveFiles(domain, event, projectSlug, userId) {
 
   // Throws 403 vault_locked when the user has an encrypted vault but no
   // active session. dek is null on the legacy plaintext path.
-  const { dek } = await requireFileAccess(userId);
+  // Coffre occupé : attend la fin d'une rotation ou d'un retrait, puis tient
+  // un bail jusqu'à l'insertion des fiches (une opération lancée entre-temps
+  // attend la fin de cet envoi, qui tient la clé).
+  return withVaultWrite(userId, (dek) =>
+    writeUploadedFiles(domain, event, projectSlug, userId, dxfFileFields, importOptions, dek),
+  );
+}
 
+async function writeUploadedFiles(domain, event, projectSlug, userId, dxfFileFields, importOptions, dek) {
   const dxfUserBucket = await getBucket(domain.dxfBucket);
 
   const file_records = [];

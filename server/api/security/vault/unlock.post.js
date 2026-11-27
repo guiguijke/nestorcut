@@ -1,6 +1,6 @@
 import { connectDB } from '~~/server/db/mongo'
 import { fingerprintKey, fingerprintsEqual } from '~~/server/utils/crypto'
-import { createVaultSession } from '~~/server/utils/vault'
+import { assertVaultUnchangedSince, createVaultSession, vaultGeneration } from '~~/server/utils/vault'
 import { assertRateLimit } from '~~/server/utils/ratelimit'
 
 /**
@@ -16,6 +16,9 @@ export default defineEventHandler(async (event) => {
 
     assertRateLimit(event, 'vault-unlock', { limit: 10, windowMs: 60_000 })
 
+    // Relevé AVANT de lire l'empreinte : une rotation ou un retrait qui
+    // commence ensuite rend cette empreinte périmée (voir plus bas).
+    const generation = vaultGeneration(userId)
     const db = await connectDB()
     const user = await db.collection('users').findOne(
         { id: userId },
@@ -31,6 +34,10 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 403, statusMessage: 'wrong_key' })
     }
 
+    // Coffre occupé, ou opération commencée depuis la lecture de l'empreinte :
+    // la clé vérifiée est peut-être l'ancienne (rotation) ou celle d'un coffre
+    // retiré. 409, dans le même segment synchrone que l'ouverture de session.
+    assertVaultUnchangedSince(userId, generation)
     const { expiresAt } = await createVaultSession(userId, dek)
     return { ok: true, expiresAt }
 })

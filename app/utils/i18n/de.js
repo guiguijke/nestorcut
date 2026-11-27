@@ -741,6 +741,8 @@ export default {
     "vault.error.rotate": "Rotation fehlgeschlagen. Ihre Dateien bleiben mit dem alten Schlüssel verschlüsselt.",
     "vault.error.disable": "Deaktivierung fehlgeschlagen. Bitte erneut versuchen.",
     "vault.error.destroy": "Vernichtung fehlgeschlagen. Bitte erneut versuchen.",
+    "vault.error.busy": "Tresor belegt — ein anderer Tresor-Vorgang läuft gerade (Datei-Upload, Nesting-Auftrag, Schlüsselwechsel oder Deaktivierung). Nichts wurde geändert. Versuchen Sie es erneut, sobald er beendet ist.",
+    "vault.error.rotateBusy": "Tresor belegt — ein Datei-Upload, ein Nesting-Auftrag oder ein anderer Tresor-Vorgang läuft gerade. Der Schlüssel wurde nicht gewechselt: Ihr aktueller Schlüssel bleibt gültig, die soeben heruntergeladene Schlüsseldatei wird nicht verwendet. Versuchen Sie es erneut, sobald er beendet ist.",
     "account.title": "Konto",
     "account.alternativesTitle": "Bevor Sie gehen…",
     "account.alternativesDesc": "Sie haben ein aktives Abo. Das Löschen Ihres Kontos kündigt es sofort, ohne Erstattung. Sie können auch einfach den Plan wechseln und Ihre Daten behalten.",

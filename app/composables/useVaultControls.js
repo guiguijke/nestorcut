@@ -52,8 +52,14 @@ export function useVaultControls() {
     const confirmed = ref(false)
 
     function setError(err, key) {
+        // Coffre occupé (envoi, calcul ou autre opération en cours) : un
+        // message traduit plutôt que le code brut du serveur. Pour un
+        // renouvellement, il dit que la clé actuelle reste valable (le
+        // nouveau fichier-clé est déjà téléchargé).
+        const busy = err?.data?.statusMessage === 'vault_busy'
+        if (busy) key = key === 'vault.error.rotate' ? 'vault.error.rotateBusy' : 'vault.error.busy'
         errorKey.value = key
-        error.value = err?.data?.statusMessage || t(key)
+        error.value = busy ? t(key) : err?.data?.statusMessage || t(key)
     }
 
     function setNotice(key) {

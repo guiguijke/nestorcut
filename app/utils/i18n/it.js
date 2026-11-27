@@ -738,6 +738,8 @@ export default {
     "vault.error.rotate": "Rinnovo non riuscito. I tuoi file restano cifrati con la vecchia chiave.",
     "vault.error.disable": "Disattivazione non riuscita. Riprova.",
     "vault.error.destroy": "Distruzione non riuscita. Riprova.",
+    "vault.error.busy": "Cassaforte occupata — è in corso un'altra operazione sulla cassaforte (caricamento di file, lavoro di nesting, cambio di chiave o disattivazione). Non è stato modificato nulla. Riprova quando è finita.",
+    "vault.error.rotateBusy": "Cassaforte occupata — è in corso un caricamento di file, un lavoro di nesting o un'altra operazione sulla cassaforte. La chiave non è stata cambiata: la tua chiave attuale resta valida, il file chiave appena scaricato non viene usato. Riprova quando è finito.",
     "account.title": "Account",
     "account.alternativesTitle": "Prima di andare…",
     "account.alternativesDesc": "Hai un abbonamento attivo. Eliminare l'account lo disdice subito, senza rimborso. Puoi anche semplicemente cambiare piano e tenere i tuoi dati.",
