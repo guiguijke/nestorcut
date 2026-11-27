@@ -328,14 +328,18 @@ const scrollToBottom = async () => {
         margin-left: 10px;
     }
 
-    &__input {
-        flex-grow: 1;
+    // InputField pose la classe `bottom__input` sur la zone de texte elle-même ;
+    // c'est sa racine (`label.input`) qui doit prendre toute la largeur, sinon
+    // le champ restait étroit et son indication (plus longue en allemand) était coupée.
+    > .input {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
 
-        // Le champ grandit avec le texte, mais sa hauteur de départ coupait le bas des lettres.
-        :deep(textarea) {
-            min-height: calc(var(--fs-14) * 1.4);
-            line-height: 1.4;
-        }
+    // Le champ grandit avec le texte, mais sa hauteur de départ coupait le bas des lettres.
+    &__input {
+        min-height: calc(var(--fs-14) * 1.4);
+        line-height: 1.4;
     }
 }
 </style>
