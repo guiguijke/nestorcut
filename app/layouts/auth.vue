@@ -143,7 +143,12 @@ const isHomePage = computed(() => {
             z-index: 3;
         }
 
-        @media (min-width: 1199px) {
+        // Écarté du coin seulement quand la page projet a sa colonne de droite
+        // (grille dès 1319 px) : en dessous, la zone du bouton Nest garde 104 px
+        // à droite pour lui (`[slug].vue`, `&__cta`). Le seuil était 1199 px :
+        // entre 1199 et 1318 px le bouton recouvrait le message sous Nest
+        // (essai navigateur de la V0.9.21, 1280 × 800).
+        @media (min-width: 1319px) {
             bottom: 60px;
             right: 60px;
         }

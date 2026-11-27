@@ -158,6 +158,21 @@ export function edgeCapacitySheets(payload) {
  * alternative moteur-shaped {structural: true} si elle reste à STRUCT_TOL
  * de la meilleure moteur.
  */
+/**
+ * Laisse le navigateur peindre « Finalisation… » avant la suite, sans jamais
+ * l'attendre indéfiniment : onglet caché, aucune attente ; sinon deux images
+ * (requestAnimationFrame) ou `maxMs` au plus. Un panneau que le navigateur ne
+ * dessine plus suspend requestAnimationFrame sans passer l'onglet en « caché ».
+ */
+export function yieldForPaint(maxMs = 200) {
+    if (typeof requestAnimationFrame !== 'function') return Promise.resolve()
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return Promise.resolve()
+    return new Promise((r) => {
+        const timer = setTimeout(r, maxMs)
+        requestAnimationFrame(() => requestAnimationFrame(() => { clearTimeout(timer); r() }))
+    })
+}
+
 async function buildGridAlternative(jobSlug, payload, result, { onZone, concurrency } = {}) {
     if ((result?.problem || payload?.problem) !== 'spp') return null
     const instance = payload?.instance || {}
@@ -769,9 +784,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     // Two rAF: let Vue paint « Finalisation… » before the (possibly
     // synchronous) post-pass starts. Without this the champion lock and a
     // fast worker collapse the stage into `final` in the same tick.
-    if (typeof requestAnimationFrame === 'function') {
-        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    }
+    // Jamais d'attente sans fin : un onglet caché (ou un panneau que le
+    // navigateur ne dessine plus) suspend requestAnimationFrame, et le calcul,
+    // fini côté moteur, restait « en recherche » jusqu'au retour sur l'onglet
+    // (constat du 26/11 : 5 min pour une pièce, fin au premier affichage).
+    // Onglet caché : pas d'attente ; sinon deux images ou 200 ms au plus.
+    await yieldForPaint()
     // AC6 (L2-ter) : miroir minimal de l'observabilité serveur — les
     // alternatives écartées laissent un diagnostic (raison + stratégie),
     // jamais une perte silencieuse. Portée FONCTION : le return et le
