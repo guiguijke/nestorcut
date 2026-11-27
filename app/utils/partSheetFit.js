@@ -10,6 +10,40 @@
 
 export const FIT_TOLERANCE_MM = 0.1
 
+/** Écart gardé SOUS l'ajustement exact pour un maximum annoncé : le moteur
+ * refuse une pièce qui tient à zéro près (« bande 984,010 pour une limite de
+ * 984 ») ; essai du 27/11 avec le vrai moteur : bord 10 refusé, 9,99 posé
+ * (pièce 980 sur tôle 1000, espacement 2). */
+export const EDGE_FIT_SLACK_MM = 0.02
+
+/**
+ * Plus grande distance au bord (mm) avec laquelle la pièce `part` ({ width :
+ * côté long, height : côté court }, mm, comme `firstPartFittingNoSheet` la rend)
+ * tient dans au moins une tôle active, moins la marge de courbes (comme le
+ * constructeur) et EDGE_FIT_SLACK_MM. Boîtes seulement : exacte pour des tôles
+ * rectangulaires ; dès qu'une tôle active est importée, sa boîte n'est qu'une
+ * borne haute, donc null (aucun chiffre plutôt qu'un maximum refusé ensuite).
+ * null aussi si rien ne tient ou si la valeur serait négative.
+ */
+export function maxEdgeForPartMm(part, { sheets, toMm, marginMm = 0 }) {
+    const long = Number(part?.width)
+    const short = Number(part?.height)
+    if (!Number.isFinite(long) || !Number.isFinite(short)) return null
+    let best = -Infinity
+    for (const s of sheets || []) {
+        const count = s?.count === undefined || s?.count === null ? 1 : Math.trunc(num(s.count))
+        if (!(count > 0)) continue
+        if (typeof s?.shapeId === 'string' && s.shapeId) return null
+        const a = toMm(num(s.width))
+        const b = toMm(num(s.height))
+        if (!Number.isFinite(a) || !Number.isFinite(b)) continue
+        best = Math.max(best, Math.min(Math.max(a, b) - long, Math.min(a, b) - short) / 2)
+    }
+    if (!Number.isFinite(best)) return null
+    const v = best - (Number(marginMm) || 0) - EDGE_FIT_SLACK_MM
+    return v >= 0 ? v : null
+}
+
 /** N rotations réparties sur le cercle, 0° compris (même règle que le moteur). */
 export function rotationAngles(count) {
     const n = Math.min(360, Math.max(1, Math.floor(Number(count) || 4)))

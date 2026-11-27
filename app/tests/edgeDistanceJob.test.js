@@ -57,8 +57,9 @@ describe('runLocalJobPrivate : refus « distance au bord » du constructeur', ()
         const { res } = await runWith({ sheets: [{ width: 60, height: 60, count: 1 }], space: 2, edgeDistance: 25 })
         expect(res.ok).toBe(false)
         expect(res.error).toBe('edge_too_large')
-        // Pièce 20 × 8 : min((60 − 20) / 2, (60 − 8) / 2) = 20.
-        expect(res.edgeDetail).toEqual({ maxEdgeMm: 20 })
+        // Pièce 20 × 8 : min((60 − 20) / 2, (60 − 8) / 2) = 20, annoncé un peu
+        // dessous (le moteur refuse l'ajustement exact).
+        expect(res.edgeDetail).toEqual({ maxEdgeMm: 19.98 })
     })
 })
 

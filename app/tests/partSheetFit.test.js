@@ -70,3 +70,25 @@ describe('partSheetFit — chaque pièce dans une tôle', () => {
         expect(run([file('p', 149, 20)], [sheet('149,5', '150')])).toBeNull()
     })
 })
+
+describe('maxEdgeForPartMm (message « la pièce ne tient pas avec ce bord »)', async () => {
+    const { maxEdgeForPartMm, EDGE_FIT_SLACK_MM } = await import('../utils/partSheetFit.js')
+    const toMm = (v) => v
+    it('rectangle : la borne des boîtes, un peu sous l’ajustement exact', () => {
+        // Pièce 980 × 100 sur 1000 × 500 : min((1000 − 980) / 2, (500 − 100) / 2) = 10.
+        const v = maxEdgeForPartMm({ width: 980, height: 100 }, { sheets: [{ width: 1000, height: 500, count: 1 }], toMm })
+        expect(v).toBeCloseTo(10 - EDGE_FIT_SLACK_MM, 9)
+    })
+    it('marge de courbes ôtée, tôle sans quantité ignorée, la meilleure tôle retenue', () => {
+        const sheets = [{ width: 2000, height: 1000, count: 0 }, { width: 1000, height: 500, count: 1 }, { width: 1100, height: 500, count: 1 }]
+        expect(maxEdgeForPartMm({ width: 980, height: 100 }, { sheets, toMm, marginMm: 0.1 })).toBeCloseTo(60 - 0.1 - EDGE_FIT_SLACK_MM, 9)
+    })
+    it('tôle importée active : aucun chiffre', () => {
+        const sheets = [{ width: 1000, height: 500, count: 1, shapeId: 'sheet-x' }]
+        expect(maxEdgeForPartMm({ width: 980, height: 100 }, { sheets, toMm })).toBe(null)
+    })
+    it('rien ne tient ou valeur négative : null', () => {
+        expect(maxEdgeForPartMm({ width: 1001, height: 100 }, { sheets: [{ width: 1000, height: 500, count: 1 }], toMm })).toBe(null)
+        expect(maxEdgeForPartMm({ width: 980, height: 100 }, { sheets: [], toMm })).toBe(null)
+    })
+})

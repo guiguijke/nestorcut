@@ -236,39 +236,31 @@ describe('vides enfermés du décalage vers l’extérieur : zones interdites du
     })
 })
 
-describe('bord maximal annoncé d’une tôle importée : trouvé avec le vrai décalage, il se construit', () => {
+describe('bord trop grand sur une tôle importée : refus sans chiffre (le contrôle de tenue y est approché)', () => {
     const build = (files, params, record) => buildLocalPayload({ files, params, profile: { timeBudgetSec: 2 } }, depsOf(record))
 
-    it('(c1) tôle ronde Ø1000, carré 600 (0°/90°) : ≈ 75 mm et non la boîte (200)', async () => {
+    // Essai navigateur du 27/11 : une recherche par dichotomie annonçait 11,8 mm
+    // pour un carré de 80 dans un triangle de 200 (vrai maximum 11,716) ; le
+    // moteur refusait la valeur retapée. Le refus part donc sans maximum.
+    it('(c1) tôle ronde Ø1000, carré 600 (0°/90°) : edge_too_large sans chiffre ; 70 se construit', async () => {
         const disc = circle(500, 256)
         const record = recordOf('sheet-vides001-rond1', disc)
         const files = [fileOf('carre', 1, rect(600, 600), [0, 90])]
         const params = (e) => ({ sheets: [{ width: 1000, height: 1000, count: 1, shapeId: 'sheet-vides001-rond1' }], space: 2, alternativesCount: 1, edgeDistance: e })
         const err = await build(files, params(80), record).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
-        const max = err.__edge.maxEdgeMm
-        // Demi-diagonale du carré 424,26 + espacement : le vrai maximum est vers 75,7.
-        expect(max).toBeGreaterThan(70)
-        expect(max).toBeLessThan(76.5)
-        expect(Math.round(max * 100) / 100).toBe(max)
-        const ok = await build(files, params(max), record)
-        expect(ok.payload.edgeShift).toBeCloseTo(max - 2, 9)
-        const over = await build(files, params(max + 0.5), record).catch((e) => e)
-        expect(over.message).toBe('edge_too_large')
+        expect(err.__edge).toEqual({})
+        await expect(build(files, params(70), record)).resolves.toBeTruthy()
     })
 
-    it('(c2) tôle en L (bras de 100) : le contour rentré disparaît à d = 50 ; annoncé < 52, et non 480', async () => {
+    it('(c2) tôle en L (bras de 100) : le contour rentré disparaît à d = 50 ; refus sans chiffre, 30 se construit', async () => {
         const L = [[0, 0], [1000, 0], [1000, 100], [100, 100], [100, 1000], [0, 1000], [0, 0]]
         const record = recordOf('sheet-vides001-enl01', L)
         const files = [fileOf('petit', 1, rect(40, 40), [0, 90])]
         const params = (e) => ({ sheets: [{ width: 1000, height: 1000, count: 1, shapeId: 'sheet-vides001-enl01' }], space: 2, alternativesCount: 1, edgeDistance: e })
         const err = await build(files, params(60), record).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
-        const max = err.__edge.maxEdgeMm
-        expect(max).toBeGreaterThanOrEqual(30)
-        expect(max).toBeLessThan(52)
-        await expect(build(files, params(max), record)).resolves.toBeTruthy()
-        const over = await build(files, params(52), record).catch((e) => e)
-        expect(over.message).toBe('edge_too_large')
+        expect(err.__edge).toEqual({})
+        await expect(build(files, params(30), record)).resolves.toBeTruthy()
     })
 })

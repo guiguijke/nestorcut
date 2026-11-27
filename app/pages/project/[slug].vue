@@ -236,6 +236,7 @@
             <p v-else-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
                 {{ minSheetInfo.edge
                     ? t('project.minSheetEdge', { name: minSheetInfo.part?.name, w: fmtLengthValue(minSheetInfo.part?.width), h: fmtLengthValue(minSheetInfo.part?.height), e: fmtLengthValue(edgeRequestedMm), unit: unitLabel })
+                        + (minSheetEdgeMax !== null ? ' ' + t('project.edgeMaxHint', { max: fmtLengthMax(minSheetEdgeMax), unit: unitLabel }) : '')
                     : t('project.minSheet', { name: minSheetInfo.part?.name, w: fmtLengthValue(minSheetInfo.part?.width), h: fmtLengthValue(minSheetInfo.part?.height), unit: unitLabel }) }}
             </p>
             <p v-if="missingSheetNames.length && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="sheet-shape-missing" role="alert">
@@ -266,7 +267,7 @@ import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { safetyPatchForTargetMm, edgeDistanceNumber, edgeShiftMm } from "~/utils/spacingParams";
 import { overhangMarginMm, minSheetCase } from "~/utils/overhangView";
 import { capacityPanelModel } from "~/utils/capacityPanel";
-import { firstPartFittingNoSheet, maxOverhangMm } from "~/utils/partSheetFit";
+import { firstPartFittingNoSheet, maxEdgeForPartMm, maxOverhangMm } from "~/utils/partSheetFit";
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB, MAX_SHEET_FORMATS } from "~~/shared/constants/payment.constants";
@@ -1074,6 +1075,17 @@ const partFitsNoSheetPlain = computed(() => unref(edgeRequestedMm) === null
         rotationCount: unref(params)?.rotationCount,
     }));
 const minSheetInfo = computed(() => minSheetCase(unref(edgeRequestedMm), partFitsNoSheet.value, partFitsNoSheetPlain.value));
+// Le bord est la cause : le plus grand bord qui laisse tenir cette pièce (tôles
+// rectangulaires seulement, un peu sous l'ajustement exact, marge de courbes
+// ôtée comme le constructeur). Tôle importée : aucun chiffre.
+const minSheetEdgeMax = computed(() => {
+    const info = minSheetInfo.value
+    if (!info?.edge || !info.part) return null
+    const files = (projectFiles.value || []).filter((f) => Number(f.count) > 0)
+    const p = unref(params)
+    const spaceMm = displayToMm(Number(String(p?.space ?? '0').replace(',', '.')) || 0)
+    return maxEdgeForPartMm(info.part, { sheets: unref(currentSheets), toMm: displayToMm, marginMm: computeSpacingMargin(files, spaceMm) })
+});
 // Bord négatif : plafond de dépassement (voir partSheetFit.maxOverhangMm). Une
 // pièce qui a moins de 1 % de matière sur la tôle est signalée au rapport.
 const edgeOverhangMax = computed(() => {

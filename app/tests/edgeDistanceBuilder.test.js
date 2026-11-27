@@ -149,9 +149,10 @@ describe('refus avant tout calcul lourd', () => {
         expect(err.message).toBe('edge_too_large')
         // Sans rotation : (1000 − 900) / 2 = 50 et (2000 − 1900) / 2 = 50 ; tournée,
         // elle ne tient pas. La valeur annoncée passe.
-        expect(err.__edge).toEqual({ maxEdgeMm: 50 })
+        // Borne exacte 50 ; annoncée un peu dessous (le moteur refuse l'ajustement exact).
+        expect(err.__edge).toEqual({ maxEdgeMm: 49.98 })
         const ok = await build({ ...bpp, edgeDistance: err.__edge.maxEdgeMm }, { files })
-        expect(ok.payload.edgeShift).toBe(48)
+        expect(ok.payload.edgeShift).toBeCloseTo(47.98, 9)
     })
 
     it('pièce trop grande même sans bord : le refus d’avant (part_too_large), pas un refus de bord', async () => {
@@ -271,7 +272,8 @@ describe('tôle importée : contour EXTÉRIEUR décalé de −d, zones gardées 
         const err1 = await build({ sheets: shapedSheets, space: 2, edgeDistance: 10 },
             { files: [fileOf(3, 10, 10)], deps: { getSheetRecord: async () => record, offsetRing: vanished } }).catch((e) => e)
         expect(err1.message).toBe('edge_too_large')
-        expect(Number.isFinite(err1.__edge.maxEdgeMm)).toBe(true)
+        // Tôle importée : aucun chiffre (le contrôle de tenue n'y est qu'approché).
+        expect(err1.__edge).toEqual({})
 
         const empty = async () => ({ ring: [], pieces: 0, lostAreaMm2: 0 })
         const err2 = await build({ sheets: shapedSheets, space: 2, edgeDistance: 10 },
@@ -314,7 +316,7 @@ describe('tôle importée : contour EXTÉRIEUR décalé de −d, zones gardées 
         await expect(build({ sheets: shapedSheets, space: 2 }, { files, deps })).resolves.toBeTruthy()
         const err = await build({ sheets: shapedSheets, space: 2, edgeDistance: 10 }, { files, deps }).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
-        expect(err.__edge).toEqual({ maxEdgeMm: 5 })
+        expect(err.__edge).toEqual({})
     })
 })
 
@@ -356,9 +358,11 @@ describe('rectangle et bande : longueurs moteur arrondies PAR DÉFAUT au flottan
         const sheets = [{ width: 1000.3, height: 2000, count: 3 }]
         const err = await build({ sheets, space: 2, directions: null, edgeDistance: 60 }, { files }).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
-        expect(err.__edge).toEqual({ maxEdgeMm: 49.99 })
-        const ok = await build({ sheets, space: 2, directions: null, edgeDistance: 49.99 }, { files })
-        expect(ok.payload.edgeShift).toBeCloseTo(47.99, 9)
+        // Borne exacte 50 : annoncée 49,98 (marge sous l'ajustement exact), qui
+        // couvre aussi l'arrondi f32 de la largeur moteur.
+        expect(err.__edge).toEqual({ maxEdgeMm: 49.98 })
+        const ok = await build({ sheets, space: 2, directions: null, edgeDistance: 49.98 }, { files })
+        expect(ok.payload.edgeShift).toBeCloseTo(47.98, 9)
         const at50 = await build({ sheets, space: 2, directions: null, edgeDistance: 50 }, { files }).catch((e) => e)
         expect(at50.message).toBe('edge_too_large')
     })
@@ -527,15 +531,16 @@ describe('bord maximal annoncé d’une tôle importée (R4)', () => {
         expect(err.__edge).toEqual({})
     })
 
-    it('contour rentré qui disparaît : la valeur annoncée se construit', async () => {
+    it('contour rentré qui disparaît : refus sans chiffre, une valeur plus petite se construit', async () => {
         const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: rectOffset([]) }
         const files = [fileOf(1, 60, 60)]
         // d = 58 : la tôle 100 × 200 n'existe plus.
         const err = await build({ sheets: shapedSheets, space: 2, edgeDistance: 60 }, { files, deps }).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
-        // (100 − 60) / 2 = 20.
-        expect(err.__edge).toEqual({ maxEdgeMm: 20 })
-        const ok = await build({ sheets: shapedSheets, space: 2, edgeDistance: err.__edge.maxEdgeMm }, { files, deps })
-        expect(ok.payload.edgeShift).toBe(18)
+        // Tôle importée : aucun chiffre ; une valeur sous la borne (100 − 60) / 2
+        // = 20 se construit.
+        expect(err.__edge).toEqual({})
+        const ok = await build({ sheets: shapedSheets, space: 2, edgeDistance: 19.9 }, { files, deps })
+        expect(ok.payload.edgeShift).toBeCloseTo(17.9, 9)
     })
 })

@@ -1128,6 +1128,7 @@ export default {
     'settings.edgeLocalOnly': 'For now this setting is available for “This device” projects only.',
     'project.edgeOverhangTooLarge': 'A hang-off of {x} {unit} is too large. Use at most {max} {unit}. A part with almost no material on the sheet is flagged in the report.',
     'project.minSheetEdge': 'The part “{name}” ({w} × {h} {unit}) does not fit on any declared sheet with a distance to the edge of {e} {unit}, even rotated.',
+    'project.edgeMaxHint': 'Use at most {max} {unit}.',
     'localMode.edgeOverhangTooLarge': 'The distance to the sheet edge is too negative. Use a hang-off of at most {max} {unit}. The nesting was refunded.',
     'localMode.edgeOverhangTooLargePlain': 'The distance to the sheet edge is too negative: parts may hang off only by a limited amount, set by the smallest part. The nesting was refunded.',
     'localMode.edgeTooLarge': 'The distance to the sheet edge is too large: a part no longer fits on the sheet. Use at most {max} {unit}, or a larger sheet. The nesting was refunded.',

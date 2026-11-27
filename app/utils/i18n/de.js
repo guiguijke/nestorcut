@@ -997,6 +997,7 @@ export default {
     "settings.edgeLocalOnly": "Diese Einstellung gibt es vorerst nur für Projekte auf „Dieses Gerät“.",
     "project.edgeOverhangTooLarge": "Ein Überstand von {x} {unit} ist zu groß. Höchstens {max} {unit}. Ein Teil mit fast keinem Material auf dem Blech wird im Bericht markiert.",
     "project.minSheetEdge": "Das Teil „{name}“ ({w} × {h} {unit}) passt mit einem Randabstand von {e} {unit} auf kein angegebenes Blech, auch nicht gedreht.",
+    "project.edgeMaxHint": "Höchstens {max} {unit}.",
     "localMode.edgeOverhangTooLarge": "Der Abstand zum Blechrand ist zu stark negativ. Höchstens {max} {unit} Überstand. Das Nesting wurde erstattet.",
     "localMode.edgeOverhangTooLargePlain": "Der Abstand zum Blechrand ist zu stark negativ: Der Überstand ist begrenzt, abhängig vom kleinsten Teil. Das Nesting wurde erstattet.",
     "localMode.edgeTooLarge": "Der Abstand zum Blechrand ist zu groß: Ein Teil passt nicht mehr auf das Blech. Höchstens {max} {unit}, oder ein größeres Blech. Das Nesting wurde erstattet.",

@@ -994,6 +994,7 @@ export default {
     "settings.edgeLocalOnly": "Per ora questa impostazione esiste solo per i progetti su «Questo dispositivo».",
     "project.edgeOverhangTooLarge": "Una sporgenza di {x} {unit} è troppo grande. Al massimo {max} {unit}. Un pezzo quasi senza materiale sulla lamiera viene segnalato nel rapporto.",
     "project.minSheetEdge": "Il pezzo «{name}» ({w} × {h} {unit}) non entra in nessuna lamiera dichiarata con una distanza dal bordo di {e} {unit}, nemmeno ruotato.",
+    "project.edgeMaxHint": "Al massimo {max} {unit}.",
     "localMode.edgeOverhangTooLarge": "La distanza dal bordo della lamiera è troppo negativa. Sporgenza massima: {max} {unit}. Il nesting è stato rimborsato.",
     "localMode.edgeOverhangTooLargePlain": "La distanza dal bordo della lamiera è troppo negativa: la sporgenza è limitata, in base al pezzo più piccolo. Il nesting è stato rimborsato.",
     "localMode.edgeTooLarge": "La distanza dal bordo della lamiera è troppo grande: un pezzo non entra più nella lamiera. Al massimo {max} {unit}, oppure usa una lamiera più grande. Il nesting è stato rimborsato.",

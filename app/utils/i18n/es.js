@@ -999,6 +999,7 @@ export default {
     "settings.edgeLocalOnly": "Por ahora este ajuste solo existe para los proyectos de «Este dispositivo».",
     "project.edgeOverhangTooLarge": "Un saliente de {x} {unit} es demasiado grande. Máximo: {max} {unit}. Una pieza casi sin material sobre la chapa se señala en el informe.",
     "project.minSheetEdge": "La pieza «{name}» ({w} × {h} {unit}) no cabe en ninguna chapa declarada con una distancia al borde de {e} {unit}, ni girada.",
+    "project.edgeMaxHint": "Como máximo {max} {unit}.",
     "localMode.edgeOverhangTooLarge": "La distancia al borde de la chapa es demasiado negativa. Saliente máximo: {max} {unit}. El nesting ha sido reembolsado.",
     "localMode.edgeOverhangTooLargePlain": "La distancia al borde de la chapa es demasiado negativa: el saliente está limitado, según la pieza más pequeña. El nesting ha sido reembolsado.",
     "localMode.edgeTooLarge": "La distancia al borde de la chapa es demasiado grande: una pieza ya no cabe en la chapa. Máximo: {max} {unit}, o usa una chapa más grande. El nesting ha sido reembolsado.",

@@ -1105,6 +1105,7 @@ export default {
     "settings.edgeLocalOnly": "Pour l'instant, ce réglage n'existe que pour les projets « Cet appareil ».",
     "project.edgeOverhangTooLarge": "Un dépassement de {x} {unit} est trop grand. Maximum : {max} {unit}. Une pièce presque entièrement hors de la tôle est signalée dans le rapport.",
     "project.minSheetEdge": "La pièce « {name} » ({w} × {h} {unit}) ne tient dans aucune tôle déclarée avec une distance au bord de {e} {unit}, même tournée.",
+    "project.edgeMaxHint": "Maximum : {max} {unit}.",
     "localMode.edgeOverhangTooLarge": "La distance au bord de la tôle est trop négative. Dépassement maximum : {max} {unit}. L'imbrication a été remboursée.",
     "localMode.edgeOverhangTooLargePlain": "La distance au bord de la tôle est trop négative : le dépassement est limité, selon la plus petite pièce. L'imbrication a été remboursée.",
     "localMode.edgeTooLarge": "La distance au bord de la tôle est trop grande : une pièce ne tient plus sur la tôle. Maximum : {max} {unit}, ou prenez une tôle plus grande. L'imbrication a été remboursée.",

@@ -991,6 +991,7 @@ export default {
     "settings.edgeLocalOnly": "Por enquanto este ajuste existe só para projetos em «Este dispositivo».",
     "project.edgeOverhangTooLarge": "Uma saliência de {x} {unit} é grande demais. No máximo {max} {unit}. Uma peça quase sem material sobre a chapa é sinalizada no relatório.",
     "project.minSheetEdge": "A peça «{name}» ({w} × {h} {unit}) não cabe em nenhuma chapa declarada com distância à borda de {e} {unit}, nem rodada.",
+    "project.edgeMaxHint": "No máximo {max} {unit}.",
     "localMode.edgeOverhangTooLarge": "A distância à borda da chapa é negativa demais. Saliência máxima: {max} {unit}. O nesting foi reembolsado.",
     "localMode.edgeOverhangTooLargePlain": "A distância à borda da chapa é negativa demais: a saliência é limitada, conforme a menor peça. O nesting foi reembolsado.",
     "localMode.edgeTooLarge": "A distância à borda da chapa é grande demais: uma peça já não cabe na chapa. No máximo {max} {unit}, ou use uma chapa maior. O nesting foi reembolsado.",

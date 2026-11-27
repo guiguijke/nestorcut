@@ -89,6 +89,7 @@ import { partWithReserve } from '~~/shared/sheetcamReserve.js'
 // d'alias que ci-dessus.
 import { engineBinShape, perimeterSplitOf } from '~~/app/utils/sheetShape.js'
 import { partMayFitSheet } from '~~/app/utils/partFit.js'
+import { EDGE_FIT_SLACK_MM } from '~~/app/utils/partSheetFit.js'
 // Distance au bord : règle partagée (lecture, décalage moteur d = e − s).
 import { edgeShiftMm } from '~~/app/utils/spacingParams.js'
 
@@ -911,9 +912,10 @@ function edgeBoxBound(inputItems, sheets, margin) {
 }
 
 /** Tôles rectangulaires : la plus grande distance au bord DEMANDÉE (mm) qui
- * passe, arrondie PAR DÉFAUT au centième (`edgeBoxBound` y est exacte). */
+ * passe, arrondie PAR DÉFAUT au centième (`edgeBoxBound` y est exacte), un peu
+ * SOUS l'ajustement exact que le moteur refuse (EDGE_FIT_SLACK_MM). */
 function maxEdgeForFit(inputItems, sheets, margin) {
-    return Math.max(0, floorCenti(edgeBoxBound(inputItems, sheets, margin)))
+    return Math.max(0, floorCenti(edgeBoxBound(inputItems, sheets, margin) - EDGE_FIT_SLACK_MM))
 }
 
 /** Le job se construit-il avec la distance au bord DEMANDÉE `e` ? Mêmes tôles
@@ -932,50 +934,17 @@ async function edgeBuilds(ctx, e) {
     return ctx.inputItems.every((item) => itemFitsSheets(item.coords, item.rotations, engine, ctx.space).fits)
 }
 
-/** Recherche du bord maximal d'une tôle importée : pas au plus, et largeur
- * d'intervalle où l'on s'arrête (mm). */
-const EDGE_SEARCH_MAX_STEPS = 14
-const EDGE_SEARCH_TOL_MM = 0.005
-
-/**
- * Plus grande distance au bord DEMANDÉE (mm, arrondie par défaut au centième)
- * avec laquelle le job se construit quand une tôle importée est en jeu : la
- * boîte du contour n'en donne qu'une borne haute, parfois très loin du vrai
- * maximum (tôle ronde, en L). Bissection entre l'espacement (d = 0 : les vraies
- * tôles) et min(bord demandé, borne des boîtes), avec le VRAI décalage, puis
- * contrôle que la valeur annoncée se construit. null quand rien ne se trouve :
- * le refus part sans chiffre, jamais avec un maximum refusé à nouveau.
- * Chemin d'erreur seulement (une douzaine de décalages par tôle importée).
- */
-async function maxEdgeBySearch(ctx, requestedEdge) {
-    let lo = Number(ctx.requestedSpace) || 0
-    if (!(await edgeBuilds(ctx, lo))) return null
-    const hi0 = Math.min(Number(requestedEdge), edgeBoxBound(ctx.inputItems, ctx.sheets, ctx.margin))
-    if (Number.isFinite(hi0) && hi0 > lo) {
-        let hi = hi0
-        if (await edgeBuilds(ctx, hi)) {
-            lo = hi
-        } else {
-            for (let k = 0; k < EDGE_SEARCH_MAX_STEPS && hi - lo > EDGE_SEARCH_TOL_MM; k++) {
-                const mid = (lo + hi) / 2
-                if (await edgeBuilds(ctx, mid)) lo = mid
-                else hi = mid
-            }
-        }
-    }
-    const announced = Math.max(0, floorCenti(lo))
-    return (await edgeBuilds(ctx, announced)) ? announced : null
-}
-
 /** Détail du refus `edge_too_large` : { maxEdgeMm } (valeur qui passe, au
  * centième par défaut), ou {} quand aucune valeur sûre n'est connue (jamais un
  * maximum que l'utilisateur ne pourrait pas retaper). */
 async function edgeTooLargeDetail(ctx, requestedEdge) {
     const active = ctx.sheets.filter((s) => (Number(s.count) || 0) > 0)
-    if ((active.length ? active : ctx.sheets).some((s) => s.shaped)) {
-        const v = await maxEdgeBySearch(ctx, requestedEdge)
-        return v === null ? {} : { maxEdgeMm: v }
-    }
+    // Tôle importée : aucun chiffre. Le contrôle « chaque pièce tient » du
+    // constructeur n'est qu'approché sur un contour quelconque : une recherche
+    // par dichotomie annonçait 11,8 mm là où un carré de 80 dans un triangle de
+    // 200 ne tient qu'à 11,716 (essai navigateur du 27/11), et le moteur refusait
+    // la valeur retapée. Le refus part sans maximum (« réduisez-la »).
+    if ((active.length ? active : ctx.sheets).some((s) => s.shaped)) return {}
     // Rectangles : la borne des boîtes est exacte ; le contrôle couvre l'arrondi
     // f32 des longueurs moteur (un centième de moins quand il mord).
     const v = maxEdgeForFit(ctx.inputItems, ctx.sheets, ctx.margin)
