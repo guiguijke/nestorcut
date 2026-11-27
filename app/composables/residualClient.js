@@ -32,6 +32,7 @@ import {
 // deux modules ne s'utilisent qu'À L'EXÉCUTION de fonctions, jamais à
 // l'init — les déclarations hoistées résolvent le cycle.
 import { sheetDims } from './localBridge'
+import { unlimitedLayoutTest } from '../utils/sheetStock.js'
 
 const EPS = 1e-6
 const N_ITER = 4
@@ -1036,13 +1037,16 @@ function relayCandidatesInBands(layouts, recvI, candidates, partsById, sheetDims
 // receveuse FUSIONNÉS. X1 : non-posées de la receveuse → DONNEUSE,
 // savedPoses AVANT détachement, validation contre les pièces modifiées
 // seulement, rollback avec RAISON tracée.
-function mergeFillCompactReceivers(layouts, donorI, partsById, sheetDimsOf, space, payload, stats = null) {
+function mergeFillCompactReceivers(layouts, donorI, partsById, sheetDimsOf, space, payload, stats = null, isNew = null) {
     if (!layouts || !layouts.length || donorI >= layouts.length) return 0
     const donor = layouts[donorI]
     let movedTotal = 0
     let mergedSheets = 0
     let rollbackReason = null
-    for (let recvI = 0; recvI < layouts.length; recvI++) {
+    // Tôle illimitée (`isNew`) : les tôles du stock reçoivent les premières.
+    const receivers = layouts.map((_, i) => i)
+    if (isNew) receivers.sort((a, b) => (Number(isNew(layouts[a])) - Number(isNew(layouts[b]))) || (a - b))
+    for (const recvI of receivers) {
         if (recvI === donorI) continue
         const recv = layouts[recvI]
         const { units, free: recvFree } = helixUnitsAndFree(recv, partsById)
@@ -1092,11 +1096,17 @@ function mergeFillCompactReceivers(layouts, donorI, partsById, sheetDimsOf, spac
             // donneuse, avant tout rollback.
             let okRecv = true
             let recvFailedBatch = []
+            // Tôle illimitée : une pièce d'une tôle du stock ne part jamais sur
+            // une tôle neuve (donneuse) ; elle revient sur la sienne, ou la
+            // passe est annulée pour cette receveuse.
+            const stockStays = Boolean(isNew && !isNew(recv) && isNew(donor))
             for (const pi of remainingRecv) {
                 pi.transformation = savedPoses.get(pi)
-                donor.placed_items.push(pi)
-                if (validateBatch([pi], donor, partsById, swD2, shD2, space)) continue
-                donor.placed_items = (donor.placed_items || []).filter((x) => x !== pi)
+                if (!stockStays) {
+                    donor.placed_items.push(pi)
+                    if (validateBatch([pi], donor, partsById, swD2, shD2, space)) continue
+                    donor.placed_items = (donor.placed_items || []).filter((x) => x !== pi)
+                }
                 recv.placed_items.push(pi)
                 if (validateBatch([pi], recv, partsById, swR2, shR2, space)) continue
                 recv.placed_items = (recv.placed_items || []).filter((x) => x !== pi)
@@ -1106,7 +1116,7 @@ function mergeFillCompactReceivers(layouts, donorI, partsById, sheetDimsOf, spac
             // pour toutes les fans sans pose d'origine valide (une par
             // fan faisait repasser le gel a 0,7 s).
             if (recvFailedBatch.length) {
-                for (const dstI of [recvI, donorI]) {
+                for (const dstI of stockStays ? [recvI] : [recvI, donorI]) {
                     if (!recvFailedBatch.length) break
                     fillOneBatch(layouts, dstI, dstI, partsById,
                         sheetDimsOf, space, payload, recvFailedBatch, null, 1)
@@ -1398,15 +1408,22 @@ export function fillResidualBands(parts, layouts, space, payload, stats = null) 
         let moved = 0
         stats.residualRounds = 1
         const ratios = layouts.map((l) => fillRatio(l, partsById, sheetDimsOf))
-        let donorI = 0
-        for (let i = 1; i < layouts.length; i++) {
+        // Tôle illimitée : la donneuse est choisie parmi les tôles illimitées
+        // posées s'il y en a, jamais une tôle du stock vidée au profit d'une
+        // neuve. Sans tôle illimitée : toutes candidates, comme avant.
+        const isNew = unlimitedLayoutTest(payload)
+        const all = layouts.map((_, i) => i)
+        const news = isNew ? all.filter((i) => isNew(layouts[i])) : []
+        const donors = news.length ? news : all
+        let donorI = donors[0]
+        for (const i of donors) {
             if (ratios[i] <= ratios[donorI]) donorI = i // tie → plus grand index
         }
         // W3 (plan correctif 2, étape B) : remplissage + receveuse
         // FUSIONNÉS, candidates = receveuse + donneuse, AVANT la
         // compaction donneuse.
         moved += mergeFillCompactReceivers(layouts, donorI, partsById,
-            sheetDimsOf, space, payload, stats)
+            sheetDimsOf, space, payload, stats, isNew)
         const kept = layouts.filter((l) => (l.placed_items || []).length)
         if (kept.length !== layouts.length) {
             layouts.length = 0

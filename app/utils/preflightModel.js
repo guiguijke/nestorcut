@@ -1,4 +1,5 @@
 import { engineBinShape, perimeterSplitOf } from './sheetShape'
+import { effectiveSheets, isUnlimitedSheet } from './sheetStock'
 
 /**
  * Modèle PUR de l'estimation « ≈ n tôles » de la page projet : les tôles et les
@@ -58,7 +59,7 @@ export function shapeStatsOfRecord(record) {
 
 /** Le projet porte-t-il au moins une tôle importée qui SERVIRA (quantité > 0) ? */
 export function hasActiveImportedSheet(settings) {
-    return (settings || []).some((row) => shapeIdOf(row) && isActive(row))
+    return effectiveSheets(settings || []).some((row) => shapeIdOf(row) && isActive(row))
 }
 
 /**
@@ -70,24 +71,31 @@ export function hasActiveImportedSheet(settings) {
  * lecture refusée) ; 'missing' (enregistrement absent ou inutilisable, noms dans
  * `missing`) ; 'inactive' (une tôle importée et AUCUNE ligne avec une quantité : le
  * champ est vide le temps d'une saisie). Jamais un repli sur la boîte d'une tôle importée.
+ * Tôle à quantité illimitée : sa quantité EFFECTIVE (`effectiveSheets`), jamais
+ * celle saisie, et la marque `unlimited` (lue par `stockFirstEstimate`) ; dans un
+ * tel projet, une ligne sans quantité est écartée, comme au calcul. `settings` :
+ * les lignes telles que le projet les lit (`sheetsForProject`).
  * @returns {{ sheets: object[], state: string, missing: string[], imported: boolean }}
  */
 export function preflightSheetsOf(settings, shapeStats, toMm) {
-    const rows = settings || []
+    const rows = effectiveSheets(settings || [])
     const imported = hasActiveImportedSheet(rows)
     const inactive = !rows.some(isActive) && rows.some((row) => shapeIdOf(row))
+    const open = rows.some(isUnlimitedSheet)
     const sheets = []
     const missing = []
     let pending = false
     let unreadable = false
     for (const row of rows) {
         const id = shapeIdOf(row)
+        const mark = isUnlimitedSheet(row) ? { unlimited: true } : {}
         if (!id) {
-            if (imported && !isActive(row)) continue
+            if ((imported || open) && !isActive(row)) continue
             sheets.push({
                 width: toMm(toNumber(row.width)),
                 height: toMm(toNumber(row.height)),
                 count: Number(row.count) || 1,
+                ...mark,
             })
             continue
         }
@@ -109,6 +117,7 @@ export function preflightSheetsOf(settings, shapeStats, toMm) {
                 // Distance au bord : partage contour / zones, quand la forme en a.
                 ...(Number.isFinite(st.outlinePerimeterMm) ? { outlinePerimeterMm: st.outlinePerimeterMm } : {}),
                 ...(Number.isFinite(st.zonesPerimeterMm) ? { zonesPerimeterMm: st.zonesPerimeterMm } : {}),
+                ...mark,
             })
         }
     }

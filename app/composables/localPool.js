@@ -41,6 +41,7 @@
  */
 
 import { engineSendOf, withSwappedCutoff } from '../utils/sheetHull'
+import { compareStockScores, mergeRuns, preferStockRuns, runScorer, walkInstance } from '../utils/sheetStock'
 
 // ---------------------------------------------------------------------------
 // derive_seed — miroir BigInt EXACT de spp.rs (splitmix64-style, wrapping
@@ -443,6 +444,9 @@ export function runPool(jobSlug, payload, { onLive, walks, concurrency } = {}) {
             mergeTimer: null,
             mergeTarget: null,
             mergeAttempts: 0,
+            // Tôle illimitée : voir `lostPieces`.
+            heldBack: null,
+            mergeAll: false,
             settle(outcome) {
                 if (pool.settled) return
                 pool.settled = true
@@ -504,7 +508,10 @@ function startWalk(jobSlug, pool, payload, masterSeed, w) {
     slot.worker.postMessage({
         jobSlug,
         // Tôle concave : enveloppe + poches (sheetHull.js), sinon payload.instance lui-même.
-        instance: engineSendOf(payload).instance,
+        // Tôle illimitée : un walk sur deux (par tranches d'un walk par sens)
+        // reçoit la seconde recette de coût du stock (`walkInstance`).
+        instance: walkInstance(engineSendOf(payload).instance, payload, w,
+            dirBiases(payload?.engineConfig?.biases).length),
         engineConfig: workerEngineConfig(payload, w, pool.isSpp),
         seed: n === 1 ? masterSeed : deriveSeed(masterSeed, w).toString(),
         live: Boolean(pool.onLive),
@@ -563,13 +570,14 @@ function placedInAlt(alt) {
     return sol?.layout?.placed_items?.length || 0
 }
 
-/** Clé de comparaison d'une alternative (plus petit = meilleur). */
-function altKey(alt) {
+/** Clé de comparaison d'une alternative (plus petit = meilleur). `ranked` (tôle
+ * illimitée) : le choix du stock est déjà passé (`compareStockScores`), ni les
+ * pièces non posées ni le coût des tôles ne départagent plus. */
+function altKey(alt, ranked = false) {
     const d = alt?.cost_detail
     if (d && typeof d === 'object') {
         return [
-            Number(d.unplaced) || 0,
-            Number(d.bin_cost) || 0,
+            ...(ranked ? [] : [Number(d.unplaced) || 0, Number(d.bin_cost) || 0]),
             -(Number(d.remnant) || 0),
             -(Number(d.falkenauer) || 0),
         ]
@@ -601,14 +609,19 @@ function compareKeys(a, b) {
  */
 function bestWalkDelivery(pool, payload, masterSeed, reason, message) {
     let best = null
+    // Tôle illimitée : le même choix qu'avant la fusion, puis la chute restante.
+    const score = runScorer(payload)
     for (const slot of pool.slots) {
         if (!slot.outcome?.ok) continue
         const alts = slot.outcome.result?.alternatives
         if (!Array.isArray(alts)) continue
         const complete = alts.filter((a) => pool.demand > 0 && placedInAlt(a) === pool.demand)
         if (!complete.length) continue
-        const key = altKey(complete[0])
-        if (!best || compareKeys(key, best.key) < 0) best = { slot, complete, key }
+        const rank = score?.(complete[0])
+        const key = altKey(complete[0], Boolean(score))
+        if (!best || ((score ? compareStockScores(rank, best.rank) : 0) || compareKeys(key, best.key)) < 0) {
+            best = { slot, complete, key, rank }
+        }
     }
     if (!best) return null
     const walkSeed = pool.slots.length === 1
@@ -727,6 +740,17 @@ function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
             return
         }
         const alternatives = Array.isArray(merged.alternatives) ? merged.alternatives : []
+        // Tôle illimitée : la fusion n'avait que les runs retenus. Si sa garde
+        // d'embouchure leur a retiré des pièces alors qu'une recherche du même
+        // sens était complète, elle est refaite avec toutes les recherches (une
+        // fois ; la tentative ne compte pas parmi celles d'un worker perdu).
+        if (lostPieces(pool, alternatives)) {
+            pool.mergeAll = true
+            pool.mergeTarget = null
+            pool.mergeAttempts -= 1
+            postMerge(jobSlug, pool, payload)
+            return
+        }
         const preferred = preferChampion(pool, alternatives)
         // La fusion ne voit pas l'import : `merge.rs` rend `thin_items` vide
         // (« rempli par l'appelant »). L'appelant, ici, c'est le pool — sans
@@ -760,6 +784,15 @@ function onWorkerMessage(jobSlug, pool, slot, event, payload, masterSeed) {
     }
     pumpQueue(jobSlug, pool, payload, masterSeed ?? String(payload?.engineConfig?.prng_seed ?? '0'))
     checkAllSettled(jobSlug, pool, payload)
+}
+
+/** Une option fusionnée n'a pas toutes les pièces, alors que la fusion n'avait
+ * reçu qu'une partie des runs et qu'une recherche du même sens était complète.
+ * Jamais vrai sans tôle illimitée (la fusion reçoit tout). */
+function lostPieces(pool, alternatives) {
+    const complete = pool.heldBack
+    return Boolean(complete) && alternatives.some((alt) => complete.has(alt.bias)
+        && (Number(alt.cost_detail?.unplaced) > 0 || placedInAlt(alt) < pool.demand))
 }
 
 function failSlot(jobSlug, pool, slot, payload, message, masterSeed) {
@@ -864,6 +897,13 @@ function postMerge(jobSlug, pool, payload) {
             runs.push({ ...alt, seed: runSeed })
         }
     }
+    // Tôle illimitée : de chaque sens, les runs qui se servent le mieux du stock
+    // (`preferStockRuns`). Sans elle : la liste elle-même.
+    const chosen = pool.mergeAll ? mergeRuns(runs, payload) : preferStockRuns(runs, payload)
+    // Runs écartés : les sens dont une recherche posait toutes les pièces.
+    pool.heldBack = chosen.length < runs.length
+        ? new Set(runs.filter((r) => r.cost_detail && !(Number(r.cost_detail.unplaced) > 0)).map((r) => r.bias))
+        : null
     const target = alive[0]
     pool.mergeAttempts += 1
     // Une seule cible à la fois : les réponses tardives d'une cible perdue
@@ -900,7 +940,7 @@ function postMerge(jobSlug, pool, payload) {
                 // Tôle concave substituée : même config que les walks.
                 ...(engineSendOf(payload).swapped ? { narrow_concavity_cutoff: null } : {}),
             },
-            runs,
+            runs: chosen,
             biases: payload?.engineConfig?.biases || [],
             n_alternatives: payload?.engineConfig?.n_alternatives,
         },

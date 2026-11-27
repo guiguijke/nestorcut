@@ -14,6 +14,7 @@ import {
 } from './localBridge'
 import { sheetCentre, sheetPositions } from '../utils/partPositions.js'
 import { entityIndexOf } from '../utils/dxfEntities.js'
+import { compareStockScores, deliveredScore, unlimitedLayoutTest } from '../utils/sheetStock.js'
 
 /** Contour d'une tôle importée (repère de la tôle : la tôle ENTIÈRE, la
  * VRAIE — à distance au bord, le contour d'origine de `sheetFrames`, jamais le
@@ -211,10 +212,14 @@ async function appendBppGrid(result, payload) {
     })
     const spaceMm = Number(payload?.engineConfig?.min_item_separation) || 0
     const gridStats = { errors: [] }
-    const gridLayouts = await buildGridLayoutsMulti(
+    let gridLayouts = await buildGridLayoutsMulti(
         parts, geomOf, sheets, spaceMm, gridStats,
         { pinwheelCapacity: geoPinwheelCapacity })
     if (!gridLayouts) return { built: false, errors: gridStats.errors }
+    // Tôle illimitée : le stock vient devant, la grille le traverse tôle par
+    // tôle ; une tôle trop petite pour elle reste vide, elle n'est pas livrée
+    // (après les contrôles du constructeur, qui comptent layouts[k] ↔ tôle k).
+    if (unlimitedLayoutTest(payload)) gridLayouts = gridLayouts.filter((l) => l.placed_items?.length)
     const ringArea = (coords) => {
         let s = 0
         for (let i = 0; i < coords.length; i++) {
@@ -419,7 +424,19 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
         alternatives = toServerShapeAlternatives(result, payload, arts, sourceIndex) || []
         const DIRECTION_ORDER = { grid: -1, left: 0, bottom: 1, balanced: 2 }
         const known = alternatives.some((a) => a.strategy in DIRECTION_ORDER)
+        // Tôle illimitée : d'abord le même choix qu'avant la fusion
+        // (`compareStockScores`), puis l'ordre d'avant ; la grille ne passe donc
+        // devant que si ce choix ne la met pas derrière. Un rapport sans origine :
+        // on ne juge pas (ordre d'avant pour toutes).
+        const scores = unlimitedLayoutTest(payload) === null ? null : new Map(alternatives.map((a, i) => [
+            a, deliveredScore(a.report, result.alternatives[sourceIndex[i] ?? i]?.solution, payload),
+        ]))
+        const byStock = scores !== null && [...scores.values()].every(Boolean)
         const cmp = (x, y) => {
+            if (byStock) {
+                const d = compareStockScores(scores.get(x), scores.get(y))
+                if (d) return d
+            }
             if (known) {
                 const dx = DIRECTION_ORDER[x.strategy] ?? 99
                 const dy = DIRECTION_ORDER[y.strategy] ?? 99

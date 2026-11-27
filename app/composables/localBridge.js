@@ -18,6 +18,7 @@
  */
 import { geoExportSvgSheet, geoComputeReport, geoExportDxfSheet } from './geometryClient'
 import { withSheetShapeSvg, shortHash } from '~~/app/utils/sheetDraw.js'
+import { sortStockFirst, unlimitedLayoutTest } from '~~/app/utils/sheetStock.js'
 import { ringCentroid } from './structureClient'
 
 const degToRad = (deg) => (deg * Math.PI) / 180
@@ -1847,6 +1848,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
         const qaParts = qa?.dumpPrePostPass
             ? parts.map((p) => ({ id: String(p.id), coords: p.coords, holes: p.holes || [] }))
             : null
+        // Tôle illimitée (null sinon : chaque ligne qui le lit est sautée) :
+        // les tôles du stock passent devant, tôle 1 = stock.
+        const isNew = unlimitedLayoutTest(payload)
         for (const alt of alternatives) {
             const layouts = normalizeLayouts(alt.solution)
             if (!layouts.length) {
@@ -1872,6 +1876,8 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     })),
                 }))
                 : null
+            // Même ordre que l'état livré, pour comparer tôle à tôle.
+            if (isNew && qaLayoutsPre) sortStockFirst(qaLayoutsPre, isNew)
             // Alternative structurelle AUTO-SUFFISANTE (constat 2026-08-29) :
             // ids d'origine + trous déjà remplis par le pass grille. Le remap
             // idMap CORROMPRait ses ids (un id d'origine indexé comme id
@@ -1931,6 +1937,14 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 // sont légitimement pas rattachées, et les compter ferait
                 // refuser une alternative parfaitement saine.
                 expansionPlanned = _plannedExpansion(payload.meta, hostsBefore)
+            }
+            // Stock d'abord dès ici : les traces des passes ci-dessous citent les
+            // tôles par leur rang livré, et la bande résiduelle sert le stock en
+            // premier. La trace « dernière tôle » du moteur (`finish.sheet`) suit.
+            if (isNew) {
+                const order = sortStockFirst(layouts, isNew)
+                const sheet = order.indexOf(alt.finish?.sheet)
+                if (sheet >= 0) alt.finish = { ...alt.finish, sheet }
             }
             // A2 (lot 4) : comptes par classe APRÈS expansion, AVANT
             // hole-fill/résiduel — miroir exact du engine_placed_by_id
@@ -2023,6 +2037,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                     }
                 }
             }
+            // L'ordre LIVRÉ, après TOUTES les passes et avant tout ce qui se
+            // livre : le stock d'abord, tri stable, en place.
+            if (isNew) sortStockFirst(layouts, isNew)
             // Distance au bord : LE point de retour au repère réel, une fois,
             // pour TOUTE alternative (moteur, grille structurelle, grille BPP),
             // après TOUTES les passes (elles travaillent dans le repère moteur)
@@ -2145,6 +2162,13 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             const report = markUnresolvedShapes(report0, reportShapes)
             applySpacingMargin(report, space - requestedSpace, requestedSpace, requestedEdge)
             applyTrueAreasToReport(report, containers, partsById)
+            // Origine de chaque tôle du rapport (champ ADDITIF, seulement avec une
+            // tôle illimitée) : prise sur le stock, ou à prévoir.
+            if (isNew && Array.isArray(report?.per_sheet)) {
+                report.per_sheet.forEach((row, i) => {
+                    if (row && layouts[i]) row.supply = isNew(layouts[i]) ? 'new' : 'stock'
+                })
+            }
             // Plafonnage holesFilled + holesOverflow (miroir verify_layout
             // d57cbea) : le bundle wasm compte sans plafond — un double-
             // remplissage passerait silencieusement (cas trou600).

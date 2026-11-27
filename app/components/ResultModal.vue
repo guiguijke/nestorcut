@@ -75,6 +75,8 @@ import { onMounted, nextTick } from 'vue'
 import { reportExportState, reportPdfState } from '~/utils/reportExport'
 import { reportPdfClick } from '~/utils/reportPdfClick'
 import { capacityPanelModel } from '~/utils/capacityPanel'
+import { sheetsForProject } from '~/utils/sheetStock'
+import { hasSupply, materialBySupply, materialKeys, supplyColumn } from '~/utils/reportSupply'
 import { flagOn } from '~/utils/runtimeFlag'
 import { maxDownloadableSheet, relaunchFreeNoteKind, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
@@ -347,7 +349,9 @@ const capacityPanel = computed(() => {
         maxSpacingZeroFits: u.maxSpacingZeroFits,
         unplaced: u.unplaced,
     }, {
-        sheets: p.sheets || [],
+        // Quantité illimitée : lue pour un projet « Cet appareil » seulement
+        // (pas de « Ajouter des tôles » alors).
+        sheets: sheetsForProject(p.sheets || [], Boolean(unref(filesStore.getters.projectLocal))),
         spaceMm: displayToMm(num(p.space)),
         kerfMm: displayToMm(num(p.kerf)),
     })
@@ -498,9 +502,10 @@ const materialFormats = computed(() => {
     if (!totals || !Array.isArray(totals.formats)) return ''
     // Tôle importée : la boîte reste la TAILLE, l'étiquette dit que ce n'est
     // pas un rectangle (l'aire à commander est l'aire utile, pas la boîte).
-    return totals.formats
-        .map((f) => `${f.count} × ${fmtLength(f.widthMm)} × ${fmtLength(f.heightMm)}${f.shaped ? ` (${t('settings.sheetShape.badge')})` : ''}`)
-        .join(' + ')
+    const formatText = (f) => `${f.count} × ${fmtLength(f.widthMm)} × ${fmtLength(f.heightMm)}${f.shaped ? ` (${t('settings.sheetShape.badge')})` : ''}`
+    // Tôle illimitée : « du stock » et « à prévoir » à part (depuis les lignes).
+    if (hasSupply(unref(reportSheets))) return materialBySupply(unref(reportSheets), formatText, t)
+    return totals.formats.map(formatText).join(' + ')
 })
 
 const offcutText = (off) => {
@@ -527,7 +532,7 @@ const buildReportText = () => {
     const name = `${projectLabel || unref(resultModalData).slug} · ${t('result.option', { n: unref(activeAlt) + 1 })} · ${unref(resultModalData).slug}`
     const lines = [
         t('report.text.title', { name }),
-        t('report.text.material', { formats: unref(materialFormats) }),
+        t(materialKeys(unref(reportSheets)).text, { formats: unref(materialFormats) }),
         t('report.text.totals', {
             sheets: totals.sheetCount,
             parts: fmtArea(totals.partsAreaMm2),
@@ -590,6 +595,8 @@ const exportCsv = () => {
     const csvLen = (mm) => fmtLengthValueRaw(mm, unref(unit))
     const csvArea = (mm2) => (isInch ? (mm2 / SQMM_PER_SQIN).toFixed(1) : String(Math.round(mm2)))
     const reusableLabel = (off) => (off.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap'))
+    // Colonne « Origine » : seulement pour un calcul à tôle illimitée.
+    const supply = supplyColumn(sheets, t)
     const headers = [
         t('report.sheet.num'),
         `${t('report.sheet.format')} W (${lenUnit})`,
@@ -602,8 +609,9 @@ const exportCsv = () => {
         `${t('report.sheet.offcut')} H (${lenUnit})`,
         `${t('report.sheet.offcut')} (${areaUnit})`,
         t('report.offcut.reusable'),
+        ...(supply ? [supply.header] : []),
     ]
-    const rows = sheets.map((s) => [
+    const rows = sheets.map((s, i) => [
         s.index + 1,
         csvLen(s.widthMm), csvLen(s.heightMm),
         s.partCount,
@@ -613,6 +621,7 @@ const exportCsv = () => {
         s.offcut ? csvLen(s.offcut.heightMm) : '',
         s.offcut ? csvArea(s.offcut.areaMm2) : '',
         s.offcut ? reusableLabel(s.offcut) : '',
+        ...(supply ? [supply.cells[i]] : []),
     ])
     if (totals) {
         rows.push([
@@ -621,6 +630,7 @@ const exportCsv = () => {
             csvArea(totals.partsAreaMm2), csvArea(totals.freeAreaMm2),
             totals.densityPct != null ? totals.densityPct.toFixed(1) : '',
             '', '', '', '',
+            ...(supply ? [''] : []),
         ])
     }
     // BOM: Excel opens UTF-8 (French accents) correctly.

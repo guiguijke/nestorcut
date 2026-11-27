@@ -225,6 +225,29 @@ export default defineEventHandler(async (event) => {
         return raw
     }
 
+    // « Quantité illimitée » d'une tôle : booléen seulement, et pour un projet
+    // « cet appareil » seulement (le worker Python ne sait pas la lire) ; refus
+    // 400 AVANT toute charge de quota, comme edge_distance_local_only. `false`
+    // n'écrit rien : la clé n'existe même pas, le document reste ce qu'il était.
+    const checkedUnlimited = (raw) => {
+        if (typeof raw !== 'boolean') {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'unlimited_sheet_invalid',
+                data: { reason: 'unlimited_sheet_invalid' },
+            })
+        }
+        if (!raw) return {}
+        if (isDemo || !project.local) {
+            throw createError({
+                statusCode: 400,
+                statusMessage: 'unlimited_sheet_local_only',
+                data: { reason: 'unlimited_sheet_local_only' },
+            })
+        }
+        return { unlimited: true }
+    }
+
     // Multi-sheet: the client sends params.sheets (list of sheet types with
     // their own dimensions and stock). Legacy clients send a single
     // width/height/sheetCount — normalized to the same shape. Demo nestings
@@ -243,6 +266,7 @@ export default defineEventHandler(async (event) => {
                 // un nom ni une forme. Absent pour une tôle rectangulaire : la
                 // clé n'existe même pas, le document reste ce qu'il était.
                 ...(sheet.shapeId != null ? { shapeId: checkedShapeId(sheet.shapeId) } : {}),
+                ...(sheet.unlimited !== undefined ? checkedUnlimited(sheet.unlimited) : {}),
             }))
             .filter(isValidSheet)
         // Jamais de troncature muette : une tôle en trop serait perdue sans un mot.
@@ -338,7 +362,9 @@ export default defineEventHandler(async (event) => {
         throw invalidSheetError()
     }
     // d6 : borne technique, tous paliers, démo comprise — avant le 422 et toute charge.
-    assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (Number(s.count) || 0), 0))
+    // Une tôle à quantité illimitée ne compte pas : le navigateur lui donne ce que
+    // la borne laisse après le stock.
+    assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (s.unlimited ? 0 : Number(s.count) || 0), 0))
     if (!project.local) {
         const partsBySlug = new Map(
             userDxfFilesDatabase.map((f) => [f.slug, f.polygonParts || []]),

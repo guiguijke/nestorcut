@@ -316,18 +316,21 @@ export function inferLiveFormats({ bins, items, parts, hint } = {}) {
 }
 
 /**
- * Champs à ajouter à une frame live d'un job à tôle importée et à PLUSIEURS
- * formats : `binFormats` (format de chaque rang) et `sheets` (boîte de chaque
- * rang), les mêmes que sur la frame finale — la vue dessine alors chaque tôle
- * avec SA forme dès les premières frames. `{}` pour tout autre job (un seul
- * format, ou aucune tôle importée) : la frame reste celle d'avant.
+ * Champs à ajouter à une frame live d'un job à PLUSIEURS conteneurs et à tôle
+ * importée, ou à tôle illimitée (`stockPriority` : le même format y occupe deux
+ * conteneurs, le rang ne dit rien de la tôle) : `binFormats` (format de chaque
+ * rang) et `sheets` (boîte de chaque rang), les mêmes que sur la frame finale —
+ * la vue dessine alors chaque tôle avec SA forme dès les premières frames.
+ * `{}` pour tout autre job (un seul conteneur, ou ni tôle importée ni tôle
+ * illimitée) : la frame reste celle d'avant.
  * `hints` : Map walk -> dernier choix, pour qu'il ne saute pas d'une frame à
  * l'autre ; elle est mise à jour ici.
  */
 export function liveFormatFields(payload, items, hints = null, worker = 0) {
     const shaped = payload?.shapedSheets
     const bins = payload?.instance?.bins
-    if (!Array.isArray(shaped) || !shaped.length || !Array.isArray(bins) || bins.length < 2) return {}
+    const wanted = (Array.isArray(shaped) && shaped.length > 0) || Boolean(payload?.stockPriority)
+    if (!wanted || !Array.isArray(bins) || bins.length < 2) return {}
     const inferred = inferLiveFormats({
         bins,
         items,

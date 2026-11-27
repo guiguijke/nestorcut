@@ -13,6 +13,7 @@ import {
 } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
 import { exceedsMaxSheets } from '~/utils/capacityPanel'
+import { isUnlimitedSheet, sheetsForProject } from '~/utils/sheetStock'
 import { flagOn } from '~/utils/runtimeFlag'
 import { MAX_UPLOAD_FILES } from '~~/shared/constants/upload.constants'
 import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
@@ -248,14 +249,15 @@ function createFilesState() {
         // paramètres sont INVALIDES » — l'ancien nom isValidParams (sémantique
         // inversée) était un piège de maintenance.
         isInvalidParams: computed(() => {
-            const sheets = normalizedSheets(state.params)
+            // Quantité illimitée (projet « Cet appareil ») : la quantité saisie
+            // n'est pas lue, elle n'a pas à être valide.
+            const sheets = sheetsForProject(normalizedSheets(state.params), state.projectLocal)
             if (sheets.length === 0) return false
             const invalid = sheets.some(
                 (sheet) =>
                     !isValidNumber(sheet.width) ||
                     !isValidNumber(sheet.height) ||
-                    !/^\d+$/.test(String(sheet.count)) ||
-                    Number(sheet.count) < 1
+                    (!isUnlimitedSheet(sheet) && !isValidSheetCount(sheet.count))
             )
             return (
                 invalid ||
@@ -276,8 +278,11 @@ function createFilesState() {
             })
         ),
         requestBody: computed(() => {
-            const sheets = normalizedSheets(state.params)
+            // Quantité illimitée : lue pour un projet « Cet appareil » seulement ;
+            // elle part alors avec `unlimited: true` et une quantité de 1.
+            const sheets = sheetsForProject(normalizedSheets(state.params), state.projectLocal)
             const first = sheets[0] || { width: 0, height: 0, count: 0 }
+            const sentCount = (sheet) => (isUnlimitedSheet(sheet) ? 1 : Number(sheet.count))
             // Params hold DISPLAY-unit strings (the user's preferred unit) — the
             // API and the whole pipeline speak canonical mm, so convert here,
             // at the boundary.
@@ -296,17 +301,19 @@ function createFilesState() {
                     sheets: sheets.map((sheet) => ({
                         width: toMm(sheet.width),
                         height: toMm(sheet.height),
-                        count: Number(sheet.count),
+                        count: sentCount(sheet),
                         // Tôle importée d'un DXF : l'identifiant opaque (slug du
                         // dossier local) et RIEN d'autre — ni son nom, ni sa
                         // forme, qui restent dans le navigateur.
                         ...(sheet.shapeId ? { shapeId: String(sheet.shapeId) } : {}),
+                        // Quantité illimitée : clé absente sinon.
+                        ...(isUnlimitedSheet(sheet) ? { unlimited: true } : {}),
                     })),
                     // Legacy mirror of the first sheet — older workers/APIs only
                     // understand width/height/sheetCount.
                     width: toMm(first.width),
                     height: toMm(first.height),
-                    sheetCount: Number(first.count),
+                    sheetCount: sentCount(first),
                     tolerance: Number(state.params.tolerance),
                     space: toMm(state.params.space),
                     ...(edgeValue !== null ? { edgeDistance: displayToMm(edgeValue, unit) } : {}),
@@ -1141,6 +1148,10 @@ async function addSheetCamJobDrop(drop, slug) {
 function isValidNumber(value) {
     return /^\d+([.,]\d+)?$/.test(value)
 }
+/** Quantité d'une tôle : un entier d'au moins 1. */
+function isValidSheetCount(value) {
+    return /^\d+$/.test(String(value)) && Number(value) >= 1
+}
 /**
  * Sheets list with backward compatibility: params written before the
  * multi-sheet feature only had widthPlate/heightPlate/sheetCount.
@@ -1214,6 +1225,27 @@ function updateSheet(index, patch) {
     state.params = { ...state.params, sheets }
     scheduleSnapshotPersist()
 }
+/**
+ * Coche ou décoche « Quantité illimitée » d'une tôle. Cochée : `unlimited: true`
+ * (la quantité saisie est gardée, mise à '1' si elle était invalide ou nulle).
+ * Décochée : la clé est RETIRÉE (jamais `false`).
+ */
+function setSheetUnlimited(index, unlimited) {
+    const state = filesState()
+    const sheets = normalizedSheets(state.params).map((sheet, i) => {
+        if (i !== index) return sheet
+        const next = { ...sheet }
+        if (!unlimited) {
+            delete next.unlimited
+            return next
+        }
+        if (!isValidSheetCount(next.count)) next.count = '1'
+        next.unlimited = true
+        return next
+    })
+    state.params = { ...state.params, sheets }
+    scheduleSnapshotPersist()
+}
 function addSheet() {
     const state = filesState()
     const sheets = normalizedSheets(state.params)
@@ -1222,10 +1254,12 @@ function addSheet() {
     state.factorySheetReplaced = '' // la note a été lue : elle ne revient pas
     const last = sheets[sheets.length - 1] || { ...DEFAULT_SHEET.mm, count: '1' }
     // Une tôle simple : la copie d'une tôle importée ne reprend pas son
-    // shapeId (width/height = sa boîte englobante, éditables).
+    // shapeId (width/height = sa boîte englobante, éditables), ni la quantité
+    // illimitée.
     const plain = { ...last, count: '1' }
     delete plain.shapeId
     delete plain.name
+    delete plain.unlimited
     state.params = { ...state.params, sheets: [...sheets, plain] }
     scheduleSnapshotPersist()
 }
@@ -1258,7 +1292,8 @@ function addSheetFromShape(record, { hasResult = false } = {}) {
     // --- Tôle d'usine intacte REMPLACÉE (à valider par le propriétaire) : ce bloc,
     // `factorySheetReplaced` et la note des réglages s'enlèvent ensemble. Sans
     // résultat encore : un calcul déjà fait garde sa tôle, l'import s'ajoute.
-    if (!hasResult && isUntouchedFactorySheet(sheets, state.paramsUnit)) {
+    // Une tôle d'usine cochée « quantité illimitée » a été réglée : elle reste.
+    if (!hasResult && isUntouchedFactorySheet(sheets, state.paramsUnit) && !isUnlimitedSheet(sheets[0])) {
         const factory = factorySheetOf(state.paramsUnit)
         state.params = { ...state.params, sheets: [shapeSheetEntry(record, 1)] }
         state.factorySheetReplaced = record.slug
@@ -1276,9 +1311,14 @@ function replaceSheetShape(index, record) {
     const state = filesState()
     const sheets = normalizedSheets(state.params)
     if (!Number.isInteger(index) || index < 0 || index >= sheets.length) return
+    // La quantité de la ligne est gardée, illimitée comprise.
+    const replaced = (sheet) => ({
+        ...shapeSheetEntry(record, sheet.count),
+        ...(isUnlimitedSheet(sheet) ? { unlimited: true } : {}),
+    })
     state.params = {
         ...state.params,
-        sheets: sheets.map((sheet, i) => (i === index ? shapeSheetEntry(record, sheet.count) : sheet)),
+        sheets: sheets.map((sheet, i) => (i === index ? replaced(sheet) : sheet)),
     }
     state.shapeRevision++
     // Une retouche qui laisse le corps de la requête identique (même boîte, même nom) ne doit pas
@@ -1620,8 +1660,9 @@ export const filesStore = readonly({
         requestBody: getter((state) => state.requestBody),
         shapeRevision: getter((state) => state.shapeRevision),
         demoQuotaReached: getter((state) => state.demoQuotaReached),
-        // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB).
-        sheetCountTooHigh: getter((state) => exceedsMaxSheets(normalizedSheets(state.params))),
+        // d6 : miroir UX de la borne technique (Σ count > MAX_SHEETS_PER_JOB),
+        // quantités illimitées non comptées (comme le serveur).
+        sheetCountTooHigh: getter((state) => exceedsMaxSheets(sheetsForProject(normalizedSheets(state.params), state.projectLocal))),
         nestError: getter((state) => state.nestError),
         nestRefusals: getter((state) => state.nestRefusals),
         // Plus de formats que le serveur n'en prend : refusé ici avant le POST.
@@ -1660,6 +1701,7 @@ export const filesStore = readonly({
         updateKerfSafety,
         updateEdgeDistance,
         updateSheet,
+        setSheetUnlimited,
         // Lot E4-b/E4-c : actions « Échelle » et « Éclater » SUR LA FICHE.
         openFicheScale,
         applyFicheScale,

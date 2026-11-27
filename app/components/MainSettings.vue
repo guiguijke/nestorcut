@@ -13,7 +13,7 @@
                         <span
                             :class="['sheet__label', { 'sheet__label--named': sheet.shapeId && sheet.name }]"
                             :title="sheet.shapeId && sheet.name ? sheet.name : undefined"
-                        >{{ sheet.shapeId && sheet.name ? sheet.name : t('settings.sheet', { n: index + 1 }) }}</span>
+                        >{{ sheetTitle(sheet, index) }}</span>
                         <span v-if="sheet.shapeId" class="shape__badge">{{ t('settings.sheetShape.badge') }}</span>
                         <!-- Une tôle importée seule reste retirable : elle est alors remplacée par la tôle simple d'usine. -->
                         <button
@@ -77,11 +77,39 @@
                     <InputField
                         :prefix="t('settings.count')"
                         :suffix="t('settings.units')"
-                        :modelValue="sheet.count"
+                        :modelValue="unlimitedOn(sheet) ? '∞' : sheet.count"
+                        :is-disable="unlimitedOn(sheet)"
+                        :disabled="unlimitedOn(sheet)"
                         @update:modelValue="(value) => updateSheet(index, { count: value })"
                         class="size__input"
                     />
+                    <!-- Quantité illimitée : prise après les tôles à quantité
+                         fixe. Calcul dans le navigateur seulement : grisée
+                         ailleurs, avec sa raison sous la liste. -->
+                    <label
+                        :class="['size__checkbox', 'size__unlimited', { 'size__unlimited--off': !isLocalProject }]"
+                    >
+                        <input
+                            type="checkbox"
+                            data-testid="settings-sheet-unlimited"
+                            :aria-label="t('settings.sheetUnlimitedAria', { sheet: sheetTitle(sheet, index) })"
+                            :aria-describedby="unlimitedDescription(sheet, index)"
+                            :checked="unlimitedOn(sheet)"
+                            :disabled="!isLocalProject"
+                            @change="setSheetUnlimited(index, $event.target.checked)"
+                        />
+                        <span>{{ t('settings.sheetUnlimited') }}</span>
+                    </label>
+                    <p
+                        v-if="unlimitedOn(sheet)"
+                        :id="`${unlimitedId}-hint-${index}`"
+                        class="size__rule"
+                        data-testid="settings-sheet-unlimited-hint"
+                    >{{ t('settings.sheetUnlimitedHint', { n: fmtNumber(MAX_SHEETS_PER_JOB, 0) }) }}</p>
                 </div>
+                <p v-if="!isLocalProject" :id="`${unlimitedId}-local`" class="size__rule" data-testid="settings-unlimited-local-only">
+                    {{ t('settings.sheetUnlimitedLocalOnly') }}
+                </p>
                 <button
                     class="size__add"
                     :disabled="formatsAtLimit"
@@ -275,7 +303,9 @@
 
 <script setup>
     import { DEFAULT_SHEET, SHEET_PRESETS } from '~/utils/units'
-    import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
+    import { useId } from 'vue'
+    import { MAX_SHEET_FORMATS, MAX_SHEETS_PER_JOB } from '~~/shared/constants/payment.constants'
+    import { isUnlimitedSheet } from '~/utils/sheetStock'
     import { holesDisabledHintVisible } from '~/utils/holesHint'
     import { edgeDistanceNumber, isValidEdgeDistance } from '~/utils/spacingParams'
     import { maxOverhangMm } from '~/utils/partSheetFit'
@@ -289,10 +319,10 @@
         rotationSegment,
     } from '~/utils/rotationChoice'
 
-    const { t } = useLocale()
+    const { t, fmtNumber } = useLocale()
     const { unit, unitLabel, enabled: unitsEnabled, fmtLength, fmtLengthValue, fmtLengthMax, displayToMm } = useUnit()
     const { getters, actions } = filesStore
-    const { updateParams, updateKerfSafety, updateEdgeDistance, updateSheet, addSheet, removeSheet } = actions
+    const { updateParams, updateKerfSafety, updateEdgeDistance, updateSheet, setSheetUnlimited, addSheet, removeSheet } = actions
     const params = computed(() => getters.params)
 
     // Standard sheet sizes of the current unit (a US user picks 48×96 from a
@@ -307,6 +337,18 @@
     // Tôle importée d'un DXF : projet local seulement. Entrée (« Importer »),
     // édition des zones (ligne `index`), et suppression avec son enregistrement.
     const isLocalProject = computed(() => Boolean(unref(getters.projectLocal)))
+    // Quantité illimitée active : cochée ET projet « Cet appareil » (ailleurs la
+    // quantité saisie vaut).
+    const unlimitedOn = (sheet) => isLocalProject.value && isUnlimitedSheet(sheet)
+    // Nom d'une ligne de tôle : celui de la tôle importée, sinon son rang.
+    const sheetTitle = (sheet, index) => (sheet.shapeId && sheet.name ? sheet.name : t('settings.sheet', { n: index + 1 }))
+    // La case est décrite par la phrase affichée à son sujet : l'aide quand elle
+    // est cochée, la raison quand le projet ne la permet pas.
+    const unlimitedId = useId()
+    const unlimitedDescription = (sheet, index) => {
+        if (!isLocalProject.value) return `${unlimitedId}-local`
+        return unlimitedOn(sheet) ? `${unlimitedId}-hint-${index}` : undefined
+    }
     // Plafond de formats (le serveur refuse au-delà) : on n'en ajoute plus.
     const formatsAtLimit = computed(() => Boolean(unref(getters.sheetFormatsAtLimit)))
     // Note unique : la tôle d'usine intacte a été remplacée par la tôle importée.
@@ -348,7 +390,9 @@
             // removeSheet garde toujours une tôle : l'unique tôle importée est
             // remplacée par la tôle simple d'usine (même quantité).
             const dflt = DEFAULT_SHEET[unit.value === 'inch' ? 'inch' : 'mm']
-            updateParams({ sheets: [{ width: dflt.width, height: dflt.height, count: target.count ?? '1' }] })
+            // « Même quantité » : une quantité illimitée le reste.
+            const quantity = { count: target.count ?? '1', ...(isUnlimitedSheet(target) ? { unlimited: true } : {}) }
+            updateParams({ sheets: [{ width: dflt.width, height: dflt.height, ...quantity }] })
         } else {
             removeSheet(index)
         }
@@ -709,6 +753,30 @@ const spacingBelowKerf = computed(() => {
                 flex-shrink: 0;
                 cursor: pointer;
                 accent-color: var(--accent-primary);
+            }
+        }
+
+        // Quantité illimitée : cible tactile d'une ligne ; grisée hors projet
+        // « Cet appareil ».
+        &__unlimited {
+            min-height: 28px;
+
+            input {
+                margin-top: 0;
+            }
+
+            input:focus-visible {
+                outline: none;
+                box-shadow: var(--focus-ring);
+            }
+
+            &--off {
+                color: var(--label-tertiary);
+                cursor: not-allowed;
+
+                input {
+                    cursor: not-allowed;
+                }
             }
         }
     }

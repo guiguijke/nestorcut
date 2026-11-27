@@ -1,4 +1,5 @@
 import { MAX_SHEETS_PER_JOB } from '~~/shared/constants/payment.constants'
+import { hasUnlimitedSheet, isUnlimitedSheet } from './sheetStock'
 
 /**
  * Z1 (vérif 2026-09-05) : modèle du bandeau « refus capacité » de la page
@@ -19,12 +20,14 @@ const finiteOrNull = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v)
  * (nest.post.js : `Math.floor(count)`, puis `count >= 1`) et que le « premier
  * format actif » de addSheetsPlan. PAS la règle `Number(c) || 1` de
  * capacityClient.js, qui compte un format sans quantité pour une tôle.
- * @param {Array<{count?: any}>} sheets
+ * Une tôle à quantité illimitée ne compte pas (comme le serveur) : l'appelant
+ * passe les lignes telles que le projet les lit (`sheetsForProject`).
+ * @param {Array<{count?: any, unlimited?: boolean}>} sheets
  * @returns {number}
  */
 export function declaredSheetCount(sheets) {
     if (!Array.isArray(sheets)) return 0
-    return sheets.reduce((sum, s) => sum + Math.max(0, Math.trunc(Number(s?.count) || 0)), 0)
+    return sheets.reduce((sum, s) => sum + (isUnlimitedSheet(s) ? 0 : Math.max(0, Math.trunc(Number(s?.count) || 0))), 0)
 }
 
 /**
@@ -44,12 +47,13 @@ export function exceedsMaxSheets(sheets, max = MAX_SHEETS_PER_JOB) {
  * @param {Array<{count?: any}>} sheets réglages courants (chaînes d'unité d'affichage)
  * @param {number} [max] borne technique
  * @returns {{ k: number, nextSheets: object[] } | null}
- *   null si aucun format actif (rien à incrémenter) ou si déclaré + k > max.
+ *   null si aucun format actif (rien à incrémenter), si déclaré + k > max, ou
+ *   si une tôle est à quantité illimitée (ajouter des tôles n'a pas de sens).
  *   nextSheets = sheets avec le count du PREMIER format actif augmenté de k,
  *   en CHAÎNE (les champs de réglage sont des chaînes) ; les autres inchangés.
  */
 export function addSheetsPlan(unfit, sheets = [], max = MAX_SHEETS_PER_JOB) {
-    if (!Array.isArray(sheets)) return null
+    if (!Array.isArray(sheets) || hasUnlimitedSheet(sheets)) return null
     const firstIdx = sheets.findIndex((s) => Math.trunc(Number(s?.count) || 0) > 0)
     if (firstIdx < 0) return null
     const declared = declaredSheetCount(sheets)

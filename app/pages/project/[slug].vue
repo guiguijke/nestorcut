@@ -284,7 +284,7 @@ import { firstPartFittingNoSheet, maxEdgeForPartMm, maxOverhangMm } from "~/util
 import { hasPaidAccess } from "~/utils/entitlementUi";
 import { freeDownloadNoteVisible, importedSheetLockVisible, sheetDownloadState } from "~/utils/sheetDownloadState";
 import { FREE_DOWNLOAD_SHEET_CAP, MAX_SHEETS_PER_JOB, MAX_SHEET_FORMATS } from "~~/shared/constants/payment.constants";
-import { capacityReport, REFERENCE_PACKING } from "~/composables/capacityClient";
+import { capacityReport, stockFirstEstimate, REFERENCE_PACKING } from "~/composables/capacityClient";
 import { computeSpacingMargin } from "~/composables/localPayloadBuilder";
 import {
     preflightParts,
@@ -309,6 +309,7 @@ import {
     DEMO_SPACE_MM,
 } from "~~/shared/constants/demo.constants";
 import { idlePaneModel } from "~/utils/idlePanes";
+import { effectiveSheets, sheetsForProject } from "~/utils/sheetStock";
 import { ZONE_RED, shapeToDrawPaths } from "~/utils/sheetDraw";
 import { displayShape, engineBinShape } from "~~/app/utils/sheetShape";
 import { PRIVACY_CHIP_KEY, PRIVACY_STATUS_KEY, projectPrivacyMode } from "~/utils/privacyMode";
@@ -637,7 +638,7 @@ const projectFilesCount = computed(() => (filesGetters.projectFiles || []).lengt
 // Absent = pas encore lu ; null = enregistrement absent ou inutilisable ; SHAPE_UNREADABLE =
 // lecture refusée. Des nombres seulement, bruts : aucun suivi profond de Vue.
 const shapeStats = shallowRef({});
-const preflightSheets = computed(() => preflightSheetsOf(unref(currentSheets), unref(shapeStats), displayToMm));
+const preflightSheets = computed(() => preflightSheetsOf(unref(projectSheets), unref(shapeStats), displayToMm));
 // Distance au bord demandée (mm), ou null : champ vide, illisible, ou champ grisé
 // (démo, fichier DWG, calcul navigateur coupé : la requête ne le porte pas, voir
 // edgeBlock du store, même règle que le serveur).
@@ -671,8 +672,13 @@ const preflightReport = computed(() => {
     // Bord réglé : même marge de courbes que l'espacement (elle s'ajoute aux deux).
     // Non réglé : l'appel d'avant, à trois arguments.
     const edgeMm = unref(edgeRequestedMm)
-    if (edgeMm === null) return capacityReport(parts, model.sheets, spaceMm + curveMargin)
-    return capacityReport(parts, model.sheets, spaceMm + curveMargin, { edge: edgeMm + curveMargin })
+    const edge = edgeMm === null ? {} : { edge: edgeMm + curveMargin }
+    const report = edgeMm === null
+        ? capacityReport(parts, model.sheets, spaceMm + curveMargin)
+        : capacityReport(parts, model.sheets, spaceMm + curveMargin, edge)
+    // Tôle illimitée : « ≈ n tôles » remplit le stock d'abord ; sans elle, le
+    // rapport tel quel.
+    return stockFirstEstimate(report, parts, model.sheets, spaceMm + curveMargin, edge)
 })
 // Le chiffre « ≈ n tôles » : sans tôle importée toujours, comme avant ; avec une
 // tôle importée seulement si la forme est lue et que le rapport existe.
@@ -968,7 +974,7 @@ const idleSheet = computed(() => {
 // Scène au repos : un panneau par type de tôle (quantité > 0), taille et
 // libellé arrondis comme la ligne des réglages (fmtLength, unité d'affichage).
 const idlePanes = computed(() =>
-    idlePaneModel(unref(currentSheets), {
+    idlePaneModel(unref(projectSheets), {
         formatSize: (w, h) => `${fmtLength(displayToMm(w))} × ${fmtLength(displayToMm(h))}`,
     })
 );
@@ -983,6 +989,12 @@ const currentSheets = computed(() => {
     // Legacy params shape (before multi-sheet).
     return [{ width: p.widthPlate ?? 0, height: p.heightPlate ?? 0 }];
 })
+// Les tôles telles que CE projet les lit : la quantité illimitée ne vaut que
+// pour un projet « Cet appareil » (ailleurs la clé est ignorée).
+const projectSheets = computed(() => sheetsForProject(unref(currentSheets), Boolean(unref(filesGetters.projectLocal))));
+// Pour les contrôles et l'estimation : une tôle illimitée porte sa quantité
+// effective, jamais la quantité saisie. Sans tôle illimitée : les mêmes lignes.
+const computedSheets = computed(() => effectiveSheets(unref(projectSheets)));
 // J2 : tôles importées au repos — la forme vient du navigateur (IndexedDB), pas
 // des réglages (qui ne portent que shapeId, nom et boîte). Illisible ou absente :
 // le panneau garde son rectangle. Une entrée par shapeId des panneaux affichés.
@@ -992,7 +1004,7 @@ const idleShapes = ref({});
 // a besoin des secondes aussi.
 const shapeIdsWanted = computed(() => [...new Set([
     ...idlePanes.value.panes.map((p) => p.shapeId),
-    ...unref(currentSheets).filter((s) => Math.trunc(Number(s?.count)) > 0).map((s) => s?.shapeId),
+    ...unref(computedSheets).filter((s) => Math.trunc(Number(s?.count)) > 0).map((s) => s?.shapeId),
 ].filter((id) => typeof id === "string" && id))]);
 // Relecture d'une forme dont la LECTURE a été refusée (IndexedDB fermée un instant) :
 // une fois, environ une seconde plus tard, puis à chaque retour de la fenêtre au premier plan.
@@ -1072,7 +1084,7 @@ watch(
 // hauteur de pièces différentes ne se posent pas ensemble sur une tôle.
 const partFitsNoSheet = computed(() => firstPartFittingNoSheet({
     files: projectFiles.value,
-    sheets: unref(currentSheets),
+    sheets: unref(computedSheets),
     toMm: displayToMm,
     rotationCount: unref(params)?.rotationCount,
     ...(unref(edgeRequestedMm) !== null ? { edgeMm: unref(edgeRequestedMm) } : {}),
@@ -1084,7 +1096,7 @@ const partFitsNoSheetPlain = computed(() => unref(edgeRequestedMm) === null
     ? partFitsNoSheet.value
     : firstPartFittingNoSheet({
         files: projectFiles.value,
-        sheets: unref(currentSheets),
+        sheets: unref(computedSheets),
         toMm: displayToMm,
         rotationCount: unref(params)?.rotationCount,
     }));
@@ -1098,7 +1110,7 @@ const minSheetEdgeMax = computed(() => {
     const files = (projectFiles.value || []).filter((f) => Number(f.count) > 0)
     const p = unref(params)
     const spaceMm = displayToMm(Number(String(p?.space ?? '0').replace(',', '.')) || 0)
-    return maxEdgeForPartMm(info.part, { sheets: unref(currentSheets), toMm: displayToMm, marginMm: computeSpacingMargin(files, spaceMm) })
+    return maxEdgeForPartMm(info.part, { sheets: unref(computedSheets), toMm: displayToMm, marginMm: computeSpacingMargin(files, spaceMm) })
 });
 // Bord négatif : plafond de dépassement (voir partSheetFit.maxOverhangMm). Une
 // pièce qui a moins de 1 % de matière sur la tôle est signalée au rapport.
@@ -1173,7 +1185,7 @@ const capacityPanel = computed(() => {
     const spaceNum = Number(String(p.space ?? '0').replace(',', '.')) || 0;
     const kerfNum = Number(String(p.kerf ?? '0').replace(',', '.')) || 0;
     return capacityPanelModel(unfit, {
-        sheets: unref(currentSheets),
+        sheets: unref(computedSheets),
         spaceMm: displayToMm(spaceNum),
         kerfMm: displayToMm(kerfNum),
         // Une seule source : le chiffre du bouton. Sans chiffre (forme pas lue ou
@@ -1243,7 +1255,7 @@ const freeDownloadNoteText = computed(() =>
 // Seulement une tôle importée qui SERVIRA : une quantité 0 est écartée du
 // payload (localPayloadBuilder.js:1143-1145, pas de shapedSheets, donc pas de
 // verrou à la sortie) — le job est ordinaire, aucune note.
-const projectHasImportedSheet = computed(() => unref(currentSheets).some((s) => Boolean(s?.shapeId) && Number(s?.count) > 0));
+const projectHasImportedSheet = computed(() => unref(computedSheets).some((s) => Boolean(s?.shapeId) && Number(s?.count) > 0));
 const ctaImportedNote = computed(() =>
     importedSheetLockVisible(unref(downloadState), unref(projectHasImportedSheet))
         ? t('nest.importedSheetNote') : '');

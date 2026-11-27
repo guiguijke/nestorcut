@@ -5,6 +5,7 @@
  * que les deux écrans posent les tôles de la même façon.
  */
 import { livePaneLayout } from './sheetView'
+import { isUnlimitedSheet } from './sheetStock'
 
 /** Même plafond que la vue live (MAX_LIVE_SHEETS) ; le reste devient « +N ». */
 export const MAX_IDLE_SHEETS = 6
@@ -15,13 +16,16 @@ const DEFAULT_H = 2000
 const num = (v) => Number(String(v).replace(',', '.'))
 
 /**
- * @param sheets      réglages : [{ width, height, count, shapeId?, name? }] (unité d'affichage)
+ * @param sheets      réglages : [{ width, height, count, shapeId?, name?,
+ *                    unlimited? }] (unité d'affichage), tels que le projet les
+ *                    lit (`sheetsForProject`)
  * @param formatSize  (w, h) → « 1000 mm × 1000 mm », arrondi comme la ligne des réglages
  * @returns { panes, truncated, totalW, totalH, gap } ; chaque panneau porte
  *   index (rang dans les réglages), w, h, viewW, viewH, landscape, dx,
  *   shapeId (null si rectangle), count, label.
  * Une tôle de quantité 0 n'est pas dessinée ; si toutes le sont, la première
- * reste affichée (comme avant).
+ * reste affichée (comme avant). Quantité illimitée : toujours dessinée,
+ * « … × ∞ », quelle que soit la quantité saisie.
  */
 export function idlePaneModel(sheets, { formatSize, max = MAX_IDLE_SHEETS } = {}) {
     const list = (Array.isArray(sheets) && sheets.length ? sheets : [{ width: DEFAULT_W, height: DEFAULT_H }])
@@ -34,9 +38,10 @@ export function idlePaneModel(sheets, { formatSize, max = MAX_IDLE_SHEETS } = {}
                 count: Number.isFinite(c) ? c : 1,
                 shapeId: s?.shapeId ? String(s.shapeId) : null,
                 name: s?.shapeId && s?.name ? String(s.name) : '',
+                unlimited: isUnlimitedSheet(s),
             }
         })
-    let kept = list.filter((s) => s.count > 0)
+    let kept = list.filter((s) => s.unlimited || s.count > 0)
     if (!kept.length) kept = [{ ...list[0], count: 1 }]
     const layout = livePaneLayout(
         kept.map((s) => [s.w, s.h]),
@@ -56,7 +61,7 @@ export function idlePaneModel(sheets, { formatSize, max = MAX_IDLE_SHEETS } = {}
             dx: p.dx,
             shapeId: s.shapeId,
             count: s.count,
-            label: s.count > 1 ? `${base} × ${s.count}` : base,
+            label: s.unlimited ? `${base} × ∞` : s.count > 1 ? `${base} × ${s.count}` : base,
         }
     })
     return {

@@ -706,9 +706,12 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
               const formatItems = edgeD && decorated?.edgeReal
                   ? shiftLiveItems(decorated.items, -edgeD)
                   : decorated?.items
+              // Tôle illimitée : la frame finale porte déjà la tôle EXACTE de
+              // chaque rang (stock d'abord), la déduction ne la remplace pas.
+              const knowsFormats = payload?.stockPriority && decorated?.stage === 'final'
               onLive(liveFrameToReal({
                   ...decorated,
-                  ...liveFormatFields(payload, formatItems, formatHints, evt?.worker ?? 0),
+                  ...(knowsFormats ? {} : liveFormatFields(payload, formatItems, formatHints, evt?.worker ?? 0)),
                   // Tôle importée : contour + zones (chemins prêts à dessiner,
                   // par format) pour la vue live ; {} pour un job rectangulaire.
                   // Reste dans le navigateur : jamais envoyé, jamais stocké.

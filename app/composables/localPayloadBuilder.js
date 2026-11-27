@@ -92,6 +92,8 @@ import { partMayFitSheet } from '~~/app/utils/partFit.js'
 import { EDGE_FIT_SLACK_MM } from '~~/app/utils/partSheetFit.js'
 // Distance au bord : règle partagée (lecture, décalage moteur d = e − s).
 import { edgeShiftMm } from '~~/app/utils/spacingParams.js'
+// Tôles à quantité illimitée : quantité effective, stock d'abord (règle partagée).
+import { isUnlimitedSheet, stockPriorityBins, unlimitedQuantity } from '~~/app/utils/sheetStock.js'
 
 /**
  * Centre de la boîte englobante du DESSIN COMPLET d'un fichier importé.
@@ -1141,9 +1143,12 @@ function sheetFrameOf(sheet) {
  * @param {object} args
  * @param {Array}  args.files   [{ slug, name, count, rotations?, parts: [...] }]
  *                              (géométrie IndexedDB déjà chargée par l'appelant)
- * @param {object} args.params  { sheets: [{width,height,count}], space,
- *                              fillHoles?, addOutShape?, outputUnit?,
- *                              directions?, alternativesCount?, name? }
+ * @param {object} args.params  { sheets: [{width,height,count,unlimited?}],
+ *                              space, fillHoles?, addOutShape?, outputUnit?,
+ *                              directions?, alternativesCount?, name? }.
+ *                              `unlimited: true` : quantité illimitée, le
+ *                              `count` de la ligne est alors ignoré
+ *                              (`utils/sheetStock.js`).
  * @param {object} args.profile profil navigateur (BROWSER_COMPUTE) :
  *                              { timeBudgetSec?, vcores?, maxDirections?,
  *                              level? } — 13 s / 1 vcore / 1 direction par
@@ -1182,6 +1187,17 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         count: Math.trunc(Number(s.count)),
     }))
     if (!sheets.length) throw new Error('buildLocalPayload: params.sheets requis (au moins une tôle)')
+    // Quantité illimitée : la ligne reçoit sa quantité effective (ce que la borne
+    // technique laisse après le stock) ; tout l'aval la lit comme un grand count
+    // (une tôle seule n'est donc jamais « de stock 1 » pour le choix bande ou
+    // multi-tôles). `unlimited[i]` suit le FORMAT i. Aucune illimitée : rien ne
+    // change.
+    const unlimited = (params.sheets || []).map(isUnlimitedSheet)
+    const hasUnlimited = unlimited.some(Boolean)
+    if (hasUnlimited) {
+        const quantity = unlimitedQuantity(params.sheets)
+        sheets.forEach((s, i) => { if (unlimited[i]) s.count = quantity })
+    }
     // Tôle importée d'un DXF (shapeId = slug du dossier local) : sa forme est
     // relue du navigateur. Un dossier absent arrête le job AVANT tout calcul
     // (sheet_shape_missing) : nicher dans le rectangle englobant, ce serait
@@ -1640,10 +1656,14 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     // Distance au bord : repère RÉEL de chaque conteneur moteur (indexé comme
     // instance.bins ; une seule entrée en bande). Rempli seulement à d ≠ 0.
     let sheetFrames = null
+    // Ids moteur des conteneurs illimités ; null sans tôle illimitée.
+    let unlimitedBins = null
     if (isSpp) {
         instance = { name, items: jaguarItems, strip_height: engineSheets[0].height }
         maxStripWidth = engineSheets[0].width
         if (edgeShift !== 0) sheetFrames = [sheetFrameOf(sheets[0])]
+        // La bande est l'unique conteneur (0) de l'unique tôle.
+        if (hasUnlimited) unlimitedBins = [0]
     } else {
         // C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS —
         // une tôle `count: 0` au milieu cassait l'import. Formats vides
@@ -1665,18 +1685,31 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
             throw new Error('sheet_shape_missing')
         }
         const minArea = Math.min(...nonEmpty.map(binArea))
+        const byArea = (s) => Math.max(1, Math.round(binArea(s) / minArea * 100))
+        // Stock ET tôle illimitée : chaque format du stock passe en deux entrées
+        // (première tôle, puis le reste), les illimitées coûtent plus que tout le
+        // stock (`stockPriorityBins`). Sinon les conteneurs d'avant. `binSheets`
+        // suit les conteneurs moteur : son rang EST l'id moteur, `formatId` le
+        // format de réglage.
+        const priority = hasUnlimited
+            ? stockPriorityBins(nonEmpty.map((s) => ({ ...s, unlimited: unlimited[s.formatId], area: binArea(s) })))
+            : null
+        const binSheets = priority || nonEmpty.map((s) => ({ ...s, cost: byArea(s) }))
         instance = {
             name,
             items: jaguarItems,
-            bins: nonEmpty.map((s, i) => ({
+            bins: binSheets.map((s, i) => ({
                 ...buildBin(i, s.count, s.width, s.height, s.shaped || null),
-                cost: Math.max(1, Math.round(binArea(s) / minArea * 100)),
+                cost: s.cost,
             })),
+        }
+        if (hasUnlimited) {
+            unlimitedBins = binSheets.flatMap((s, i) => (unlimited[s.formatId] ? [i] : []))
         }
         if (hasShaped) {
             // Toujours la VRAIE tôle (aires, densité, forme livrée) : à d ≠ 0 le
             // moteur a la sienne dans `bins`, le repère réel est `sheetFrames`.
-            shapedSheets = nonEmpty
+            shapedSheets = binSheets
                 .map((es, i) => {
                     const s = sheets[es.formatId]
                     return s.shaped
@@ -1695,15 +1728,17 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
                 .filter(Boolean)
         }
         if (edgeShift !== 0) {
-            sheetFrames = nonEmpty.map((es) => ({
+            sheetFrames = binSheets.map((es) => ({
                 ...sheetFrameOf(sheets[es.formatId]),
                 // Contour rentré qui se coupe en morceaux : le plus grand est gardé
                 // (prudent), l'aire perdue est dite.
                 ...(es.shaped?.lostAreaMm2 > 0 ? { offsetLostAreaMm2: es.shaped.lostAreaMm2 } : {}),
             }))
         }
-        containerMapBack = nonEmpty.length !== sheets.length
-            ? nonEmpty.map((s, eid) => [eid, s.formatId])
+        // Dès qu'un id moteur diffère de son format (format vide filtré, ou stock
+        // mis devant et coupé en deux).
+        containerMapBack = binSheets.length !== sheets.length || binSheets.some((s, eid) => s.formatId !== eid)
+            ? binSheets.map((s, eid) => [eid, s.formatId])
             : null
         maxStripWidth = undefined
     }
@@ -1897,6 +1932,10 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // Les passes qui posent ou déplacent des pièces en croyant la tôle
         // pleine (grille, bandes résiduelles) la lisent pour s'abstenir.
         ...(shapedSheets?.length ? { shapedSheets } : {}),
+        // Tôle illimitée (clé absente sinon) : ids moteur des conteneurs
+        // illimités. Les passes d'après-calcul tiennent le stock devant, le
+        // rapport dit l'origine de chaque tôle. Hors du seed et du moteur.
+        ...(unlimitedBins ? { stockPriority: { unlimitedBins } } : {}),
         // Lot J4 — constats de réserve d'amorce. ADDITIF et vide pour tout
         // job sans `.job` : le champ n'existe même pas, donc rien ne change
         // pour les jobs ordinaires ni pour les anciens résultats relus.

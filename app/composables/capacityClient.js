@@ -177,6 +177,48 @@ function constructiveFit(parts, sheets, space, edge = null) {
 }
 
 /**
+ * « ≈ n tôles » d'un projet à tôle à quantité illimitée (ligne marquée
+ * `unlimited`) : le stock est rempli d'abord, puis les tôles à prévoir sont
+ * comptées. Même aire gonflée, même aire utile et même taux (REFERENCE_PACKING)
+ * que `capacityReport`, qui ne change pas : seul `sheetsNeeded` est remplacé, et
+ * ni le ratio, ni le refus, ni les leviers.
+ *  - Le stock, la plus grande aire utile d'abord, tôle par tôle jusqu'à couvrir
+ *    l'aire des pièces ;
+ *  - le reste en tôles illimitées, à leur aire utile moyenne.
+ * Estimation d'aires seulement. Elle ignore la forme des pièces et des tôles :
+ * une pièce trop grande pour les chutes est comptée comme si elle les
+ * remplissait, et le moteur peut laisser vide une tôle du stock.
+ * @returns le rapport lui-même quand il n'y a rien à remplacer (aucune tôle
+ *   illimitée, pas de rapport, aucune aire utile illimitée pour le reste).
+ */
+export function stockFirstEstimate(report, parts, sheets, space, opts = {}) {
+    const open = (sheets || []).filter((sh) => sh?.unlimited === true)
+    if (!report || !open.length) return report
+    const s = Math.max(0, Number(space) || 0)
+    const edge = edgeOption(opts)
+    const filled = (sh) => formatUsableArea(sh, s, edge) * REFERENCE_PACKING
+    let remaining = (parts || []).reduce(
+        (sum, p) => sum + inflatedArea(p, s) * Math.trunc(Number(p?.count) || 0), 0)
+    let used = 0
+    const stock = sheets.filter((sh) => sh?.unlimited !== true)
+        .map((sh) => ({ area: filled(sh), count: Math.trunc(Number(sh?.count) || 1) }))
+        .filter((f) => f.area > 0)
+        .sort((a, b) => b.area - a.area)
+    for (const f of stock) {
+        if (remaining <= EPS) break
+        const n = Math.min(f.count, Math.ceil(remaining / f.area - EPS))
+        used += n
+        remaining -= n * f.area
+    }
+    if (remaining > EPS) {
+        const areas = open.map(filled).filter((a) => a > 0)
+        if (!areas.length) return report
+        used += Math.ceil(remaining / (areas.reduce((a, b) => a + b, 0) / areas.length) - EPS)
+    }
+    return { ...report, sheetsNeeded: Math.max(1, used) }
+}
+
+/**
  * @param {object} [opts]
  * @param {number|null} [opts.edge] distance au bord (mm, convention INTERNE :
  *   demandée + marge de courbes, comme `space`). Absente / null : le bord suit

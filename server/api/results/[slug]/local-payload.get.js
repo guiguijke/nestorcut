@@ -58,9 +58,10 @@ export default defineEventHandler(async (event) => {
                 rotations: f.rotations || null,
             })),
             params: {
-                // Liste blanche : dimensions, stock et, pour une tôle importée,
-                // son identifiant opaque (chaîne courte). Jamais un nom, jamais
-                // une forme, même si un document plus ancien en portait.
+                // Liste blanche : dimensions, stock, quantité illimitée et, pour
+                // une tôle importée, son identifiant opaque (chaîne courte).
+                // Jamais un nom, jamais une forme, même si un document plus ancien
+                // en portait.
                 sheets: Array.isArray(p.sheets)
                     ? p.sheets.map((s) => ({
                         width: s?.width,
@@ -69,6 +70,8 @@ export default defineEventHandler(async (event) => {
                         ...(typeof s?.shapeId === 'string' && s.shapeId.length <= 64
                             ? { shapeId: s.shapeId }
                             : {}),
+                        // Clé présente seulement si le job la porte.
+                        ...(s?.unlimited === true ? { unlimited: true } : {}),
                     }))
                     : null,
                 width: p.width ?? null,
