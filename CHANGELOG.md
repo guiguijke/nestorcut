@@ -4,6 +4,68 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.25
+
+*FR*
+
+- « Enregistrer le projet » garde un projet « Cet appareil » dans un fichier `.nestorcut` : pièces, quantités, réglages, tôles importées et leurs zones. « Ouvrir un projet enregistré », sur l'accueil, le rouvre en nouveau projet, sans rien envoyer ; un clic sur Nest refait le calcul. Le fichier ne contient ni résultat ni fichier de coupe. Un fichier abîmé ou modifié est refusé.
+- Nouveau bouton « Rapport PDF » dans le rapport de nesting, pour toutes les offres : un rapport à imprimer avec le logo NestorCut, une page de résumé (matière à prévoir, pièces posées, densité, surfaces, chute, contrôles) et une page par tôle avec son plan.
+- « Rapport avancé » pour Unlimited et Pro : votre logo et le nom de votre entreprise, des champs libres (client, référence, matière, commentaire), la longueur de coupe et le nombre d'amorçages. Pour un calcul « Cet appareil », un numéro sur chaque pièce du plan, la liste des pièces de chaque tôle et une page des pièces. Le PDF se fabrique dans votre navigateur ; votre logo est gardé dans ce navigateur et n'est jamais envoyé à nos serveurs.
+- Distance au bord de la tôle sur les projets « Nos serveurs » : le réglage marche maintenant aussi sur ces projets, avec les mêmes règles et les mêmes fichiers de coupe que sur un projet « Cet appareil ». Avec une distance au bord, le calcul se fait sur votre appareil, même avec un abonnement, et le résultat reste dans ce navigateur. Pas disponible avec un fichier DWG, ni dans la démo.
+- Import sur nos serveurs : un contour fait de lignes et d'arcs dont les extrémités ne se touchaient pas tout à fait pouvait rester ouvert. Il est refermé, comme sur un projet « Cet appareil ».
+- Coffre chiffré : renouveler la clé ou retirer le coffre pendant qu'un autre onglet envoie des fichiers, ou pendant un calcul, ne rend plus ces fichiers illisibles. L'envoi attend la fin de l'opération ; pendant un calcul, le renouvellement ou le retrait est refusé avec un message clair, à refaire une fois le calcul fini.
+- La touche Échap ne ferme plus que la fenêtre du dessus.
+
+*EN*
+
+- "Save project" keeps a "This device" project in a `.nestorcut` file: parts, quantities, settings, imported sheets and their zones. "Open a saved project", on the home page, reopens it as a new project without sending anything; one click on Nest runs the calculation again. The file holds no result and no cutting file. A damaged or modified file is refused.
+- New "PDF report" button in the nesting report, on every plan: a printable report with the NestorCut logo, a summary page (material to plan, placed parts, density, areas, offcut, checks) and one page per sheet with its layout.
+- "Advanced report" on Unlimited and Pro: your logo and company name, free fields (customer, reference, material, comment), cutting length and pierce count. For a "This device" nesting, a number on every part of the layout, the part list of each sheet and a parts page. The PDF is built in your browser; your logo is kept in this browser and never sent to our servers.
+- Distance to the sheet edge in "Our servers" projects: the setting now works in these projects too, with the same rules and the same cut files as in a "This device" project. With an edge distance, the calculation runs on your device, even with a subscription, and the result stays in this browser. Not available with a DWG file, nor in the demo.
+- Import on our servers: an outline made of lines and arcs whose ends did not quite meet could stay open. It is now closed, as in a "This device" project.
+- Encrypted vault: renewing your key or turning the vault off while another tab is uploading files, or while a job is running, no longer leaves those files unreadable. The upload waits for the operation to finish; during a job, the renewal or removal is refused with a clear message — try again once the job is done.
+- The Esc key now closes only the window on top.
+
+*PT*
+
+- "Salvar o projeto" guarda um projeto "Este dispositivo" num arquivo `.nestorcut`: peças, quantidades, configurações, chapas importadas e suas zonas. "Abrir um projeto salvo", na página inicial, o reabre como um novo projeto, sem enviar nada; um clique em Nest refaz o cálculo. O arquivo não contém resultado nem arquivo de corte. Um arquivo danificado ou modificado é recusado.
+- Novo botão "Relatório PDF" no relatório de nesting, em todos os planos: um relatório para imprimir com o logotipo NestorCut, uma página de resumo (material a prever, peças posicionadas, densidade, áreas, retalho, verificações) e uma página por chapa com o seu desenho.
+- "Relatório avançado" no Unlimited e no Pro: seu logotipo e o nome da sua empresa, campos livres (cliente, referência, material, comentário), o comprimento de corte e o número de pontos de perfuração. Para um cálculo "Este dispositivo", um número em cada peça do desenho, a lista de peças de cada chapa e uma página de peças. O PDF é gerado no seu navegador; seu logotipo fica guardado neste navegador e nunca é enviado aos nossos servidores.
+- Distância à borda da chapa nos projetos "Nossos servidores": o ajuste agora também funciona nesses projetos, com as mesmas regras e os mesmos arquivos de corte que num projeto "Este dispositivo". Com uma distância à borda, o cálculo é feito no seu dispositivo, mesmo com uma assinatura, e o resultado fica neste navegador. Não disponível com um arquivo DWG, nem na demo.
+- Importação nos nossos servidores: um contorno feito de linhas e arcos cujas pontas não se tocavam exatamente podia ficar aberto. Agora é fechado, como num projeto "Este dispositivo".
+- Cofre criptografado: trocar a chave ou desativar o cofre enquanto outra aba envia arquivos, ou durante um cálculo, não deixa mais esses arquivos ilegíveis. O envio aguarda o fim da operação; durante um cálculo, a troca ou a desativação é recusada com uma mensagem clara — tente novamente quando o cálculo terminar.
+- A tecla Esc fecha apenas a janela da frente.
+
+*IT*
+
+- "Salva il progetto" conserva un progetto "Questo dispositivo" in un file `.nestorcut`: pezzi, quantità, impostazioni, lamiere importate e le loro zone. "Apri un progetto salvato", nella pagina iniziale, lo riapre come nuovo progetto, senza inviare nulla; un clic su Nest rifà il calcolo. Il file non contiene né risultati né file di taglio. Un file danneggiato o modificato viene rifiutato.
+- Nuovo pulsante "Report PDF" nel report di nesting, per tutti i piani: un report da stampare con il logo NestorCut, una pagina di riepilogo (materiale da pianificare, pezzi posizionati, densità, superfici, ritaglio, controlli) e una pagina per lamiera con il suo disegno.
+- "Report avanzato" per Unlimited e Pro: il tuo logo e il nome della tua azienda, campi liberi (cliente, riferimento, materiale, commento), la lunghezza di taglio e il numero di punti di sfondamento. Per un calcolo "Questo dispositivo", un numero su ogni pezzo del disegno, l'elenco dei pezzi di ogni lamiera e una pagina dei pezzi. Il PDF viene creato nel tuo browser; il tuo logo resta in questo browser e non viene mai inviato ai nostri server.
+- Distanza dal bordo della lamiera nei progetti "I nostri server": l'impostazione ora funziona anche in questi progetti, con le stesse regole e gli stessi file di taglio di un progetto "Questo dispositivo". Con una distanza dal bordo, il calcolo avviene sul tuo dispositivo, anche con un abbonamento, e il risultato resta in questo browser. Non disponibile con un file DWG, né nella demo.
+- Importazione sui nostri server: un contorno fatto di linee e archi le cui estremità non si toccavano del tutto poteva restare aperto. Ora viene chiuso, come in un progetto "Questo dispositivo".
+- Cassaforte cifrata: rinnovare la chiave o disattivare la cassaforte mentre un'altra scheda carica file, o durante un calcolo, non rende più illeggibili quei file. Il caricamento attende la fine dell'operazione; durante un calcolo, il rinnovo o la disattivazione viene rifiutato con un messaggio chiaro: riprova quando il calcolo è finito.
+- Il tasto Esc chiude solo la finestra in primo piano.
+
+*DE*
+
+- "Projekt speichern" bewahrt ein Projekt "Dieses Gerät" in einer `.nestorcut`-Datei auf: Teile, Mengen, Einstellungen, importierte Bleche und ihre Zonen. "Gespeichertes Projekt öffnen" auf der Startseite öffnet es als neues Projekt, ohne etwas zu senden; ein Klick auf Nest berechnet neu. Die Datei enthält weder Ergebnisse noch Schneiddateien. Eine beschädigte oder veränderte Datei wird abgelehnt.
+- Neue Schaltfläche "PDF-Bericht" im Nesting-Bericht, für alle Tarife: ein druckbarer Bericht mit dem NestorCut-Logo, einer Übersichtsseite (zu planendes Material, platzierte Teile, Dichte, Flächen, Restblech, Prüfungen) und einer Seite pro Blech mit seinem Plan.
+- "Erweiterter Bericht" für Unlimited und Pro: Ihr Logo und Firmenname, freie Felder (Kunde, Referenz, Material, Kommentar), Schnittlänge und Anzahl der Einstichpunkte. Bei einer Berechnung "Dieses Gerät" eine Nummer an jedem Teil im Plan, die Teileliste jedes Blechs und eine Teileseite. Das PDF wird in Ihrem Browser erstellt; Ihr Logo bleibt in diesem Browser und wird nie an unsere Server gesendet.
+- Randabstand in Projekten "Unsere Server": Die Einstellung funktioniert jetzt auch in diesen Projekten, mit denselben Regeln und denselben Schnittdateien wie in einem Projekt "Dieses Gerät". Mit einem Randabstand wird auf Ihrem Gerät gerechnet, auch mit einem Abonnement, und das Ergebnis bleibt in diesem Browser. Nicht verfügbar mit einer DWG-Datei und nicht in der Demo.
+- Import auf unseren Servern: Eine Kontur aus Linien und Bögen, deren Enden sich nicht ganz berührten, konnte offen bleiben. Sie wird jetzt geschlossen, wie in einem Projekt "Dieses Gerät".
+- Verschlüsselter Tresor: Den Schlüssel zu erneuern oder den Tresor zu deaktivieren, während ein anderer Tab Dateien hochlädt oder eine Berechnung läuft, macht diese Dateien nicht mehr unlesbar. Der Upload wartet, bis der Vorgang beendet ist; während einer Berechnung wird das Erneuern oder Deaktivieren mit einer klaren Meldung abgelehnt – versuchen Sie es nach der Berechnung erneut.
+- Die Esc-Taste schließt nur noch das oberste Fenster.
+
+*ES*
+
+- "Guardar el proyecto" conserva un proyecto "Este dispositivo" en un archivo `.nestorcut`: piezas, cantidades, ajustes, chapas importadas y sus zonas. "Abrir un proyecto guardado", en la página de inicio, lo vuelve a abrir como un nuevo proyecto, sin enviar nada; un clic en Nest rehace el cálculo. El archivo no contiene resultados ni archivos de corte. Un archivo dañado o modificado se rechaza.
+- Nuevo botón "Informe PDF" en el informe de nesting, en todos los planes: un informe para imprimir con el logo de NestorCut, una página de resumen (material que planificar, piezas colocadas, densidad, superficies, sobrante, controles) y una página por chapa con su plano.
+- "Informe avanzado" en Unlimited y Pro: tu logo y el nombre de tu empresa, campos libres (cliente, referencia, material, comentario), la longitud de corte y el número de puntos de perforación. Para un cálculo "Este dispositivo", un número en cada pieza del plano, la lista de piezas de cada chapa y una página de piezas. El PDF se genera en tu navegador; tu logo se guarda en este navegador y nunca se envía a nuestros servidores.
+- Distancia al borde de la chapa en los proyectos "Nuestros servidores": el ajuste ahora también funciona en estos proyectos, con las mismas reglas y los mismos archivos de corte que en un proyecto "Este dispositivo". Con una distancia al borde, el cálculo se hace en tu dispositivo, incluso con una suscripción, y el resultado se queda en este navegador. No disponible con un archivo DWG, ni en la demo.
+- Importación en nuestros servidores: un contorno hecho de líneas y arcos cuyos extremos no se tocaban del todo podía quedar abierto. Ahora se cierra, como en un proyecto "Este dispositivo".
+- Caja fuerte cifrada: renovar la clave o desactivar la caja fuerte mientras otra pestaña sube archivos, o durante un cálculo, ya no deja esos archivos ilegibles. La subida espera a que termine la operación; durante un cálculo, la renovación o la desactivación se rechaza con un mensaje claro: vuelve a intentarlo cuando termine el cálculo.
+- La tecla Esc ya solo cierra la ventana de arriba.
+
 ## V0.9.24
 
 *FR*
