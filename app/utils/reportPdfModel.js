@@ -74,6 +74,16 @@ function readable(preview, row) {
  * @param {ReportPdfInput} input
  * @returns {object} modèle pour `buildReportPdf`
  */
+/**
+ * Pourquoi les numéros de pièces manquent : « server » pour un résultat serveur ou
+ * pour un calcul fait ici sur un payload préparé par nos serveurs (projet « Nos
+ * serveurs », par exemple avec une distance au bord) ; « old » pour un record local
+ * d'avant les numéros.
+ */
+export function numbersMissingReason(isLocal, record) {
+    return isLocal && !record?.serverPrepared ? 'old' : 'server'
+}
+
 export function buildReportPdfModel(input) {
     const inp = input || {}
     const advanced = inp.advanced === true

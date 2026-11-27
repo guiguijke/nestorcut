@@ -61,7 +61,8 @@ import { composeThinPartsLine } from '~/composables/importFindings'
 import { filesStore } from '~/composables/files'
 import { altDensityPctOf, whyFirstKind } from '~/utils/resultQuality'
 import { zoneBadge } from '~/utils/reportLayout'
-import { edgeReportModel } from '~/utils/overhangView'
+import { edgeReportModel, overhangMarginMm, widenSvgViewBox } from '~/utils/overhangView'
+import { numbersMissingReason } from '~/utils/reportPdfModel'
 import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
@@ -708,7 +709,7 @@ const reportPdfInput = () => {
         slugs: Array.isArray(recAlt?.svgSlugs) ? recAlt.svgSlugs : null,
         poses: Array.isArray(recAlt?.svgPoses) ? recAlt.svgPoses : null,
         densityPct: unref(densityPct),
-        slugsMissing: unref(isLocal) ? 'old' : 'server',
+        slugsMissing: numbersMissingReason(unref(isLocal), unref(localRecord)),
         requestedBySlug,
     }
 }
@@ -718,7 +719,9 @@ const reportPdfInput = () => {
 const reportPdfSvgSources = () => {
     const rawSvgs = unref(localRecord)?.alternatives?.[unref(activeAlt)]?.svgs
     const shown = unref(currentSvgs)
-    return shown.map((src, i) => (typeof rawSvgs?.[i] === 'string' ? rawSvgs[i] : src))
+    // Pièces qui dépassent du bord : même cadre élargi qu'à l'écran (sinon rognées).
+    const margin = overhangMarginMm(unref(requestedEdgeMm))
+    return shown.map((src, i) => (typeof rawSvgs?.[i] === 'string' ? widenSvgViewBox(rawSvgs[i], margin) : src))
 }
 
 // Jeton de fabrication : une fabrication dont le contexte a changé (résultat fermé ou

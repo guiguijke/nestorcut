@@ -1031,6 +1031,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             ...(payload?.leadInReserve?.length
                 ? { leadInReserve: payload.leadInReserve }
                 : {}),
+            // Payload préparé par nos serveurs (projet « Nos serveurs » calculé ici,
+            // par exemple à cause d'une distance au bord) : le rapport PDF dit alors
+            // « calcul fait sur nos serveurs », pas « avant cette version ».
+            ...(fetched?.mode === 'client-built' ? {} : { serverPrepared: true }),
             problem: result?.problem || payload?.problem || null,
             isSpp: (result?.problem || payload?.problem) === 'spp',
             sheets: [[sheetWidth, sheetHeight]],

@@ -195,7 +195,9 @@ export function parseSheetSvg(svgText) {
             }
             const rings = raw
                 .filter((r) => r.length > 2)
-                .map((r) => r.map(([x, y]) => [(mat[0] * x + mat[2] * y + mat[4]) * factor, (mat[1] * x + mat[3] * y + mat[5]) * factor]))
+                // Repère de l'image : origine du viewBox (négative quand le cadre est élargi
+                // pour une pièce qui dépasse du bord ; 0 sinon, coordonnées inchangées).
+                .map((r) => r.map(([x, y]) => [(mat[0] * x + mat[2] * y + mat[4] - vb[0]) * factor, (mat[1] * x + mat[3] * y + mat[5] - vb[1]) * factor]))
             if (!rings.length) {
                 ignored += 1
                 continue
