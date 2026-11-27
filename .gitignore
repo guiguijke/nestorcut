@@ -101,3 +101,4 @@ spike/
 # Brouillons locaux de l'implémenteur (S-9, audit 2026-09-27) : des scripts y
 # portent en clair des identifiants de comptes de test.
 .omo/
+.vitest-ci-report.json

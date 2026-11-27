@@ -17,6 +17,7 @@ on:
       # déclencheurs, c'est ne jamais tester le correctif qui les répare
       # (constat du 2026-09-10 : le correctif esbuild ne déclenchait pas CI).
       - "vitest.config.js"
+      - "scripts/ci-vitest.mjs"
       - ".github/workflows/app-ci.yml"
   push:
     branches: [main]
@@ -28,6 +29,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - "vitest.config.js"
+      - "scripts/ci-vitest.mjs"
       - ".github/workflows/app-ci.yml"
 
 permissions:
@@ -45,7 +47,9 @@ jobs:
       - name: Install
         run: npm ci
       - name: Tests server (vitest, db mockée)
-        run: npx vitest run
+        # scripts/ci-vitest.mjs : code de vitest tel quel, sauf la panne d'outil
+        # connue « Timeout calling onTaskUpdate » quand tous les tests passent.
+        run: node scripts/ci-vitest.mjs
       - name: Build Nuxt
         run: npm run build
 
