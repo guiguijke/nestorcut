@@ -343,9 +343,11 @@ describe('distance au bord (edgeDistance)', () => {
         expect(store.getters.requestBody).not.toContain('edgeDistance')
     })
 
-    it('validation : négatifs et virgule acceptés, texte refusé, vide accepté', async () => {
+    it('validation : négatifs et virgule acceptés, texte refusé, vide accepté (champ actif)', async () => {
         await setup()
+        browserCompute(true)
         await openProject('a', false)
+        expect(store.getters.edgeBlock).toBe(null)
         for (const ok of ['', '0', '5', '-5', '-0.25', '1,5']) {
             store.actions.updateEdgeDistance(ok)
             expect(store.getters.nestRequestError, `« ${ok} »`).toBe('')
@@ -354,6 +356,15 @@ describe('distance au bord (edgeDistance)', () => {
             store.actions.updateEdgeDistance(bad)
             expect(store.getters.nestRequestError, `« ${bad} »`).toBe('project.invalidParams')
         }
+    })
+
+    it('champ grisé : une valeur invalide restée dedans ne bloque pas Nest', async () => {
+        await setup()
+        browserCompute(false)
+        await openProject('a', false)
+        expect(store.getters.edgeBlock).toBe('off')
+        store.actions.updateEdgeDistance('abc')
+        expect(store.getters.nestRequestError).toBe('')
     })
 
     it("changement d'unité : le vide reste vide, une valeur explicite (négative comprise) est convertie", async () => {

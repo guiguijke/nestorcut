@@ -4,6 +4,7 @@ import { connectDB } from '~~/server/db/mongo'
 import { DOMAINS } from '~~/server/core/domains'
 import { enqueueNestingJob } from '~~/server/core/project/service'
 import { trackEvent } from '~~/server/tracking/add'
+import { edgeShiftMm } from '~~/app/utils/spacingParams'
 import { assertCanNest, assertCanNestDemo, assertSheetCountWithinMax, BROWSER_COMPUTE, browserWalksForTier, COMPUTE_TIERS, QUALITY_WALKS, getComputeProfile, getComputeTier, maxParallelNestsForTier, refundNestCharge, resolveComputeLocation, validateDirections, NEST_DIRECTIONS } from '~~/server/utils/entitlement'
 import {
     DEMO_MAX_DIRECTIONS,
@@ -305,7 +306,9 @@ export default defineEventHandler(async (event) => {
                     data: { reason: 'edge_distance_dwg' },
                 })
             }
-            edgeForcesLocal = true
+            // Un bord égal à l'espacement ne change rien au calcul : il ne force
+            // pas le navigateur (même règle que edgeShiftMm).
+            if (edgeShiftMm(space, e) !== 0) edgeForcesLocal = true
         }
         edgeDistance = e
     }
@@ -340,11 +343,17 @@ export default defineEventHandler(async (event) => {
         const partsBySlug = new Map(
             userDxfFilesDatabase.map((f) => [f.slug, f.polygonParts || []]),
         )
+        const rotationsBySlug = new Map(fileMetadata.map((f) => [f.slug, f.rotations]))
         const parts = []
         for (const file of filteredFiles) {
             const polys = partsBySlug.get(file.slug) || []
             for (const poly of polys) {
-                parts.push({ coords: poly.coordinates, count: normalizeCount(file.count) })
+                parts.push({
+                    coords: poly.coordinates,
+                    count: normalizeCount(file.count),
+                    // Rotations permises, comme la requête les porte (repli : quarts de tour).
+                    rotations: rotationsBySlug.get(file.slug) || [0, 90, 180, 270],
+                })
             }
         }
         if (parts.length > 0) {
@@ -353,7 +362,7 @@ export default defineEventHandler(async (event) => {
             // l'espacement INTERNE (demandé + marge de courbes) : le même
             // calcul ici, sur les mêmes polygonParts, évite une bande de jobs
             // acceptés puis refusés et remboursés.
-            const { computeSpacingMargin, userMaxSpacing, f32AtOrBelow } = await import('~~/app/composables/localPayloadBuilder')
+            const { computeSpacingMargin, userMaxSpacing, f32AtOrBelow, itemFitsSheets } = await import('~~/app/composables/localPayloadBuilder')
             const curveMargin = computeSpacingMargin(
                 filteredFiles.map((f) => ({ parts: partsBySlug.get(f.slug) || [] })), space)
             // Distance au bord réglée (d = bord − espacement demandé, la marge de
@@ -361,7 +370,6 @@ export default defineEventHandler(async (event) => {
             // le constructeur du navigateur (arrondi par défaut au f32). Une tôle
             // active qui n'a plus de place (dimension moteur <= 0) : pas de
             // pré-contrôle, le worker refuse avec la valeur maximale.
-            const { edgeShiftMm } = await import('~~/app/utils/spacingParams')
             const d = edgeDistance === null ? 0 : edgeShiftMm(space, edgeDistance)
             let engineSheets = normalizedSheets
             let skipCapacity = false
@@ -372,6 +380,19 @@ export default defineEventHandler(async (event) => {
                     count: s.count,
                 }))
                 skipCapacity = engineSheets.some((s) => s.count > 0 && (s.width <= 0 || s.height <= 0))
+                // Une pièce qui ne tient sur aucune tôle moteur active : pas de
+                // pré-contrôle non plus, le worker refuse avec edge_too_large et la
+                // valeur maximale, comme le navigateur. Même test que le
+                // constructeur (itemFitsSheets) avec les rotations permises de
+                // chaque fichier. Une fiche à plusieurs pièces (bloc) reste testée
+                // pièce par pièce, sans son enveloppe : cela ne saute le
+                // pré-contrôle que moins souvent, jamais à tort.
+                if (!skipCapacity) {
+                    const active = engineSheets.filter((s) => s.count > 0)
+                    const inner = space + curveMargin
+                    skipCapacity = parts.some((p) =>
+                        !itemFitsSheets(p.coords, p.rotations, active, inner).fits)
+                }
             }
             const cap = skipCapacity ? null : capacityReport(parts, engineSheets, space + curveMargin)
             if (cap && cap.refused) {

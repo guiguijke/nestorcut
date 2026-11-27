@@ -21,7 +21,7 @@ from core.engine import (EngineCancelled, EngineError,
                          parse_item_unplaceable,
                          run_engine, thin_parts)
 from core.edge import (EdgeCtx, EdgeRefusal, edge_engine_sheets, edge_request_of,
-                       edge_shift_mm, edge_too_large_detail, js_deterministic_seed,
+                       edge_shift_mm, edge_too_large_detail, js_deterministic_seed, js_round,
                        sheet_frame_of)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
@@ -195,6 +195,21 @@ def _convex_hull_ring(points):
     return [[x, y] for x, y in ring]
 
 
+def _ring_hull_of(ring):
+    """Miroir de ringHullOf (localPayloadBuilder.js) : enveloppe convexe d'un
+    anneau, ou None s'il est illisible ou trop petit."""
+    if not isinstance(ring, (list, tuple)) or len(ring) < 3:
+        return None
+    try:
+        pts = [(float(p[0]), float(p[1])) for p in ring]
+    except (TypeError, ValueError, IndexError):
+        return None
+    if any(not math.isfinite(x) or not math.isfinite(y) for x, y in pts):
+        return None
+    hull = _convex_hull_ring(pts)
+    return hull if len(hull) >= 4 else None
+
+
 def _blocks_report(input_items, result_containers):
     """E4-a : décompte blocs/pièces placés (« N blocs (M pièces) », §8.1.3) —
     {} pour un job sans bloc (champ ADDITIF, jamais posé sinon)."""
@@ -213,7 +228,7 @@ def _blocks_report(input_items, result_containers):
     return {"blocks": {"placed": placed_blocks, "pieces": pieces}}
 
 
-def convert_files_to_input_items(files, dek=None, stats=None):
+def convert_files_to_input_items(files, dek=None, stats=None, edge_extras=False):
     """Builds the nesting input items from the project's files.
 
     The requested gap (`space`) is enforced natively by jagua-rs via
@@ -221,6 +236,9 @@ def convert_files_to_input_items(files, dek=None, stats=None):
     (interior rings extracted at file processing time) are carried along and
     opened with a hairline channel so the engine nests parts inside cutouts
     natively. Geometry is lightly simplified first (see SIMPLIFY_MM).
+    `edge_extras` : vrai seulement à distance au bord réglée ; les blocs portent
+    alors poignées et enveloppe de chaque pièce (`_blockPartsExtra`), sinon rien
+    de plus n'est calculé.
     `stats` (dict, optionnel) reçoit l'écart de simplification mesuré
     (voir spacing_margin).
     """
@@ -254,6 +272,9 @@ def convert_files_to_input_items(files, dek=None, stats=None):
                 "coords": coords,
                 "holes": holes,
                 "handles": part.get("handles"),
+                # Enveloppe de l'anneau ORIGINAL (avant simplification) : ne sert
+                # qu'au payload à distance au bord (miroir de ringHullOf du JS).
+                "ring_hull": _ring_hull_of(part.get("coordinates")) if edge_extras else None,
                 # Display color (screen rendering only — never applied to the
                 # production DXF). Persisted at import; deterministic fallback
                 # for files imported before colors existed.
@@ -288,6 +309,13 @@ def convert_files_to_input_items(files, dek=None, stats=None):
                     {'coords': p["coords"], 'holes': p["holes"], 'color': p["color"]}
                     for p in processed
                 ],
+                # Clés en plus que le JS met dans blockParts (poignées, enveloppe
+                # de l'anneau d'origine) : lues seulement pour le payload à
+                # distance au bord, ailleurs elles ne servent à rien.
+                **({'_blockPartsExtra': [
+                    {'handles': p["handles"], 'ringHull': p["ring_hull"]}
+                    for p in processed
+                ]} if edge_extras else {}),
             })
             id += 1
             continue
@@ -660,7 +688,10 @@ def _nesting_process_impl(doc):
     # `space` devient l'INTERNE = demandé + marge, pour tout le pipeline.
     requested_space = space
     _simpl_stats = {}
-    input_items = convert_files_to_input_items(files, dek, _simpl_stats)
+    # `edge_extras` : seulement à bord réglé (l'appel sans bord reste celui d'avant).
+    _edge_kw = ({"edge_extras": True}
+                if edge_shift_mm(requested_space, edge_request_of(params)) != 0 else {})
+    input_items = convert_files_to_input_items(files, dek, _simpl_stats, **_edge_kw)
     space = requested_space + spacing_margin(_simpl_stats, requested_space)
 
     # Distance au bord (piège 68) : d = e - s. d == 0 (réglage absent ou égal à
@@ -760,7 +791,10 @@ def _nesting_process_impl(doc):
     if active_areas:
         min_area = min(active_areas)
         for b, area in zip(bins, active_areas):
-            b["cost"] = max(1, round(area / min_area * 100))
+            # Bord réglé : arrondi comme Math.round du navigateur (demi vers le
+            # haut) ; sans bord, l'arrondi d'avant (pair) est gardé tel quel.
+            ratio = area / min_area * 100
+            b["cost"] = max(1, js_round(ratio) if edge_shift != 0 else round(ratio))
     # bin_dims_engine : clés = ids MOTEUR (0..len(bins)-1), valeurs = dims
     # du format d'origine (identité quand aucun format n'est filtré).
     bin_dims_engine = {
@@ -950,7 +984,11 @@ def _nesting_process_impl(doc):
             "$set": {
                 "requested": total_requested_count,
                 "itemMap": [
-                    {"id": item_id, "slug": m["slug"], "part": m["part"]}
+                    {"id": item_id, "slug": m["slug"], "part": m["part"],
+                     # Bord réglé seulement : le nombre de pièces d'un bloc,
+                     # comme l'itemMap du navigateur.
+                     **({"parts": m["parts"]}
+                        if edge_shift != 0 and "parts" in m else {})}
                     for item_id, m in part_index_by_id.items()
                 ],
                 "update_ts": datetime.now()
@@ -1358,6 +1396,16 @@ def _nesting_process_impl(doc):
                 # était absorbée (idMap non identité).
                 "rotations": item.get("rotations")
                     or default_allowed_orientations or [0.0],
+                # Fiche à plusieurs pièces (bloc) : même clés que le JS, bord
+                # réglé seulement (sans bord, le payload reste celui d'avant).
+                **({"block": item["block"],
+                    "blockParts": [
+                        {**bp, **{k: v for k, v in extra.items()
+                                  if v is not None or k == "ringHull"}}
+                        for bp, extra in zip(item["blockParts"],
+                                             item["_blockPartsExtra"])
+                    ]}
+                   if edge_shift != 0 and item.get("block") else {}),
             }
             for item in input_items
         ]

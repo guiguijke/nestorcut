@@ -176,6 +176,17 @@ describe('POST nest - distance au bord', () => {
         }
     })
 
+    it('serveurs payant, bord egal a l espacement : calcul inchange (pas de force navigateur)', async () => {
+        state.db = serverDb(user(PAID))
+        await nestHandler(ev('u1', 'p1', bodyEdge(undefined)))
+        const sans = state.enqueued[0].params.computeLocation
+        state.enqueued = []
+        state.db = serverDb(user(PAID))
+        await nestHandler(ev('u1', 'p1', bodyEdge(2)))
+        expect(state.enqueued[0].params.computeLocation).toBe(sans)
+        expect(sans).toBe('server')
+    })
+
     it('serveurs avec un DWG : 400 edge_distance_dwg, rien en file, quota intact', async () => {
         const userDoc = user()
         state.db = fakeDb({
@@ -272,6 +283,30 @@ describe('POST nest - capacite a distance au bord (Nos serveurs)', () => {
         state.db = serverDb()
         await nestHandler(ev('u1', 'p1', body(1, 300)))
         expect(state.enqueued).toHaveLength(1)
+    })
+
+    it('piece qui ne tient sur aucune tole moteur (bord 240) : pas de 422, le job part', async () => {
+        state.db = serverDb()
+        await nestHandler(ev('u1', 'p1', body(4, 240)))
+        expect(state.enqueued).toHaveLength(1)
+    })
+
+    it('barre 130 x 5 a 0 et 45 degres, tole 120 x 120, bord 12 : elle tient a 45, le 422 est garde', async () => {
+        const BAR = [[0, 0], [130, 0], [130, 5], [0, 5]]
+        const userDoc = user()
+        state.db = fakeDb({
+            users: [userDoc],
+            projects: [{ slug: 'p1', ownerId: 'u1' }],
+            user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'p.dxf', polygonParts: [{ coordinates: BAR }] }],
+        })
+        let err
+        await nestHandler(ev('u1', 'p1', {
+            files: [{ slug: 'f-aabbccddeeff.dxf', count: 40, rotation: '[0,45]' }],
+            params: { sheets: [{ width: 120, height: 120, count: 1 }], space: 2, edgeDistance: 12 },
+        })).catch((e) => { err = e })
+        expect(err).toMatchObject({ statusCode: 422, statusMessage: 'capacity_exceeded' })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.freeNestingUsed).toBe(0)
     })
 
     it('bord egal a l\'espacement : meme verdict que sans bord', async () => {

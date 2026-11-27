@@ -1488,6 +1488,607 @@
   }
  },
  {
+  "name": "fiche a plusieurs pieces (bloc), bord 10",
+  "input": {
+   "files": [
+    {
+     "slug": "bloc-e5f6.dxf",
+     "name": "bloc.dxf",
+     "count": 1,
+     "rotations": [
+      0,
+      90
+     ],
+     "parts": [
+      {
+       "coordinates": [
+        [
+         0,
+         0
+        ],
+        [
+         20,
+         0
+        ],
+        [
+         20,
+         100
+        ],
+        [
+         0,
+         100
+        ],
+        [
+         0,
+         0
+        ]
+       ],
+       "holes": [],
+       "handles": [
+        "A"
+       ],
+       "color": null
+      },
+      {
+       "coordinates": [
+        [
+         120,
+         0
+        ],
+        [
+         140,
+         0
+        ],
+        [
+         140,
+         100
+        ],
+        [
+         120,
+         100
+        ],
+        [
+         120,
+         0
+        ]
+       ],
+       "holes": [],
+       "handles": [
+        "B"
+       ],
+       "color": null
+      }
+     ]
+    }
+   ],
+   "params": {
+    "sheets": [
+     {
+      "width": 1500,
+      "height": 1000,
+      "count": 1
+     }
+    ],
+    "space": 2,
+    "fillHoles": true,
+    "addOutShape": false,
+    "outputUnit": "mm",
+    "alternativesCount": 1,
+    "directions": [
+     "left"
+    ],
+    "edgeDistance": 10
+   },
+   "profile": {
+    "timeBudgetSec": 13,
+    "vcores": 1,
+    "maxDirections": 1,
+    "level": "browser"
+   }
+  },
+  "expected": {
+   "payload": {
+    "problem": "spp",
+    "instance": {
+     "name": "nest2d",
+     "items": [
+      {
+       "id": 0,
+       "demand": 1,
+       "allowed_orientations": [
+        0,
+        90
+       ],
+       "shape": {
+        "type": "simple_polygon",
+        "data": [
+         [
+          0.0,
+          0.0
+         ],
+         [
+          140.0,
+          0.0
+         ],
+         [
+          140.0,
+          100.0
+         ],
+         [
+          0.0,
+          100.0
+         ],
+         [
+          0.0,
+          0.0
+         ]
+        ]
+       }
+      }
+     ],
+     "strip_height": 984.0
+    },
+    "meta": null,
+    "engineConfig": {
+     "time_budget_sec": 13,
+     "prng_seed": "7335910489332306211",
+     "n_alternatives": 1,
+     "poly_simpl_tolerance": 0.001,
+     "min_item_separation": 2.0,
+     "narrow_concavity_cutoff": [
+      0.01,
+      0.01
+     ],
+     "live_events": true,
+     "max_strip_width": 1484.0,
+     "n_workers": 1,
+     "biases": [
+      "left"
+     ],
+     "plateau_patience_sec": 2.0533333333333332,
+     "separator_workers": 1
+    },
+    "requestedSpace": 2,
+    "parts": [
+     {
+      "id": 0,
+      "file_slug": "bloc-e5f6.dxf",
+      "handles": [
+       "A",
+       "B"
+      ],
+      "color": "#3F6212",
+      "coords": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        140.0,
+        0.0
+       ],
+       [
+        140.0,
+        100.0
+       ],
+       [
+        0.0,
+        100.0
+       ],
+       [
+        0.0,
+        0.0
+       ]
+      ],
+      "holes": [],
+      "count": 1,
+      "rotations": [
+       0,
+       90
+      ],
+      "block": {
+       "parts": 2
+      },
+      "blockParts": [
+       {
+        "coords": [
+         [
+          0.0,
+          0.0
+         ],
+         [
+          20.0,
+          0.0
+         ],
+         [
+          20.0,
+          100.0
+         ],
+         [
+          0.0,
+          100.0
+         ],
+         [
+          0.0,
+          0.0
+         ]
+        ],
+        "holes": [],
+        "color": "#3F6212",
+        "handles": [
+         "A"
+        ],
+        "ringHull": [
+         [
+          0.0,
+          0.0
+         ],
+         [
+          20.0,
+          0.0
+         ],
+         [
+          20.0,
+          100.0
+         ],
+         [
+          0.0,
+          100.0
+         ],
+         [
+          0.0,
+          0.0
+         ]
+        ]
+       },
+       {
+        "coords": [
+         [
+          120.0,
+          0.0
+         ],
+         [
+          140.0,
+          0.0
+         ],
+         [
+          140.0,
+          100.0
+         ],
+         [
+          120.0,
+          100.0
+         ],
+         [
+          120.0,
+          0.0
+         ]
+        ],
+        "holes": [],
+        "color": "#CA8A04",
+        "handles": [
+         "B"
+        ],
+        "ringHull": [
+         [
+          120.0,
+          0.0
+         ],
+         [
+          140.0,
+          0.0
+         ],
+         [
+          140.0,
+          100.0
+         ],
+         [
+          120.0,
+          100.0
+         ],
+         [
+          120.0,
+          0.0
+         ]
+        ]
+       }
+      ]
+     }
+    ],
+    "requestedEdge": 10.0,
+    "edgeShift": 8.0,
+    "sheetFrames": [
+     {
+      "width": 1500.0,
+      "height": 1000.0
+     }
+    ],
+    "hasHoles": false,
+    "fillHoles": true,
+    "outputUnit": "mm",
+    "addOutShape": false
+   },
+   "seed": "7335910489332306211",
+   "itemMap": [
+    {
+     "id": 0,
+     "slug": "bloc-e5f6.dxf",
+     "part": 0,
+     "parts": 2
+    }
+   ]
+  }
+ },
+ {
+  "name": "couts des toles, ratio 112,5 arrondi comme Math.round",
+  "input": {
+   "files": [
+    {
+     "slug": "sq-a1b2.dxf",
+     "name": "carre.dxf",
+     "count": 4,
+     "rotations": [
+      0,
+      90,
+      180,
+      270
+     ],
+     "parts": [
+      {
+       "coordinates": [
+        [
+         0,
+         0
+        ],
+        [
+         80,
+         0
+        ],
+        [
+         80,
+         80
+        ],
+        [
+         0,
+         80
+        ],
+        [
+         0,
+         0
+        ]
+       ],
+       "holes": [],
+       "width": 80,
+       "height": 80,
+       "handles": [
+        "A1"
+       ],
+       "color": null
+      }
+     ]
+    }
+   ],
+   "params": {
+    "sheets": [
+     {
+      "width": 1020,
+      "height": 1020,
+      "count": 1
+     },
+     {
+      "width": 1145,
+      "height": 1020,
+      "count": 1
+     }
+    ],
+    "space": 2,
+    "fillHoles": true,
+    "addOutShape": false,
+    "outputUnit": "mm",
+    "alternativesCount": 1,
+    "edgeDistance": 12
+   },
+   "profile": {
+    "timeBudgetSec": 13,
+    "vcores": 1,
+    "maxDirections": 1,
+    "level": "browser"
+   }
+  },
+  "expected": {
+   "payload": {
+    "problem": "bpp",
+    "instance": {
+     "name": "nest2d",
+     "items": [
+      {
+       "id": 0,
+       "demand": 4,
+       "allowed_orientations": [
+        0,
+        90,
+        180,
+        270
+       ],
+       "shape": {
+        "type": "simple_polygon",
+        "data": [
+         [
+          0.0,
+          0.0
+         ],
+         [
+          80.0,
+          0.0
+         ],
+         [
+          80.0,
+          80.0
+         ],
+         [
+          0.0,
+          80.0
+         ],
+         [
+          0.0,
+          0.0
+         ]
+        ]
+       }
+      }
+     ],
+     "bins": [
+      {
+       "id": 0,
+       "cost": 100,
+       "stock": 1,
+       "shape": {
+        "type": "polygon",
+        "data": {
+         "outer": [
+          [
+           0.0,
+           0.0
+          ],
+          [
+           1000.0,
+           0.0
+          ],
+          [
+           1000.0,
+           1000.0
+          ],
+          [
+           0.0,
+           1000.0
+          ],
+          [
+           0.0,
+           0.0
+          ]
+         ]
+        }
+       }
+      },
+      {
+       "id": 1,
+       "cost": 113,
+       "stock": 1,
+       "shape": {
+        "type": "polygon",
+        "data": {
+         "outer": [
+          [
+           0.0,
+           0.0
+          ],
+          [
+           1125.0,
+           0.0
+          ],
+          [
+           1125.0,
+           1000.0
+          ],
+          [
+           0.0,
+           1000.0
+          ],
+          [
+           0.0,
+           0.0
+          ]
+         ]
+        }
+       }
+      }
+     ]
+    },
+    "meta": null,
+    "engineConfig": {
+     "time_budget_sec": 13,
+     "prng_seed": "6806356572190358293",
+     "n_alternatives": 1,
+     "poly_simpl_tolerance": 0.001,
+     "min_item_separation": 2.0,
+     "narrow_concavity_cutoff": [
+      0.01,
+      0.01
+     ],
+     "live_events": true,
+     "n_workers": 1,
+     "plateau_patience_sec": 2.2133333333333334,
+     "separator_workers": 1
+    },
+    "requestedSpace": 2,
+    "parts": [
+     {
+      "id": 0,
+      "file_slug": "sq-a1b2.dxf",
+      "handles": [
+       "A1"
+      ],
+      "color": "#4F46E5",
+      "coords": [
+       [
+        0.0,
+        0.0
+       ],
+       [
+        80.0,
+        0.0
+       ],
+       [
+        80.0,
+        80.0
+       ],
+       [
+        0.0,
+        80.0
+       ],
+       [
+        0.0,
+        0.0
+       ]
+      ],
+      "holes": [],
+      "count": 4,
+      "rotations": [
+       0,
+       90,
+       180,
+       270
+      ]
+     }
+    ],
+    "requestedEdge": 12.0,
+    "edgeShift": 10.0,
+    "sheetFrames": [
+     {
+      "width": 1020.0,
+      "height": 1020.0
+     },
+     {
+      "width": 1145.0,
+      "height": 1020.0
+     }
+    ],
+    "hasHoles": false,
+    "fillHoles": true,
+    "outputUnit": "mm",
+    "addOutShape": false
+   },
+   "seed": "6806356572190358293",
+   "itemMap": [
+    {
+     "id": 0,
+     "slug": "sq-a1b2.dxf",
+     "part": 0
+    }
+   ]
+  }
+ },
+ {
   "name": "f32 qui mord, bord 9,3",
   "input": {
    "files": [

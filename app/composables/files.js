@@ -260,7 +260,9 @@ function createFilesState() {
             return (
                 invalid ||
                 !isValidNumber(state.params.space) ||
-                !isValidEdgeDistance(state.params.edgeDistance)
+                // Champ grisé : la valeur restée dedans n'est pas envoyée, elle ne
+                // bloque donc pas Nest.
+                (state.edgeBlock === null && !isValidEdgeDistance(state.params.edgeDistance))
             )
         }),
         // Pourquoi la distance au bord est inactive (null = active) : voir

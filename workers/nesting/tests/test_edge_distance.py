@@ -410,6 +410,10 @@ def parity_inputs():
         ("depassement trop grand, bloc", make_input(bloc, ONE_SHEET, space=2, edge=-11)),
         ("bord trop grand", make_input(rect_a, ONE_SHEET, space=2, edge=600)),
         ("piece ne tient plus", make_input(rect_a, ONE_SHEET, space=2, edge=465)),
+        ("fiche a plusieurs pieces (bloc), bord 10", make_input(bloc, ONE_SHEET, space=2, edge=10, directions=["left"])),
+        ("couts des toles, ratio 112,5 arrondi comme Math.round", make_input(
+            rect_a, [{"width": 1020, "height": 1020, "count": 1},
+                     {"width": 1145, "height": 1020, "count": 1}], space=2, edge=12)),
         ("f32 qui mord, bord 9,3", make_input(rect_a, [{"width": 1500, "height": 1000, "count": 1},
                                                          {"width": 1800, "height": 1100, "count": 1}],
                                               space=2, edge=9.3)),

@@ -415,6 +415,22 @@ describe('files.js — tôle importée', () => {
         expect(store.getters.nestRequestError).toBe('')
     })
 
+    it('distance au bord invalide, champ grisé : ne bloque pas Nest (valeur non envoyée)', () => {
+        // Projet « Nos serveurs », calcul navigateur coupé : champ grisé.
+        store.actions.updateEdgeDistance('abc')
+        expect(store.getters.edgeBlock).toBe('off')
+        expect(store.getters.nestRequestError).toBe('')
+    })
+
+    it('distance au bord invalide, champ actif : bloque Nest ; valeur valide : débloque', () => {
+        vi.stubGlobal('useRuntimeConfig', () => ({ public: { localComputeEnabled: true } }))
+        store.actions.updateEdgeDistance('abc')
+        expect(store.getters.edgeBlock).toBe(null)
+        expect(store.getters.nestRequestError).toBe('project.invalidParams')
+        store.actions.updateEdgeDistance('3')
+        expect(store.getters.nestRequestError).toBe('')
+    })
+
     it('removeSheet et addSheet : la copie d une tôle importée est une tôle simple', () => {
         store.actions.addSheetFromShape(record(), { hasResult: true })
         store.actions.addSheet()
