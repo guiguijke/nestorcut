@@ -1486,6 +1486,30 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       PR (piège 33b), avec `wasm-opt` (binaryen) sur le PATH : sans lui le script
       installe un binaire non optimisé.
 
+69. **Tôle à quantité illimitée : « le stock d'abord » se joue dans
+    l'application, pas dans le moteur.** Le moteur n'a qu'un coût par tôle, et à
+    coût égal il départage sur la plus grande chute libre : il préfère donc le
+    stock le MOINS servi. Avec `params.sheets[].unlimited === true` (clé absente
+    sinon ; projets « Cet appareil » seulement) :
+    - le constructeur coupe chaque format fini en « première tôle » (coût 0) et
+      « le reste » (coût 1), met le stock devant et fait coûter chaque illimitée
+      plus que tout le stock (`stockPriorityBins`), racine `stockPriority` ;
+    - le pool donne à un walk sur deux (par tranches d'un walk par sens) la
+      recette « tout le stock à 0 » (`walkInstance`) : sans elle la 2e tôle d'un
+      format ne sert presque jamais, seule elle en ouvre une pour une pièce ;
+    - AVANT la fusion, `preferStockRuns` choisit par (pièces non posées, coût
+      des seules tôles à prévoir, aire de pièces sur le stock, tôles du stock
+      touchées) et réécrit `cost_detail.bin_cost` ; le chemin dégradé et l'ordre
+      des options suivent le même critère. Si la garde d'embouchure de la fusion
+      retire des pièces, la fusion est refaite avec tous les runs ;
+    - après le calcul : stock numéroté en premier (`sortStockFirst`), une pièce
+      du stock ne part jamais sur une tôle à prévoir (bandes résiduelles), la
+      grille ne livre pas de tôle vide, le rapport porte `supply` par tôle.
+    Rien ne garantit que chaque tôle du stock serve : ce qu'aucune recherche ne
+    trouve n'est pas rattrapé. Toute retouche d'un coût ou du critère se mesure
+    avec le vrai moteur sur plusieurs graines, jamais sur une seule. Sans tôle
+    illimitée, tout est identique à l'octet (`unlimitedBuilder`).
+
 ## 3. Banc d'essai (workers/nesting/bench/)
 
 Boucle de test de bout en bout, sans UI :

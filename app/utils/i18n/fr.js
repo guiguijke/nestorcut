@@ -615,8 +615,8 @@ export default {
     'report.supply.column': 'Origine',
     'report.supply.stock': 'Stock',
     'report.supply.new': 'À prévoir',
-    'report.supply.title': 'Matière',
-    'report.supply.text': 'Matière : {formats}',
+    'report.supply.title': 'Tôles',
+    'report.supply.text': 'Tôles : {formats}',
     'settings.requiredHeight': "Hauteur requise : au moins {h} (5 % au-dessus de la plus haute pièce).",
 
     'project.projects': 'Projets',

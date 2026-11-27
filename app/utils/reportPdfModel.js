@@ -55,6 +55,7 @@
  */
 import { buildPartRefs, labelPoint, ringsBox, cutStats } from './sheetSvgReport.js'
 import { showSheetOffcutColumn } from './reportLayout.js'
+import { materialKeys, supplyColumn } from './reportSupply.js'
 
 const arr = (v) => (Array.isArray(v) ? v : [])
 const clean = (v) => (v == null ? '' : String(v).trim())
@@ -111,7 +112,8 @@ export function buildReportPdfModel(input) {
             { label: t('reportPdf.meta.unit'), value: inch ? t('reportPdf.unit.inch') : t('reportPdf.unit.mm') },
         ],
         fields: [],
-        headline: { label: t('report.material'), value: clean(inp.materialFormats) || '—' },
+        // Tôle illimitée : même titre qu'à l'écran (une partie peut venir du stock).
+        headline: { label: t(materialKeys(rows).title), value: clean(inp.materialFormats) || '—' },
         figures: [],
         checks: [],
         notes: [],
@@ -242,13 +244,16 @@ export function buildReportPdfModel(input) {
     const refs = advanced ? buildPartRefs(countLists) : null
 
     // ---- une page par tôle -------------------------------------------------------------------
+    // Tôle illimitée : chaque page dit si sa tôle vient du stock (null sinon).
+    const supply = supplyColumn(rows, t)
     model.sheets = rows.map((s, i) => {
         const p = previews[i]
         const image = images[i]
         const pct = s.densityPct != null ? inp.fmtPercent(s.densityPct) : '—'
+        const origin = supply?.cells[i] ? ` · ${supply.cells[i]}` : ''
         const sheet = {
             title: t('result.sheet', { n: (Number(s.index) || i) + 1, total: sheetCount }),
-            subtitle: `${inp.fmtLength(s.widthMm)} × ${inp.fmtLength(s.heightMm)}${s.shaped ? ` (${badge})` : ''} · ${inp.tp('reportPdf.sheetParts', Number(s.partCount) || 0)} · ${t('report.sheet.density')} ${pct}`,
+            subtitle: `${inp.fmtLength(s.widthMm)} × ${inp.fmtLength(s.heightMm)}${s.shaped ? ` (${badge})` : ''}${origin} · ${inp.tp('reportPdf.sheetParts', Number(s.partCount) || 0)} · ${t('report.sheet.density')} ${pct}`,
             plan: p && image ? { image, widthMm: p.widthMm, heightMm: p.heightMm, labels: [] } : null,
             note: p && image ? null : t('reportPdf.note.noPlan'),
         }

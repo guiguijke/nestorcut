@@ -632,8 +632,8 @@ export default {
     'report.supply.column': 'Source',
     'report.supply.stock': 'In stock',
     'report.supply.new': 'To plan',
-    'report.supply.title': 'Sheet material',
-    'report.supply.text': 'Sheet material: {formats}',
+    'report.supply.title': 'Sheets',
+    'report.supply.text': 'Sheets: {formats}',
     'settings.requiredHeight': 'Required height: at least {h} (5% above the tallest selected part).',
 
     'project.projects': 'Projects',
