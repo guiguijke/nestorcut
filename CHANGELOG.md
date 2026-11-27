@@ -4,6 +4,32 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.23
+
+*FR*
+
+- Imbrication dans les trous : quand « Imbriquer dans les trous » est coché, l'option « Grille » n'est plus proposée si elle laisse hors des trous des pièces qui y tiennent. Les options proposées mettent les petites pièces dans les trous.
+
+*EN*
+
+- Nesting inside holes: when "Nest parts inside holes" is checked, the "Grid" option is no longer offered if it leaves outside the holes parts that fit in them. The options offered put the small parts in the holes.
+
+*PT*
+
+- Aninhamento nos furos: com "Aninhar nos furos" marcado, a opção "Grade" não é mais proposta se deixar fora dos furos peças que cabem neles. As opções propostas colocam as peças pequenas nos furos.
+
+*IT*
+
+- Annidamento nei fori: con "Annida nei fori" attivo, l'opzione "Griglia" non viene più proposta se lascia fuori dai fori pezzi che vi entrano. Le opzioni proposte mettono i pezzi piccoli nei fori.
+
+*DE*
+
+- Verschachtelung in Löchern: Ist "In Löcher verschachteln" aktiviert, wird die Option "Raster" nicht mehr angeboten, wenn sie Teile außerhalb der Löcher lässt, die hineinpassen. Die angebotenen Optionen legen die kleinen Teile in die Löcher.
+
+*ES*
+
+- Anidado en los agujeros: con "Anidar en los agujeros" activado, la opción "Rejilla" ya no se propone si deja fuera de los agujeros piezas que caben en ellos. Las opciones propuestas ponen las piezas pequeñas en los agujeros.
+
 ## V0.9.22
 
 *FR*
