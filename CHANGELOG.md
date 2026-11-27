@@ -4,6 +4,74 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.26
+
+*FR*
+
+- Quantité de tôles illimitée, sur les projets « Cet appareil » : cochez « Quantité illimitée » sous une tôle. Vos tôles à quantité fixe, stock et chutes, sont remplies d'abord et numérotées en premier ; les tôles illimitées complètent, autant qu'il en faut (1 000 tôles au plus par calcul). Quand une tôle neuve est de toute façon nécessaire, il peut arriver qu'une tôle du stock reste inutilisée.
+- Rapport d'imbrication, texte copié, CSV et PDF : « Du stock » et « À prévoir » sont séparés, avec l'origine de chaque tôle.
+- Import « Cet appareil » : un trait ou un arc qui s'arrête au milieu d'un autre trait (une bosse ronde posée sur le côté d'un rectangle, par exemple) n'était pas raccordé dans environ un cas sur quatre : la forme restait hors de la pièce ou un trou manquait, et l'import signalait des tracés ouverts. Il est maintenant raccordé, pour les pièces comme pour les tôles importées.
+- Import « Cet appareil » : un trait tracé d'un trou jusqu'au bord de la pièce (une fente, un trait de scie) ne fait plus disparaître le trou.
+- La fenêtre Support, la page d'erreur et les infobulles des boutons à icône parlent maintenant votre langue, dans les six langues.
+- Allemand, espagnol, italien et portugais relus de bout en bout : portugais du Brésil partout, tutoiement en espagnol et en italien, mêmes mots d'un écran à l'autre. En français, l'application dit « imbrication » et « e-mail » partout. La page Benchmarks et les anciennes nouveautés existent aussi dans les six langues.
+- Sur téléphone, la fenêtre de résultat montre la tôle d'abord et le rapport s'ouvre en haut. Les noms de projets ne sont plus coupés dans la colonne Projets.
+- Au clavier, le focus se voit partout et les volets fermés ne retiennent plus la tabulation. Les colonnes Projets et Résultats vides disent quoi faire, et « m² » ne passe plus seul à la ligne.
+
+*EN*
+
+- Unlimited sheet quantity, in "This device" projects: tick "Unlimited quantity" under a sheet. Your fixed-quantity sheets, stock and offcuts, are filled and numbered first; unlimited sheets complete the job, as many as needed (1,000 sheets at most per calculation). When a new sheet is needed anyway, a stock sheet can occasionally stay unused.
+- Nesting report, copied text, CSV and PDF: "From stock" and "To plan" are shown separately, with the source of each sheet.
+- "This device" import: a line or arc that ends in the middle of another line (a round bump on the side of a rectangle, for example) was not joined in about one case in four: the shape stayed outside the part or a hole was missing, and the import reported open paths. It is now joined, for parts as for imported sheets.
+- "This device" import: a line drawn from a hole to the edge of the part (a slot, a saw cut) no longer makes the hole disappear.
+- The Support window, the error page and the tooltips of icon buttons now speak your language, in all six languages.
+- German, Spanish, Italian and Portuguese reviewed end to end: Brazilian Portuguese throughout, informal address in Spanish and Italian, the same words from one screen to the next. The Benchmarks page and the older release notes are also available in all six languages.
+- On phones, the result window shows the sheet first and the report opens at the top. Project names are no longer cut off in the Projects column.
+- With the keyboard, focus is visible everywhere and closed side panels no longer trap the Tab key. Empty Projects and Results columns say what to do, and "m²" no longer wraps onto a line of its own.
+
+*PT*
+
+- Quantidade ilimitada de chapas, nos projetos "Este dispositivo": marque "Quantidade ilimitada" abaixo de uma chapa. As chapas com quantidade fixa, estoque e retalhos, são preenchidas e numeradas primeiro; as chapas ilimitadas completam o trabalho, quantas forem necessárias (no máximo 1.000 chapas por cálculo). Quando uma chapa nova é necessária de qualquer forma, uma chapa do estoque pode ocasionalmente ficar sem uso.
+- Relatório de nesting, texto copiado, CSV e PDF: "Do estoque" e "A prever" aparecem separados, com a origem de cada chapa.
+- Importação "Este dispositivo": uma linha ou um arco que termina no meio de outra linha (uma saliência redonda no lado de um retângulo, por exemplo) não era ligado em cerca de um caso em quatro: a forma ficava fora da peça ou faltava um furo, e a importação indicava trajetos abertos. Agora ele é ligado, tanto nas peças quanto nas chapas importadas.
+- Importação "Este dispositivo": uma linha traçada de um furo até a borda da peça (uma fenda, um corte de serra) não faz mais o furo desaparecer.
+- A janela de Suporte, a página de erro e as dicas dos botões com ícone agora falam o seu idioma, nos seis idiomas.
+- Alemão, espanhol, italiano e português revisados de ponta a ponta: português do Brasil em todo lugar, tratamento informal em espanhol e italiano, as mesmas palavras de uma tela para outra. A página Benchmarks e as novidades antigas também estão nos seis idiomas.
+- No celular, a janela de resultado mostra a chapa primeiro e o relatório abre no topo. Os nomes de projeto não são mais cortados na coluna Projetos.
+- Pelo teclado, o foco fica visível em todo lugar e os painéis fechados não prendem mais a tecla Tab. As colunas Projetos e Resultados vazias dizem o que fazer, e "m²" não passa mais sozinho para a linha seguinte.
+
+*IT*
+
+- Quantità illimitata di lamiere, nei progetti «Questo dispositivo»: spunta «Quantità illimitata» sotto una lamiera. Le lamiere in quantità fissa, stock e ritagli, vengono riempite e numerate per prime; le lamiere illimitate completano il lavoro, quante ne servono (al massimo 1.000 lamiere per calcolo). Quando una lamiera nuova è comunque necessaria, può capitare che una lamiera dello stock resti inutilizzata.
+- Rapporto di nesting, testo copiato, CSV e PDF: «Dallo stock» e «Da pianificare» sono separati, con l'origine di ogni lamiera.
+- Importazione «Questo dispositivo»: una linea o un arco che finisce a metà di un'altra linea (una gobba tonda sul lato di un rettangolo, per esempio) non veniva collegato in circa un caso su quattro: la forma restava fuori dal pezzo o mancava un foro, e l'importazione segnalava tracciati aperti. Ora viene collegato, sia per i pezzi sia per le lamiere importate.
+- Importazione «Questo dispositivo»: una linea tracciata da un foro fino al bordo del pezzo (una fessura, un taglio di sega) non fa più sparire il foro.
+- La finestra di Supporto, la pagina di errore e i suggerimenti dei pulsanti con icona ora parlano la tua lingua, in tutte e sei le lingue.
+- Tedesco, spagnolo, italiano e portoghese riletti da cima a fondo: portoghese del Brasile ovunque, il «tu» in spagnolo e in italiano, le stesse parole da una schermata all'altra. Anche la pagina Benchmark e le novità precedenti sono nelle sei lingue.
+- Sul telefono, la finestra del risultato mostra prima la lamiera e il rapporto si apre dall'alto. I nomi dei progetti non sono più tagliati nella colonna Progetti.
+- Da tastiera, il focus è visibile ovunque e i pannelli chiusi non trattengono più il tasto Tab. Le colonne Progetti e Risultati vuote dicono cosa fare, e «m²» non va più a capo da solo.
+
+*DE*
+
+- Unbegrenzte Blechmenge, in Projekten „Dieses Gerät“: Haken Sie unter einem Blech „Unbegrenzte Menge“ an. Ihre Bleche mit fester Menge, Bestand und Restbleche, werden zuerst belegt und zuerst nummeriert; die unbegrenzten Bleche ergänzen den Auftrag, so viele wie nötig (höchstens 1.000 Bleche pro Berechnung). Wenn ohnehin ein neues Blech nötig ist, kann gelegentlich ein Blech aus dem Bestand ungenutzt bleiben.
+- Nesting-Bericht, kopierter Text, CSV und PDF: „Aus dem Bestand“ und „Einzuplanen“ stehen getrennt, mit der Herkunft jedes Blechs.
+- Import „Dieses Gerät“: Eine Linie oder ein Bogen, die in der Mitte einer anderen Linie enden (zum Beispiel ein runder Buckel an der Seite eines Rechtecks), wurden in etwa einem von vier Fällen nicht verbunden: Die Form blieb außerhalb des Teils oder ein Loch fehlte, und der Import meldete offene Konturen. Sie werden jetzt verbunden, für Teile wie für importierte Bleche.
+- Import „Dieses Gerät“: Eine Linie von einem Loch bis zum Rand des Teils (ein Schlitz, ein Sägeschnitt) lässt das Loch nicht mehr verschwinden.
+- Das Support-Fenster, die Fehlerseite und die Tooltips der Symbolschaltflächen sprechen jetzt Ihre Sprache, in allen sechs Sprachen.
+- Deutsch, Spanisch, Italienisch und Portugiesisch vollständig überarbeitet: durchgehend brasilianisches Portugiesisch, Duzen im Spanischen und Italienischen, dieselben Begriffe auf allen Bildschirmen. Die Benchmark-Seite und die älteren Neuigkeiten gibt es ebenfalls in allen sechs Sprachen.
+- Auf dem Smartphone zeigt das Ergebnisfenster zuerst das Blech, und der Bericht öffnet sich oben. Projektnamen werden in der Spalte „Projekte“ nicht mehr abgeschnitten.
+- Mit der Tastatur ist der Fokus überall sichtbar, und geschlossene Seitenleisten halten die Tabulatortaste nicht mehr fest. Leere Spalten „Projekte“ und „Ergebnisse“ sagen, was zu tun ist, und „m²“ rutscht nicht mehr allein in die nächste Zeile.
+
+*ES*
+
+- Cantidad ilimitada de chapas, en los proyectos «Este dispositivo»: marca «Cantidad ilimitada» debajo de una chapa. Tus chapas de cantidad fija, stock y sobrantes, se llenan y se numeran primero; las chapas ilimitadas completan el trabajo, tantas como hagan falta (1.000 chapas como máximo por cálculo). Cuando de todos modos hace falta una chapa nueva, a veces una chapa del stock puede quedar sin usar.
+- Informe de nesting, texto copiado, CSV y PDF: «Del stock» y «Por planificar» aparecen por separado, con el origen de cada chapa.
+- Importación «Este dispositivo»: una línea o un arco que termina en medio de otra línea (una protuberancia redonda en el lado de un rectángulo, por ejemplo) no se unía en aproximadamente un caso de cada cuatro: la forma quedaba fuera de la pieza o faltaba un agujero, y la importación señalaba trazados abiertos. Ahora se une, tanto en las piezas como en las chapas importadas.
+- Importación «Este dispositivo»: una línea trazada desde un agujero hasta el borde de la pieza (una ranura, un corte de sierra) ya no hace desaparecer el agujero.
+- La ventana de Soporte, la página de error y las ayudas de los botones con icono ya hablan tu idioma, en los seis idiomas.
+- Alemán, español, italiano y portugués revisados de principio a fin: portugués de Brasil en todas partes, tuteo en español e italiano, las mismas palabras de una pantalla a otra. La página Benchmarks y las novedades antiguas también están en los seis idiomas.
+- En el móvil, la ventana del resultado muestra primero la chapa y el informe se abre arriba. Los nombres de proyecto ya no se cortan en la columna Proyectos.
+- Con el teclado, el foco se ve en todas partes y los paneles cerrados ya no retienen la tecla Tab. Las columnas Proyectos y Resultados vacías dicen qué hacer, y «m²» ya no salta solo a la línea siguiente.
+
 ## V0.9.25
 
 *FR*
