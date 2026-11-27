@@ -290,10 +290,56 @@ describe('distance au bord (edgeDistance)', () => {
         expect(body().params.edgeDistance).toBeCloseTo(-12.7, 6)
     })
 
-    it("projet serveur ou démo : la clé n'est jamais envoyée, même remplie", async () => {
+    // Projet « Nos serveurs » : la clé part seulement si le calcul navigateur est
+    // activé (le serveur la refuserait sinon), hors démo et sans DWG.
+    const openServer = async (slug, { isDemo = false, slugs = [`${slug}-f`] } = {}) => {
+        vi.stubGlobal('$fetch', vi.fn(async () => ({
+            name: slug, slug, local: false, isDemo,
+            files: slugs.map((s) => ({ ...file(s), count: 1 })),
+        })))
+        await open(slug)
+    }
+    const browserCompute = (v) => vi.stubGlobal('useRuntimeConfig', () => ({ public: { localComputeEnabled: v } }))
+
+    it('projet serveur, calcul navigateur coupé ou inconnu : la clé ne part jamais envoyée, même remplie', async () => {
+        for (const v of [false, 'false', undefined]) {
+            await setup()
+            browserCompute(v)
+            await openServer('a')
+            store.actions.updateEdgeDistance('4')
+            expect(store.getters.edgeBlock).toBe('off')
+            expect(store.getters.requestBody).not.toContain('edgeDistance')
+        }
         await setup()
-        await openProject('a', false)
+        await openServer('a')
         store.actions.updateEdgeDistance('4')
+        expect(store.getters.requestBody).not.toContain('edgeDistance')
+    })
+
+    it.each([[true], ['true']])('projet serveur, calcul navigateur activé (%s) : la clé part, en mm', async (v) => {
+        await setup()
+        browserCompute(v)
+        await openServer('a')
+        store.actions.updateEdgeDistance('-2,5')
+        expect(store.getters.edgeBlock).toBe(null)
+        expect(body().params.edgeDistance).toBe(-2.5)
+    })
+
+    it('projet serveur avec un DWG à calculer : champ grisé, clé jamais envoyée', async () => {
+        await setup()
+        browserCompute(true)
+        await openServer('a', { slugs: ['a-f.dxf', 'a-g.dwg'] })
+        store.actions.updateEdgeDistance('4')
+        expect(store.getters.edgeBlock).toBe('dwg')
+        expect(store.getters.requestBody).not.toContain('edgeDistance')
+    })
+
+    it('démo : champ grisé, clé jamais envoyée, même calcul navigateur activé', async () => {
+        await setup()
+        browserCompute(true)
+        await openServer('demo', { isDemo: true })
+        store.actions.updateEdgeDistance('4')
+        expect(store.getters.edgeBlock).toBe('demo')
         expect(store.getters.requestBody).not.toContain('edgeDistance')
     })
 

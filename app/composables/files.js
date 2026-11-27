@@ -8,6 +8,8 @@ import {
     isEdgeDistanceSet,
     isValidEdgeDistance,
     edgeDistanceNumber,
+    edgeDistanceBlock,
+    hasDwgToNest,
 } from '~/utils/spacingParams'
 import { getUnitState } from '~/composables/useUnit'
 import { exceedsMaxSheets } from '~/utils/capacityPanel'
@@ -17,6 +19,16 @@ import { MAX_SHEET_FORMATS } from '~~/shared/constants/payment.constants'
 import { isUntouchedFactorySheet, factorySheetOf } from '~/utils/factorySheet'
 import { SNAPSHOT_VERSION, snapshotUnit } from '~/utils/projectSnapshot'
 import { rotationAngles } from '~/utils/partSheetFit'
+
+// Calcul navigateur activé ? (override runtime en CHAÎNE, AGENTS #29). Hors
+// Nuxt (tests sans configuration) : coupé, donc rien n'est envoyé de plus.
+function browserComputeOn() {
+    try {
+        return flagOn(useRuntimeConfig().public.localComputeEnabled)
+    } catch {
+        return false
+    }
+}
 
 const { actions } = globalStore
 const { getProjects, setModalNestData } = actions
@@ -251,6 +263,16 @@ function createFilesState() {
                 !isValidEdgeDistance(state.params.edgeDistance)
             )
         }),
+        // Pourquoi la distance au bord est inactive (null = active) : voir
+        // edgeDistanceBlock. Lu par l'écran, par la page et par la requête.
+        edgeBlock: computed(() =>
+            edgeDistanceBlock({
+                local: state.projectLocal,
+                isDemo: state.projectDemo,
+                hasDwg: hasDwgToNest(state.filesToNest),
+                browserCompute: browserComputeOn(),
+            })
+        ),
         requestBody: computed(() => {
             const sheets = normalizedSheets(state.params)
             const first = sheets[0] || { width: 0, height: 0, count: 0 }
@@ -259,10 +281,11 @@ function createFilesState() {
             // at the boundary.
             const unit = state.displayUnit || getUnitState()
             const toMm = (v) => displayToMm(Number(v), unit)
-            // Distance au bord : envoyée SEULEMENT si remplie ET projet « Cet
-            // appareil » (calcul 100 % navigateur, phase 1). Absente sinon :
-            // le corps par défaut reste identique à l'octet.
-            const edgeValue = state.projectLocal
+            // Distance au bord : envoyée SEULEMENT si remplie ET si le champ est
+            // actif (« Cet appareil », ou « Nos serveurs » avec calcul navigateur,
+            // sans DWG, hors démo). Absente sinon : le corps par défaut reste
+            // identique à l'octet, et le serveur n'a rien à refuser.
+            const edgeValue = state.edgeBlock === null
                 ? edgeDistanceNumber(state.params.edgeDistance)
                 : null
             return JSON.stringify({
@@ -1449,6 +1472,16 @@ async function nest(slug) {
                 if (stillOnSubmittedProject()) refuseSubmission('nest.error.tooManyFormats')
                 return
             }
+            if (error?.data?.statusMessage === 'edge_distance_dwg' || error?.data?.statusMessage === 'edge_distance_local_only') {
+                // Distance au bord refusée (400, avant toute charge) : le champ est
+                // grisé d'ordinaire (edgeBlock) ; ici l'écran a été contourné.
+                if (stillOnSubmittedProject()) {
+                    refuseSubmission(error.data.statusMessage === 'edge_distance_dwg'
+                        ? 'settings.edgeNoDwg'
+                        : 'settings.edgeLocalOnly')
+                }
+                return
+            }
             if (error?.data?.statusMessage === 'too_many_sheets') {
                 // d6 (02/11) : borne technique serveur (400, avant toute
                 // charge) — le miroir client (sheetCountTooHigh) grise Nest
@@ -1572,6 +1605,7 @@ export const filesStore = readonly({
         projectName: getter((state) => state.projectName),
         projectDemo: getter((state) => state.projectDemo),
         projectLocal: getter((state) => state.projectLocal),
+        edgeBlock: getter((state) => state.edgeBlock),
         localImportError: getter((state) => state.localImportError),
         localImportNotice: getter((state) => state.localImportNotice),
         localImportNoticeParams: getter((state) => state.localImportNoticeParams),

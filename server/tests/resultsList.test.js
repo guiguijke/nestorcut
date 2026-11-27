@@ -75,6 +75,7 @@ const fullJob = (i, extra = {}) => ({
     degraded: 'merge_unavailable',
     errorCode: 'engine_error',
     itemGeometry: { slug: 'f', part: 2 },
+    edgeDetail: { maxOverhangMm: 12.5, part: 'nom-prive' },
     thinParts: [{ item: 3, slug: 'f', part: 1 }],
     thinCount: 80,
     unfit: { reason: 'partial' },
@@ -117,6 +118,8 @@ describe('getResults — projection, borne et index', () => {
         expect(done.errorCode).toBe('engine_error')
         // Pièce nommée par un refus : exposée, sinon le bandeau perd son nom après un rechargement.
         expect(done.itemGeometry).toEqual({ slug: 'f', part: 2 })
+        // Refus « distance au bord » du worker : les chiffres seuls (pas la pièce nommée).
+        expect(done.edgeDetail).toEqual({ maxOverhangMm: 12.5 })
         // Constat « pièces à traits fins » (local ET serveur) : sans ces champs la ligne du rapport ne sort jamais.
         expect(done.thinParts).toEqual([{ item: 3, slug: 'f', part: 1 }])
         expect(done.thinCount).toBe(80)

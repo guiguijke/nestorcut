@@ -519,6 +519,7 @@ const jobErrorText = computed(() => {
         t,
         mapLocalError: (code, params) => localModeCtl.mapError(code, { localOnly: unref(isLocalProject), params: params || null }),
         files: projectFiles.value,
+        edgeParams: edgeRefusalParams,
     });
 });
 // Z1 (vérif 2026-09-05) : payload unfit du dernier job local refusé (les
@@ -637,11 +638,11 @@ const projectFilesCount = computed(() => (filesGetters.projectFiles || []).lengt
 // lecture refusée. Des nombres seulement, bruts : aucun suivi profond de Vue.
 const shapeStats = shallowRef({});
 const preflightSheets = computed(() => preflightSheetsOf(unref(currentSheets), unref(shapeStats), displayToMm));
-// Distance au bord demandée (mm), ou null : champ vide, illisible, ou projet qui
-// ne calcule pas dans le navigateur (phase 1 : le réglage n'y vaut pas, le champ
-// est grisé et la requête ne le porte pas).
+// Distance au bord demandée (mm), ou null : champ vide, illisible, ou champ grisé
+// (démo, fichier DWG, calcul navigateur coupé : la requête ne le porte pas, voir
+// edgeBlock du store, même règle que le serveur).
 const edgeRequestedMm = computed(() => {
-    if (!unref(filesGetters.projectLocal)) return null
+    if (unref(filesGetters.edgeBlock) !== null) return null
     const n = edgeDistanceNumber(unref(params)?.edgeDistance)
     if (n === null) return null
     const edgeMm = displayToMm(n)

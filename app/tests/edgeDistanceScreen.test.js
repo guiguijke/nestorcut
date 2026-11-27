@@ -126,3 +126,25 @@ describe('gabarits', () => {
         expect(fmtLengthValue(displayToMm(0.0625, 'inch'), 'inch', 6, 'fr')).toBe('0,0625')
     })
 })
+
+describe('« Nos serveurs » : champ actif, grisé avec sa phrase', () => {
+    const settings = readFileSync(resolve(__dirname, '../components/MainSettings.vue'), 'utf8')
+    const page = readFileSync(resolve(__dirname, '../pages/project/[slug].vue'), 'utf8')
+    it('le champ se grise d’après edgeBlock (démo, DWG, calcul navigateur coupé), plus d’après le seul projet local', () => {
+        expect(settings).toMatch(/const edgeDisabled = computed\(\(\) => edgeBlock\.value !== null\)/)
+        expect(settings).not.toMatch(/edgeDisabled = computed\(\(\) => !isLocalProject/)
+    })
+    it('chaque cas a sa phrase, et la ligne « calculé sur cet appareil » est sur le champ actif', () => {
+        expect(settings).toMatch(/'demo'\) return t\('settings\.edgeNoDemo'\)/)
+        expect(settings).toMatch(/'dwg'\) return t\('settings\.edgeNoDwg'\)/)
+        expect(settings).toMatch(/'off'\) return t\('settings\.edgeLocalOnly'\)/)
+        expect(settings).toMatch(/data-testid="settings-edge-computed-here"/)
+        expect(settings).toMatch(/!isLocalProject\.value && edgeBlock\.value === null/)
+    })
+    it('la page ne lit aucun bord quand le champ est grisé (requête, contrôles de page)', () => {
+        expect(page).toMatch(/if \(unref\(filesGetters\.edgeBlock\) !== null\) return null/)
+    })
+    it('la page passe sa fonction de chiffres au bandeau d’échec', () => {
+        expect(page).toMatch(/edgeParams: edgeRefusalParams/)
+    })
+})

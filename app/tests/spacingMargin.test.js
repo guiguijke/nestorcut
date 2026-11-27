@@ -196,8 +196,9 @@ describe('pré-contrôles : la capacité est jugée à l’espacement interne co
         const read = (rel) => readFileSync(new URL(rel, import.meta.url), 'utf8')
         const api = read('../../server/api/project/[slug]/nest.post.js')
         expect(api).toContain('computeSpacingMargin(')
-        expect(api).toContain('capacityReport(parts, normalizedSheets, space + curveMargin)')
-        expect(api).toContain('...userMaxSpacing(cap.maxSpacingForFitMm, curveMargin)')
+        // Tôles moteur (= les vraies sans distance au bord) à l'espacement interne.
+        expect(api).toContain('capacityReport(parts, engineSheets, space + curveMargin)')
+        expect(api).toContain('...userMaxSpacing(lever.maxSpacingForFitMm, curveMargin)')
         const page = read('../pages/project/[slug].vue')
         expect(page).toContain('computeSpacingMargin(')
         expect(page).toContain('capacityReport(parts, model.sheets, spaceMm + curveMargin)')

@@ -139,3 +139,24 @@ describe('distance au bord (lot du 26/11)', async () => {
         expect(m.edgeShiftMm(0, 3)).toBe(3)
     })
 })
+
+describe('distance au bord : quand le champ est actif', async () => {
+    const m = await import('../utils/spacingParams.js')
+    const base = { local: false, isDemo: false, hasDwg: false, browserCompute: true }
+    it('« Cet appareil » : toujours actif', () => {
+        expect(m.edgeDistanceBlock({ ...base, local: true, browserCompute: false })).toBe(null)
+    })
+    it('« Nos serveurs » : actif avec le calcul navigateur, sans DWG, hors démo', () => {
+        expect(m.edgeDistanceBlock(base)).toBe(null)
+    })
+    it('chaque cas grisé a sa raison', () => {
+        expect(m.edgeDistanceBlock({ ...base, isDemo: true })).toBe('demo')
+        expect(m.edgeDistanceBlock({ ...base, hasDwg: true })).toBe('dwg')
+        expect(m.edgeDistanceBlock({ ...base, browserCompute: false })).toBe('off')
+    })
+    it('hasDwgToNest : un DWG demandé (quantité > 0), comme le serveur', () => {
+        expect(m.hasDwgToNest([{ slug: 'a.dxf', count: 1 }, { slug: 'B.DWG', count: 2 }])).toBe(true)
+        expect(m.hasDwgToNest([{ slug: 'b.dwg', count: 0 }])).toBe(false)
+        expect(m.hasDwgToNest(null)).toBe(false)
+    })
+})

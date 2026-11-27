@@ -90,7 +90,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing', 'unfit-open
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
 const { t, tp, fmtPercent, fmtNumber } = useLocale()
-const { unit, fmtArea: fmtAreaUnit, fmtLength, fmtLengthValue, unitLabel, displayToMm } = useUnit()
+const { unit, fmtArea: fmtAreaUnit, fmtLength, fmtLengthValue, fmtLengthMax, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
 // passent par les contenus persistés (localDownloads), jamais par une URL
@@ -967,6 +967,11 @@ const failureDetail = computed(() => failureDetailText(
     t,
     (code, params) => localModeCtl.mapError(code, { localOnly: isLocalJob(unref(resultModalData)), params: params || null }),
     unref(onJobProject) ? (filesStore.getters.projectFiles || []) : [],
+    // Refus « distance au bord » d'un job « Nos serveurs » : le chiffre du détail.
+    (detail) => {
+        const mm = Number(detail.maxOverhangMm ?? detail.maxEdgeMm)
+        return Number.isFinite(mm) ? { max: fmtLengthMax(mm), unit: unitLabel.value } : null
+    },
 ))
 // D26 : information Free avant de relancer un calcul. La règle (propriétaire,
 // 20/11) : en Free, les 2 premières tôles d'un calcul à tôles rectangulaires ;

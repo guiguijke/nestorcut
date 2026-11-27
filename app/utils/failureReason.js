@@ -130,6 +130,15 @@ export function failureItemParams(job, files) {
 }
 
 const ITEM_CODES = new Set(['item_geometry', 'item_unplaceable'])
+const EDGE_CODES = new Set(['edge_too_large', 'edge_overhang_too_large'])
+
+/** Paramètres de la phrase d'un refus « distance au bord » : `edgeParams` (fournie
+ * par la page, elle met les mm dans l'unité d'affichage) appliquée au détail
+ * chiffré du job (`edgeDetail`). `null` : la phrase sans chiffre. */
+function edgeRefusalParamsOf(job, edgeParams) {
+    if (typeof edgeParams !== 'function' || !job?.edgeDetail) return null
+    return edgeParams(job.edgeDetail) || null
+}
 
 /**
  * Texte du bandeau de la page projet pour un job en échec que le registre local
@@ -142,12 +151,17 @@ const ITEM_CODES = new Set(['item_geometry', 'item_unplaceable'])
  * quel, sauf la trace du moteur natif (`ENGINE_TRACE`).
  * `error` n'est pas exposé au client, il peut citer un chemin ou une trace : sans
  * `information`, le libellé d'échec.
+ * Refus « distance au bord » d'un job « Nos serveurs » : le worker écrit le code nu
+ * et `edgeDetail` ({ maxEdgeMm } ou { maxOverhangMm, part }) ; avec `edgeParams`
+ * (optionnel) la phrase porte le chiffre, sinon elle n'en a pas.
  */
-export function failureBannerText(job, t, mapLocalError, files = []) {
+export function failureBannerText(job, t, mapLocalError, files = [], edgeParams = null) {
     const errorCode = job?.errorCode
     if (errorCode && errorCode !== 'local_interrupted') {
         const code = errorCode === 'engine_error' ? 'crash' : errorCode
-        return mapLocalError(code, ITEM_CODES.has(code) ? failureItemParams(job, files) : null)
+        return mapLocalError(code, ITEM_CODES.has(code)
+            ? failureItemParams(job, files)
+            : EDGE_CODES.has(code) ? edgeRefusalParamsOf(job, edgeParams) : null)
     }
     const information = String(job?.information || '').trim()
     const code = refusalCode(information)
@@ -157,6 +171,9 @@ export function failureBannerText(job, t, mapLocalError, files = []) {
         }
         if (code === 'part_too_large' && typeof mapLocalError === 'function') {
             return mapLocalError(code, tooLargeParams(information))
+        }
+        if (EDGE_CODES.has(code) && typeof mapLocalError === 'function' && typeof edgeParams === 'function' && job?.edgeDetail) {
+            return mapLocalError(code, edgeRefusalParamsOf(job, edgeParams))
         }
         return t(failureReasonKey(information, { localOnly: isLocalJob(job) }))
     }
@@ -169,14 +186,14 @@ export function failureBannerText(job, t, mapLocalError, files = []) {
  * la fenêtre dit déjà « aucune solution » — sans cause connue, ni texte libre
  * ni trace du moteur natif, elle n'ajoute rien (chaîne vide).
  */
-export function failureDetailText(job, t, mapLocalError, files = []) {
+export function failureDetailText(job, t, mapLocalError, files = [], edgeParams = null) {
     const information = String(job?.information || '').trim()
     if (!job?.errorCode && !information) return ''
     if (!job?.errorCode && !refusalCode(information) && isEngineTrace(information)) return ''
     // Échec local sans code connu (repli « crash ») mais cause connue par ailleurs
     // (tôle trop petite, aucune solution faisable) : la fenêtre la dit déjà.
     if (job?.errorCode === 'engine_error' && job?.unfit) return ''
-    return failureBannerText(job, t, mapLocalError, files)
+    return failureBannerText(job, t, mapLocalError, files, edgeParams)
 }
 
 /**
@@ -184,10 +201,10 @@ export function failureDetailText(job, t, mapLocalError, files = []) {
  * pièce), sinon le dernier job vu par le flux serveur (`serverJobState`,
  * `{ phase, job }`), seulement s'il est en erreur. Rien à dire : chaîne vide.
  */
-export function jobErrorBannerText({ localErrorText, serverJob, t, mapLocalError, files = [] }) {
+export function jobErrorBannerText({ localErrorText, serverJob, t, mapLocalError, files = [], edgeParams = null }) {
     if (localErrorText) return localErrorText
     if (serverJob?.phase !== 'error') return ''
-    return failureBannerText(serverJob.job, t, mapLocalError, files)
+    return failureBannerText(serverJob.job, t, mapLocalError, files, edgeParams)
 }
 
 /**

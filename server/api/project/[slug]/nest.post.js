@@ -271,10 +271,13 @@ export default defineEventHandler(async (event) => {
     // Distance au bord de tôle (mm, négative = débordement admis). Absente ou
     // null : rien du tout (document du job identique à avant). Strictement un
     // nombre fini borné : une chaîne vide ou un texte ne devient jamais 0.
-    // Phase 1 : réservée aux projets « cet appareil » (le worker Python ne
-    // sait pas la lire) ; refus 400 AVANT toute charge de quota, comme
-    // imported_sheet_not_local.
+    // Démo : jamais (champ grisé à l'écran). Projet « cet appareil » : tel quel.
+    // Projet « Nos serveurs » : le calcul se fait TOUJOURS dans le navigateur
+    // (le worker Python ne fait que préparer le payload), donc il faut que le
+    // calcul navigateur soit activé et qu'aucun fichier ne soit un DWG (conversion
+    // serveur, jamais compatible). Refus 400 AVANT toute charge de quota.
     let edgeDistance = null
+    let edgeForcesLocal = false
     if (params.edgeDistance != null) {
         const e = params.edgeDistance
         if (typeof e !== 'number' || !Number.isFinite(e) || Math.abs(e) > MAX_EDGE_DISTANCE_MM) {
@@ -284,12 +287,25 @@ export default defineEventHandler(async (event) => {
                 data: { reason: 'edge_distance_invalid' },
             })
         }
-        if (isDemo || !project.local) {
+        const localComputeOn =
+            useRuntimeConfig(event).public.localComputeEnabled === true ||
+            useRuntimeConfig(event).public.localComputeEnabled === 'true'
+        if (isDemo || (!project.local && !localComputeOn)) {
             throw createError({
                 statusCode: 400,
                 statusMessage: 'edge_distance_local_only',
                 data: { reason: 'edge_distance_local_only' },
             })
+        }
+        if (!project.local) {
+            if (filteredFiles.some((f) => String(f.slug).toLowerCase().endsWith('.dwg'))) {
+                throw createError({
+                    statusCode: 400,
+                    statusMessage: 'edge_distance_dwg',
+                    data: { reason: 'edge_distance_dwg' },
+                })
+            }
+            edgeForcesLocal = true
         }
         edgeDistance = e
     }
@@ -320,8 +336,6 @@ export default defineEventHandler(async (event) => {
     }
     // d6 : borne technique, tous paliers, démo comprise — avant le 422 et toute charge.
     assertSheetCountWithinMax(normalizedSheets.reduce((sum, s) => sum + (Number(s.count) || 0), 0))
-    // (La distance au bord ne peut pas arriver ici : elle est refusée plus haut
-    // hors projet local, donc ce pré-contrôle serveur n'en tient jamais compte.)
     if (!project.local) {
         const partsBySlug = new Map(
             userDxfFilesDatabase.map((f) => [f.slug, f.polygonParts || []]),
@@ -339,11 +353,33 @@ export default defineEventHandler(async (event) => {
             // l'espacement INTERNE (demandé + marge de courbes) : le même
             // calcul ici, sur les mêmes polygonParts, évite une bande de jobs
             // acceptés puis refusés et remboursés.
-            const { computeSpacingMargin, userMaxSpacing } = await import('~~/app/composables/localPayloadBuilder')
+            const { computeSpacingMargin, userMaxSpacing, f32AtOrBelow } = await import('~~/app/composables/localPayloadBuilder')
             const curveMargin = computeSpacingMargin(
                 filteredFiles.map((f) => ({ parts: partsBySlug.get(f.slug) || [] })), space)
-            const cap = capacityReport(parts, normalizedSheets, space + curveMargin)
+            // Distance au bord réglée (d = bord − espacement demandé, la marge de
+            // courbes s'annule) : le moteur reçoit une tôle décalée de d, comme dans
+            // le constructeur du navigateur (arrondi par défaut au f32). Une tôle
+            // active qui n'a plus de place (dimension moteur <= 0) : pas de
+            // pré-contrôle, le worker refuse avec la valeur maximale.
+            const { edgeShiftMm } = await import('~~/app/utils/spacingParams')
+            const d = edgeDistance === null ? 0 : edgeShiftMm(space, edgeDistance)
+            let engineSheets = normalizedSheets
+            let skipCapacity = false
+            if (d !== 0) {
+                engineSheets = normalizedSheets.map((s) => ({
+                    width: f32AtOrBelow(s.width - 2 * d),
+                    height: f32AtOrBelow(s.height - 2 * d),
+                    count: s.count,
+                }))
+                skipCapacity = engineSheets.some((s) => s.count > 0 && (s.width <= 0 || s.height <= 0))
+            }
+            const cap = skipCapacity ? null : capacityReport(parts, engineSheets, space + curveMargin)
             if (cap && cap.refused) {
+                // Levier « espacement max » à BORD FIXE : vraies tôles, bord interne
+                // = demandé + marge (comme le constructeur du navigateur).
+                const lever = d === 0
+                    ? cap
+                    : (capacityReport(parts, normalizedSheets, space + curveMargin, { edge: edgeDistance + curveMargin }) || cap)
                 const totalMax = Object.values(cap.maxPartsAtSpacing || {})
                     .reduce((n, v) => n + Number(v || 0), 0)
                 throw createError({
@@ -355,7 +391,7 @@ export default defineEventHandler(async (event) => {
                             ratio: cap.ratio,
                             sheetsNeeded: cap.sheetsNeeded,
                             maxPartsAtSpacing: totalMax,
-                            ...userMaxSpacing(cap.maxSpacingForFitMm, curveMargin),
+                            ...userMaxSpacing(lever.maxSpacingForFitMm, curveMargin),
                         },
                     },
                 })
@@ -446,7 +482,6 @@ export default defineEventHandler(async (event) => {
                       addOutShape: params.addOutShape,
                       fillHoles: params.fillHoles !== false,
                   }
-            if (edgeDistance !== null) dbParams.edgeDistance = edgeDistance
             // Quota puis profil par palier (quota consommé une fois la requête
             // validée ; refundé si échec).
             const tier = await getComputeTier(userId, null)
@@ -501,7 +536,10 @@ export default defineEventHandler(async (event) => {
         // Python worker then only PREPARES the payload and the client solves.
         // J-090 : un projet « local » part TOUJOURS en compute navigateur — le
         // serveur n'a pas la géométrie, aucun autre routage n'est possible.
-        const computeLocation = project.local
+        if (edgeDistance !== null && !isDemo) dbParams.edgeDistance = edgeDistance
+        // Distance au bord sur « Nos serveurs » : calcul navigateur, quel que
+        // soit le palier (le profil navigateur du palier s'applique).
+        const computeLocation = project.local || edgeForcesLocal
             ? 'local'
             : resolveComputeLocation(
                   config.public.localComputeEnabled,

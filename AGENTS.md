@@ -1449,8 +1449,22 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       proche. Tôle importée : `maxEdgeMm` cherché par bissection avec le VRAI
       décalage (`maxEdgeBySearch`, ≤ 14 pas, chemin d'erreur seulement), vérifié
       constructible ; introuvable : refus sans chiffre (`edgeTooLargePlain`).
-    - Phase 1 : projets « Cet appareil » seulement ; le serveur refuse le réglage
-      ailleurs (`edge_distance_local_only`), le worker Python ne le lit pas.
+    - **Projets « Nos serveurs » (phase 2) : calcul TOUJOURS dans le navigateur.**
+      `nest.post.js` force `computeLocation: 'local'` dès que `edgeDistance` est
+      là (projet non local) ; refus `edge_distance_dwg` si le job a un DWG,
+      `edge_distance_local_only` sur la démo ou calcul navigateur coupé. Le
+      worker Python ne fait que PRÉPARER le payload (`core/edge.py`, miroir
+      exact du constructeur JS, rectangles et bandes seulement : les tôles
+      importées restent « Cet appareil ») ; il refuse un bord réglé hors
+      `computeLocation == "local"` (ses passes, son rapport et ses DXF ne
+      connaissent pas le repère réel). Refus du worker : `information` = code
+      nu (`edge_too_large`, `edge_overhang_too_large`), chiffres dans
+      `edgeDetail`. Verrou de parité : fixtures générées par Python
+      (`workers/nesting/tests/fixtures/edge_payload_parity.json`) rejouées
+      dans `buildLocalPayload` (`app/tests/edgeDistanceServerParity.test.js`) :
+      toute règle du bord changée d'un côté se change de l'autre, fixtures
+      régénérées. Pré-contrôle de capacité du serveur : tôles moteur, levier
+      « espacement max » à bord fixe, comme le constructeur.
     - **d < 0 sur tôle importée, vides** : le décalage vers l'extérieur comble
       les encoches. Les vides qu'il enferme partent au moteur comme zones
       interdites (translatées de (−d, −d), tenues à `s` : prudent) : ceux du

@@ -134,8 +134,8 @@
                 <p class="size__rule">{{ spacingRule }}</p>
                 <!-- Distance au bord de la tôle : réglage séparé de l'espacement.
                      Vide = comme l'espacement ; négatif = les pièces peuvent
-                     dépasser du bord. Calcul dans le navigateur seulement
-                     (phase 1) : grisé ailleurs, avec sa raison. -->
+                     dépasser du bord. Calcul dans le navigateur : grisé dans la démo, avec
+                     un DWG ou calcul navigateur coupé, avec sa raison. -->
                 <InputField
                     :prefix="t('settings.edgeDistance')"
                     :suffix="unitLabel"
@@ -149,8 +149,11 @@
                     data-testid="settings-edge"
                 />
                 <p class="size__rule" data-testid="settings-edge-rule">{{ t('settings.edgeRule') }}</p>
-                <p v-if="edgeDisabled" class="size__rule" data-testid="settings-edge-local-only">
-                    {{ t('settings.edgeLocalOnly') }}
+                <p v-if="edgeDisabledText" class="size__rule" data-testid="settings-edge-local-only">
+                    {{ edgeDisabledText }}
+                </p>
+                <p v-else-if="edgeOnDevice" class="size__rule" data-testid="settings-edge-computed-here">
+                    {{ t('settings.edgeComputedHere') }}
                 </p>
                 <div v-if="edgeInvalid" class="size__warning" data-testid="settings-edge-invalid">
                     {{ t('settings.edgeInvalid') }}
@@ -380,12 +383,21 @@
 
     // Distance au bord : passe par son propre chemin d'écriture (jamais par
     // updateKerfSafety) ; '' = comme l'espacement. Champ grisé hors des projets
-    // « Cet appareil » (le serveur refuse le réglage pour l'instant).
+    // « Cet appareil ». Sur « Nos serveurs » il est actif : le calcul se fait alors
+    // dans le navigateur (une phrase le dit). Grisé, chaque cas a sa phrase.
     const localEdge = computed({
         get: () => unref(params).edgeDistance ?? '',
         set: (value) => updateEdgeDistance(value),
     })
-    const edgeDisabled = computed(() => !isLocalProject.value)
+    const edgeBlock = computed(() => getters.edgeBlock)
+    const edgeDisabled = computed(() => edgeBlock.value !== null)
+    const edgeOnDevice = computed(() => !isLocalProject.value && edgeBlock.value === null)
+    const edgeDisabledText = computed(() => {
+        if (edgeBlock.value === 'demo') return t('settings.edgeNoDemo')
+        if (edgeBlock.value === 'dwg') return t('settings.edgeNoDwg')
+        if (edgeBlock.value === 'off') return t('settings.edgeLocalOnly')
+        return ''
+    })
     const edgeInvalid = computed(() => !edgeDisabled.value && !isValidEdgeDistance(unref(params).edgeDistance))
     const edgePlaceholder = computed(() =>
         t('settings.edgePlaceholder', { v: unref(params).space ?? '0', unit: unitLabel.value })

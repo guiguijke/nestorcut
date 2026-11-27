@@ -8,6 +8,39 @@ import es from '../utils/i18n/es'
 import it_ from '../utils/i18n/it'
 import pt from '../utils/i18n/pt'
 
+describe('refus « distance au bord » d’un job « Nos serveurs » : le chiffre arrive', () => {
+    const t = (key) => `t:${key}`
+    const mapLocalError = (code, params) => `local:${code}:${params ? JSON.stringify(params) : 'sans'}`
+    const edgeParams = (d) => ({ max: String(d.maxOverhangMm ?? d.maxEdgeMm), unit: 'mm' })
+
+    it.each([
+        ['edge_too_large', { maxEdgeMm: 12.5 }, '12.5'],
+        ['edge_overhang_too_large', { maxOverhangMm: 3.25, part: 'x' }, '3.25'],
+    ])('%s avec edgeDetail : phrase avec chiffre', (code, edgeDetail, max) => {
+        const job = { information: code, edgeDetail }
+        const expected = `local:${code}:{"max":"${max}","unit":"mm"}`
+        expect(failureBannerText(job, t, mapLocalError, [], edgeParams)).toBe(expected)
+        expect(failureDetailText(job, t, mapLocalError, [], edgeParams)).toBe(expected)
+        expect(jobErrorBannerText({ localErrorText: '', serverJob: { phase: 'error', job }, t, mapLocalError, edgeParams })).toBe(expected)
+    })
+
+    it('sans fonction de paramètres, ou sans edgeDetail : la phrase sans chiffre, comme avant', () => {
+        const withDetail = { information: 'edge_too_large', edgeDetail: { maxEdgeMm: 12.5 } }
+        expect(failureBannerText(withDetail, t, mapLocalError)).toBe('t:localMode.edgeTooLargePlain')
+        expect(failureBannerText({ information: 'edge_too_large' }, t, mapLocalError, [], edgeParams)).toBe('t:localMode.edgeTooLargePlain')
+    })
+
+    it('un chiffre illisible : la fonction rend null, la phrase sans chiffre', () => {
+        const job = { information: 'edge_overhang_too_large', edgeDetail: {} }
+        expect(failureBannerText(job, t, mapLocalError, [], () => null)).toBe('local:edge_overhang_too_large:sans')
+    })
+
+    it('job navigateur rechargé (errorCode) : le chiffre aussi', () => {
+        const job = { errorCode: 'edge_too_large', edgeDetail: { maxEdgeMm: 8 } }
+        expect(failureBannerText(job, t, mapLocalError, [], edgeParams)).toBe('local:edge_too_large:{"max":"8","unit":"mm"}')
+    })
+})
+
 const CODES = [
     'memory_cap', 'entity_limit', 'geometry_missing', 'sheet_shape_missing', 'sheet_shape_unreadable', 'all_alternatives_invalid',
     'capacity_exceeded', 'item_geometry', 'item_unplaceable', 'part_too_large', 'spacing_too_large',

@@ -5,10 +5,22 @@ import { connectDB } from "~~/server/db/mongo";
 // complète en clair, params, files, charge, engineConfig, …) n'est
 // plus rapatrié à chaque seconde et par onglet. Ajouter ici tout champ lu
 // dans le mapping : server/tests/resultsList.test.js le verrouille.
+// Détail chiffré d'un refus « distance au bord » : seuls maxEdgeMm / maxOverhangMm
+// (nombres finis, mm) passent ; sinon null.
+function edgeDetailOf(detail) {
+    if (!detail || typeof detail !== 'object') return null
+    const out = {}
+    for (const key of ['maxEdgeMm', 'maxOverhangMm']) {
+        const n = Number(detail[key])
+        if (detail[key] != null && Number.isFinite(n)) out[key] = n
+    }
+    return Object.keys(out).length ? out : null
+}
+
 const RESULT_FIELDS = [
     'slug', 'projectSlug', 'status', 'error', 'layoutCount', 'localOnly', 'localConfig',
     'createdAt', 'purgedAt', 'placed', 'requested', 'discardedAlternatives',
-    'information', 'errorCode', 'itemGeometry', 'thinParts', 'thinCount', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
+    'information', 'errorCode', 'itemGeometry', 'edgeDetail', 'thinParts', 'thinCount', 'degraded', 'unfit', 'progress', 'liveLayout', 'itemMap', 'compute',
     'dxf_files', 'svg_files',
     'alternatives.alt_id', 'alternatives.seed', 'alternatives.density',
     'alternatives.usedSheetShare', 'alternatives.strategy', 'alternatives.offcut',
@@ -107,6 +119,9 @@ export async function getResults(userId, projectSlug) {
             // local-fail et par le worker) : le bandeau retrouve le nom du fichier
             // et le rang après un rechargement. Null sur les jobs sans refus nommé.
             itemGeometry: queueItem.itemGeometry ?? null,
+            // Refus « distance au bord » du worker (job « Nos serveurs ») : les
+            // chiffres de la phrase, deux nombres en mm et rien d'autre.
+            edgeDetail: edgeDetailOf(queueItem.edgeDetail),
             // Constat « pièces à traits fins » (local-quota ou worker) : liste
             // bornée {item, slug, part, name?} et vrai nombre de pièces nommées.
             // Le rapport ne nomme que trois pièces puis « et N autres » : on

@@ -160,3 +160,26 @@ export function edgeShiftMm(spaceMm, edgeMm) {
     const d = e - (Number(spaceMm) || 0)
     return Math.abs(d) < EDGE_EPS_MM ? 0 : d
 }
+
+/**
+ * Pourquoi le champ « distance au bord » est grisé, ou null quand il est actif.
+ * Un projet « Cet appareil » : toujours actif. Sinon le calcul se fait dans le
+ * navigateur : pas dans la démo, pas avec un fichier DWG (converti sur nos
+ * serveurs), pas si le calcul navigateur est coupé. Même règle que le serveur
+ * (`nest.post.js`) : la page n'envoie jamais un réglage qu'il refuserait.
+ * @returns {null|'demo'|'dwg'|'off'}
+ */
+export function edgeDistanceBlock({ local, isDemo, hasDwg, browserCompute }) {
+    if (local) return null
+    if (isDemo) return 'demo'
+    if (hasDwg) return 'dwg'
+    if (!browserCompute) return 'off'
+    return null
+}
+
+/** Un des fichiers demandés (quantité > 0) est-il un DWG ? (même test que le serveur : le slug) */
+export function hasDwgToNest(files) {
+    return (files || []).some(
+        (f) => Number(f?.count) > 0 && String(f?.slug || '').toLowerCase().endsWith('.dwg')
+    )
+}

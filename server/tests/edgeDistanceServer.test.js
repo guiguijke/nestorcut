@@ -62,6 +62,21 @@ const localDb = (userDoc = user()) => fakeDb({
     user_dxf_files: [],
 })
 
+// Compte payant : accès accordé (palier « standard »).
+const PAID = { grantedUntil: new Date(Date.now() + 86400000).toISOString(), grantedTier: 'standard' }
+
+// Projet « Nos serveurs » : un carré de 100 mm, polygone connu du serveur.
+const SQUARE = [[0, 0], [100, 0], [100, 100], [0, 100]]
+const serverDb = (userDoc = user()) => fakeDb({
+    users: [userDoc],
+    projects: [{ slug: 'p1', ownerId: 'u1' }],
+    user_dxf_files: [{
+        slug: 'f-aabbccddeeff.dxf',
+        name: 'p.dxf',
+        polygonParts: [{ coordinates: SQUARE }],
+    }],
+})
+
 beforeEach(() => {
     state.db = null
     state.enqueued = []
@@ -96,33 +111,95 @@ describe('POST nest - distance au bord', () => {
         expect(withEdge).toEqual(state.enqueued[0].params)
     })
 
-    it.each([
-        ['demo', () => fakeDb({
-            users: [user()],
+    it('demo : 400 edge_distance_local_only, rien en file, quota intact', async () => {
+        const userDoc = user()
+        state.db = fakeDb({
+            users: [userDoc],
             projects: [{ slug: 'p1', isDemo: true }],
             user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'm.dxf', projectSlug: 'p1', isDemo: true }],
-        })],
-        ['serveur', () => fakeDb({
-            users: [user()],
-            projects: [{ slug: 'p1', ownerId: 'u1' }],
-            user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'p.dxf' }],
-        })],
-    ])('projet %s : 400 edge_distance_local_only, rien en file, quota intact', async (_l, make) => {
-        state.db = make()
+        })
         await expect(nestHandler(ev('u1', 'p1', bodyEdge(3)))).rejects.toMatchObject({
             statusCode: 400,
             statusMessage: 'edge_distance_local_only',
             data: { reason: 'edge_distance_local_only' },
         })
         expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.demoNestingUsed).toBe(0)
+    })
+
+    it('serveurs, calcul navigateur coupe : 400 edge_distance_local_only, quota intact', async () => {
+        for (const flag of [false, 'false', undefined]) {
+            state.config = { public: { localComputeEnabled: flag } }
+            const userDoc = user()
+            state.db = serverDb(userDoc)
+            await expect(nestHandler(ev('u1', 'p1', bodyEdge(-2)))).rejects.toMatchObject({
+                statusCode: 400,
+                statusMessage: 'edge_distance_local_only',
+                data: { reason: 'edge_distance_local_only' },
+            })
+            expect(userDoc.freeNestingUsed).toBe(0)
+        }
+        expect(state.enqueued).toHaveLength(0)
+    })
+
+    it('serveurs, calcul navigateur active en chaine "true" : accepte', async () => {
+        state.config = { public: { localComputeEnabled: 'true' } }
+        state.db = serverDb(user())
+        await nestHandler(ev('u1', 'p1', bodyEdge(3)))
+        expect(state.enqueued).toHaveLength(1)
+    })
+
+    it.each([['gratuit', {}, 'browser'], ['payant', PAID, 'standard']])(
+        'projet serveur %s : job en file, calcul navigateur, bord et profil navigateur du palier',
+        async (_l, extra, level) => {
+            state.db = serverDb(user(extra))
+            await nestHandler(ev('u1', 'p1', bodyEdge(-3.5)))
+            expect(state.enqueued).toHaveLength(1)
+            const { params } = state.enqueued[0]
+            expect(params.computeLocation).toBe('local')
+            expect(params.edgeDistance).toBe(-3.5)
+            expect(params.computeLevel).toBe(level)
+            expect(params.browser_walks).toBeDefined()
+            expect(params.browser_concurrency).toBeDefined()
+            // Le worker prépare encore le payload : pas de awaiting_local direct.
+            expect(state.enqueued[0].initialStatus).toBe('pending')
+        })
+
+    it('serveurs payant sans bord : reste calcule sur le serveur (computeLocation server)', async () => {
+        for (const edge of [undefined, null]) {
+            state.enqueued = []
+            state.db = serverDb(user(PAID))
+            await nestHandler(ev('u1', 'p1', bodyEdge(edge)))
+            const { params } = state.enqueued[0]
+            expect(params.computeLocation).toBe('server')
+            expect('edgeDistance' in params).toBe(false)
+        }
+    })
+
+    it('serveurs avec un DWG : 400 edge_distance_dwg, rien en file, quota intact', async () => {
+        const userDoc = user()
+        state.db = fakeDb({
+            users: [userDoc],
+            projects: [{ slug: 'p1', ownerId: 'u1' }],
+            user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'p.dxf' }, { slug: 'f-112233445566.DWG', name: 'q.dwg' }],
+        })
+        const body = bodyEdge(3)
+        body.files = [{ slug: 'f-aabbccddeeff.dxf', count: 2 }, { slug: 'f-112233445566.DWG', count: 2 }]
+        await expect(nestHandler(ev('u1', 'p1', body))).rejects.toMatchObject({
+            statusCode: 400,
+            statusMessage: 'edge_distance_dwg',
+            data: { reason: 'edge_distance_dwg' },
+        })
+        expect(state.enqueued).toHaveLength(0)
+        expect(userDoc.freeNestingUsed).toBe(0)
     })
 
     it('refus local_only : le compteur de quota du compte reste a zero', async () => {
         const userDoc = user()
         state.db = fakeDb({
             users: [userDoc],
-            projects: [{ slug: 'p1', ownerId: 'u1' }],
-            user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'p.dxf' }],
+            projects: [{ slug: 'p1', isDemo: true }],
+            user_dxf_files: [{ slug: 'f-aabbccddeeff.dxf', name: 'm.dxf', projectSlug: 'p1', isDemo: true }],
         })
         await expect(nestHandler(ev('u1', 'p1', bodyEdge(-2)))).rejects.toMatchObject({ statusMessage: 'edge_distance_local_only' })
         expect(userDoc.freeNestingUsed).toBe(0)
@@ -140,6 +217,67 @@ describe('POST nest - distance au bord', () => {
         })
         expect(state.enqueued).toHaveLength(0)
         expect(userDoc.freeNestingUsed).toBe(0)
+    })
+})
+
+describe('POST nest - capacite a distance au bord (Nos serveurs)', () => {
+    // Tole 500 x 500, espacement 2, pieces de 100 mm : 20 tiennent, 22 non.
+    const body = (count, edge) => ({
+        files: [{ slug: 'f-aabbccddeeff.dxf', count }],
+        params: {
+            sheets: [{ width: 500, height: 500, count: 1 }],
+            space: 2,
+            ...(edge === undefined ? {} : { edgeDistance: edge }),
+        },
+    })
+
+    it('un bord positif fait refuser un job qui tenait a l\'espacement', async () => {
+        state.db = serverDb()
+        await nestHandler(ev('u1', 'p1', body(20)))
+        expect(state.enqueued).toHaveLength(1)
+
+        const userDoc = user()
+        state.db = serverDb(userDoc)
+        let err
+        await nestHandler(ev('u1', 'p1', body(20, 12))).catch((e) => { err = e })
+        expect(err).toMatchObject({ statusCode: 422, statusMessage: 'capacity_exceeded' })
+        expect(err.data.unfit.reason).toBe('capacity')
+        expect(state.enqueued).toHaveLength(1)
+        expect(userDoc.freeNestingUsed).toBe(0)
+    })
+
+    it('un bord negatif fait accepter un job refuse sans lui', async () => {
+        state.db = serverDb()
+        await expect(nestHandler(ev('u1', 'p1', body(22)))).rejects.toMatchObject({ statusCode: 422 })
+        expect(state.enqueued).toHaveLength(0)
+        state.db = serverDb()
+        await nestHandler(ev('u1', 'p1', body(22, -8)))
+        expect(state.enqueued).toHaveLength(1)
+        expect(state.enqueued[0].params.edgeDistance).toBe(-8)
+    })
+
+    it('espacement max du refus : calcule a bord fixe sur les vraies toles', async () => {
+        const { capacityReport } = await import('~~/app/composables/capacityClient')
+        const { userMaxSpacing } = await import('~~/app/composables/localPayloadBuilder')
+        const real = capacityReport(
+            [{ coords: SQUARE, count: 20 }], [{ width: 500, height: 500, count: 1 }], 2, { edge: 12 })
+        state.db = serverDb()
+        let err
+        await nestHandler(ev('u1', 'p1', body(20, 12))).catch((e) => { err = e })
+        const expected = userMaxSpacing(real.maxSpacingForFitMm, 0)
+        for (const k of Object.keys(expected)) expect(err.data.unfit[k]).toEqual(expected[k])
+    })
+
+    it('tole moteur sans place (bord enorme) : pas de pre-controle, le job part', async () => {
+        state.db = serverDb()
+        await nestHandler(ev('u1', 'p1', body(1, 300)))
+        expect(state.enqueued).toHaveLength(1)
+    })
+
+    it('bord egal a l\'espacement : meme verdict que sans bord', async () => {
+        state.db = serverDb()
+        await nestHandler(ev('u1', 'p1', body(20, 2)))
+        expect(state.enqueued).toHaveLength(1)
     })
 })
 
