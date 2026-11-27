@@ -4,6 +4,38 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.24
+
+*FR*
+
+- Un calcul « Cet appareil » laissé dans un onglet en arrière-plan se termine sans attendre votre retour sur l'onglet.
+- Sur un écran de 1 200 à 1 320 px de large, le bouton Support ne cache plus le message sous le bouton Nest.
+
+*EN*
+
+- A "This device" nesting left in a background tab now finishes without waiting for you to come back to the tab.
+- On screens 1,200 to 1,320 px wide, the Support button no longer hides the message under the Nest button.
+
+*PT*
+
+- Um cálculo "Este dispositivo" deixado numa aba em segundo plano termina sem esperar que você volte à aba.
+- Em telas de 1 200 a 1 320 px de largura, o botão Suporte não esconde mais a mensagem abaixo do botão Nest.
+
+*IT*
+
+- Un calcolo "Questo dispositivo" lasciato in una scheda in secondo piano termina senza aspettare che torni sulla scheda.
+- Sugli schermi larghi da 1 200 a 1 320 px, il pulsante Supporto non nasconde più il messaggio sotto il pulsante Nest.
+
+*DE*
+
+- Eine Berechnung "Dieses Gerät" in einem Tab im Hintergrund wird fertig, ohne dass Sie zum Tab zurückkehren müssen.
+- Auf Bildschirmen mit 1 200 bis 1 320 px Breite verdeckt die Schaltfläche Support nicht mehr die Meldung unter der Schaltfläche Nest.
+
+*ES*
+
+- Un cálculo "Este dispositivo" dejado en una pestaña en segundo plano termina sin esperar a que vuelvas a la pestaña.
+- En pantallas de 1 200 a 1 320 px de ancho, el botón Soporte ya no tapa el mensaje bajo el botón Nest.
+
 ## V0.9.23
 
 *FR*
