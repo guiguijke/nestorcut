@@ -14,6 +14,13 @@
         />
         <p v-if="rejectError" class="files__error">{{ t(rejectError, rejectParams) }}</p>
         <p v-if="showQuantityHint" class="files__hint" data-testid="files-quantity-hint">{{ t('files.quantityHint') }}</p>
+        <UiEmptyState
+            v-if="!groupedFiles.length && !readonly"
+            icon="file"
+            :title="t('files.emptyTitle')"
+            :text="t('files.emptyHint')"
+            data-testid="files-empty"
+        />
         <div class="files__grid">
             <!-- Lot J11-a (A2) : les fiches d'un même dessin issues du MÊME
                  `.job` se rendent sous UNE carte groupée dépliable — le

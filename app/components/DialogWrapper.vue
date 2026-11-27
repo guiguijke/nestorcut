@@ -232,6 +232,9 @@ onUnmounted(() => {
             max-width: none;
             width: calc(100vw - 48px);
             height: calc(100vh - 48px);
+            // Téléphone : 100vh dépasse la zone visible (barre d'adresse),
+            // ce qui laissait une bande vide en bas de la fenêtre.
+            height: calc(100dvh - 48px);
             display: flex;
             flex-direction: column;
         }
@@ -253,6 +256,9 @@ onUnmounted(() => {
         z-index: 2;
         flex-shrink: 0;
         margin: 8.5px 8.5px -38.5px auto;
+        // Fond plein : la croix ne laisse pas lire le contenu qui défile dessous.
+        background-color: var(--background-primary);
+        border-radius: 50%;
     }
 }
 </style>

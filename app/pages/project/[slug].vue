@@ -1522,9 +1522,16 @@ const startsNest = () => {
         background: var(--background-primary);
         box-shadow: 0 -8px 12px -8px color-mix(in srgb, var(--label-primary) 14%, transparent);
 
+        // Dès 900 px la barre n'est plus collante : collée en bas de l'écran,
+        // elle recouvrait la dernière fiche de pièce (quantité, échelle).
+        // Elle reste alignée sur la colonne des réglages, sous l'atelier.
         @media (min-width: 900px) {
+            position: static;
             width: 340px;
             margin-left: auto;
+            padding: 0 0 10px;
+            box-shadow: none;
+            background: transparent;
         }
 
         // Entre 480 et 1318 px le bouton « Support » est fixé en bas à droite.

@@ -23,12 +23,13 @@
         </template>
         <template v-else>
             <div class="free-nest__body">
-                <span class="free-nest__text">
+                <span :id="`${uid}-text`" class="free-nest__text">
                     {{ t('banner.remaining', { n: freeRemaining, total: freeLimit }) }}
                 </span>
                 <div
                     class="free-nest__bar"
                     role="progressbar"
+                    :aria-labelledby="`${uid}-text`"
                     :aria-valuemin="0"
                     :aria-valuemax="freeLimit"
                     :aria-valuenow="freeRemaining"
@@ -52,6 +53,7 @@
     import { formatQuotaReset } from '~/utils/quotaReset'
     import { hasPaidAccess } from '~/utils/entitlementUi'
     import { flagOn } from '~/utils/runtimeFlag'
+    const uid = useId()
 
     const { getters } = authStore
     const { t, locale } = useLocale()

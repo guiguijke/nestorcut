@@ -78,9 +78,13 @@
         <p v-else-if="search" class="projects__text">
             {{ t('project.searchEmpty') }}
         </p>
-        <p v-else class="projects__text">
-            {{ t('project.empty') }}
-        </p>
+        <UiEmptyState
+            v-else
+            icon="file"
+            :title="t('project.empty')"
+            :text="t('project.emptyHint')"
+            data-testid="projects-empty"
+        />
         <DialogWrapper
             v-model:isModalOpen="dialogOpen"
             trackingTag="project_delete_many"

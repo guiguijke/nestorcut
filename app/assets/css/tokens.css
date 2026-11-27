@@ -82,7 +82,8 @@
     --lh-text: 1.5;
     --lh-title: 1.25;
 
-    --focus-ring: 0 0 0 3px rgba(0, 123, 255, 0.25);
+    /* a11y : anneau plein (écart de 2 px couleur fond + 2 px d'accent), au moins 3:1 */
+    --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 
     /* ── Alias des ANCIENS jetons (compatibilité migration U0→U5) ──
        Tout nouveau code utilise les jetons ci-dessus ; ces alias
@@ -118,7 +119,7 @@
     --border-strong: #4a5878;
     --text: #f8fbff;         /* mist */
     --text-2: #b9c2d0;
-    --text-3: #8b93ad;
+    --text-3: #9199b2;
     --accent: #00c2ff;       /* cyan */
     --accent-hover: #33d0ff;
     --on-accent: #06283a;
@@ -135,14 +136,14 @@
     --shadow-m: 0 2px 8px rgba(0, 0, 0, 0.35);
     --shadow-l: 0 8px 24px rgba(0, 0, 0, 0.45);
 
-    --focus-ring: 0 0 0 3px rgba(0, 194, 255, 0.3);
+    --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 
     /* Alias — variantes sombres */
     --fill-secondary: rgba(248, 251, 255, 0.08);
     --fill-tertiary: rgba(248, 251, 255, 0.05);
     --label-primary: var(--text);
     --label-secondary: #b9c2d0;
-    --label-tertiary: var(--text-3); /* #8b93ad : 5,06:1 sur --bg, 4,53:1 sur --surface */
+    --label-tertiary: var(--text-3); /* #9199b2 : 5,45:1 sur --bg, 4,72:1 sur #252e4a */
     --accent-primary: var(--accent);
     --accent-secondary: var(--accent-hover);
     --background-primary: var(--bg);

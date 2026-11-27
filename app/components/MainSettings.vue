@@ -550,7 +550,7 @@
         if (n === 1) return t('settings.noRotation')
         const step = 360 / n
         const angles = Array.from({ length: n }, (_, i) => Math.round(i * step))
-        return `→ ${angles.map((a) => a + '°').join(', ')}`
+        return angles.map((a) => a + '°').join(', ')
     })
 
 // W10 : espacement EFFECTIF < 0,05 mm (kerf laser) — la découpe peut
@@ -856,7 +856,7 @@ const spacingBelowKerf = computed(() => {
 
             &--active {
                 border-color: var(--accent-primary);
-                color: var(--accent-primary);
+                color: var(--accent-secondary);
                 background-color: color-mix(in srgb, var(--accent-primary) 8%, transparent);
             }
         }
@@ -954,7 +954,6 @@ const spacingBelowKerf = computed(() => {
             margin-top: 6px;
             font-size: var(--fs-13);
             color: var(--label-secondary);
-            font-family: $sf_mono;
             word-break: break-word;
             line-height: 1.4;
         }

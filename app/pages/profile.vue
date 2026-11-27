@@ -17,7 +17,6 @@
                 <UiBadge
                     v-if="emailVerified"
                     tone="ok"
-                    dot
                 >{{ t('verify.badge') }}</UiBadge>
             </div>
             <UiButton

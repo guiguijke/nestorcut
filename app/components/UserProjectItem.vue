@@ -241,9 +241,12 @@ onMounted(() => {
     &__label {
         display: flex;
         /* U1 : nom sur UNE ligne tronquée (méta à la ligne suivante). */
-        flex-wrap: nowrap;
+        /* Le nom passe d'abord en entier ; le badge (« Cet appareil »…) et la
+           mention d'imbrication descendent sous le nom quand la place manque,
+           au lieu de lui voler sa largeur. */
+        flex-wrap: wrap;
         align-items: center;
-        gap: 6px;
+        gap: 2px 6px;
         white-space: nowrap;
         // Room for the trash (absolute, top-right) so the local-project
         // badge never sits on top of it on a narrow aside.
@@ -267,8 +270,9 @@ onMounted(() => {
        carte). Le badge et la mention d'imbrication gardent leur largeur
        naturelle. */
     &__name {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
         min-width: 0;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;

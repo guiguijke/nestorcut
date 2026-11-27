@@ -8,6 +8,7 @@
             <div class="content__controls controls">
                 <div :class="{'controls__bg--open': projectsIsOpen || resultsIsOpen}" @click="close" class="controls__bg"></div>
                 <MainButton
+                    ref="projectsBtn"
                     @click="openProjects"
                     trackingTag="open_projects"
                     class="controls__btn controls__btn--projects"
@@ -15,6 +16,7 @@
                     :label="t('common.openProjects')"
                 />
                 <MainButton
+                    ref="resultsBtn"
                     @click="openResults"
                     trackingTag="open_results"
                     class="controls__btn controls__btn--results"
@@ -22,9 +24,9 @@
                     :label="isHomePage ? t('common.openAllResults') : t('common.openResults')"
                 />
             </div>
-            <UserProjects @closeAside="close" :class="{'content__projects--open': projectsIsOpen}" class="content__projects"/>
+            <UserProjects ref="projectsPane" :inert="paneInert(projectsIsOpen)" @closeAside="close" :class="{'content__projects--open': projectsIsOpen}" class="content__projects"/>
             <slot />
-            <UserResults @closeAside="close" :class="{'content__results--open': resultsIsOpen}" class="content__results" />
+            <UserResults ref="resultsPane" :inert="paneInert(resultsIsOpen)" @closeAside="close" :class="{'content__results--open': resultsIsOpen}" class="content__results" />
         </main>
         <ChatSupport v-if="supportDialog" />
         <!-- U1 passe 2 : pilule flottante migrée sur UiButton secondary —
@@ -32,6 +34,7 @@
         <UiButton
             v-if="!supportDialog"
             variant="secondary"
+            size="s"
             class="main__btn"
             tracking-tag="support_open"
             @click="supportDialog = true"
@@ -85,16 +88,58 @@ useHead({
 });
 const projectsIsOpen = ref(false);
 const resultsIsOpen = ref(false);
+const projectsBtn = ref(null);
+const resultsBtn = ref(null);
+const projectsPane = ref(null);
+const resultsPane = ref(null);
+
+// A11y : sous 1319 px les colonnes sont des volets. Fermé, un volet est
+// `inert` (hors tabulation et hors lecteur d'écran) ; en grand écran
+// (colonnes toujours visibles) rien n'est inerte. `narrow` reste faux
+// côté serveur et avant montage : le rendu initial ne change pas.
+const narrow = ref(false);
+let narrowQuery = null;
+const syncNarrow = () => { narrow.value = Boolean(narrowQuery?.matches); };
+const paneInert = (isOpen) => (narrow.value && !isOpen ? '' : undefined);
+
+const focusInto = async (paneRef) => {
+    await nextTick();
+    const root = paneRef.value?.$el;
+    const target = root?.querySelector?.(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    target?.focus?.();
+};
 const openProjects = () => {
     projectsIsOpen.value = true;
+    focusInto(projectsPane);
 }
 const openResults = () => {
     resultsIsOpen.value = true;
+    focusInto(resultsPane);
 }
 const close = () => {
+    const back = projectsIsOpen.value ? projectsBtn : resultsIsOpen.value ? resultsBtn : null;
     projectsIsOpen.value = false;
     resultsIsOpen.value = false;
+    // Le focus revient au bouton qui a ouvert le volet.
+    back?.value?.$el?.focus?.();
 }
+const onKeydown = (event) => {
+    if (event.key === 'Escape' && (projectsIsOpen.value || resultsIsOpen.value) && narrow.value) {
+        close();
+    }
+};
+onMounted(() => {
+    narrowQuery = window.matchMedia('(max-width: 1318.98px)');
+    syncNarrow();
+    narrowQuery.addEventListener('change', syncNarrow);
+    window.addEventListener('keydown', onKeydown);
+});
+onBeforeUnmount(() => {
+    narrowQuery?.removeEventListener('change', syncNarrow);
+    window.removeEventListener('keydown', onKeydown);
+});
 const isHomePage = computed(() => {
     return route.path === '/home'
 })
@@ -116,10 +161,12 @@ const isHomePage = computed(() => {
         margin: 24px auto;
         max-width: 1760px;
         width: 100%;
+        // Place réservée au bouton « Support » flottant (petit, 32 px) :
+        // le bas de la dernière colonne reste dégagé en fin de page.
         padding-bottom: 64px;
 
-        @media (min-width: 1199px) {
-            padding-bottom: 24px;
+        @media (min-width: 480px) {
+            padding-bottom: 72px;
         }
     }
     &__line {
@@ -149,8 +196,8 @@ const isHomePage = computed(() => {
         // entre 1199 et 1318 px le bouton recouvrait le message sous Nest
         // (essai navigateur de la V0.9.21, 1280 × 800).
         @media (min-width: 1319px) {
-            bottom: 60px;
-            right: 60px;
+            bottom: 24px;
+            right: 24px;
         }
     }
 }

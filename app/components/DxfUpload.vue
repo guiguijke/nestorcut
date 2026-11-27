@@ -135,6 +135,14 @@ const labelClasses = computed(() => ({
         border-radius: var(--radius-l);
         transition: background-color 0.3s;
 
+        // Le vrai champ est masqué (0 × 0) : le repère de focus se dessine
+        // sur la zone de dépôt dès que le champ reçoit le focus clavier.
+        &:has(.upload__input:focus-visible) {
+            outline: 2px solid var(--accent-primary);
+            outline-offset: 2px;
+            background-color: var(--fill-secondary);
+        }
+
         &--hover {
             background-color: var(--fill-secondary);
         }

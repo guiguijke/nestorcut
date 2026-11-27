@@ -13,9 +13,23 @@
                 class="results__item"
             />
         </div>
-        <p v-else class="results__text">
-            {{ t('results.empty') }}
-        </p>
+        <!-- U4 : squelette tant que la première lecture n'est pas arrivée,
+             5 s au plus (flux muet : l'état vide reprend la main). -->
+        <div
+            v-else-if="!getters.resultsLoaded && !skeletonExpired"
+            class="results__skeleton"
+            aria-busy="true"
+            data-testid="results-skeleton"
+        >
+            <span v-for="n in 3" :key="n" class="results__skeleton-item" />
+        </div>
+        <UiEmptyState
+            v-else
+            icon="layers"
+            :title="t('results.empty')"
+            :text="t('results.emptyHint')"
+            data-testid="results-empty"
+        />
         <ResultModal
             v-model:isModalOpen="resultDialog"
             @unfit-add-sheet="onUnfitAddSheet"
@@ -37,6 +51,17 @@ const { t } = useLocale()
 const { getters, actions } = globalStore;
 const { setResults, setModalResultData, updateNotification } = actions;
 const eventSource = ref(null)
+// Le squelette ne reste jamais plus de 5 s : si le flux ne répond pas,
+// on montre l'état vide plutôt qu'un chargement sans fin.
+const skeletonExpired = ref(false)
+let skeletonTimer = null
+const armSkeletonTimer = () => {
+    clearTimeout(skeletonTimer)
+    skeletonExpired.value = false
+    skeletonTimer = setTimeout(() => { skeletonExpired.value = true }, 5000)
+}
+onMounted(armSkeletonTimer)
+watch(() => route.fullPath, armSkeletonTimer)
 // J-082 : hydratation asynchrone (IndexedDB) — chaîner pour préserver
 // l'ordre des frames SSE même si une hydratation est encore en cours.
 let hydrateChain = Promise.resolve()
@@ -161,6 +186,7 @@ const isHomePage = computed(() => {
 })
 
 onBeforeUnmount(() => {
+    clearTimeout(skeletonTimer)
     if (unref(eventSource)) {
         unref(eventSource).close()
     }
@@ -177,13 +203,30 @@ watch(
 </script>
 <style lang="scss" scoped>
 .results {
-    &__text {
-        color: var(--label-secondary);
+    &__skeleton {
+        display: flex;
+        flex-direction: column;
+        gap: var(--sp-2);
+    }
+    &__skeleton-item {
+        display: block;
+        height: 64px;
+        border-radius: var(--radius);
+        background: var(--surface-2);
+        animation: results-pulse 1.4s ease-in-out infinite;
     }
     &__item {
         &:not(:last-child) {
             margin-bottom: 8px;
         }
     }
+}
+
+@keyframes results-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .results__skeleton-item { animation: none; }
 }
 </style>

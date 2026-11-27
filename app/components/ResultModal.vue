@@ -385,14 +385,10 @@ watch(resultDialog, async (isOpen) => {
         viewTracked = false
         viewSession = true
         trackLockedView()
-        if (scrollToReportFlag.value) {
-            scrollToReportFlag.value = false
-            await nextTick()
-            // Let the dialog transition settle before scrolling.
-            setTimeout(() => {
-                reportChild.value?.reportEl?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-            }, 120)
-        }
+        // Le rapport s'ouvre toujours en haut (la tôle d'abord) : l'ancien
+        // scrollIntoView du bouton « Rapport de nesting » faisait défiler la
+        // fenêtre entière, et coupait le haut du rapport même à 1280 px.
+        scrollToReportFlag.value = false
     } else {
         viewSession = false
     }
@@ -1350,9 +1346,15 @@ const onExportIntent = ({ action, trackingTag }) => {
     flex-direction: column;
     gap: var(--sp-3);
     padding: 44px var(--sp-4) var(--sp-4);
-    height: 100%;
-    min-height: 0;
+    flex: 1 0 auto;
     box-sizing: border-box;
+
+    // Grand écran : la fenêtre ne défile pas, le rapport défile dans son volet.
+    @media (min-width: 768px) {
+        flex: 1 1 auto;
+        height: 100%;
+        min-height: 0;
+    }
 
     &__alts {
         flex: 0 0 auto;
@@ -1368,9 +1370,9 @@ const onExportIntent = ({ action, trackingTag }) => {
         display: flex;
         flex-direction: column;
         gap: var(--sp-3);
-        overflow-y: auto;
-        overscroll-behavior: contain;
 
+        // Sous 768 px : aucune zone de défilement ici, c'est la fenêtre
+        // (DialogWrapper) qui défile.
         @media (min-width: 768px) {
             display: grid;
             grid-template-columns: 2fr minmax(320px, 1fr);

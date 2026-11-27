@@ -1152,6 +1152,27 @@ defineExpose({ reportEl })
         font-size: var(--fs-12);
         color: var(--label-tertiary);
         user-select: none;
+        list-style: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+
+        /* Triangle CSS à la place de la flèche unicode du navigateur. */
+        &::before {
+            content: '';
+            display: inline-block;
+            margin-right: 6px;
+            vertical-align: 0.05em;
+            border-style: solid;
+            border-width: 4px 0 4px 6px;
+            border-color: transparent transparent transparent currentColor;
+            transition: transform 0.15s;
+        }
+    }
+
+    &[open] > summary::before {
+        transform: rotate(90deg);
     }
 
     & .report__engine {
