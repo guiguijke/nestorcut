@@ -44,6 +44,11 @@ describe('whyFirstKind — la justification du rang 0 est vraie (AA1)', () => {
         expect(whyFirstKind([alt(580406), alt(599600)])).toBe('grid')
     })
 
+    it('rang 0 qui n’est PAS la grille et sans la plus grande chute : pas de justification', () => {
+        expect(whyFirstKind([{ strategy: 'bottom', offcut: { area: 1583600 } }, { strategy: 'left', offcut: { area: 1689700 } }])).toBeNull()
+        expect(whyFirstKind([{ strategy: 'grid', offcut: { area: 100 } }, { strategy: 'left', offcut: { area: 200 } }])).toBe('grid')
+    })
+
     it('forme hydratée areaMm2 reconnue aussi', () => {
         expect(whyFirstKind([
             { offcut: { areaMm2: 100 } },

@@ -29,5 +29,11 @@ export function whyFirstKind(alts, { toleranceMm2 = 1 } = {}) {
     // Aucune chute mesurée nulle part (tôle importée : chute null) : « la plus
     // grande chute propre » serait faux — pas de justification (piège 60).
     if (!(best > 0) && !(otherMax > 0)) return null
-    return best >= otherMax - toleranceMm2 ? 'offcut' : 'grid'
+    if (best >= otherMax - toleranceMm2) return 'offcut'
+    // Rang 0 sans la plus grande chute : « rangées régulières » n'est vrai que
+    // si c'est bien la grille. Une option du moteur peut passer devant par son
+    // sens, ou parce que la grille a été écartée (trous vides, 27/11) : pas de
+    // justification plutôt qu'une fausse. Sans stratégie connue : règle d'avant.
+    const s = alts[0]?.strategy
+    return s === undefined || s === null || s === 'grid' ? 'grid' : null
 }
