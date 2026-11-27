@@ -634,6 +634,96 @@ pub fn material_zone_distance(outer: &[Pt], holes: &[Vec<Pt>], zone: &[Pt]) -> f
     best
 }
 
+/// Part minimale de la matière d'une pièce qui doit être SUR la tôle quand un
+/// dépassement est permis (distance au bord négative). En dessous, la pièce
+/// compte hors tôle : sa boîte peut respecter le dépassement alors que presque
+/// toute sa matière est dans le vide (équerre fine dans un coin, triangle posé
+/// par sa pointe).
+pub const ON_SHEET_MIN_FRACTION: f64 = 0.01;
+
+/// Aire (mm²) de l'anneau `ring` coupé par le rectangle [0 ; w] x [0 ; h].
+/// Découpe de Sutherland-Hodgman, un demi-plan après l'autre : sur un anneau
+/// concave elle rend un polygone dégénéré (allers-retours le long de la droite
+/// de coupe) dont l'aire de Green reste exacte, ces allers-retours s'annulant.
+fn ring_area_in_rect(ring: &[Pt], w: f64, h: f64) -> f64 {
+    let mut poly: Vec<Pt> = closed(ring);
+    poly.pop();
+    // (axe, borne, garder le côté >=)
+    for (axis, bound, keep_ge) in [(0usize, 0.0, true), (0, w, false), (1, 0.0, true), (1, h, false)] {
+        let n = poly.len();
+        if n < 3 {
+            return 0.0;
+        }
+        let inside = |p: &Pt| if keep_ge { p[axis] >= bound } else { p[axis] <= bound };
+        let mut out: Vec<Pt> = Vec::with_capacity(n + 4);
+        for i in 0..n {
+            let (a, b) = (poly[i], poly[(i + 1) % n]);
+            let (ia, ib) = (inside(&a), inside(&b));
+            if ia {
+                out.push(a);
+            }
+            if ia != ib {
+                let t = (bound - a[axis]) / (b[axis] - a[axis]);
+                let mut q = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+                q[axis] = bound;
+                out.push(q);
+            }
+        }
+        poly = out;
+    }
+    geom::ring_area_abs(&poly)
+}
+
+/// Vrai si moins de `ON_SHEET_MIN_FRACTION` de la matière de la pièce (contour
+/// moins trous) est sur la tôle rectangulaire [0 ; w] x [0 ; h].
+pub fn barely_on_rect(outer: &[Pt], holes: &[Vec<Pt>], w: f64, h: f64) -> bool {
+    let total = geom::material_area(outer, holes);
+    if total <= 0.0 {
+        return false;
+    }
+    let on = ring_area_in_rect(outer, w, h) - holes.iter().map(|r| ring_area_in_rect(r, w, h)).sum::<f64>();
+    on < ON_SHEET_MIN_FRACTION * total
+}
+
+/// Points d'essai par côté de boîte dans le repli de `barely_on_outline`.
+const ON_SHEET_SAMPLES: usize = 48;
+
+/// Vrai si moins de `ON_SHEET_MIN_FRACTION` de la matière de la pièce est dans
+/// le contour de la tôle importée `sh` (zones interdites ignorées : elles ont
+/// leur propre contrôle). L'aire commune est la vraie (`guarded_overlap_closed`,
+/// celle des recouvrements entre pièces). Si elle n'est pas fiable (bords
+/// presque confondus), repli sur une grille de points de la boîte de la pièce :
+/// loin du seuil de 1 %, elle décide sans risque ; une pièce trop fine pour
+/// qu'un point y tombe n'est pas déclarée dehors par ce repli.
+pub fn barely_on_outline(outer: &[Pt], holes: &[Vec<Pt>], sh: &ReadyShape) -> bool {
+    let part = material_of(outer, holes);
+    let total = material_area(&part);
+    if total <= 0.0 {
+        return false;
+    }
+    if let Some(on) = guarded_overlap_closed(&part, &material_of(&sh.outer, &[])) {
+        return on < ON_SHEET_MIN_FRACTION * total;
+    }
+    let b = geom::ring_bounds(&part[0]);
+    let n = ON_SHEET_SAMPLES;
+    let (mut in_part, mut in_both) = (0usize, 0usize);
+    for i in 0..n {
+        for j in 0..n {
+            let p = [
+                b[0] + (i as f64 + 0.5) / n as f64 * (b[2] - b[0]),
+                b[1] + (j as f64 + 0.5) / n as f64 * (b[3] - b[1]),
+            ];
+            if geom::point_in_ring(p, &part[0]) && !part[1..].iter().any(|r| geom::point_in_ring(p, r)) {
+                in_part += 1;
+                if geom::point_in_ring(p, &sh.outer) {
+                    in_both += 1;
+                }
+            }
+        }
+    }
+    in_part > 0 && (in_both as f64) < ON_SHEET_MIN_FRACTION * in_part as f64
+}
+
 /// Résultat des contrôles de forme d'UNE tôle.
 #[derive(Debug, Default, Clone)]
 pub struct ShapeChecks {
@@ -661,7 +751,15 @@ pub fn check_sheet(
 /// et l'écart au contour est SIGNÉ sans palier : `-profondeur` dès que la pièce
 /// sort, la profondeur étant le maximum exact (`outside_depth_exact`), pas la
 /// borne basse échantillonnée du rapport d'avant. Les zones interdites sont
-/// jugées comme avant.
+/// jugées comme avant. Avec un dépassement permis, une pièce presque sans
+/// matière sur la tôle compte dehors (`barely_on_outline`).
+///
+/// LIMITE CONNUE : la profondeur ne suit que les BORDS de la pièce. Une pièce
+/// qui AVALE une cavité du contour à l'embouchure étroite (fente plus fine que
+/// le dépassement permis, chambre plus large au fond) n'a aucun bord dans la
+/// chambre : elle reste verte ici. C'est au constructeur du payload de passer
+/// ces cavités au moteur comme zones interdites (vides de `offset_ring` avec
+/// `keep_voids`) ; la zone, elle, est contrôlée par l'aire commune.
 pub fn check_sheet_edge(
     placed: &[(Vec<Pt>, Vec<Vec<Pt>>)],
     sh: &ReadyShape,
@@ -688,6 +786,10 @@ fn check_sheet_with(
         };
         let gap = if let Some(over) = overhang {
             if depth > OUTLINE_TOL_MM + over {
+                out.parts_outside += 1;
+            } else if over > 0.0 && depth > 0.0 && barely_on_outline(&ring, h, sh) {
+                // Dépassement dans la limite, mais presque rien de la pièce sur
+                // la tôle : hors tôle (une pièce entièrement dedans a `depth` nul).
                 out.parts_outside += 1;
             }
             if depth > 0.0 { -depth } else { gap_to_outline(&ring, sh, best_outline) }

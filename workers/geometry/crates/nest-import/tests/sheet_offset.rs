@@ -569,3 +569,145 @@ fn the_json_entry_reads_numbers_and_strings_and_names_its_fields() {
     let count = |s: &str| serde_json::from_str::<serde_json::Value>(s).unwrap()["ring"].as_array().unwrap().len();
     assert!(count(&coarse) < count(&fine));
 }
+
+// --------------------------------------------------- fente de largeur nulle
+
+/// Plus petite distance des points contrôlés de `out` au point `tip`.
+fn dist_to_point(out: &[Pt], tip: Pt) -> f64 {
+    probes(out).iter().fold(f64::INFINITY, |d, p| d.min(((p[0] - tip[0]).powi(2) + (p[1] - tip[1]).powi(2)).sqrt()))
+}
+
+/// Plaque 100 x 100 dont le bord bas porte une fente de largeur nulle jusqu'à
+/// (50 ; 30) : l'aller et le retour sont sur la même droite, le retour s'arrête
+/// à `back` avant de rejoindre le bord (ce que rend l'import d'un retour décalé
+/// de moins d'un demi-pas de grille).
+fn slit_plate(back: Pt) -> Vec<Pt> {
+    vec![[0.0, 0.0], [50.0, 0.0], [50.0, 30.0], back, [50.0002, 0.0], [100.0, 0.0], [100.0, 100.0], [0.0, 100.0], [0.0, 0.0]]
+}
+
+#[test]
+fn the_tip_of_a_zero_width_slit_is_held_at_the_distance() {
+    // Demi-tour exact au bout de la fente : sans demi-disque, les deux
+    // rectangles s'arrêtaient à la perpendiculaire du bout et la région rendue
+    // le touchait.
+    let input = slit_plate([50.0, 5.0]);
+    let o = off(&input, -10.0).unwrap();
+    assert_eq!(o.applied_distance_mm, -10.0);
+    assert_clean_ring(&o.ring);
+    let d = dist_to_point(&o.ring, [50.0, 30.0]);
+    assert!(d >= 10.0 - 1e-6 && d <= 10.0 + arc_slack(10.0), "bout de fente à {d}");
+    for p in probes(&o.ring) {
+        assert!(point_in_ring(p, open(&input)) || edge_dist(p, &input) <= 1e-9);
+        assert!(edge_dist(p, &input) >= 10.0 - 1e-6, "bord rendu à {} de la tôle", edge_dist(p, &input));
+    }
+    // La région passe au-dessus du bout : elle reste d'un seul morceau.
+    assert_eq!(o.pieces, 1);
+    assert!(point_in_ring([50.0, 45.0], open(&o.ring)));
+    assert!(!point_in_ring([50.0, 35.0], open(&o.ring)));
+}
+
+#[test]
+fn a_zero_width_slit_does_not_grow_the_outward_container() {
+    // Vers l'extérieur, la fente est dans la tôle : le conteneur est celui de
+    // la plaque, jamais plus grand que le décalage exact.
+    let input = slit_plate([50.0, 5.0]);
+    let o = off(&input, 10.0).unwrap();
+    assert!(o.applied_distance_mm <= 10.0 && o.applied_distance_mm >= 9.0);
+    assert_clean_ring(&o.ring);
+    let plate = rect(0.0, 0.0, 100.0, 100.0);
+    for p in probes(&o.ring) {
+        assert!(signed_dist(p, &plate) <= 10.0 + 1e-9, "{}", signed_dist(p, &plate));
+    }
+}
+
+#[test]
+fn the_slit_tip_is_held_on_a_ring_of_several_thousand_vertices() {
+    // Disque de 4000 sommets (rayon 500) avec la même fente au point bas : le
+    // contrôle point par point y était abandonné (trop de couples) et l'anneau
+    // rendu passait par le bout de la fente.
+    let mut input = disc(500.0, 500.0, 500.0, 4000);
+    input.pop();
+    let k = 3000; // angle 3π/2 : le point bas.
+    assert!((input[k][0] - 500.0).abs() < 1e-6 && input[k][1].abs() < 1e-6);
+    input.splice(k..=k, [[500.0, 0.0], [500.0, 30.0], [500.0, 5.0]]);
+    input.push(input[0]);
+    let o = off(&input, -10.0).unwrap();
+    assert_eq!(o.applied_distance_mm, -10.0);
+    let d = dist_to_point(&o.ring, [500.0, 30.0]);
+    assert!(d >= 10.0 - 1e-6 && d <= 10.0 + arc_slack(10.0), "bout de fente à {d}");
+    assert!(point_in_ring([500.0, 45.0], open(&o.ring)));
+    assert!(!point_in_ring([500.0, 35.0], open(&o.ring)));
+}
+
+// ------------------------------------------------------ vides pour le moteur
+
+/// Tôle en C : plaque 400 x 400 dont une baie de 100 x 200 (150..250 x
+/// 100..300) s'ouvre sur le bord droit par un couloir de `mouth` mm de haut.
+fn c_sheet(mouth: f64) -> Vec<Pt> {
+    let (lo, hi) = (200.0 - mouth / 2.0, 200.0 + mouth / 2.0);
+    vec![
+        [0.0, 0.0], [400.0, 0.0], [400.0, lo], [250.0, lo], [250.0, 100.0], [150.0, 100.0],
+        [150.0, 300.0], [250.0, 300.0], [250.0, hi], [400.0, hi], [400.0, 400.0], [0.0, 400.0], [0.0, 0.0],
+    ]
+}
+
+#[test]
+fn the_voids_handed_to_the_engine_are_closed_counter_clockwise_rings_inside_the_container() {
+    // Couloir de 12 mm, décalage de 10 : le couloir se referme, la baie reste.
+    let input = c_sheet(12.0);
+    assert_eq!(off(&input, 10.0).unwrap_err(), OffsetError::EnclosedVoid);
+    let opts = OffsetOptions { keep_voids: true, ..OffsetOptions::default() };
+    let o = offset_ring(&input, 10.0, &opts, &Deadline::unlimited()).unwrap();
+    assert_eq!(o.applied_distance_mm, 10.0);
+    assert_clean_ring(&o.ring);
+    assert_eq!(o.voids.len(), 1);
+    let void = &o.voids[0];
+    // Même convention que le conteneur : fermé, anti-horaire, sur la grille.
+    assert_clean_ring(void);
+    for p in probes(void) {
+        // Dans le conteneur, hors de la tôle, à 10 mm de la matière (jamais
+        // moins : un vide trop petit laisserait poser une pièce trop loin).
+        assert!(point_in_ring(p, open(&o.ring)), "vide hors du conteneur");
+        let s = signed_dist(p, &input);
+        assert!(s <= 10.0 + 1e-9 && s >= 10.0 - arc_slack(10.0), "{s}");
+    }
+    // Le cœur de la baie est dans le vide, le couloir refermé n'y est pas.
+    assert!(point_in_ring([200.0, 200.0], open(void)));
+    assert!(!point_in_ring([330.0, 200.0], open(void)));
+    // Un décalage plus petit que le demi-couloir ne ferme rien : pas de vide.
+    let open_bay = offset_ring(&input, 5.0, &opts, &Deadline::unlimited()).unwrap();
+    assert!(open_bay.voids.is_empty());
+    // Une baie plus étroite que deux fois la distance est comblée sans vide.
+    let filled = offset_ring(&input, 60.0, &opts, &Deadline::unlimited()).unwrap();
+    assert!(filled.voids.is_empty());
+    assert!(point_in_ring([200.0, 200.0], open(&filled.ring)));
+}
+
+#[test]
+fn several_voids_come_largest_first_and_through_the_json_entry() {
+    // Deux trous de serrure sur le bord haut : chambres de 100 et de 60 mm.
+    let input: Vec<Pt> = vec![
+        [0.0, 0.0], [600.0, 0.0], [600.0, 400.0],
+        [476.0, 400.0], [476.0, 230.0], [500.0, 230.0], [500.0, 170.0], [440.0, 170.0], [440.0, 230.0],
+        [464.0, 230.0], [464.0, 400.0],
+        [206.0, 400.0], [206.0, 250.0], [250.0, 250.0], [250.0, 150.0], [150.0, 150.0], [150.0, 250.0],
+        [194.0, 250.0], [194.0, 400.0],
+        [0.0, 400.0], [0.0, 0.0],
+    ];
+    let opts = OffsetOptions { keep_voids: true, ..OffsetOptions::default() };
+    let o = offset_ring(&input, 10.0, &opts, &Deadline::unlimited()).unwrap();
+    assert_eq!(o.voids.len(), 2);
+    assert!(area(&o.voids[0]) > area(&o.voids[1]));
+    assert!(point_in_ring([200.0, 200.0], open(&o.voids[0])));
+    assert!(point_in_ring([470.0, 200.0], open(&o.voids[1])));
+    for v in &o.voids {
+        assert_clean_ring(v);
+    }
+    let ring: Vec<String> = input.iter().map(|p| format!("[\"{}\",\"{}\"]", p[0], p[1])).collect();
+    let json = format!("{{\"ring\":[{}],\"distance_mm\":\"10\",\"keep_voids\":true}}", ring.join(","));
+    let v: serde_json::Value = serde_json::from_str(&offset_ring_json(&json).unwrap()).unwrap();
+    assert_eq!(v["voids"].as_array().unwrap().len(), 2);
+    assert_eq!(v["voids"], serde_json::to_value(&o.voids).unwrap());
+    let refused = json.replace(",\"keep_voids\":true", "");
+    assert_eq!(offset_ring_json(&refused).unwrap_err(), OffsetError::EnclosedVoid);
+}

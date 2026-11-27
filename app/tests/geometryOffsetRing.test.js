@@ -183,6 +183,49 @@ describe('geoOffsetRing', () => {
         expect(area(r.voids[0])).toBeLessThan(6415)
     })
 
+    it('keepVoids : des anneaux fermés, anti-horaires, sur la grille, dans le conteneur et loin de la tôle', async () => {
+        // Tôle en C : baie (150..250 x 100..300) ouverte à droite par un couloir de 12 mm.
+        const c = [
+            [0, 0], [400, 0], [400, 194], [250, 194], [250, 100], [150, 100], [150, 300], [250, 300],
+            [250, 206], [400, 206], [400, 400], [0, 400], [0, 0],
+        ]
+        await expect(geoOffsetRing(c, 10)).rejects.toMatchObject({ code: 'offset_enclosed_void' })
+        const r = await geoOffsetRing(c, 10, { keepVoids: true })
+        expect(r.appliedDistanceMm).toBe(10)
+        expect(r.voids.length).toBe(1)
+        const [v] = r.voids
+        // Même forme que `ring` : c'est ce que le constructeur translate et passe
+        // au moteur comme zone interdite.
+        expect(v[0]).toEqual(v[v.length - 1])
+        expect(area(v)).toBeGreaterThan(0)
+        for (const p of v) for (const x of p) expect(Math.abs(x * 1e4 - Math.round(x * 1e4))).toBeLessThan(1e-6)
+        for (const p of probes(v)) {
+            expect(inside(p, r.ring)).toBe(true)
+            // À 10 mm de la matière au moins (à l'erreur d'arc près) : hors d'atteinte du dépassement.
+            const d = signedDist(p, c)
+            expect(d).toBeLessThanOrEqual(10 + 1e-9)
+            expect(d).toBeGreaterThanOrEqual(10 - 0.02)
+        }
+        expect(inside([200, 200], v)).toBe(true)
+        // Rien d'enfermé : liste vide, pas de refus.
+        expect((await geoOffsetRing(c, 5, { keepVoids: true })).voids).toEqual([])
+        expect((await geoOffsetRing(c, 60, { keepVoids: true })).voids).toEqual([])
+    })
+
+    it('une fente de largeur nulle est tenue à la distance jusqu\'à son bout', async () => {
+        // L'aller et le retour de la fente sont sur la même droite (demi-tour exact en (50 ; 30)).
+        const slit = [[0, 0], [50, 0], [50, 30], [50, 5], [50.0002, 0], [100, 0], [100, 100], [0, 100], [0, 0]]
+        const r = await geoOffsetRing(slit, -10)
+        expect(r.appliedDistanceMm).toBe(-10)
+        let tip = Infinity
+        for (const p of probes(r.ring)) {
+            tip = Math.min(tip, Math.hypot(p[0] - 50, p[1] - 30))
+            expect(edgeDist(p, slit)).toBeGreaterThanOrEqual(10 - 1e-6)
+        }
+        expect(tip).toBeGreaterThanOrEqual(10 - 1e-6)
+        expect(tip).toBeLessThan(10.03)
+    })
+
     it('rejette avec le code du refus', async () => {
         await expect(geoOffsetRing(sq(0, 0, 100, 100), -60)).rejects.toMatchObject({ code: 'offset_empty' })
         await expect(geoOffsetRing([[0, 0], [10, 0]], 5)).rejects.toMatchObject({ code: 'offset_bad_input' })
@@ -237,6 +280,77 @@ describe('geoComputeReport avec une distance au bord', () => {
         })
         const ko = await geoComputeReport(spec([item('a', -10.5, 20, 89.5, 120)], { edge: -10 }))
         expect(ko.verify).toMatchObject({ edgeGapMm: -10.5, edgeOk: false, insideSheet: false })
+    })
+
+    it('rectangle : `insideSheet` a la tolérance de `edgeOk` (0,01 mm) dès qu\'une distance au bord est réglée', async () => {
+        // Le moteur lit la tôle décalée en f32 : une pose au ras peut passer la limite d'un dix-millième.
+        for (const [edge, limit] of [[0, 0], [-5, 5]]) {
+            const ok = await geoComputeReport(spec([item('a', -(limit + 0.0005), 20, 100, 120)], { edge }))
+            expect(ok.verify).toMatchObject({ edgeOk: true, insideSheet: true })
+            const ko = await geoComputeReport(spec([item('a', -(limit + 0.02), 20, 100, 120)], { edge }))
+            expect(ko.verify).toMatchObject({ edgeOk: false, insideSheet: false })
+        }
+        // Sans distance au bord : la tolérance d'avant (1e-6).
+        const legacy = await geoComputeReport(spec([item('a', -0.0005, 20, 100, 120)]))
+        expect(legacy.verify.insideSheet).toBe(false)
+    })
+
+    it('distance négative : une pièce presque sans matière sur la tôle est hors tôle, même dans la limite', async () => {
+        // Équerre 100 x 100 à ailes de 12 mm, coin en (-45 ; -45) : sa boîte dépasse
+        // de 45 mm (permis), toute sa matière est hors de la tôle.
+        const bracket = (x, y) => ({
+            id: 'l',
+            coords: [[x, y], [x + 100, y], [x + 100, y + 12], [x + 12, y + 12], [x + 12, y + 100], [x, y + 100], [x, y]],
+            holes: [],
+        })
+        const off = await geoComputeReport(spec([bracket(-45, -45)], { edge: -45 }))
+        expect(off.verify).toMatchObject({ edgeGapMm: -45, edgeOk: true, insideSheet: false })
+        const on = await geoComputeReport(spec([bracket(-5, -5)], { edge: -45 }))
+        expect(on.verify).toMatchObject({ edgeOk: true, insideSheet: true })
+        // Tôle importée : même règle, comptée dans partsOutsideOutline.
+        const shaped = (items) => ({
+            items,
+            containers: [{
+                bin_width: 1000,
+                bin_height: 1000,
+                transforms: items.map((i) => at(i.id)),
+                shape: { outer: sq(0, 0, 1000, 1000), inner: [] },
+            }],
+            space: 2,
+            edge: -12,
+        })
+        const bar = await geoComputeReport(shaped([item('b', -12, 100, -2, 400)]))
+        expect(bar.verify).toMatchObject({ edgeGapMm: -12, edgeOk: true, insideSheet: false, partsOutsideOutline: 1 })
+        const half = await geoComputeReport(shaped([item('b', -12, 100, 88, 400)]))
+        expect(half.verify).toMatchObject({ edgeGapMm: -12, edgeOk: true, insideSheet: true, partsOutsideOutline: 0 })
+    })
+
+    it('tôle importée : une pièce qui avale une cavité à l\'embouchure étroite n\'est vue que par une zone', async () => {
+        // Fente de 1 mm (y 0..5) ouvrant sur une chambre de 8 x 8 : le centre de la
+        // chambre est à 4 mm de la matière, plus que les 3 mm permis, mais aucun bord
+        // de la pièce n'y passe. Le rapport seul reste vert : le constructeur doit
+        // passer la chambre au moteur comme zone interdite (vides de keepVoids).
+        const keyhole = [
+            [0, 0], [499.5, 0], [499.5, 5], [496, 5], [496, 13], [504, 13], [504, 5], [500.5, 5], [500.5, 0],
+            [1000, 0], [1000, 1000], [0, 1000], [0, 0],
+        ]
+        const part = item('p', 450, 2, 550, 102)
+        const report = (inner) => geoComputeReport({
+            items: [part],
+            containers: [{
+                bin_width: 1000, bin_height: 1000, transforms: [at('p')], shape: { outer: keyhole, inner },
+            }],
+            space: 2,
+            edge: -3,
+        })
+        expect((await report([])).verify).toMatchObject({
+            edgeGapMm: -0.5, edgeOk: true, insideSheet: true, partsOutsideOutline: 0,
+        })
+        // Le vide rendu par le décalage de |bord| = 3 mm, passé comme zone : violation.
+        const { voids } = await geoOffsetRing(keyhole, 3, { keepVoids: true })
+        expect(voids.length).toBe(1)
+        expect(inside([500, 9], voids[0])).toBe(true)
+        expect((await report(voids)).verify).toMatchObject({ zoneViolations: 1, zoneClear: false, spacingOk: false })
     })
 
     it('tôle importée : le contour suit `edge`, la zone interdite garde l\'espacement', async () => {

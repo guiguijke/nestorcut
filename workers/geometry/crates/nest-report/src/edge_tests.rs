@@ -357,3 +357,202 @@ fn an_edge_equal_to_the_spacing_keeps_the_same_verdicts() {
     assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
     assert_eq!(r["edgeGapMm"], serde_json::json!(2.0), "{r}");
 }
+
+// ------------------------------------------------- tolérance de `insideSheet`
+
+fn poly(id: &str, pts: &[Pt]) -> Item {
+    let mut coords = pts.to_vec();
+    coords.push(pts[0]);
+    Item { id: id.into(), coords, holes: vec![] }
+}
+
+#[test]
+fn a_rectangular_sheet_tolerates_what_edge_ok_tolerates() {
+    // Le moteur lit la tôle décalée en f32 : une pose au ras de la limite peut la
+    // passer de quelques dix-millièmes. `insideSheet` suit `edgeOk` (0,01 mm),
+    // au bord 0 comme au bord négatif.
+    for (edge, limit) in [(0.0, 0.0), (-5.0, 5.0)] {
+        let within = sq("a", -(limit + 0.005), 100.0, 100.0, 200.0);
+        let r = verify_layout_edge(&[rect(1000.0, 500.0, &[&within])], &[within], 2.0, Some(edge));
+        assert_eq!(r["insideSheet"], serde_json::json!(true), "bord {edge} : {r}");
+        assert_eq!(r["edgeOk"], serde_json::json!(true), "bord {edge} : {r}");
+        let beyond = sq("a", 900.0, 100.0, 1000.0 + limit + 0.02, 200.0);
+        let r = verify_layout_edge(&[rect(1000.0, 500.0, &[&beyond])], &[beyond], 2.0, Some(edge));
+        assert_eq!(r["insideSheet"], serde_json::json!(false), "bord {edge} : {r}");
+        assert_eq!(r["edgeOk"], serde_json::json!(false), "bord {edge} : {r}");
+        // En haut aussi (les quatre côtés ont la même tolérance).
+        let top = sq("a", 100.0, 400.0, 200.0, 500.0 + limit + 0.005);
+        let r = verify_layout_edge(&[rect(1000.0, 500.0, &[&top])], &[top], 2.0, Some(edge));
+        assert_eq!(r["insideSheet"], serde_json::json!(true), "bord {edge} : {r}");
+    }
+}
+
+#[test]
+fn without_an_edge_the_rectangular_tolerance_stays_at_inside_eps() {
+    let just = sq("a", -5e-7, 100.0, 100.0, 200.0);
+    let r = verify_layout(&[rect(1000.0, 500.0, &[&just])], &[just], 2.0);
+    assert_eq!(r["insideSheet"], serde_json::json!(true), "{r}");
+    let out = sq("a", -1e-5, 100.0, 100.0, 200.0);
+    let r = verify_layout(&[rect(1000.0, 500.0, &[&out])], &[out], 2.0);
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+}
+
+// ------------------------------------- pièce presque sans matière sur la tôle
+
+/// Équerre de 100 x 100, ailes de 12 mm, coin extérieur en (x ; y).
+fn bracket(id: &str, x: f64, y: f64) -> Item {
+    poly(
+        id,
+        &[[x, y], [x + 100.0, y], [x + 100.0, y + 12.0], [x + 12.0, y + 12.0], [x + 12.0, y + 100.0], [x, y + 100.0]],
+    )
+}
+
+#[test]
+fn a_bracket_lying_wholly_in_the_overhang_band_is_outside_the_sheet() {
+    // Bord -45 : la boîte de l'équerre dépasse de 45 mm, c'est permis, mais
+    // toute sa matière est en x <= -33 ou y <= -33 : rien sur la tôle.
+    let l = bracket("l", -45.0, -45.0);
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&l])], std::slice::from_ref(&l), 2.0, Some(-45.0));
+    assert_eq!(r["edgeGapMm"], serde_json::json!(-45.0), "{r}");
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // La même équerre avancée de 40 mm : ses ailes sont sur la tôle.
+    let on = bracket("l", -5.0, -5.0);
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&on])], &[on], 2.0, Some(-45.0));
+    assert_eq!(r["insideSheet"], serde_json::json!(true), "{r}");
+    // Dans le coin opposé (400 ; 300), tournée d'un demi-tour et parcourue dans
+    // l'autre sens : pareil.
+    let far = poly(
+        "l",
+        &[[445.0, 345.0], [445.0, 245.0], [433.0, 245.0], [433.0, 333.0], [345.0, 333.0], [345.0, 345.0]],
+    );
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&far])], &[far], 2.0, Some(-45.0));
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+}
+
+#[test]
+fn a_triangle_touching_the_sheet_by_its_tip_is_outside_the_sheet() {
+    // Triangle rectangle de côté 100, hypoténuse vers la tôle : à (-50 ; -50)
+    // elle passe par le coin, la tôle n'en reçoit qu'un point.
+    let t = poly("t", &[[-50.0, -50.0], [50.0, -50.0], [-50.0, 50.0]]);
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&t])], &[t], 2.0, Some(-50.0));
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // Seuil de 1 % : le triangle de côté 100 (aire 5000) avancé de `k` a sur la
+    // tôle un triangle de côté 2k, d'aire 2k². 1 % = 50 mm², soit k = 5.
+    for (k, inside) in [(4.5, false), (5.5, true)] {
+        let t = poly("t", &[[-50.0 + k, -50.0 + k], [50.0 + k, -50.0 + k], [-50.0 + k, 50.0 + k]]);
+        let r = verify_layout_edge(&[rect(400.0, 300.0, &[&t])], &[t], 2.0, Some(-50.0));
+        assert_eq!(r["insideSheet"], serde_json::json!(inside), "k = {k} : {r}");
+    }
+}
+
+#[test]
+fn a_frame_whose_hole_covers_the_sheet_corner_is_outside_the_sheet() {
+    // Cadre (-10..10)², trou (-5..9,95)² : de la tôle il ne couvre que
+    // 100 - 9,95² = 0,9975 mm², pour 400 - 14,95² = 176,5 mm² de matière.
+    let frame = Item {
+        id: "f".into(),
+        coords: square_ring(-10.0, -10.0, 10.0, 10.0),
+        holes: vec![square_ring(-5.0, -5.0, 9.95, 9.95)],
+    };
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&frame])], &[frame], 2.0, Some(-10.0));
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // Sans le trou, le quart de la pièce est sur la tôle.
+    let plain = sq("f", -10.0, -10.0, 10.0, 10.0);
+    let r = verify_layout_edge(&[rect(400.0, 300.0, &[&plain])], &[plain], 2.0, Some(-10.0));
+    assert_eq!(r["insideSheet"], serde_json::json!(true), "{r}");
+}
+
+#[test]
+fn the_material_rule_only_applies_when_an_overhang_is_allowed() {
+    // Bord positif ou nul : une pièce hors tôle l'est déjà par sa boîte, et la
+    // règle de matière ne se déclenche jamais pour une pièce dedans.
+    let a = sq("a", 0.0, 0.0, 100.0, 100.0);
+    for edge in [0.0, 5.0] {
+        let r = verify_layout_edge(&[rect(400.0, 300.0, &[&a])], std::slice::from_ref(&a), 2.0, Some(edge));
+        assert_eq!(r["insideSheet"], serde_json::json!(true), "bord {edge} : {r}");
+    }
+}
+
+#[test]
+fn on_an_imported_sheet_a_part_with_no_material_on_it_is_counted_outside() {
+    let outline = || square_ring(0.0, 0.0, 1000.0, 1000.0);
+    // Barre de 10 mm le long du bord gauche, entièrement dehors (x -12..-2) :
+    // dépassement de 12 mm, permis au bord -12.
+    let bar = sq("b", -12.0, 100.0, -2.0, 400.0);
+    let r = verify_layout_edge(&[shaped(outline(), vec![], &[&bar])], &[bar], 2.0, Some(-12.0));
+    assert_eq!(r["edgeGapMm"], serde_json::json!(-12.0), "{r}");
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(1), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // La même barre AU RAS du bord (x -10..0) : bords confondus de sens opposés,
+    // aire commune nulle.
+    let flush = sq("b", -10.0, 100.0, 0.0, 400.0);
+    let r = verify_layout_edge(&[shaped(outline(), vec![], &[&flush])], &[flush], 2.0, Some(-12.0));
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(1), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // Équerre dans le coin : son coin est à 45·sqrt(2) = 63,64 mm du contour.
+    let l = bracket("l", -45.0, -45.0);
+    let r = verify_layout_edge(&[shaped(outline(), vec![], &[&l])], &[l], 2.0, Some(-70.0));
+    assert_eq!(r["edgeGapMm"], serde_json::json!(-63.64), "{r}");
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(1), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(false), "{r}");
+    // Une pièce qui dépasse en gardant sa matière sur la tôle reste dedans, et
+    // une pièce déjà trop profonde n'est comptée qu'une fois.
+    let half = sq("h", -12.0, 100.0, 88.0, 400.0);
+    let deep = sq("d", -30.0, 500.0, -20.0, 600.0);
+    let c = shaped(outline(), vec![], &[&half, &deep]);
+    let r = verify_layout_edge(&[c], &[half, deep], 2.0, Some(-12.0));
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(1), "{r}");
+    // Sur le disque : carré de 20 mm posé hors du cercle, à 1 mm du bord droit.
+    let off = sq("o", 1001.0, 490.0, 1021.0, 510.0);
+    let r = verify_layout_edge(&[shaped(disc(), vec![], &[&off])], &[off], 2.0, Some(-25.0));
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(1), "{r}");
+}
+
+// ---------------------------------------------- cavité à l'embouchure étroite
+
+/// Tôle 1000 x 1000 dont le bord bas porte un trou de serrure : fente de 1 mm
+/// (x 499,5..500,5 ; y 0..5) qui débouche sur une chambre de 8 x 8
+/// (x 496..504 ; y 5..13).
+fn keyhole_sheet() -> Vec<Pt> {
+    vec![
+        [0.0, 0.0], [499.5, 0.0], [499.5, 5.0], [496.0, 5.0], [496.0, 13.0], [504.0, 13.0],
+        [504.0, 5.0], [500.5, 5.0], [500.5, 0.0], [1000.0, 0.0], [1000.0, 1000.0], [0.0, 1000.0],
+        [0.0, 0.0],
+    ]
+}
+
+#[test]
+fn a_part_swallowing_a_narrow_mouthed_cavity_is_only_caught_through_a_zone() {
+    // Espacement 2, bord -3. La pièce (450..550 x 2..102) couvre toute la
+    // chambre, dont le centre (500 ; 9) est à 4 mm de la matière : plus que les
+    // 3 mm permis. Mais aucun BORD de la pièce n'est dans la chambre : le bord
+    // bas ne traverse que la fente, à 0,5 mm de ses parois.
+    //
+    // Le contrôle du contour ne suit que les bords de la pièce : il reste VERT.
+    // Ce test fixe cette limite (voir `check_sheet_edge`). Le constructeur du
+    // payload DOIT donc passer la chambre au moteur comme zone interdite : les
+    // vides de `offset_ring(contour, |bord|, keep_voids)`.
+    let p = sq("p", 450.0, 2.0, 550.0, 102.0);
+    let bare = shaped(keyhole_sheet(), vec![], &[&p]);
+    let r = verify_layout_edge(&[bare], std::slice::from_ref(&p), 2.0, Some(-3.0));
+    assert_eq!(r["edgeGapMm"], serde_json::json!(-0.5), "{r}");
+    assert_eq!(r["edgeOk"], serde_json::json!(true), "{r}");
+    assert_eq!(r["insideSheet"], serde_json::json!(true), "{r}");
+    assert_eq!(r["partsOutsideOutline"], serde_json::json!(0), "{r}");
+    // Avec la zone (ici le cœur de la chambre, à 3 mm au moins de la matière) :
+    // la même pose est une violation, mesurée par l'aire commune.
+    let void = square_ring(499.0, 8.0, 501.0, 10.0);
+    let zoned = shaped(keyhole_sheet(), vec![void], &[&p]);
+    let r = verify_layout_edge(&[zoned], &[p], 2.0, Some(-3.0));
+    assert_eq!(r["zoneViolations"], serde_json::json!(1), "{r}");
+    assert_eq!(r["zoneClear"], serde_json::json!(false), "{r}");
+    assert_eq!(r["zoneOverlapAreaMm2"], serde_json::json!(4.0), "{r}");
+    assert_eq!(r["spacingOk"], serde_json::json!(false), "{r}");
+}

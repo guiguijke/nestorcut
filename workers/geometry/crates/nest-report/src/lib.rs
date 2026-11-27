@@ -383,9 +383,18 @@ pub fn verify_layout(containers: &[Container], items: &[Item], space: f64) -> se
 /// - `smallestGapMm` / `spacingOk` ne couvrent plus que les écarts pièce-pièce
 ///   et pièce-zone interdite, toujours jugés contre `space` (`smallestGapMm`
 ///   null et `spacingOk` vrai quand il n'y a ni paire ni zone) ;
-/// - `insideSheet` admet un dépassement jusqu'à `max(0, -e)` : tolérance
-///   `INSIDE_EPS + max(0, -e)` sur un rectangle, `OUTLINE_TOL_MM + max(0, -e)`
-///   sur le contour d'une tôle importée (les zones interdites ne bougent pas).
+/// - `insideSheet` admet un dépassement jusqu'à `max(0, -e)`, à la même
+///   tolérance que `edgeOk` : `OUTLINE_TOL_MM + max(0, -e)`, sur un rectangle
+///   comme sur le contour d'une tôle importée (les zones interdites ne bougent
+///   pas). Le moteur lit la tôle décalée en f32 : une pose au ras de la limite
+///   peut la passer d'un dix-millième, ce que `INSIDE_EPS` prenait pour une
+///   sortie alors que `edgeOk` restait vrai ;
+/// - dépassement permis (`e < 0`) : une pièce dont moins de
+///   `ON_SHEET_MIN_FRACTION` de la matière est SUR la tôle (rectangle ou
+///   contour, zones interdites ignorées) compte hors tôle même si sa boîte
+///   respecte le dépassement (`insideSheet` faux, `partsOutsideOutline` sur une
+///   tôle importée). Une équerre fine posée dans le coin peut tenir entière
+///   dans la bande de dépassement : elle serait coupée dans le vide.
 pub fn verify_layout_edge(
     containers: &[Container],
     items: &[Item],
@@ -468,12 +477,19 @@ pub fn verify_layout_edge(
                 inside_sheet = false;
             }
         } else {
-            // Sans distance au bord, `overhang` vaut 0 : `INSIDE_EPS + 0.0` est
-            // INSIDE_EPS au bit près.
-            let tol = INSIDE_EPS + overhang;
-            for (o, _h) in &placed_polys {
+            // Sans distance au bord : INSIDE_EPS, comme avant. Avec : la tolérance
+            // d'`edgeOk` et du contour importé (voir l'en-tête), y compris à e >= 0.
+            let tol = if edge.is_some() { shape::OUTLINE_TOL_MM + overhang } else { INSIDE_EPS };
+            for (o, h) in &placed_polys {
                 let b = geom::ring_bounds(o);
                 if b[0] < -tol || b[1] < -tol || b[2] > sw + tol || b[3] > sh + tol {
+                    inside_sheet = false;
+                } else if overhang > 0.0
+                    && (b[0] < 0.0 || b[1] < 0.0 || b[2] > sw || b[3] > sh)
+                    && shape::barely_on_rect(o, h, sw, sh)
+                {
+                    // Boîte dans le dépassement permis, mais presque rien de la
+                    // pièce sur la tôle.
                     inside_sheet = false;
                 }
                 if edge.is_some() {

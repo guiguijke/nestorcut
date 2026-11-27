@@ -11,7 +11,9 @@
 //! sommet d'arrivée par le secteur de rayon `r` entre les deux normales quand
 //! le sommet est saillant de ce côté. C'est exact : un point à moins de `r` du
 //! bord a son plus proche voisin dans une arête (rectangle) ou en un sommet
-//! (secteur).
+//! (secteur). Un demi-tour EXACT (fente de largeur nulle : ... A, B, A ...) a
+//! son demi-disque au bout B, des deux côtés : la fente est un bord, tenue à
+//! `r` comme le reste.
 //! - vers l'INTÉRIEUR : `cut_sheet(contour, défauts = ces polygones)` ; la
 //!   région gardée est le contour moins la bande ;
 //! - vers l'EXTÉRIEUR : `cut_sheet(grande boîte, défauts = contour + ces
@@ -43,6 +45,16 @@
 //! l'appelant demande les vides (`keep_voids`) pour les passer au moteur comme
 //! interdits.
 //!
+//! Ce que reçoit l'appelant avec `keep_voids` : `voids`, des anneaux FERMÉS,
+//! anti-horaires, sur la grille 1e-4 mm, dans le repère de l'entrée (celui de
+//! `ring`), strictement dans `ring`, disjoints entre eux, par aire décroissante.
+//! Vers l'extérieur, chaque vide est l'air resté à plus de `r` de la tôle : du
+//! côté sûr comme le conteneur (arcs inscrits, donc un vide un peu plus GRAND
+//! que l'exact, jamais plus petit ; après un repli, le vide est celui du rayon
+//! réduit, plus grand encore). Une cavité plus étroite que `2r` partout est
+//! comblée sans vide ; un contour rendu tel quel (`applied_distance_mm` nul)
+//! n'a aucun vide. Liste vide : rien d'enfermé.
+//!
 //! Sinus, cosinus et arc tangente viennent de `libm` (piège 14b : natif et
 //! wasm doivent s'accorder au bit près).
 
@@ -67,6 +79,10 @@ const FALLBACK_STEPS_MM: [f64; 2] = [0.5, 1.0];
 const FALLBACK_SLACK_MM: f64 = 0.05;
 /// Contrôle point par point abandonné au-delà (couples sommet x arête).
 const CHECK_MAX_PAIRS: usize = 60_000_000;
+/// Grille de préfiltrage de `clear_of` : cases par côté au plus, et entrées
+/// (arête x case) au plus avant de prendre une grille deux fois plus grossière.
+const CHECK_GRID_MAX: usize = 512;
+const CHECK_GRID_MAX_ENTRIES: usize = 8_000_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OffsetError {
@@ -149,8 +165,10 @@ pub struct RingOffset {
     /// Distance réellement appliquée (signée) : la demandée, ou moins en valeur
     /// absolue après un repli (voir l'en-tête).
     pub applied_distance_mm: f64,
-    /// Vides enfermés dans le conteneur (anneaux fermés, anti-horaires) : à
-    /// passer au moteur comme interdits. Vide sans `keep_voids`.
+    /// Vides enfermés dans le conteneur : anneaux FERMÉS, anti-horaires, sur la
+    /// grille 1e-4 mm, dans le repère de l'entrée comme `ring`, par aire
+    /// décroissante ; à passer au moteur comme interdits (voir l'en-tête). Vide
+    /// sans `keep_voids`.
     pub voids: Vec<Vec<Pt>>,
 }
 
@@ -254,10 +272,20 @@ fn band(ring: &[Pt], radius: f64, outward: bool, segments_per_turn: u32) -> Vec<
         if let Some(nj) = normal((i + 1) % n) {
             let c = ring[(i + 2) % n];
             let turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+            // Demi-tour exact (c revient sur a-b) : le bout b d'une fente de
+            // largeur nulle, saillant des DEUX côtés.
+            let reversal = turn == 0.0 && (b[0] - a[0]) * (c[0] - b[0]) + (b[1] - a[1]) * (c[1] - b[1]) < 0.0;
             // Sommet saillant du côté de la bande : virage à gauche vu de
             // l'extérieur, à droite vu de l'intérieur.
-            if side * turn > 0.0 {
-                let phi = libm::atan2(ni[0] * nj[1] - ni[1] * nj[0], ni[0] * nj[0] + ni[1] * nj[1]);
+            if side * turn > 0.0 || reversal {
+                // Demi-tour : l'arc tangente ne dit pas de quel côté tourner
+                // (±0). Le demi-disque passe par le prolongement de a-b, qui est
+                // la normale tournée d'un quart de tour vers `side`.
+                let phi = if reversal {
+                    side * core::f64::consts::PI
+                } else {
+                    libm::atan2(ni[0] * nj[1] - ni[1] * nj[0], ni[0] * nj[0] + ni[1] * nj[1])
+                };
                 let k = (phi.abs() / step).ceil().max(1.0) as usize;
                 let t0 = libm::atan2(ni[1], ni[0]);
                 let at = |t: f64, r: f64| -> Pt { [b[0] + r * libm::cos(t), b[1] + r * libm::sin(t)] };
@@ -333,12 +361,96 @@ fn within(result: &[Pt], ring: &[Pt], limit: f64) -> Option<bool> {
 }
 
 /// Chaque point contrôlé de `result` est à `limit` au moins du bord de `ring`.
+///
+/// Seules les arêtes à moins de `limit` d'un point peuvent le contredire : une
+/// grille uniforme range chaque arête dans les cases que touche sa boîte élargie
+/// de `limit`, et un point n'est comparé qu'aux arêtes de sa case. Le verdict est
+/// celui du balayage complet. Un grand contour reste donc contrôlé ; `None` ne
+/// revient que si, même préfiltré, le travail dépasse `CHECK_MAX_PAIRS`.
 fn clear_of(result: &[Pt], ring: &[Pt], limit: f64) -> Option<bool> {
     let pts = probes(result);
-    if pts.len().saturating_mul(ring.len()) > CHECK_MAX_PAIRS {
-        return None;
+    let n = ring.len();
+    if pts.len().saturating_mul(n) <= CHECK_MAX_PAIRS / 64 {
+        return Some(pts.iter().all(|&p| boundary_dist(p, ring) >= limit));
     }
-    Some(pts.iter().all(|&p| boundary_dist(p, ring) >= limit))
+    let b = ring.iter().fold([f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY], |b, p| {
+        [b[0].min(p[0]), b[1].min(p[1]), b[2].max(p[0]), b[3].max(p[1])]
+    });
+    // Marge des boîtes : `limit` et un rien de plus, pour qu'une arête à `limit`
+    // tout juste ne soit pas écartée par l'arrondi.
+    let reach = limit.max(0.0) * (1.0 + 1e-9) + 1e-9;
+    let (x0, y0) = (b[0] - reach, b[1] - reach);
+    let (w, h) = (b[2] + reach - x0, b[3] + reach - y0);
+    let mut g = ((n as f64).sqrt().ceil() as usize).clamp(1, CHECK_GRID_MAX);
+    loop {
+        let (cw, ch) = (w / g as f64, h / g as f64);
+        let cell = |v: f64, o: f64, c: f64| -> usize {
+            if c > 0.0 { (((v - o) / c).floor().max(0.0) as usize).min(g - 1) } else { 0 }
+        };
+        // Cases couvertes par la boîte élargie de l'arête i.
+        let span = |i: usize| -> [usize; 4] {
+            let (p, q) = (ring[i], ring[(i + 1) % n]);
+            [
+                cell(p[0].min(q[0]) - reach, x0, cw),
+                cell(p[1].min(q[1]) - reach, y0, ch),
+                cell(p[0].max(q[0]) + reach, x0, cw),
+                cell(p[1].max(q[1]) + reach, y0, ch),
+            ]
+        };
+        let mut count = vec![0u32; g * g + 1];
+        let mut entries = 0usize;
+        for i in 0..n {
+            let s = span(i);
+            entries += (s[2] - s[0] + 1) * (s[3] - s[1] + 1);
+        }
+        if entries > CHECK_GRID_MAX_ENTRIES && g > 1 {
+            g /= 2;
+            continue;
+        }
+        for i in 0..n {
+            let s = span(i);
+            for cy in s[1]..=s[3] {
+                for cx in s[0]..=s[2] {
+                    count[cy * g + cx + 1] += 1;
+                }
+            }
+        }
+        for k in 0..g * g {
+            count[k + 1] += count[k];
+        }
+        let mut fill: Vec<u32> = count[..g * g].to_vec();
+        let mut list = vec![0u32; entries];
+        for i in 0..n {
+            let s = span(i);
+            for cy in s[1]..=s[3] {
+                for cx in s[0]..=s[2] {
+                    let c = cy * g + cx;
+                    list[fill[c] as usize] = i as u32;
+                    fill[c] += 1;
+                }
+            }
+        }
+        let mut work = 0usize;
+        for &p in &pts {
+            // Un point hors de la grille est à plus de `limit` de tout le bord.
+            if p[0] < x0 || p[1] < y0 || p[0] > x0 + w || p[1] > y0 + h {
+                continue;
+            }
+            let c = cell(p[1], y0, ch) * g + cell(p[0], x0, cw);
+            let near = &list[count[c] as usize..count[c + 1] as usize];
+            work = work.saturating_add(near.len());
+            if work > CHECK_MAX_PAIRS {
+                return None;
+            }
+            for &i in near {
+                let i = i as usize;
+                if point_seg_dist(p, ring[i], ring[(i + 1) % n]) < limit {
+                    return Some(false);
+                }
+            }
+        }
+        return Some(true);
+    }
 }
 
 fn closed(ring: &[Pt]) -> Vec<Pt> {
@@ -513,4 +625,55 @@ pub fn offset_ring_json(json: &str) -> Res<String> {
     let dl = Deadline::new(i.time_budget_ms.unwrap_or(TIME_BUDGET_MS_BROWSER));
     let out = offset_ring(&ring, i.distance_mm.0, &opts, &dl)?;
     serde_json::to_string(&out).map_err(|_| OffsetError::Failed("json"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn disc(r: f64, n: usize) -> Vec<Pt> {
+        (0..n)
+            .map(|i| {
+                let t = 2.0 * core::f64::consts::PI * i as f64 / n as f64;
+                [500.0 + r * libm::cos(t), 500.0 + r * libm::sin(t)]
+            })
+            .collect()
+    }
+
+    #[test]
+    fn the_inward_guard_still_runs_on_a_large_ring() {
+        // 24 000 points contrôlés x 20 000 arêtes : huit fois le plafond du
+        // balayage complet, qui rendait `None` (anneau non contrôlé).
+        let ring = disc(500.0, 20_000);
+        let result = disc(490.0, 6_000);
+        assert!(probes(&result).len() * ring.len() > CHECK_MAX_PAIRS);
+        // La corde du contour passe à 500·cos(π/20000) du centre : l'écart réel
+        // est 10 mm à mieux que 1e-4 près.
+        assert_eq!(clear_of(&result, &ring, 9.99), Some(true));
+        assert_eq!(clear_of(&result, &ring, 10.01), Some(false));
+        // Un seul point trop près suffit.
+        let mut dented = result.clone();
+        dented[1234] = [500.0 + 495.0 * libm::cos(1.0), 500.0 + 495.0 * libm::sin(1.0)];
+        assert_eq!(clear_of(&dented, &ring, 9.99), Some(false));
+    }
+
+    #[test]
+    fn the_prefiltered_guard_agrees_with_the_full_scan() {
+        // Contour en dents de scie (arêtes longues et courtes mêlées), anneaux
+        // contrôlés à des distances variées : même verdict que le balayage complet.
+        let n = 3_000;
+        let ring: Vec<Pt> = (0..n)
+            .map(|i| {
+                let t = 2.0 * core::f64::consts::PI * i as f64 / n as f64;
+                let r = if i % 7 == 0 { 420.0 } else { 500.0 };
+                [500.0 + r * libm::cos(t), 500.0 + r * libm::sin(t)]
+            })
+            .collect();
+        for (r, limit) in [(300.0, 100.0), (300.0, 119.0), (300.0, 121.0), (410.0, 9.0), (410.0, 11.0), (100.0, 300.0)] {
+            let result = disc(r, 500);
+            assert!(probes(&result).len() * ring.len() > CHECK_MAX_PAIRS / 64, "le préfiltre doit servir");
+            let full = probes(&result).iter().all(|&p| boundary_dist(p, &ring) >= limit);
+            assert_eq!(clear_of(&result, &ring, limit), Some(full), "rayon {r}, limite {limit}");
+        }
+    }
 }
