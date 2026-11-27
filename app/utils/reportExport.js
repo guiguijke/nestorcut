@@ -25,3 +25,18 @@ export function reportExportState(computeLevel, paidPlansDisabled) {
     if (paid) return 'enabled'
     return paidPlansDisabled ? 'disabled' : 'locked'
 }
+
+/**
+ * Verrou du rapport PDF (décision du propriétaire) : un compte Free reçoit
+ * le PDF de BASE ; le PDF AVANCÉ (logo de l'entreprise, champs, numéros de
+ * pièce, longueur de coupe) suit exactement le verrou de « Copier le rapport »
+ * et « Exporter CSV » (`reportExportState`). Même logique commerciale,
+ * 100 % côté client.
+ *
+ * @param {string|null|undefined} computeLevel 'free'|'standard'|'privacy'
+ * @param {boolean} paidPlansDisabled NUXT_PUBLIC_PAID_PLANS_DISABLED (D-PAY-7)
+ * @returns {{ base: 'enabled', advanced: 'enabled'|'locked'|'disabled' }}
+ */
+export function reportPdfState(computeLevel, paidPlansDisabled) {
+    return { base: 'enabled', advanced: reportExportState(computeLevel, paidPlansDisabled) }
+}
