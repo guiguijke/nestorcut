@@ -149,8 +149,24 @@ watch(disabled, (d) => {
     if (d && mode.value === 'advanced') mode.value = 'basic'
 })
 
-// Lecture de la marque gardée dans ce navigateur, à chaque ouverture.
+// Écriture de la marque dans ce navigateur. Déclarée AVANT le watcher (qui s'exécute
+// tout de suite). Tout vide : la clé est retirée, pas réécrite à vide.
 let loaded = false
+let saveTimer = null
+const flushSave = () => {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    if (!loaded) return null
+    if (!company.value.trim() && !line.value.trim() && !logo.value) {
+        clearBranding()
+        return { ok: true }
+    }
+    const r = saveBranding({ company: company.value, line: line.value, logo: logo.value })
+    if (!r.ok && r.reason === 'quota') logoError.value = t('reportPdf.brand.quota')
+    return r
+}
+
+// Lecture de la marque gardée dans ce navigateur, à chaque ouverture.
 watch(() => props.isModalOpen, (isOpen) => {
     if (!isOpen) {
         flushSave()
@@ -165,15 +181,6 @@ watch(() => props.isModalOpen, (isOpen) => {
     loaded = true
 }, { immediate: true })
 
-let saveTimer = null
-const flushSave = () => {
-    clearTimeout(saveTimer)
-    saveTimer = null
-    if (!loaded) return
-    const r = saveBranding({ company: company.value, line: line.value, logo: logo.value })
-    if (!r.ok && r.reason === 'quota') logoError.value = t('reportPdf.brand.quota')
-    return r
-}
 watch([company, line, logo], () => {
     if (!loaded) return
     clearTimeout(saveTimer)
@@ -209,11 +216,8 @@ const onDrop = async (e) => {
 const removeLogo = () => {
     logo.value = null
     logoError.value = ''
-    // Plus de logo : on n'écrit pas « sans logo » par-dessus, on efface la clé si le reste est vide.
-    if (!company.value && !line.value) {
-        clearTimeout(saveTimer)
-        clearBranding()
-    }
+    // Tout vide : la clé disparaît vraiment (flushSave la retire).
+    flushSave()
 }
 
 const onDownload = () => {

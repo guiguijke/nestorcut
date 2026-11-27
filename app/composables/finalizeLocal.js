@@ -70,6 +70,7 @@ export function dropPositionsUnlessBrowserBuilt(alternatives, mode) {
         delete alt.positions
         // Même règle pour les identifiants de fichier des formes d'aperçu (rapport PDF).
         delete alt.svgSlugs
+        delete alt.svgPoses
     }
     return alternatives
 }

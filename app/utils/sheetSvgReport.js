@@ -150,8 +150,9 @@ function attr(tag, name) {
 /**
  * Lit un SVG couleur de tôle.
  * @param {string} svgText
- * @returns {{ widthMm: number, heightMm: number,
+ * @returns {{ widthMm: number, heightMm: number, ignored: number,
  *   parts: { rings: number[][][], color: string }[] } | null}
+ *   `ignored` : chemins de pièces illisibles écartés
  *   Coordonnées des anneaux APRÈS transformation, en mm, repère du SVG
  *   (origine en haut à gauche, y vers le bas) ; pièces dans l'ordre du fichier.
  *   null si le SVG est illisible (jamais d'exception).
@@ -172,6 +173,9 @@ export function parseSheetSvg(svgText) {
         if (!Number.isFinite(widthMm) || !Number.isFinite(heightMm)) return null
 
         const parts = []
+        // Chemins de pièces vus (`translate(`) mais illisibles : écartés ; leur compte permet de
+        // ne jamais présenter un total de coupe sous-estimé comme complet.
+        let ignored = 0
         const re = /<path\b([^>]*)>/gi
         let m
         while ((m = re.exec(svgText))) {
@@ -180,17 +184,26 @@ export function parseSheetSvg(svgText) {
             if (!tr || !/translate\s*\(/.test(tr)) continue // contour de tôle ou zone interdite
             const d = attr(tag, 'd')
             const mat = parseTransform(tr)
-            if (!d || !mat) continue
+            if (!d || !mat) {
+                ignored += 1
+                continue
+            }
             const raw = parsePathRings(d)
-            if (!raw) continue
+            if (!raw) {
+                ignored += 1
+                continue
+            }
             const rings = raw
                 .filter((r) => r.length > 2)
                 .map((r) => r.map(([x, y]) => [(mat[0] * x + mat[2] * y + mat[4]) * factor, (mat[1] * x + mat[3] * y + mat[5]) * factor]))
-            if (!rings.length) continue
+            if (!rings.length) {
+                ignored += 1
+                continue
+            }
             const fill = attr(tag, 'fill')
             parts.push({ rings, color: fill && /^#[0-9a-fA-F]{6}$/.test(fill) ? fill.toUpperCase() : FALLBACK_COLOR })
         }
-        return { widthMm, heightMm, parts }
+        return { widthMm, heightMm, parts, ignored }
     } catch {
         return null
     }

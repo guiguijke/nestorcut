@@ -76,11 +76,11 @@ describe('buildReportPdfModel : contenu avancé', () => {
         expect(byLabel['reportPdf.fig.placed']).toBe('4 / 4')
         expect(byLabel['reportPdf.fig.edge']).toBe('5 mm')
         expect(byLabel['reportPdf.fig.holes']).toBe('1')
-        expect(byLabel['reportPdf.fig.offcut']).toContain('400 mm × 300 mm')
+        expect(Object.entries(byLabel).find(([k]) => k.startsWith('reportPdf.fig.offcut'))[1]).toContain('400 mm × 300 mm')
         // Périmètres : 3 x (300) + 1 pièce a (300) + trou (120) + b (240) ... voir calcul ci-dessous
         const perim = (w, h) => 2 * (w + h)
         const expected = perim(100, 50) * 3 + perim(40, 20) + perim(60, 60)
-        expect(byLabel['reportPdf.fig.cutLength']).toBe(`${Math.round(expected * 10) / 10} mm`)
+        expect(byLabel['reportPdf.fig.cutLength']).toBe(`${expected / 1000} m`) // mètres, 2 décimales
         expect(byLabel['reportPdf.fig.pierces']).toBe('5') // 4 contours + 1 trou
     })
 
@@ -216,7 +216,7 @@ describe('buildReportPdfModel : cas dégradés', () => {
     it('tôle importée : note, pas de chute', () => {
         const m = buildReportPdfModel(input({ sheets: [sheetRow(0, 3, { shaped: true }), sheetRow(1, 1, { shaped: true })] }))
         expect(m.notes).toContain('reportPdf.note.shaped')
-        expect(m.figures.map((f) => f.label)).not.toContain('reportPdf.fig.offcut')
+        expect(m.figures.map((f) => f.label).some((l) => l.startsWith('reportPdf.fig.offcut'))).toBe(false)
     })
 
     it('pièces non posées et distance au bord inconnue', () => {

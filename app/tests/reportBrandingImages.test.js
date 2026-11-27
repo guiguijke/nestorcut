@@ -102,21 +102,34 @@ describe('câblage : rien de nouveau ne part au serveur, le verrou passe par onE
         expect(btn).toContain("$emit('report-pdf')")
     })
 
-    it('l\'avancé suit le chemin verrouillé des exports et relit l\'état au clic', () => {
+    it('l’avancé passe par reportPdfClick et le chemin verrouillé des exports, état relu au clic', () => {
         const at = modal.indexOf('const onReportPdfDownload')
-        const body = modal.slice(at, modal.indexOf('\n}\n', at))
-        expect(body).toContain("onExportClick(() => makeReportPdf(payload), 'report_pdf_locked_click')")
-        expect(body).toContain("'disabled'")
+        const body = modal.slice(at, modal.indexOf('\n})\n', at))
+        expect(body).toContain('reportPdfClick({')
+        expect(body).toContain("onExportClick(onProceed, 'report_pdf_locked_click', beforePaywall)")
+        expect(body).toContain('readState: () => unref(pdfState).advanced')
+        expect(body).toContain('closeDialog: () => { reportPdfOpen.value = false }')
         // Le contenu avancé exige l'état 'enabled' relu, deux fois (au départ et avant le modèle).
         expect(modal).toContain("const advancedPdfEnabled = () => unref(pdfState).advanced === 'enabled'")
-        expect(modal).toContain('wantAdvanced: advanced === true && advancedPdfEnabled()')
         expect(modal).toContain('stillAdvanced: advancedPdfEnabled')
         // Même source d'offre que le verrou des exports.
         expect(modal).toMatch(/const pdfState = computed\(\(\) => reportPdfState\(\s*unref\(userData\)\?\.compute\?\.level \?\? null,\s*flagOn\(config\.public\.paidPlansDisabled\),/)
         expect(modal).toMatch(/const exportState = computed\(\(\) =>\s*reportExportState\(\s*unref\(userData\)\?\.compute\?\.level \?\? null,\s*flagOn\(config\.public\.paidPlansDisabled\),/)
     })
 
-    it('ni logo, ni champs, ni PDF dans une requête ; le suivi ne porte que altId et advanced', () => {
+    it('la fabrication lit son contexte AVANT le premier await et vérifie qu’il est encore le bon', () => {
+        const at = modal.indexOf('const makeReportPdf')
+        const body = modal.slice(at, modal.indexOf('\n}\n', at))
+        const firstAwait = body.indexOf('await ')
+        for (const needle of ['stillCurrent()', 'resultModalData).slug', 'reportPdfInput()', 'reportPdfSvgSources()', 'unref(activeAlt)']) {
+            const i = body.indexOf(needle)
+            expect(i, needle).toBeGreaterThan(-1)
+            expect(i, needle).toBeLessThan(firstAwait)
+        }
+        expect(body).toContain('if (!live()) return')
+    })
+
+    it('ni logo, ni champs, ni PDF dans une requête ; le suivi ne porte que altId, sous deux noms', () => {
         for (const f of ['../composables/reportPdfExport.js', '../components/ReportPdfDialog.vue', '../utils/reportBranding.js']) {
             const src = read(f)
             const calls = [...src.matchAll(/(\$fetch|useApiFetch|useFetch|sendBeacon)\(/g)]
@@ -125,6 +138,6 @@ describe('câblage : rien de nouveau ne part au serveur, le verrou passe par onE
         // Le seul fetch lit un aperçu (GET, même origine), sans corps.
         const exp = read('../composables/reportPdfExport.js')
         expect([...exp.matchAll(/\bfetch\(([^)]*)\)/g)].map((m) => m[1])).toEqual(["src, { credentials: 'same-origin' }"])
-        expect(modal).toContain("trackEvent('report_pdf_exported', { altId: unref(activeAlt), advanced: out.advanced })")
+        expect(modal).toContain("trackEvent(out.advanced ? 'report_pdf_advanced_exported' : 'report_pdf_exported', { altId })")
     })
 })

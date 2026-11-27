@@ -1204,4 +1204,5 @@ export default {
     'reportPdf.download': "Télécharger le PDF",
     'reportPdf.working': "Fabrication du PDF...",
     'reportPdf.error': "Le PDF n'a pas pu être fabriqué. Réessayez.",
+    'reportPdf.error.offer': "Le rapport avancé n'est plus inclus dans votre offre. Rien n'a été téléchargé.",
 }

@@ -9,7 +9,8 @@
  * PDF en traits se reconvertirait en DXF et contournerait le verrou des
  * fichiers de coupe du compte Free.
  */
-import { parseSheetSvg, svgTextFromDataUri } from '~/utils/sheetSvgReport'
+import { zlibSync } from 'fflate'
+import { labelPoint, parseSheetSvg, svgTextFromDataUri } from '~/utils/sheetSvgReport'
 import { buildReportPdfModel } from '~/utils/reportPdfModel'
 import { buildReportPdf } from '~/utils/reportPdf'
 import { LOGO_MAX_BYTES } from '~/utils/reportBranding'
@@ -18,6 +19,9 @@ import { fitInside, nonWhiteBox, rgbaToImage, scaleToLongSide, whiteToAlpha } fr
 const PLAN_LONG_SIDE = 1600
 const PLAN_LONG_SIDE_MANY = 1200 // beaucoup de tôles : on ménage la mémoire
 const MANY_SHEETS = 8
+const HUGE_SHEETS = 30
+const PLAN_LONG_SIDE_HUGE = 1000 // plus de 30 tôles
+const IMAGE_TIMEOUT_MS = 15000
 const NESTORCUT_LOGO_URL = '/brand/nestorcut-logo-light-master.png'
 const NESTORCUT_LOGO_WIDTH = 600
 const COMPANY_LOGO_MAX = { width: 800, height: 400 }
@@ -28,8 +32,16 @@ const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']
 function loadImage(src) {
     return new Promise((resolve, reject) => {
         const img = new Image()
-        img.onload = () => resolve(img)
-        img.onerror = () => reject(new Error('image_unreadable'))
+        // Une image qui ne répond jamais ne bloque pas la fabrication : rejet après 15 s.
+        const timer = setTimeout(() => reject(new Error('image_timeout')), IMAGE_TIMEOUT_MS)
+        img.onload = () => {
+            clearTimeout(timer)
+            resolve(img)
+        }
+        img.onerror = () => {
+            clearTimeout(timer)
+            reject(new Error('image_unreadable'))
+        }
         img.src = src
     })
 }
@@ -192,15 +204,22 @@ export async function processCompanyLogo(file) {
  */
 export async function generateReportPdf({ input, svgSources, wantAdvanced, stillAdvanced, branding = null, fields = null }) {
     const sources = Array.isArray(svgSources) ? svgSources : []
-    const longSide = sources.length > MANY_SHEETS ? PLAN_LONG_SIDE_MANY : PLAN_LONG_SIDE
+    const longSide = sources.length > HUGE_SHEETS ? PLAN_LONG_SIDE_HUGE : sources.length > MANY_SHEETS ? PLAN_LONG_SIDE_MANY : PLAN_LONG_SIDE
     const previews = []
     const images = []
-    // Une tôle après l'autre : la mémoire ne garde qu'une rastérisation en cours.
+    const labelPoints = []
+    const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve))
+    // Une tôle après l'autre : la mémoire ne garde qu'une rastérisation en cours, déjà
+    // compressée (le brut est libéré), et la main est rendue au navigateur entre deux tôles.
     for (const src of sources) {
         const text = await svgTextOf(src)
         const parsed = text ? parseSheetSvg(text) : null
         previews.push(parsed)
-        images.push(parsed ? await rasterizeSheetSvg(text, parsed.widthMm, parsed.heightMm, longSide) : null)
+        const raw = parsed ? await rasterizeSheetSvg(text, parsed.widthMm, parsed.heightMm, longSide) : null
+        images.push(raw ? { width: raw.width, height: raw.height, rgbZ: zlibSync(raw.rgb) } : null)
+        // Points d'étiquette (avancé seulement), calculés ici pour rendre la main par tôle.
+        labelPoints.push(wantAdvanced && parsed ? parsed.parts.map((p) => labelPoint(p.rings)) : null)
+        await yieldToBrowser()
     }
     const nestorcutLogo = await loadNestorcutLogo()
     const companyLogo = wantAdvanced && branding?.logo ? await dataUriToImage(branding.logo) : null
@@ -210,6 +229,7 @@ export async function generateReportPdf({ input, svgSources, wantAdvanced, still
         advanced,
         previews,
         images,
+        labelPoints,
         nestorcutLogo,
         branding: advanced && branding ? { logo: companyLogo, company: branding.company, line: branding.line } : null,
         fields: advanced ? fields : null,

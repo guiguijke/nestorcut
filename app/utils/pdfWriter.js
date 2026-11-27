@@ -106,6 +106,13 @@ function codePointToByte(cp) {
     return 0x3f // « ? »
 }
 
+// Signes hors cp1252 que les libellés de l'écran emploient : translittérés avant le
+// repli (sinon « ≥ » sortirait en « ? »). Coches et croix : rien.
+const TRANSLIT = { '≥': '>=', '≤': '<=', '−': '-', '≈': '~', '→': '->', '←': '<-', '✓': '', '✗': '', '✔': '', '✘': '' }
+function translit(str) {
+    return str.replace(/[≥≤−≈→←✓✗✔✘]/g, (c) => TRANSLIT[c])
+}
+
 /**
  * Texte Unicode → octets WinAnsi (cp1252). Caractères invisibles retirés ;
  * hors cp1252 : accent retiré, à défaut « ? ».
@@ -114,7 +121,7 @@ function codePointToByte(cp) {
  */
 export function encodeWinAnsi(str) {
     const out = []
-    for (const ch of String(str ?? '')) {
+    for (const ch of translit(String(str ?? ''))) {
         const b = codePointToByte(ch.codePointAt(0))
         if (b !== DROPPED) out.push(b)
     }
@@ -237,16 +244,18 @@ export function createPdf({ title = '', producer = 'NestorCut', creationDate } =
 
     /**
      * Enregistre une image RVB 8 bits (lignes de haut en bas).
-     * @param {{ width: number, height: number, rgb: Uint8Array, alpha?: Uint8Array }} img
+     * @param {{ width: number, height: number, rgb?: Uint8Array, alpha?: Uint8Array, rgbZ?: Uint8Array, alphaZ?: Uint8Array }} img
      * @returns {number} identifiant à passer à `page.image`
      */
-    function addImage({ width, height, rgb, alpha } = {}) {
+    function addImage({ width, height, rgb, alpha, rgbZ, alphaZ } = {}) {
         if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
             throw new Error('addImage : largeur/hauteur invalides')
         }
-        if (!rgb || rgb.length !== width * height * 3) throw new Error('addImage : rgb doit faire largeur*hauteur*3 octets')
+        // `rgbZ` / `alphaZ` : octets DÉJÀ compressés (zlib), fournis par un appelant qui a libéré le brut.
+        if (!rgbZ && (!rgb || rgb.length !== width * height * 3)) throw new Error('addImage : rgb doit faire largeur*hauteur*3 octets')
         if (alpha && alpha.length !== width * height) throw new Error('addImage : alpha doit faire largeur*hauteur octets')
-        images.push({ width, height, rgb, alpha: alpha || null })
+        // Compressé tout de suite : le brut peut être libéré par l'appelant (beaucoup de tôles).
+        images.push({ width, height, rgbZ: rgbZ || zlibSync(rgb), alphaZ: alphaZ || (alpha ? zlibSync(alpha) : null) })
         return images.length
     }
 
@@ -361,7 +370,7 @@ export function createPdf({ title = '', producer = 'NestorCut', creationDate } =
         const imgIds = []
         let next = 6
         for (const im of images) {
-            const smask = im.alpha ? next++ : 0
+            const smask = im.alphaZ ? next++ : 0
             imgIds.push({ id: next++, smask })
         }
         const pageIds = pages.map(() => ({ page: next++, content: next++ }))
@@ -378,14 +387,14 @@ export function createPdf({ title = '', producer = 'NestorCut', creationDate } =
         images.forEach((im, i) => {
             const { id, smask } = imgIds[i]
             if (smask) {
-                const data = zlibSync(im.alpha)
+                const data = im.alphaZ
                 putObj(
                     smask,
                     `<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${data.length} >>`,
                     data,
                 )
             }
-            const data = zlibSync(im.rgb)
+            const data = im.rgbZ
             putObj(
                 id,
                 `<< /Type /XObject /Subtype /Image /Width ${im.width} /Height ${im.height} /ColorSpace /DeviceRGB /BitsPerComponent 8${smask ? ` /SMask ${smask} 0 R` : ''} /Filter /FlateDecode /Length ${data.length} >>`,

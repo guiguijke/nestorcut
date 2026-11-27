@@ -44,6 +44,10 @@
  * @property {((string[]|null)|undefined)[]|null} slugs Identifiants de fichier
  *   des formes de chaque aperçu (`svgSlugs`), ou null si inconnus
  * @property {'server'|'old'} slugsMissing Pourquoi `slugs` manque
+ * @property {(number[]|null|undefined)[]|null} [poses] Indice de pose de chaque forme
+ *   (`svgPoses`) : les formes d'un bloc partagent la pose de leur item, comptée UNE fois
+ * @property {([number, number][]|null|undefined)[]} [labelPoints] Points d'étiquette déjà calculés (sinon calculés ici)
+ * @property {number|null} [densityPct] Densité de l'option, si `totals` n'en a pas
  * @property {Record<string, number>|null} requestedBySlug Quantité demandée par fichier
  * @property {Image|null} nestorcutLogo
  * @property {{ logo: Image|null, company: string, line: string }|null} branding
@@ -55,11 +59,15 @@ import { showSheetOffcutColumn } from './reportLayout.js'
 const arr = (v) => (Array.isArray(v) ? v : [])
 const clean = (v) => (v == null ? '' : String(v).trim())
 
-/** Un aperçu est exploitable s'il est lu et porte des pièces quand la tôle en a. */
+/**
+ * Un aperçu est exploitable s'il est lu, sans chemin de pièce écarté et avec au moins
+ * autant de formes que de pièces posées : sinon la coupe serait sous-estimée.
+ */
 function readable(preview, row) {
     if (!preview || !Array.isArray(preview.parts)) return false
+    if (Number(preview.ignored) > 0) return false
     const expected = Number(row?.partCount) || 0
-    return preview.parts.length > 0 || expected === 0
+    return preview.parts.length >= expected
 }
 
 /**
@@ -111,6 +119,8 @@ export function buildReportPdfModel(input) {
     // ---- coupe : par tôle, seulement si avancé et aperçu lisible ---------------
     const cuts = rows.map((row, i) => (advanced && readable(previews[i], row) ? cutStats(previews[i].parts) : null))
     const cutKnown = cuts.filter(Boolean).length
+    // Longueur de coupe : mètres (2 décimales) en mm, pieds (1 décimale) en pouces, au format de la langue.
+    const cutText = (mm) => (inch ? `${inp.fmtNumber(mm / 304.8, 1)} ft` : `${inp.fmtNumber(mm / 1000, 2)} m`)
     const cutComplete = sheetCount > 0 && cutKnown === sheetCount
 
     // ---- chiffres clés ---------------------------------------------------------
@@ -120,7 +130,7 @@ export function buildReportPdfModel(input) {
     const figures = []
     figures.push({ label: t('reportPdf.fig.placed'), value: `${placed} / ${requested}` })
     if (unplaced > 0) figures.push({ label: t('reportPdf.fig.unplaced'), value: String(unplaced) })
-    const density = totals?.densityPct
+    const density = totals?.densityPct ?? inp.densityPct ?? null
     if (density != null) figures.push({ label: t('result.densityFull'), value: inp.fmtPercent(density) })
     if (totals?.partsAreaMm2 != null) figures.push({ label: t('reportPdf.fig.partsArea'), value: inp.fmtArea(totals.partsAreaMm2) })
     if (totals?.freeAreaMm2 != null) figures.push({ label: t('reportPdf.fig.freeArea'), value: inp.fmtArea(totals.freeAreaMm2) })
@@ -133,7 +143,8 @@ export function buildReportPdfModel(input) {
     if (!anyShaped && off && off.areaMm2 > 1) {
         const kind = off.reusable ? t('report.offcut.reusable') : t('report.offcut.scrap')
         figures.push({
-            label: t('reportPdf.fig.offcut'),
+            // « au moins » dans le libellé : la valeur reste sur deux lignes au plus dans la carte.
+            label: `${t('reportPdf.fig.offcut')} (${t('report.offcut.atLeast')})`,
             value: `${inp.fmtLength(off.widthMm)} × ${inp.fmtLength(off.heightMm)} (${kind})`,
         })
     }
@@ -143,7 +154,7 @@ export function buildReportPdfModel(input) {
         const pierces = cuts.reduce((s, c) => s + (c ? c.pierceCount : 0), 0)
         // Un total partiel dit « au moins » : jamais un faux total présenté comme complet.
         const atLeast = cutComplete ? '' : `${t('report.offcut.atLeast')} `
-        figures.push({ label: t('reportPdf.fig.cutLength'), value: `${atLeast}${inp.fmtLength(total)}` })
+        figures.push({ label: t('reportPdf.fig.cutLength'), value: `${atLeast}${cutText(total)}` })
         figures.push({ label: t('reportPdf.fig.pierces'), value: `${atLeast}${inp.fmtNumber(pierces)}` })
     }
     model.figures = figures
@@ -194,7 +205,7 @@ export function buildReportPdfModel(input) {
             }
             if (withOffcut) r.offcut = s.offcut ? `${inp.fmtLength(s.offcut.widthMm)} × ${inp.fmtLength(s.offcut.heightMm)}` : '—'
             if (advanced) {
-                r.cut = cuts[i] ? inp.fmtLength(cuts[i].cutLengthMm) : '—'
+                r.cut = cuts[i] ? cutText(cuts[i].cutLengthMm) : '—'
                 r.pierces = cuts[i] ? inp.fmtNumber(cuts[i].pierceCount) : '—'
             }
             return r
@@ -211,7 +222,14 @@ export function buildReportPdfModel(input) {
         if (!Array.isArray(list) || !readable(p, row) || list.length !== p.parts.length) return null
         return list
     })
-    const refs = advanced ? buildPartRefs(slugLists) : null
+    // Comptage : une pièce par POSE (les formes d'un bloc partagent leur numéro).
+    const countLists = slugLists.map((list, i) => {
+        if (!list) return null
+        const poses = inp.poses?.[i]
+        if (!Array.isArray(poses) || poses.length !== list.length) return list
+        return list.filter((_, k) => k === 0 || poses[k] !== poses[k - 1])
+    })
+    const refs = advanced ? buildPartRefs(countLists) : null
 
     // ---- une page par tôle -------------------------------------------------------------------
     model.sheets = rows.map((s, i) => {
@@ -227,14 +245,14 @@ export function buildReportPdfModel(input) {
         if (!advanced) return sheet
         if (cuts[i]) {
             sheet.figures = [
-                { label: t('reportPdf.fig.cutLength'), value: inp.fmtLength(cuts[i].cutLengthMm) },
+                { label: t('reportPdf.fig.cutLength'), value: cutText(cuts[i].cutLengthMm) },
                 { label: t('reportPdf.fig.pierces'), value: inp.fmtNumber(cuts[i].pierceCount) },
             ]
         }
         const list = slugLists[i]
         if (list && sheet.plan) {
             sheet.plan.labels = p.parts.map((part, k) => {
-                const [x, y] = labelPoint(part.rings)
+                const [x, y] = inp.labelPoints?.[i]?.[k] || labelPoint(part.rings)
                 const box = ringsBox(part.rings)
                 return {
                     x,
@@ -276,7 +294,7 @@ export function buildReportPdfModel(input) {
             const placedBy = new Map()
             const sheetsOf = new Map()
             slugLists.forEach((list, i) => {
-                for (const slug of list) placedBy.set(slug, (placedBy.get(slug) || 0) + 1)
+                for (const slug of countLists[i]) placedBy.set(slug, (placedBy.get(slug) || 0) + 1)
                 for (const e of refs.perSheet[i] || []) {
                     if (!sheetsOf.has(e.slug)) sheetsOf.set(e.slug, [])
                     sheetsOf.get(e.slug).push((Number(rows[i].index) || i) + 1)

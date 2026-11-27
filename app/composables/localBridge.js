@@ -2034,6 +2034,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             // Rapport PDF : identifiant de fichier (`file_slug`) de chaque forme du
             // SVG de la tôle, dans l'ordre des formes. Reste dans le navigateur.
             const svgSlugs = []
+            // Indice de pose (dans `transforms`) de chaque forme : les formes d'un bloc
+            // partagent la pose de leur item, le rapport compte une pièce par POSE.
+            const svgPoses = []
             // Tôle importée : forme (contour + zones) de chaque layout, pour le
             // rapport seulement. null = job rectangulaire, chemin inchangé.
             const reportShapes = reportSheetShapes(payload, layouts)
@@ -2070,6 +2073,12 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 const svgTransforms = _blockExpandedTransforms(transforms, partsById)
                 // Un identifiant manquant rend toute la liste de la tôle inutilisable (null).
                 svgSlugs.push(svgTransforms.every((tr) => tr.file_slug) ? svgTransforms.map((tr) => String(tr.file_slug)) : null)
+                const poseOfShape = []
+                transforms.forEach((tr, k) => {
+                    const n = partsById.get(String(tr.item_id))?.blockParts?.length || 0
+                    for (let j = 0; j < Math.max(1, n); j++) poseOfShape.push(k)
+                })
+                svgPoses.push(poseOfShape.length === svgTransforms.length ? poseOfShape : null)
                 const svg = await geoExportSvgSheet({
                     transforms: svgTransforms,
                     items: svgItems,
@@ -2147,6 +2156,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             out.push({
                 sheets,
                 svgSlugs,
+                svgPoses,
                 containers,
                 report: report && !report.error ? report : null,
                 postPass,
@@ -2312,6 +2322,7 @@ export function toServerShapeAlternatives(result, payload, artifacts, sourceInde
             // que les formes). Champ ADDITIF, retiré hors job construit dans le
             // navigateur (`dropPositionsUnlessBrowserBuilt`).
             ...(Array.isArray(art.svgSlugs) ? { svgSlugs: art.svgSlugs } : {}),
+            ...(Array.isArray(art.svgPoses) ? { svgPoses: art.svgPoses } : {}),
             report: {
                 ...verify,
                 // Y3 (vérif tour 5) : unplaced explicite en solution

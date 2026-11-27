@@ -161,6 +161,7 @@ export const TRACK_ACTIONS = [
     'report_csv_locked_click',
     // Rapport PDF : suivi sans contenu (jamais le logo, les champs ni le PDF).
     'report_pdf_exported',
+    'report_pdf_advanced_exported',
     'report_pdf_locked_click',
     'click_report_pdf',
     'click_report_pdf_download',

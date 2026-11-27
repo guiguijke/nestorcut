@@ -1096,4 +1096,5 @@ export default {
     'reportPdf.download': "PDF herunterladen",
     'reportPdf.working': "PDF wird erstellt...",
     'reportPdf.error': "Das PDF konnte nicht erstellt werden. Versuchen Sie es erneut.",
+    'reportPdf.error.offer': "Der erweiterte Bericht ist in Ihrem Tarif nicht mehr enthalten. Es wurde nichts heruntergeladen.",
 }

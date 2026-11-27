@@ -72,6 +72,7 @@ import { SQMM_PER_SQIN, fmtLengthValue as fmtLengthValueRaw } from '~/utils/unit
 import { directionWordKey, displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
 import { reportExportState, reportPdfState } from '~/utils/reportExport'
+import { reportPdfClick } from '~/utils/reportPdfClick'
 import { capacityPanelModel } from '~/utils/capacityPanel'
 import { flagOn } from '~/utils/runtimeFlag'
 import { maxDownloadableSheet, relaunchFreeNoteKind, sheetDownloadState } from '~/utils/sheetDownloadState'
@@ -240,7 +241,7 @@ const openBuyCredits = useBuyCreditsOpener()
 // + CTA, J-054) instead of running the export.
 // Palier périmé : relu d'abord (userRefresh.js) ; si le compte est ouvert
 // maintenant, l'export demandé part, sans fenêtre d'abonnement.
-const onExportClick = async (action, trackingTag) => {
+const onExportClick = async (action, trackingTag, beforePaywall = null) => {
     if (unref(exportLocked)) {
         await guardedLockedClick({
             guard: exportGuard,
@@ -251,6 +252,8 @@ const onExportClick = async (action, trackingTag) => {
             isCurrent: stillCurrent(),
             onProceed: action,
             onPaywall: () => {
+                // Rappel facultatif (ex. fermer la fenêtre du PDF, sinon l'abonnement s'ouvre derrière).
+                if (typeof beforePaywall === 'function') beforePaywall()
                 trackEvent(trackingTag)
                 openBuyCredits({ source: 'export' })
             },
@@ -365,6 +368,10 @@ onMounted(() => {
 
 watch(resultDialog, async (isOpen) => {
     reportPdfOpen.value = false
+    // Fabrication en cours d'un autre résultat : abandonnée, ses suites ne touchent plus rien ici.
+    pdfToken += 1
+    pdfBusy.value = false
+    pdfError.value = ''
     if (isOpen) {
         openSeq += 1
         activePart.value = 0
@@ -699,6 +706,8 @@ const reportPdfInput = () => {
         unfit: unref(isUnfit),
         edgeMm,
         slugs: Array.isArray(recAlt?.svgSlugs) ? recAlt.svgSlugs : null,
+        poses: Array.isArray(recAlt?.svgPoses) ? recAlt.svgPoses : null,
+        densityPct: unref(densityPct),
         slugsMissing: unref(isLocal) ? 'old' : 'server',
         requestedBySlug,
     }
@@ -712,44 +721,71 @@ const reportPdfSvgSources = () => {
     return shown.map((src, i) => (typeof rawSvgs?.[i] === 'string' ? rawSvgs[i] : src))
 }
 
+// Jeton de fabrication : une fabrication dont le contexte a changé (résultat fermé ou
+// autre résultat ouvert, fenêtre du PDF fermée) ne télécharge rien et ne touche ni
+// `reportPdfOpen`, ni `pdfError`, ni `pdfBusy`.
+let pdfToken = 0
+watch(reportPdfOpen, (isOpen) => {
+    pdfToken += 1
+    pdfBusy.value = false
+    if (isOpen) pdfError.value = ''
+})
+
 const makeReportPdf = async ({ advanced, branding, fields }) => {
     if (unref(pdfBusy)) return
-    pdfBusy.value = true
+    // Tout ce qui dépend du clic est lu AVANT le premier await.
+    const isCurrent = stillCurrent()
+    const token = (pdfToken += 1)
+    const live = () => token === pdfToken && isCurrent()
+    const slug = unref(resultModalData).slug
+    const altId = unref(activeAlt)
+    const input = reportPdfInput()
+    const sources = reportPdfSvgSources()
+    const wantAdvanced = advanced === true
     pdfError.value = ''
+    // Avancé demandé mais offre déjà perdue : message, pas de PDF de base à la place.
+    if (wantAdvanced && !advancedPdfEnabled()) {
+        pdfError.value = t('reportPdf.error.offer')
+        return
+    }
+    pdfBusy.value = true
     try {
         const { generateReportPdf, reportPdfFileName, downloadPdfBytes } = await import('~/composables/reportPdfExport')
-        const altNumber = unref(activeAlt) + 1
         const out = await generateReportPdf({
-            input: reportPdfInput(),
-            svgSources: reportPdfSvgSources(),
-            wantAdvanced: advanced === true && advancedPdfEnabled(),
+            input,
+            svgSources: sources,
+            wantAdvanced,
             stillAdvanced: advancedPdfEnabled,
             branding,
             fields,
         })
-        downloadPdfBytes(out.bytes, reportPdfFileName(unref(resultModalData).slug, altNumber))
-        // Suivi sans contenu : ni logo, ni champs, ni PDF.
-        trackEvent('report_pdf_exported', { altId: unref(activeAlt), advanced: out.advanced })
+        if (!live()) return
+        if (wantAdvanced && !out.advanced) {
+            // Offre perdue pendant la fabrication : on le dit, rien n'est téléchargé.
+            pdfError.value = t('reportPdf.error.offer')
+            return
+        }
+        downloadPdfBytes(out.bytes, reportPdfFileName(slug, altId + 1))
+        // Suivi sans contenu (deux noms, comme le CSV : seulement l'option).
+        trackEvent(out.advanced ? 'report_pdf_advanced_exported' : 'report_pdf_exported', { altId })
         reportPdfOpen.value = false
     } catch (e) {
+        if (!live()) return
         console.warn('report pdf failed', e)
         pdfError.value = t('reportPdf.error')
     } finally {
-        pdfBusy.value = false
+        if (live()) pdfBusy.value = false
     }
 }
 
-// Le PDF de base part tout de suite. L'avancé passe par le chemin du verrou : offre
-// relue, fenêtre d'abonnement si elle est toujours verrouillée, rien sinon. Le
-// drapeau 'disabled' n'ouvre jamais de fenêtre (l'option est grisée dans la fenêtre).
-const onReportPdfDownload = async (payload) => {
-    if (payload?.advanced === true) {
-        if (unref(pdfState).advanced === 'disabled') return
-        await onExportClick(() => makeReportPdf(payload), 'report_pdf_locked_click')
-        return
-    }
-    await makeReportPdf({ advanced: false, branding: null, fields: null })
-}
+// Le PDF de base part tout de suite. L'avancé : voir `reportPdfClick` (pur, testé).
+const onReportPdfDownload = (payload) => reportPdfClick({
+    wantAdvanced: payload?.advanced === true,
+    readState: () => unref(pdfState).advanced,
+    lockedClick: (onProceed, beforePaywall) => onExportClick(onProceed, 'report_pdf_locked_click', beforePaywall),
+    make: (advanced) => makeReportPdf(advanced ? payload : { advanced: false, branding: null, fields: null }),
+    closeDialog: () => { reportPdfOpen.value = false },
+})
 // Lot E2 : constat de nesting « pièces plus fines que l'espacement ». Le
 // moteur les a préparées autrement (repli du lot E0) et le job est livré :
 // c'est une information, pas une erreur.

@@ -1227,4 +1227,5 @@ export default {
     'reportPdf.download': "Download the PDF",
     'reportPdf.working': "Making the PDF...",
     'reportPdf.error': "The PDF could not be made. Try again.",
+    'reportPdf.error.offer': "The advanced report is no longer available with your plan. Nothing was downloaded.",
 }

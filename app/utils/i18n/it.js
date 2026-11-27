@@ -1093,4 +1093,5 @@ export default {
     'reportPdf.download': "Scarica il PDF",
     'reportPdf.working': "Creazione del PDF...",
     'reportPdf.error': "Non è stato possibile creare il PDF. Riprova.",
+    'reportPdf.error.offer': "Il report avanzato non è più incluso nel tuo piano. Non è stato scaricato nulla.",
 }

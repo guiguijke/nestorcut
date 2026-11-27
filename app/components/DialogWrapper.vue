@@ -24,6 +24,10 @@
 // Verrou de défilement de la page, partagé par toutes les instances : avec
 // deux fenêtres ouvertes, la page ne se libère qu'à la fermeture de la
 // dernière, et retrouve l'overflow qu'elle avait avant la première.
+// Pile des fenêtres ouvertes (la dernière ouverte est celle du dessus) : Échap ne
+// ferme que celle du dessus, jamais la fenêtre de résultat posée dessous.
+const openStack = []
+let nextDialogId = 0
 let scrollLocks = 0
 let savedOverflow = ''
 let savedPaddingRight = ''
@@ -91,6 +95,7 @@ const bodyEl = ref(null)
 // y est RESTITUÉ à la fermeture (clavier et lecteurs d'écran).
 let previouslyFocused = null
 
+const dialogId = nextDialogId++
 const closeModal = () => {
     emit("update:isModalOpen", false);
 }
@@ -128,6 +133,15 @@ watch([() => isModalOpen, () => lockScroll], ([isOpen, lock]) => {
     }
 }, { immediate: true })
 
+const leaveStack = () => {
+    const i = openStack.indexOf(dialogId)
+    if (i >= 0) openStack.splice(i, 1)
+}
+watch(() => isModalOpen, (isOpen) => {
+    leaveStack()
+    if (isOpen && import.meta.client) openStack.push(dialogId)
+}, { immediate: true })
+
 watch(() => isModalOpen, async (isOpen) => {
     if (isOpen) {
         if (Boolean(trackingTag)) {
@@ -147,7 +161,7 @@ watch(() => isModalOpen, async (isOpen) => {
 });
 
 const handleKeydown = (event) => {
-    if (event.key === 'Escape' && isModalOpen) {
+    if (event.key === 'Escape' && isModalOpen && openStack[openStack.length - 1] === dialogId) {
         event.preventDefault()
         closeModal();
     }
@@ -158,6 +172,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    leaveStack()
     document.removeEventListener('keydown', handleKeydown);
     if (holdsLock) {
         releaseScrollLock()

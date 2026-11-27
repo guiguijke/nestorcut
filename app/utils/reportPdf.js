@@ -157,22 +157,48 @@ export function buildReportPdf(model) {
 
     // ---- tableau --------------------------------------------------------------
 
+    /** Plus large mot insécable d'un texte (les espaces ordinaires seuls coupent). */
+    function widestWord(text, size, bold) {
+        let w = 0
+        for (const word of str(text).split(' ')) if (word) w = Math.max(w, doc.measure(word, size, bold))
+        return w
+    }
+
+    /**
+     * Largeurs de colonnes et taille du texte. Minimum d'une colonne = plus large mot
+     * insécable de l'en-tête et des cellules + marge : jamais de coupe dans un mot ni
+     * dans un nombre. Si la somme des minimums dépasse la largeur, le tableau passe en 8 pt.
+     */
     function columnWidths(table, avail) {
         const cols = arr(table.columns)
         const rows = arr(table.rows)
         const pad = 10
-        const natural = cols.map((c) => {
-            let w = doc.measure(str(c.label), 9, true)
-            for (const r of rows) w = Math.max(w, doc.measure(str(r[c.key]), 9, false))
-            return w + pad
-        })
-        const sum = natural.reduce((a, b) => a + b, 0) || 1
-        if (sum <= avail) return natural.map((w) => w + ((avail - sum) * w) / sum)
-        const min = 28
-        let widths = natural.map((w) => Math.max(min, (w * avail) / sum))
-        const s2 = widths.reduce((a, b) => a + b, 0)
-        widths = widths.map((w) => (w * avail) / s2)
-        return widths
+        for (const size of [9, 8, 7]) {
+            const natural = cols.map((c) => {
+                let w = doc.measure(str(c.label), size, true)
+                for (const r of rows) w = Math.max(w, doc.measure(str(r[c.key]), size, false))
+                return w + pad
+            })
+            const mins = cols.map((c, i) => {
+                let w = widestWord(c.label, size, true)
+                for (const r of rows) w = Math.max(w, widestWord(r[c.key], size, false))
+                return Math.min(w + pad, natural[i])
+            })
+            const sumMin = mins.reduce((a, b) => a + b, 0)
+            if (sumMin > avail && size > 7) continue
+            const sumNat = natural.reduce((a, b) => a + b, 0) || 1
+            let widths
+            if (sumNat <= avail) widths = natural.map((w) => w + ((avail - sumNat) * w) / sumNat)
+            else {
+                // Les minimums d'abord, puis le reste réparti selon l'écart au naturel.
+                const room = Math.max(0, avail - sumMin)
+                const extra = natural.map((w, i) => w - mins[i])
+                const sumExtra = extra.reduce((a, b) => a + b, 0) || 1
+                widths = mins.map((w, i) => w + (room * extra[i]) / sumExtra)
+            }
+            return { widths, size }
+        }
+        return { widths: cols.map(() => avail / (cols.length || 1)), size: 7 }
     }
 
     /**
@@ -184,10 +210,10 @@ export function buildReportPdf(model) {
         if (!cols.length) return { page, y: top }
         const x0 = M
         const avail = page.width - 2 * M
-        const widths = columnWidths(table, avail)
-        const lh = 11.5
+        const { widths, size: fs } = columnWidths(table, avail)
+        const lh = fs * 1.28
         const bottom = (p) => p.height - FOOTER_H
-        const cellLines = (c, i, text, bold) => doc.wrap(str(text), widths[i] - 10, 9, bold)
+        const cellLines = (c, i, text, bold) => doc.wrap(str(text), widths[i] - 10, fs, bold)
 
         const drawHeader = (pg, y) => {
             const lines = cols.map((c, i) => cellLines(c, i, c.label, true))
@@ -195,7 +221,7 @@ export function buildReportPdf(model) {
             pg.rect(x0, y, avail, h, { fill: '#F3F4F6' })
             let x = x0
             cols.forEach((c, i) => {
-                lines[i].forEach((l, k) => pg.text(cellX(c, x, widths[i]), y + 4 + k * lh + 9 * 0.85, l, { size: 9, bold: true, align: c.align || 'left' }))
+                lines[i].forEach((l, k) => pg.text(cellX(c, x, widths[i]), y + 4 + k * lh + fs * 0.85, l, { size: fs, bold: true, align: c.align || 'left' }))
                 x += widths[i]
             })
             pg.line(x0, y + h, x0 + avail, y + h, { stroke: GRAY, lineWidth: 0.8 })
@@ -215,7 +241,7 @@ export function buildReportPdf(model) {
             if (ri % 2 === 1) pg.rect(x0, y, avail, h, { fill: '#F9FAFB' })
             let x = x0
             cols.forEach((c, i) => {
-                lines[i].forEach((l, k) => pg.text(cellX(c, x, widths[i]), y + 2.5 + k * lh + 9 * 0.85, l, { size: 9, align: c.align || 'left' }))
+                lines[i].forEach((l, k) => pg.text(cellX(c, x, widths[i]), y + 2.5 + k * lh + fs * 0.85, l, { size: fs, align: c.align || 'left' }))
                 x += widths[i]
             })
             pg.line(x0, y + h, x0 + avail, y + h, { stroke: LIGHT, lineWidth: 0.5 })
@@ -229,7 +255,7 @@ export function buildReportPdf(model) {
     let page = newPage()
     const cw = pw - 2 * M
     let y = M
-    const branded = !!(mdl.advanced && mdl.branding && (mdl.branding.logo || str(mdl.branding.company)))
+    const branded = !!(mdl.advanced && mdl.branding && (mdl.branding.logo || str(mdl.branding.company) || str(mdl.branding.line)))
 
     // Bandeau de tête.
     if (branded) {
@@ -237,9 +263,10 @@ export function buildReportPdf(model) {
         let tx = M
         let hh = 0
         if (b.logo) {
-            const [lw, lh] = fitSize(b.logo, 130, 42)
+            // Proportions gardées dans une boîte maximale ; le texte commence après la largeur RÉELLE dessinée.
+            const [lw, lh] = fitSize(b.logo, 170, 48)
             page.image(imageId(b.logo), M, y, lw, lh)
-            tx = M + lw + 14
+            tx = M + lw + 16
             hh = lh
         }
         let ty = y
@@ -247,7 +274,7 @@ export function buildReportPdf(model) {
         if (str(b.line)) ty = para(page, tx, ty + 1, b.line, pw - M - tx, { size: 9, color: GRAY, maxLines: 3 })
         y += Math.max(hh, ty - y)
     } else if (mdl.nestorcutLogo) {
-        const [lw, lh] = fitSize(mdl.nestorcutLogo, 150, 30)
+        const [lw, lh] = fitSize(mdl.nestorcutLogo, 200, 40)
         page.image(imageId(mdl.nestorcutLogo), M, y, lw, lh)
         y += lh
     } else {

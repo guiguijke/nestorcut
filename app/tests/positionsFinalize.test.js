@@ -161,6 +161,8 @@ describe('rapport PDF : identifiants de fichier de chaque forme de l’aperçu (
         const out = await assembleBrowserArtifacts({ result: resultOf(), payload: payloadOf(), sources, jobSlug: 'job' })
         const alt = out.alternatives[0]
         expect(alt.svgSlugs).toEqual([['c17', 'c225', 'c353', 'rect']])
+        // Une pose par forme (aucun bloc ici) : indices 0 à 3 ; retirés avec les identifiants.
+        expect(alt.svgPoses).toEqual([[0, 1, 2, 3]])
         // Alignement : autant de formes dans le SVG que d identifiants, dans le même ordre
         // (la 4e est le rectangle 30 x 20).
         const parsed = parseSheetSvg(alt.svgs[0])
@@ -180,6 +182,7 @@ describe('rapport PDF : identifiants de fichier de chaque forme de l’aperçu (
         expect(kept[0].svgSlugs).toEqual([['c17', 'c225', 'c353', 'rect']])
         const dropped = dropPositionsUnlessBrowserBuilt(structuredClone(out.alternatives), 'server')
         expect(dropped[0].svgSlugs).toBeUndefined()
+        expect(dropped[0].svgPoses).toBeUndefined()
         expect(dropped[0].positions).toBeUndefined()
     })
 
@@ -223,7 +226,7 @@ describe('aucune position ne quitte le navigateur', () => {
             }
         }
         expect(calls.length).toBeGreaterThan(20)
-        const leaking = calls.filter((c) => /\bpositions\b|\bfileNames\b|\bblockParts\b/.test(c.call))
+        const leaking = calls.filter((c) => /\bpositions\b|\bfileNames\b|\bblockParts\b|\bsvgSlugs\b|\bsvgPoses\b|\bbranding\b|\bcompanyLogo\b/.test(c.call))
         expect(leaking).toEqual([])
         // Le corps de local-quota (la seule requête qui part à la fin d'un job local) :
         // des scalaires, jamais les alternatives ni le record.
