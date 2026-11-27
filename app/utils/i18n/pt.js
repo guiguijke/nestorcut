@@ -1017,7 +1017,7 @@ export default {
     "settings.sheetUnlimited": "Quantidade ilimitada",
     "settings.sheetUnlimitedAria": "Quantidade ilimitada: {sheet}",
     "settings.sheetUnlimitedHint": "Usada depois das chapas de quantidade fixa, quantas forem necessárias (no máximo {n} chapas por cálculo).",
-    "settings.sheetUnlimitedLocalOnly": "Por enquanto a quantidade ilimitada existe só para projetos em «Este dispositivo».",
+    "settings.sheetUnlimitedLocalOnly": "Por enquanto a quantidade ilimitada existe só para projetos em \"Este dispositivo\".",
     "project.edgeOverhangTooLarge": "Uma saliência de {x} {unit} é grande demais. No máximo {max} {unit}. Uma peça quase sem material sobre a chapa é sinalizada no relatório.",
     "project.minSheetEdge": "A peça \"{name}\" ({w} × {h} {unit}) não cabe em nenhuma chapa declarada com distância à borda de {e} {unit}, nem rodada.",
     "project.edgeMaxHint": "No máximo {max} {unit}.",
