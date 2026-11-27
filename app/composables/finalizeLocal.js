@@ -157,6 +157,24 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
  * puis remises dans l'ordre affiché).
  * @returns {{ alternatives, liveLayout, placed, allAlternativesInvalid, localDiscarded, result, jobSheets }}
  */
+/**
+ * Nombre de pièces que le plan des trous (« Imbriquer dans les trous ») met
+ * dans les trous des hôtes : somme des `slots` de la forme compressée, ou des
+ * pièces de chaque pack. 0 sans plan, ou quand l'option est décochée.
+ */
+export function plannedHoleFills(payload) {
+    if (payload?.fillHoles === false) return 0
+    const meta = payload?.meta
+    if (!meta) return 0
+    if (Array.isArray(meta.packs)) {
+        return meta.packs.reduce((n, p) => n + (Array.isArray(p?.fills) ? p.fills.length : 0), 0)
+    }
+    if (Array.isArray(meta.slots)) {
+        return meta.slots.reduce((n, s) => n + (Number(s) || 0), 0)
+    }
+    return 0
+}
+
 async function appendBppGrid(result, payload) {
     if ((result?.problem || payload?.problem) === 'spp') return null
     const inst = payload?.instance || {}
@@ -267,9 +285,24 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
             (payload?.parts || []).map((p) => [String(p.id), Number(p.count) || 0]),
         )
         const keptIdx = []
+        // Imbrication dans les trous demandée : combien de pièces le plan des
+        // trous met DANS les trous (0 sans plan, ou option décochée).
+        const holesPlanned = plannedHoleFills(payload)
         rawAlts.forEach((alt, i) => {
             const art = arts?.[i]
             const strategy = alt.bias || alt.strategy || 'engine'
+            // Option GRILLE qui laisse hors des trous des pièces que le plan des
+            // trous y mettait (retour du propriétaire, 27/11) : la grille remplit
+            // ses rangées d'abord et ne se sert des trous que pour le surplus ;
+            // sur une grande tôle, aucun surplus, donc trous vides alors que
+            // « Imbriquer dans les trous » est coché. Elle n'est pas proposée :
+            // il reste les options du moteur, pièces dans les trous. Rapport
+            // illisible : on ne juge pas (comportement d'avant).
+            const filled = Number(art?.report?.verify?.holesFilled)
+            if (alt.structural && holesPlanned > 0 && Number.isFinite(filled) && filled < holesPlanned) {
+                localDiscarded.push({ reason: 'holes_unused', strategy, planned: holesPlanned, filled })
+                return
+            }
             // Distance au bord négative (règle R1 du 27/11) : une pièce posée
             // (presque) entièrement hors de la tôle rend l'option inutilisable.
             // Sur une tôle importée le contrôle du contour l'écarte déjà ; sur
