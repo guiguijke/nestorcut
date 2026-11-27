@@ -2031,6 +2031,9 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             if (edgeD) layoutsToRealFrame(layouts, edgeD, movedPoses)
             const containers = []
             const sheets = []
+            // Rapport PDF : identifiant de fichier (`file_slug`) de chaque forme du
+            // SVG de la tôle, dans l'ordre des formes. Reste dans le navigateur.
+            const svgSlugs = []
             // Tôle importée : forme (contour + zones) de chaque layout, pour le
             // rapport seulement. null = job rectangulaire, chemin inchangé.
             const reportShapes = reportSheetShapes(payload, layouts)
@@ -2064,8 +2067,11 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
                 // réel, pas l'enveloppe. `containers.transforms` (DXF,
                 // gardes, nestedIn) reste AU NIVEAU ITEM : handles-union,
                 // une pose par bloc (§8.1.2).
+                const svgTransforms = _blockExpandedTransforms(transforms, partsById)
+                // Un identifiant manquant rend toute la liste de la tôle inutilisable (null).
+                svgSlugs.push(svgTransforms.every((tr) => tr.file_slug) ? svgTransforms.map((tr) => String(tr.file_slug)) : null)
                 const svg = await geoExportSvgSheet({
-                    transforms: _blockExpandedTransforms(transforms, partsById),
+                    transforms: svgTransforms,
                     items: svgItems,
                     bin_width: binWidth,
                     bin_height: binHeight,
@@ -2140,6 +2146,7 @@ export async function buildAlternativeArtifacts(result, payload, qa = null) {
             }
             out.push({
                 sheets,
+                svgSlugs,
                 containers,
                 report: report && !report.error ? report : null,
                 postPass,
@@ -2301,6 +2308,10 @@ export function toServerShapeAlternatives(result, payload, artifacts, sourceInde
             // §17.2 : présent UNIQUEMENT sous le drapeau QA du harnais.
             qaPrePostPass: art.qaPrePostPass ?? null,
             svgs: art.sheets || [],
+            // Rapport PDF : `file_slug` de chaque forme de chaque aperçu (même ordre
+            // que les formes). Champ ADDITIF, retiré hors job construit dans le
+            // navigateur (`dropPositionsUnlessBrowserBuilt`).
+            ...(Array.isArray(art.svgSlugs) ? { svgSlugs: art.svgSlugs } : {}),
             report: {
                 ...verify,
                 // Y3 (vérif tour 5) : unplaced explicite en solution

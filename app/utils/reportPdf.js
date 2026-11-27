@@ -33,12 +33,13 @@
  * @property {{
  *   title: string, subtitle: string,
  *   plan: { image: Image|null, widthMm: number, heightMm: number,
- *           labels: { x: number, y: number, text: string }[] } | null,
+ *           labels: { x: number, y: number, text: string, boxW?: number, boxH?: number }[] } | null,
  *   legendTitle?: string, legend?: { ref: string|number, name: string, count: string|number }[],
  *   figures?: LabelValue[], note?: string|null,
  * }[]} sheets Une page par tôle. `plan.labels` : points en mm dans le repère du
  *   SVG (origine en haut à gauche, y vers le bas), texte centré sur le point ;
- *   un label qui n'a pas la place est omis (jamais tronqué ni déplacé).
+ *   un label qui n'a pas la place est omis (jamais tronqué ni déplacé) ;
+ *   `boxW`/`boxH` (mm) : boîte de la pièce, le label doit y tenir à l'échelle du plan.
  *   Page en PAYSAGE si le plan est plus large que haut ; plan absent (null ou
  *   sans image) : la page garde l'en-tête, les chiffres et la note.
  * @property {{ title: string } & Table | null} partsTable Avancé : page « Pièces »
@@ -259,7 +260,7 @@ export function buildReportPdf(model) {
     y = para(page, M, y, mdl.title, cw, { size: 20, bold: true }) + 8
 
     // Blocs étiquette / valeur (meta, champs).
-    const labelW = 105
+    const labelW = 125
     const kv = (items) => {
         for (const it of arr(items)) {
             const lines = doc.wrap(str(it.value), cw - labelW - 6, 10, false)
@@ -376,13 +377,21 @@ export function buildReportPdf(model) {
             const iy = ty
             pg.image(imageId(plan.image), ix, iy, iw, ih)
             pg.rect(ix, iy, iw, ih, { stroke: '#9CA3AF', lineWidth: 0.6 })
-            // Labels : centrés sur le point, jamais tronqués ni déplacés ; omis s'ils sortent du cadre ou chevauchent un label déjà posé.
+            // Labels : centrés sur le point, jamais tronqués ni déplacés ; omis s'ils sortent
+            // du cadre, chevauchent un label déjà posé ou ne tiennent pas dans la boîte de
+            // leur pièce (`boxW`, `boxH` en mm) à l'échelle du plan. Texte à 9 pt, puis 8 pt
+            // quand la place manque.
             const k = iw / plan.widthMm
-            const size = 8
             const placed = []
             for (const lb of arr(plan.labels)) {
                 const text = str(lb.text)
                 if (!text || !Number.isFinite(lb.x) || !Number.isFinite(lb.y)) continue
+                const hasBox = Number.isFinite(lb.boxW) && Number.isFinite(lb.boxH)
+                const size = [9, 8].find((sz) => {
+                    if (!hasBox) return sz === 8
+                    return doc.measure(text, sz, true) + 5 <= lb.boxW * k && sz + 3.5 <= lb.boxH * k
+                })
+                if (!size) continue
                 const w = doc.measure(text, size, true) + 5
                 const h = size + 3.5
                 const cx = ix + lb.x * k

@@ -117,6 +117,22 @@ describe('buildReportPdf', () => {
         expect(pageStreams(tpl).join('\n')).toContain('(Seite 1 von 3)')
     })
 
+    it('labels : omis quand ils ne tiennent pas dans la boîte de leur pièce, 9 pt quand la place le permet', () => {
+        const model = baseModel()
+        model.sheets[0].plan.labels = [
+            { x: 500, y: 600, text: '71', boxW: 400, boxH: 400 }, // large : 9 pt
+            { x: 500, y: 1400, text: '82', boxW: 3, boxH: 3 }, // minuscule : omis
+            { x: 200, y: 1000, text: '93' }, // boîte inconnue : 8 pt, pas de contrainte
+        ]
+        const streams = pageStreams(buildReportPdf(model)).join(String.fromCharCode(10))
+        expect(streams).toContain('(71)')
+        expect(streams).not.toContain('(82)')
+        expect(streams).toContain('(93)')
+        const at = (txt) => streams.slice(Math.max(0, streams.indexOf(`(${txt})`) - 80), streams.indexOf(`(${txt})`))
+        expect(at('71')).toMatch(/ 9 Tf/)
+        expect(at('93')).toMatch(/ 8 Tf/)
+    })
+
     it('modèle minimal ou vide : ne lève pas', () => {
         checkPdfStructure(buildReportPdf({}))
         checkPdfStructure(buildReportPdf(undefined))

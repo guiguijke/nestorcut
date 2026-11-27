@@ -35,6 +35,7 @@
                     @download-all="downloadLocalAll"
                     @download-single="downloadLocalSingle"
                     @download-positions="downloadLocalPositionsCsv"
+                    @report-pdf="reportPdfOpen = true"
                     @origin="setOrigin"
                     @download-job="downloadLocalSheetJob"
                     @download-all-jobs="downloadLocalAllJobs"
@@ -42,6 +43,15 @@
                     @close="resultDialog = false"
                 />
             </div>
+            <!-- Rapport PDF : choix base / avancé. Le verrou et la fabrication
+                 restent ici (onReportPdfDownload) ; la fenêtre n'émet qu'une intention. -->
+            <ReportPdfDialog
+                v-model:isModalOpen="reportPdfOpen"
+                :advanced-state="pdfState.advanced"
+                :busy="pdfBusy"
+                :error-text="pdfError"
+                @download="onReportPdfDownload"
+            />
         </div>
     </DialogWrapper>
 </template>
@@ -57,10 +67,11 @@ import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
 import { statusType } from '~~/constants/status.constants'
 import { trackEvent } from '~/utils/track'
+import { intlTag } from '~/utils/i18n'
 import { SQMM_PER_SQIN, fmtLengthValue as fmtLengthValueRaw } from '~/utils/units'
 import { directionWordKey, displayDirectionArrow } from '~/utils/sheetView'
 import { onMounted, nextTick } from 'vue'
-import { reportExportState } from '~/utils/reportExport'
+import { reportExportState, reportPdfState } from '~/utils/reportExport'
 import { capacityPanelModel } from '~/utils/capacityPanel'
 import { flagOn } from '~/utils/runtimeFlag'
 import { maxDownloadableSheet, relaunchFreeNoteKind, sheetDownloadState } from '~/utils/sheetDownloadState'
@@ -89,7 +100,7 @@ const emit = defineEmits(['unfit-add-sheet', 'unfit-reduce-spacing', 'unfit-open
 
 const { getters, getters: globalGetters } = globalStore
 const resultModalData = computed(() => getters.resultModalData)
-const { t, tp, fmtPercent, fmtNumber } = useLocale()
+const { t, tp, locale, fmtPercent, fmtNumber } = useLocale()
 const { unit, fmtArea: fmtAreaUnit, fmtLength, fmtLengthValue, fmtLengthMax, unitLabel, displayToMm } = useUnit()
 
 // J-082 : job Mode Local hydraté depuis IndexedDB — les téléchargements
@@ -353,6 +364,7 @@ onMounted(() => {
 })
 
 watch(resultDialog, async (isOpen) => {
+    reportPdfOpen.value = false
     if (isOpen) {
         openSeq += 1
         activePart.value = 0
@@ -621,6 +633,122 @@ const exportCsv = () => {
     // localDownloads (grâce 1 s).
     setTimeout(() => URL.revokeObjectURL(url), 1000)
     trackEvent('report_csv_exported', { altId: unref(activeAlt) })
+}
+// ---- Rapport PDF -------------------------------------------------------------------
+// Le PDF de BASE est pour tout le monde (Free compris). Le PDF AVANCÉ suit
+// exactement le verrou de « Copier le rapport » et « Exporter CSV » : même source
+// d'offre (`exportState`, ci-dessus), même chemin de clic verrouillé (`onExportClick` :
+// offre relue, puis fenêtre d'abonnement ; drapeau = option grisée, sans fenêtre).
+// L'état avancé est relu AU CLIC puis une dernière fois avant de construire le
+// contenu : sans 'enabled', le modèle ne contient rien d'avancé.
+const reportPdfOpen = ref(false)
+const pdfBusy = ref(false)
+const pdfError = ref('')
+const pdfState = computed(() => reportPdfState(
+    unref(userData)?.compute?.level ?? null,
+    flagOn(config.public.paidPlansDisabled),
+))
+const advancedPdfEnabled = () => unref(pdfState).advanced === 'enabled'
+
+// Entrées du modèle qui ne dépendent ni du verrou ni des images.
+const reportPdfInput = () => {
+    const data = unref(resultModalData)
+    const altIdx = unref(activeAlt)
+    const recAlt = unref(localRecord)?.alternatives?.[altIdx]
+    const names = recAlt?.fileNames || {}
+    const projectFiles = unref(onJobProject) ? (filesStore.getters.projectFiles || []) : []
+    const fileName = (slug) => names[slug] || projectFiles.find((f) => f.slug === slug)?.name || slug
+    // Quantité demandée par fichier : celle du projet à l'écran, seulement si elle
+    // redonne EXACTEMENT le total demandé de ce résultat (réglages inchangés depuis).
+    let requestedBySlug = null
+    if (projectFiles.length) {
+        const map = {}
+        let sum = 0
+        for (const f of projectFiles) {
+            const n = Number(f.count) || 0
+            if (n > 0) {
+                map[f.slug] = n
+                sum += n
+            }
+        }
+        if (sum > 0 && sum === Number(data?.requested)) requestedBySlug = map
+    }
+    const projectLabel = (globalGetters.projectsList || []).find((p) => p.slug === data.projectSlug)?.name
+    const rawEdge = unref(requestedEdgeMm)
+    const edgeMm = rawEdge != null && rawEdge !== '' && Number.isFinite(Number(rawEdge)) ? Number(rawEdge) : null
+    return {
+        t,
+        tp,
+        fmtLength,
+        fmtArea,
+        fmtPercent,
+        fmtNumber,
+        nameOf: fileName,
+        unit: unref(unit) === 'inch' ? 'inch' : 'mm',
+        projectName: projectLabel || '',
+        resultId: String(data.slug || ''),
+        optionNumber: altIdx + 1,
+        dateText: new Date().toLocaleDateString(intlTag(unref(locale)), { year: 'numeric', month: 'long', day: 'numeric' }),
+        requested: data.requested,
+        placed: data.placed,
+        report: unref(activeReport),
+        sheets: unref(reportSheets),
+        totals: unref(reportTotals),
+        materialFormats: unref(materialFormats),
+        badges: unref(reportBadges),
+        unfit: unref(isUnfit),
+        edgeMm,
+        slugs: Array.isArray(recAlt?.svgSlugs) ? recAlt.svgSlugs : null,
+        slugsMissing: unref(isLocal) ? 'old' : 'server',
+        requestedBySlug,
+    }
+}
+
+// Aperçu de chaque tôle : le SVG brut du record local quand il existe, sinon ce
+// que l'écran affiche (data URI ou URL d'un résultat serveur).
+const reportPdfSvgSources = () => {
+    const rawSvgs = unref(localRecord)?.alternatives?.[unref(activeAlt)]?.svgs
+    const shown = unref(currentSvgs)
+    return shown.map((src, i) => (typeof rawSvgs?.[i] === 'string' ? rawSvgs[i] : src))
+}
+
+const makeReportPdf = async ({ advanced, branding, fields }) => {
+    if (unref(pdfBusy)) return
+    pdfBusy.value = true
+    pdfError.value = ''
+    try {
+        const { generateReportPdf, reportPdfFileName, downloadPdfBytes } = await import('~/composables/reportPdfExport')
+        const altNumber = unref(activeAlt) + 1
+        const out = await generateReportPdf({
+            input: reportPdfInput(),
+            svgSources: reportPdfSvgSources(),
+            wantAdvanced: advanced === true && advancedPdfEnabled(),
+            stillAdvanced: advancedPdfEnabled,
+            branding,
+            fields,
+        })
+        downloadPdfBytes(out.bytes, reportPdfFileName(unref(resultModalData).slug, altNumber))
+        // Suivi sans contenu : ni logo, ni champs, ni PDF.
+        trackEvent('report_pdf_exported', { altId: unref(activeAlt), advanced: out.advanced })
+        reportPdfOpen.value = false
+    } catch (e) {
+        console.warn('report pdf failed', e)
+        pdfError.value = t('reportPdf.error')
+    } finally {
+        pdfBusy.value = false
+    }
+}
+
+// Le PDF de base part tout de suite. L'avancé passe par le chemin du verrou : offre
+// relue, fenêtre d'abonnement si elle est toujours verrouillée, rien sinon. Le
+// drapeau 'disabled' n'ouvre jamais de fenêtre (l'option est grisée dans la fenêtre).
+const onReportPdfDownload = async (payload) => {
+    if (payload?.advanced === true) {
+        if (unref(pdfState).advanced === 'disabled') return
+        await onExportClick(() => makeReportPdf(payload), 'report_pdf_locked_click')
+        return
+    }
+    await makeReportPdf({ advanced: false, branding: null, fields: null })
 }
 // Lot E2 : constat de nesting « pièces plus fines que l'espacement ». Le
 // moteur les a préparées autrement (repli du lot E0) et le job est livré :

@@ -1,4 +1,5 @@
 import { customRef, reactive, readonly, unref } from 'vue'
+import { clearBranding } from '~/utils/reportBranding'
 
 const emptyState = () => ({ userIsSet: false, user: {} })
 
@@ -101,6 +102,9 @@ async function logout() {
         // refetches instead of returning the pre-logout data (which would
         // keep the user "logged in" on the client).
         clearNuxtData('user')
+        // Logo et nom de l'entreprise du rapport PDF : gardés dans ce navigateur
+        // seulement, effacés à la déconnexion (poste partagé).
+        clearBranding()
     } catch (err) {
         console.error('Logout failed:', err)
     }

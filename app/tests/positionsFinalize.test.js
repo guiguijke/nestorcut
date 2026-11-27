@@ -19,7 +19,8 @@ vi.mock('../composables/geometryClient', () => ({
     geoComputeReport: vi.fn(async (spec) => JSON.parse(glue.mod.compute_report(JSON.stringify(spec)))),
 }))
 
-import { alternativePositions, assembleBrowserArtifacts } from '../composables/finalizeLocal'
+import { alternativePositions, assembleBrowserArtifacts, dropPositionsUnlessBrowserBuilt } from '../composables/finalizeLocal'
+import { parseSheetSvg } from '../utils/sheetSvgReport'
 import { hydrateLocalItem } from '../composables/localHydrate'
 import { entityIndexOf, readDxfEntities } from '../utils/dxfEntities'
 
@@ -152,6 +153,43 @@ describe('finalisation : positions des pièces d\'un disque importé de 153 mm',
         expect(item.localRecord.alternatives[0].positions[0].rows).toHaveLength(4)
         const old = hydrateLocalItem({ slug: 's' }, { slug: 's', alternatives: [{ ...out.alternatives[0], positions: undefined }] })
         expect(old.alternatives[0].hasPositions).toBe(false)
+    })
+})
+
+describe('rapport PDF : identifiants de fichier de chaque forme de l’aperçu (svgSlugs)', () => {
+    it('une liste par tôle, dans l’ordre des formes du SVG, sans rien changer au SVG', async () => {
+        const out = await assembleBrowserArtifacts({ result: resultOf(), payload: payloadOf(), sources, jobSlug: 'job' })
+        const alt = out.alternatives[0]
+        expect(alt.svgSlugs).toEqual([['c17', 'c225', 'c353', 'rect']])
+        // Alignement : autant de formes dans le SVG que d identifiants, dans le même ordre
+        // (la 4e est le rectangle 30 x 20).
+        const parsed = parseSheetSvg(alt.svgs[0])
+        expect(parsed.parts).toHaveLength(alt.svgSlugs[0].length)
+        const box = (rings) => ({ w: Math.max(...rings[0].map((p) => p[0])) - Math.min(...rings[0].map((p) => p[0])), h: Math.max(...rings[0].map((p) => p[1])) - Math.min(...rings[0].map((p) => p[1])) })
+        expect(box(parsed.parts[3].rings).w).toBeCloseTo(30, 6)
+        expect(box(parsed.parts[3].rings).h).toBeCloseTo(20, 6)
+        expect(box(parsed.parts[0].rings).w).toBeCloseTo(17, 1)
+        // Le champ est additif : aucun autre champ de l'alternative n'a bougé de forme.
+        expect(Array.isArray(alt.svgs)).toBe(true)
+        expect(typeof alt.svgs[0]).toBe('string')
+    })
+
+    it('retiré hors job construit dans le navigateur, comme les positions', async () => {
+        const out = await assembleBrowserArtifacts({ result: resultOf(), payload: payloadOf(), sources, jobSlug: 'job' })
+        const kept = dropPositionsUnlessBrowserBuilt(structuredClone(out.alternatives), 'client-built')
+        expect(kept[0].svgSlugs).toEqual([['c17', 'c225', 'c353', 'rect']])
+        const dropped = dropPositionsUnlessBrowserBuilt(structuredClone(out.alternatives), 'server')
+        expect(dropped[0].svgSlugs).toBeUndefined()
+        expect(dropped[0].positions).toBeUndefined()
+    })
+
+    it('un résultat ancien (sans svgSlugs) s’hydrate sans rien casser', async () => {
+        const out = await assembleBrowserArtifacts({ result: resultOf(), payload: payloadOf(), sources, jobSlug: 'job' })
+        const { svgSlugs, ...old } = out.alternatives[0]
+        expect(svgSlugs).toBeDefined()
+        const item = hydrateLocalItem({ slug: 's' }, { slug: 's', alternatives: [old] })
+        expect(item.localRecord.alternatives[0].svgSlugs).toBeUndefined()
+        expect(item.alternatives[0].svgs).toHaveLength(1)
     })
 })
 

@@ -62,11 +62,15 @@ export function alternativePositions(containers, payload, entityIndex) {
 
 /** Les positions n'existent que pour un job construit DANS le navigateur
  * (`mode === 'client-built'`, projet « Cet appareil ») : le payload préparé par le
- * serveur a perdu `blockParts` et les noms de fichiers. Retire `positions` des
- * alternatives sinon (mutation). */
+ * serveur a perdu `blockParts` et les noms de fichiers. Retire `positions` et
+ * `svgSlugs` des alternatives sinon (mutation). */
 export function dropPositionsUnlessBrowserBuilt(alternatives, mode) {
     if (mode === 'client-built') return alternatives
-    for (const alt of alternatives || []) delete alt.positions
+    for (const alt of alternatives || []) {
+        delete alt.positions
+        // Même règle pour les identifiants de fichier des formes d'aperçu (rapport PDF).
+        delete alt.svgSlugs
+    }
     return alternatives
 }
 

@@ -1008,7 +1008,11 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     dropPositionsUnlessBrowserBuilt(alternatives, fetched?.mode)
     if (fileNames) {
         for (const alt of alternatives) {
-            const used = new Set((alt.positions || []).flatMap((s) => s.rows.map((r) => r.fileSlug)))
+            // Noms des fichiers posés : ceux des positions et ceux des formes d'aperçu (rapport PDF).
+            const used = new Set([
+                ...(alt.positions || []).flatMap((s) => s.rows.map((r) => r.fileSlug)),
+                ...(alt.svgSlugs || []).flatMap((l) => l || []),
+            ])
             const names = Object.fromEntries([...used].filter((k) => fileNames[k]).map((k) => [k, fileNames[k]]))
             if (Object.keys(names).length) alt.fileNames = names
         }

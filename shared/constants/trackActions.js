@@ -159,6 +159,12 @@ export const TRACK_ACTIONS = [
     'report_copy_locked_click',
     'report_csv_exported',
     'report_csv_locked_click',
+    // Rapport PDF : suivi sans contenu (jamais le logo, les champs ni le PDF).
+    'report_pdf_exported',
+    'report_pdf_locked_click',
+    'click_report_pdf',
+    'click_report_pdf_download',
+    'dialog_view_report_pdf',
     'result_slug_copied',
     // Bloc 3 — 02/11 (lot V1, téléchargement Free) : nouveaux événements.
     'locked_sheets_view',

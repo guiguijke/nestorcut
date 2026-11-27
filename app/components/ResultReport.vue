@@ -363,6 +363,18 @@
                     trackingTag="report_csv"
                     @click="onExportClick(exportCsv, 'report_csv_locked_click')"
                 />
+                <!-- Rapport PDF : jamais au cadenas (le compte Free a le PDF de base).
+                     L'enfant n'émet qu'une intention ; le verrou du PDF avancé est
+                     dans la fenêtre et dans l'orchestrateur. -->
+                <MainButton
+                    v-if="reportSheets.length"
+                    :label="t('report.pdf')"
+                    :size="sizeType.s"
+                    :theme="themeType.ghost"
+                    trackingTag="report_pdf"
+                    data-testid="report-pdf"
+                    @click="$emit('report-pdf')"
+                />
                 <!-- Lot positions : liste simple des pièces (fichier, X, Y,
                      diamètre). Même verrou que les DXF (cadenas d'une tôle
                      importée verrouillée) ; absent d'un résultat d'avant. -->
@@ -490,7 +502,7 @@ const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
     'unfit-add-sheet', 'unfit-reduce-spacing', 'export', 'download-all',
     'download-single', 'download-job', 'download-all-jobs', 'close', 'copy-slug',
-    'unlock-sheets', 'unfit-open-project', 'download-positions', 'origin',
+    'unlock-sheets', 'unfit-open-project', 'download-positions', 'origin', 'report-pdf',
 ])
 
 const t = (...a) => props.d.t(...a)
