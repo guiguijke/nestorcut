@@ -1051,6 +1051,15 @@ noms de lots internes. La version affichée dans l'en-tête est le
   Sprach-Tags der Website harmonisiert, und die Startseite jeder
   Sprache nennt das Englische als Referenz.
 
+*ES*
+
+- NestorCut ya habla alemán: interfaz, sitio web y documentación
+  traducidos por completo. El idioma de tu navegador se detecta desde la
+  primera visita, y el menú de idiomas ofrece Deutsch junto a English,
+  Français, Português e Italiano. De paso, las etiquetas de idioma del
+  sitio se han armonizado y la página de inicio de cada idioma remite al
+  inglés como idioma por defecto.
+
 ## V0.9.4
 
 *FR*
@@ -1085,6 +1094,23 @@ noms de lots internes. La version affichée dans l'en-tête est le
   English, Français e Português. Al passaggio, le lunghezze seguono la
   lingua: un utente francese ora legge « 1040,4 mm » con la sua virgola.
 
+*DE*
+
+- NestorCut spricht jetzt Italienisch: Oberfläche, Website und
+  Dokumentation sind vollständig übersetzt. Die Sprache Ihres Browsers
+  wird schon beim ersten Besuch erkannt, und das Sprachmenü bietet
+  Italiano neben English, Français und Português an. Nebenbei richten
+  sich Längenangaben jetzt nach der Sprache: Ein französischer Nutzer
+  liest nun „1040,4 mm“ mit dem passenden Komma.
+
+*ES*
+
+- NestorCut ahora habla italiano: interfaz, sitio web y documentación
+  totalmente traducidos. El idioma de tu navegador se detecta en la
+  primera visita, y el menú de idiomas ofrece Italiano junto a English,
+  Français y Português. De paso, las longitudes siguen el idioma: un
+  usuario francés lee ahora «1040,4 mm» con su coma.
+
 ## V0.9.3
 
 *FR*
@@ -1108,6 +1134,27 @@ noms de lots internes. La version affichée dans l'en-tête est le
   detectado na primeira visita, e o menu de idiomas oferece Português
   junto de English e Français.
 
+*IT*
+
+- NestorCut ora parla portoghese brasiliano: interfaccia, sito e
+  documentazione completamente tradotti. La lingua del tuo browser viene
+  riconosciuta dalla prima visita, e il menu delle lingue offre
+  Português accanto a English e Français.
+
+*DE*
+
+- NestorCut spricht jetzt brasilianisches Portugiesisch: Oberfläche,
+  Website und Dokumentation sind vollständig übersetzt. Die Sprache
+  Ihres Browsers wird schon beim ersten Besuch erkannt, und das
+  Sprachmenü bietet Português neben English und Français an.
+
+*ES*
+
+- NestorCut ahora habla portugués de Brasil: interfaz, sitio web y
+  documentación totalmente traducidos. El idioma de tu navegador se
+  detecta en la primera visita, y el menú de idiomas ofrece Português
+  junto a English y Français.
+
 ## V0.9.2
 
 *FR*
@@ -1121,6 +1168,30 @@ noms de lots internes. La version affichée dans l'en-tête est le
 - A “?” next to each setting and on the result opens the guide at the
   right place, in your language: sheets, spacing, rotations,
   directions, options, proposals, offcut, badges, downloads.
+
+*PT*
+
+- Um "?" ao lado de cada configuração e do resultado abre o guia no
+  lugar certo, no seu idioma: chapas, espaçamento, rotações, direções,
+  opções, propostas, retalho, selos, downloads.
+
+*IT*
+
+- Un «?» accanto a ogni impostazione e al risultato apre la guida nel
+  punto giusto, nella tua lingua: lamiere, distanza, rotazioni,
+  direzioni, opzioni, proposte, ritaglio, badge, download.
+
+*DE*
+
+- Ein „?“ neben jeder Einstellung und beim Ergebnis öffnet das Handbuch
+  an der passenden Stelle, in Ihrer Sprache: Bleche, Abstand, Drehungen,
+  Richtungen, Optionen, Vorschläge, Restblech, Badges, Downloads.
+
+*ES*
+
+- Una «?» junto a cada ajuste y al resultado abre la guía en el lugar
+  adecuado, en tu idioma: chapas, separación, rotaciones, direcciones,
+  opciones, propuestas, sobrante, insignias, descargas.
 
 ## V0.9.1
 
@@ -1137,6 +1208,33 @@ noms de lots internes. La version affichée dans l'en-tête est le
   arrives in your language, with no flash and no prior setting. The
   EN/FR button becomes a language menu — each language shown under its
   own name.
+
+*PT*
+
+- O idioma do seu navegador é reconhecido já na primeira visita: a página
+  chega no seu idioma, sem piscar e sem configuração prévia. O botão
+  EN/FR virou um menu de idiomas — cada idioma aparece com o próprio nome.
+
+*IT*
+
+- La lingua del tuo browser viene riconosciuta fin dalla prima visita: la
+  pagina arriva nella tua lingua, senza sfarfallio e senza impostazioni
+  preliminari. Il pulsante EN/FR diventa un menu delle lingue — ogni
+  lingua è mostrata con il proprio nome.
+
+*DE*
+
+- Die Sprache Ihres Browsers wird schon beim allerersten Besuch erkannt:
+  Die Seite erscheint in Ihrer Sprache, ohne Aufblitzen und ohne
+  vorherige Einstellung. Aus der Schaltfläche EN/FR wird ein Sprachmenü
+  — jede Sprache steht unter ihrem eigenen Namen.
+
+*ES*
+
+- El idioma de tu navegador se reconoce desde la primera visita: la
+  página llega en tu idioma, sin parpadeo y sin ajuste previo. El botón
+  EN/FR pasa a ser un menú de idiomas — cada idioma aparece con su
+  propio nombre.
 
 ## V0.9
 
@@ -1176,3 +1274,87 @@ noms de lots internes. La version affichée dans l'en-tête est le
   in automatic batches, and a rejected file is always named.
 - A single small part on a large sheet now nests (it used to fail when
   tiny compared to the sheet).
+
+*PT*
+
+- Você solta um arquivo de trabalho do SheetCam (`.job`) sozinho, sem os
+  DXFs: a geometria, a chapa, o kerf, as quantidades e seus pontos de
+  partida são lidos do arquivo, e o nesting devolve **um `.job` por
+  chapa**, pronto para reabrir no SheetCam. O botão de download do `.job`
+  agora é a ação principal do resultado.
+- Um desenho presente várias vezes no mesmo `.job` (quatro cópias, por
+  exemplo) gera **quatro peças livres**, agrupadas em um único cartão
+  expansível — cada uma mantém o ponto de partida que você posicionou, byte
+  por byte.
+- As entradas e saídas de corte aparecem **antes** do cálculo (prévia da
+  ficha, visualização ampliada) e **durante** ele (visualização ao vivo),
+  com o ponto de perfuração; o espaço reservado para a entrada de corte é
+  exatamente o que você vê.
+- Solte todos os seus arquivos de uma vez — mesmo mais de vinte: o envio
+  é feito em lotes automáticos, e um arquivo recusado sempre é nomeado.
+- Uma peça pequena sozinha em uma chapa grande agora entra no nesting
+  (antes dava erro quando era minúscula diante da chapa).
+
+*IT*
+
+- Carica da solo un file di lavoro SheetCam (`.job`), senza i suoi DXF:
+  la geometria, la lamiera, il kerf, le quantità e i tuoi punti di
+  partenza vengono letti dal file, e il nesting restituisce **un `.job`
+  per lamiera**, pronto da riaprire in SheetCam. Il download del `.job`
+  è ora l'azione principale.
+- Un disegno presente più volte nello stesso `.job` (per esempio quattro
+  copie) dà **quattro pezzi liberi**, raggruppati sotto un'unica scheda
+  espandibile — ognuno conserva il punto di partenza che hai posizionato,
+  byte per byte.
+- Le entrate e le uscite di taglio si vedono **prima** del calcolo
+  (anteprima della scheda, visualizzazione ingrandita) e **durante**
+  (visualizzazione in diretta), con il punto di sfondamento; lo spazio
+  riservato all'entrata di taglio è esattamente quello che vedi.
+- Carica tutti i tuoi file in una volta sola — anche più di venti:
+  l'invio avviene a lotti automatici, e un file rifiutato viene sempre
+  nominato.
+- Un pezzo singolo su una lamiera grande ora viene annidato (prima
+  andava in errore se era piccolo rispetto alla lamiera).
+
+*DE*
+
+- Sie legen eine SheetCam-Auftragsdatei (`.job`) allein ab, ohne ihre
+  DXF-Dateien: Geometrie, Blech, Kerf, Stückzahlen und Ihre Startpunkte
+  werden aus der Datei gelesen, und das Nesting liefert **eine `.job`
+  pro Blech**, bereit zum erneuten Öffnen in SheetCam. Der
+  `.job`-Download ist jetzt die Hauptaktion des Ergebnisses.
+- Eine Zeichnung, die mehrfach in derselben `.job` vorkommt (zum
+  Beispiel vier Exemplare), ergibt **vier freie Teile**, gebündelt unter
+  einer einzigen aufklappbaren Karte — jedes behält den von Ihnen
+  gesetzten Startpunkt, auf das Byte genau.
+- Die Einfahrts- und Ausfahrtswege sind **vor** der Berechnung
+  (Vorschau der Teilekarte, vergrößerte Ansicht) und **währenddessen**
+  (Live-Ansicht) zu sehen, samt Einstichpunkt; der für die Einfahrt
+  freigehaltene Platz entspricht genau dem, was Sie sehen.
+- Legen Sie alle Ihre Dateien auf einmal ab — auch mehr als zwanzig: Das
+  Hochladen erfolgt in automatischen Stapeln, und eine abgelehnte Datei
+  wird immer namentlich genannt.
+- Ein einzelnes kleines Teil auf einem großen Blech wird jetzt
+  verschachtelt (es lief auf einen Fehler, wenn es im Vergleich zum
+  Blech winzig war).
+
+*ES*
+
+- Sueltas un archivo de trabajo de SheetCam (`.job`) solo, sin sus DXF:
+  la geometría, la chapa, el kerf, las cantidades y tus puntos de
+  partida se leen del archivo, y el nesting devuelve **un `.job` por
+  chapa** listo para reabrir en SheetCam. El botón de descarga del `.job`
+  es ahora la acción principal del resultado.
+- Un dibujo presente varias veces en un mismo `.job` (por ejemplo,
+  cuatro copias) da **cuatro piezas libres**, agrupadas bajo una sola
+  ficha desplegable — cada una conserva el punto de partida que colocaste,
+  byte a byte.
+- Las entradas y salidas de corte se ven **antes** del cálculo (vista
+  previa de la ficha, vista ampliada) y **durante** él (vista en
+  directo), con el punto de perforación; el espacio reservado para la
+  entrada es exactamente el que ves.
+- Suelta todos tus archivos de una vez — incluso más de veinte: la subida
+  se hace por lotes automáticos, y un archivo rechazado siempre se
+  nombra.
+- Una pieza sola en una chapa grande ahora se anida (antes daba error si
+  era pequeña en comparación con la chapa).
