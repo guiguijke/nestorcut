@@ -20,6 +20,9 @@ from core.engine import (EngineCancelled, EngineError,
                          thin_items_original, thin_named_count,
                          parse_item_unplaceable,
                          run_engine, thin_parts)
+from core.edge import (EdgeCtx, EdgeRefusal, edge_engine_sheets, edge_request_of,
+                       edge_shift_mm, edge_too_large_detail, js_deterministic_seed,
+                       sheet_frame_of)
 from core.holed_polygons import channel_width_for_space, channels_usable, open_holes_with_channels
 from core.placement import ResultContainer, Transform, parse_result_containers
 from core.metrics import (
@@ -628,42 +631,6 @@ def _nesting_process_impl(doc):
             "count": params.get("sheetCount"),
         }]
 
-    bin_dims = {}
-    bins = []
-    # C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS — une tôle
-    # `count: 0` au milieu de la liste cassait l'import (« consecutive
-    # IDs », opaque). Les formats vides sont FILTRÉS ; container_map_back
-    # mappe id moteur → id de format d'origine (coûts, dimensions, grille) —
-    # jamais appliqué aux container_id des tôles, qui sont des rangs 1..N
-    # (bin_dims reste indexé par l'id FORMAT).
-    container_map_back = {}
-    for bin_id, sheet in enumerate(sheets):
-        sheet_width = float(sheet.get("width"))
-        sheet_height = float(sheet.get("height"))
-        sheet_stock = int(sheet.get("count"))
-        bin_dims[bin_id] = (sheet_width, sheet_height)
-        if sheet_stock <= 0:
-            continue
-        container_map_back[len(bins)] = bin_id
-        bins.append(build_bin(len(bins), sheet_stock, sheet_width, sheet_height))
-    # V11 (vérif 2026-09-04, décision propriétaire) : coût d'une tôle ∝ sa
-    # SURFACE (entier : surface / plus petite surface × 100) — l'objectif
-    # « moins de plaques » devient « moins de matière », ce qu'un atelier
-    # attend ; à l'ouverture du bin, min(cost, loss) choisit ainsi la plus
-    # PETITE tôle qui admet l'item (et non le plus grand format).
-    areas = []
-    for sheet in sheets:
-        areas.append(float(sheet.get("width")) * float(sheet.get("height")))
-    active_areas = [areas[fmt] for eng, fmt in sorted(container_map_back.items())]
-    if active_areas:
-        min_area = min(active_areas)
-        for b, area in zip(bins, active_areas):
-            b["cost"] = max(1, round(area / min_area * 100))
-    # bin_dims_engine : clés = ids MOTEUR (0..len(bins)-1), valeurs = dims
-    # du format d'origine (identité quand aucun format n'est filtré).
-    bin_dims_engine = {
-        eid: bin_dims[fid] for eid, fid in container_map_back.items()}
-
     # Time budget (wall-clock cap) and number of alternatives are set
     # server-side at enqueue time based on the owner's tier
     # (params.timeBudgetSec / params.alternativesCount). Defaults cover jobs
@@ -696,6 +663,109 @@ def _nesting_process_impl(doc):
     input_items = convert_files_to_input_items(files, dek, _simpl_stats)
     space = requested_space + spacing_margin(_simpl_stats, requested_space)
 
+    # Distance au bord (piège 68) : d = e - s. d == 0 (réglage absent ou égal à
+    # l'espacement) : RIEN ne change, `engine_sheets` EST `sheets`, aucune clé
+    # ajoutée au payload. Sinon le calcul se fait dans le navigateur (le serveur
+    # Nuxt route ainsi) et le moteur reçoit une tôle décalée de d.
+    requested_edge = edge_request_of(params)
+    edge_shift = edge_shift_mm(requested_space, requested_edge)
+    engine_sheets = sheets
+    if edge_shift != 0:
+        if params.get("computeLocation") != "local":
+            # Défense : le serveur n'envoie jamais un tel job au calcul serveur.
+            information = "Edge distance requires the in-browser computation."
+            db["nesting_jobs"].update_one(
+                {"slug": slug},
+                {
+                    "$set": {
+                        "placed": 0,
+                        "status": "error",
+                        "information": information,
+                        "finishedAt": datetime.now(),
+                        "update_ts": datetime.now(),
+                    },
+                    "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""},
+                },
+            )
+            raise UserFacingError(information)
+
+        def _user_file_name(file_slug):
+            # Nom du fichier de l'utilisateur, jamais l'identifiant interne
+            # (à défaut, le slug : comme le constructeur navigateur).
+            name = None
+            if file_slug:
+                try:
+                    name = (db["user_dxf_files"].find_one(
+                        {"slug": file_slug}, {"name": 1}) or {}).get("name")
+                except Exception:
+                    name = None
+            return name or file_slug
+
+        edge_ctx = EdgeCtx(
+            sheets, input_items, space - requested_space, requested_space,
+            space, default_allowed_orientations, _user_file_name)
+
+        def _refuse_edge(code, detail):
+            logger.warning("Edge distance refused", extra={"code": code})
+            db["nesting_jobs"].update_one(
+                {"slug": slug},
+                {
+                    "$set": {
+                        "placed": 0,
+                        "status": "error",
+                        "finishedAt": datetime.now(),
+                        "update_ts": datetime.now(),
+                        "information": code,
+                        "edgeDetail": detail,
+                    },
+                    "$unset": {"progress": "", "liveLayout": "", "itemMap": "", "compute": ""},
+                },
+            )
+            raise UserFacingError(code)
+
+        try:
+            engine_sheets = edge_engine_sheets(edge_ctx, requested_edge, edge_shift)
+        except EdgeRefusal as refusal:
+            _refuse_edge(refusal.code, refusal.detail)
+    # Tôles que le MOTEUR reçoit (décalées à distance au bord réglée, sinon
+    # les vraies tôles) : bins, dimensions et coûts les lisent ; `sheets` (les
+    # vraies) ne sert qu'aux messages et au repère réel.
+    bin_dims = {}
+    bins = []
+    # C13 (audit 2026-09-03) : jagua exige des ids CONSECUTIFS — une tôle
+    # `count: 0` au milieu de la liste cassait l'import (« consecutive
+    # IDs », opaque). Les formats vides sont FILTRÉS ; container_map_back
+    # mappe id moteur → id de format d'origine (coûts, dimensions, grille) —
+    # jamais appliqué aux container_id des tôles, qui sont des rangs 1..N
+    # (bin_dims reste indexé par l'id FORMAT).
+    container_map_back = {}
+    for bin_id, sheet in enumerate(engine_sheets):
+        sheet_width = float(sheet.get("width"))
+        sheet_height = float(sheet.get("height"))
+        sheet_stock = int(sheet.get("count"))
+        bin_dims[bin_id] = (sheet_width, sheet_height)
+        if sheet_stock <= 0:
+            continue
+        container_map_back[len(bins)] = bin_id
+        bins.append(build_bin(len(bins), sheet_stock, sheet_width, sheet_height))
+    # V11 (vérif 2026-09-04, décision propriétaire) : coût d'une tôle ∝ sa
+    # SURFACE (entier : surface / plus petite surface × 100) — l'objectif
+    # « moins de plaques » devient « moins de matière », ce qu'un atelier
+    # attend ; à l'ouverture du bin, min(cost, loss) choisit ainsi la plus
+    # PETITE tôle qui admet l'item (et non le plus grand format).
+    areas = []
+    for sheet in engine_sheets:
+        areas.append(float(sheet.get("width")) * float(sheet.get("height")))
+    active_areas = [areas[fmt] for eng, fmt in sorted(container_map_back.items())]
+    if active_areas:
+        min_area = min(active_areas)
+        for b, area in zip(bins, active_areas):
+            b["cost"] = max(1, round(area / min_area * 100))
+    # bin_dims_engine : clés = ids MOTEUR (0..len(bins)-1), valeurs = dims
+    # du format d'origine (identité quand aucun format n'est filtré).
+    bin_dims_engine = {
+        eid: bin_dims[fid] for eid, fid in container_map_back.items()}
+
     # ------------------------------------------------------------------
     # Instant feasibility pre-check: an item whose bbox (+ the requested
     # spacing, which the engine enforces on every side) does not fit in ANY
@@ -706,26 +776,41 @@ def _nesting_process_impl(doc):
     from shapely.geometry import Polygon as _Polygon
     from shapely.affinity import rotate as _sh_rotate
 
-    unplaceable = []
-    for item in input_items:
+    def _item_fits(item, sheet_list):
         poly = _Polygon(item.get("coords"), item.get("holes") or [])
         rotations = item.get("rotations", default_allowed_orientations) or [0.0]
-        fits_anywhere = False
         for angle in rotations:
             rotated = _sh_rotate(poly, float(angle), origin=(0, 0)) if angle else poly
             bx = rotated.bounds
             w, h = bx[2] - bx[0], bx[3] - bx[1]
-            if part_fits_any_sheet(w, h, sheets, space):
-                fits_anywhere = True
-                break
-        if not fits_anywhere:
+            if part_fits_any_sheet(w, h, sheet_list, space):
+                return True
+        return False
+
+    # Les tôles MOTEUR décident (à distance au bord réglée, la tôle est plus
+    # petite que la vraie).
+    unplaceable = []
+    failing_items = []
+    for item in input_items:
+        if not _item_fits(item, engine_sheets):
+            poly = _Polygon(item.get("coords"), item.get("holes") or [])
             bx = poly.bounds
+            failing_items.append(item)
             unplaceable.append({
                 "slug": item.get("file_slug"),
                 "width": bx[2] - bx[0],
                 "height": bx[3] - bx[1],
                 "count": item.get("count"),
             })
+
+    # Distance au bord plus grande que l'espacement : une pièce qui tenait sur
+    # la vraie tôle et ne tient plus sur la tôle moteur ne tient pas à CETTE
+    # distance au bord. Une pièce trop grande même sans distance au bord garde
+    # le refus d'avant (c'est elle qu'il faut changer d'abord).
+    if unplaceable and edge_shift > 0:
+        if all(_item_fits(item, sheets) for item in failing_items):
+            _refuse_edge("edge_too_large",
+                         edge_too_large_detail(edge_ctx, requested_edge))
 
     if unplaceable:
         # Nom du fichier de l'utilisateur, jamais le slug interne.
@@ -1002,10 +1087,13 @@ def _nesting_process_impl(doc):
     cap_parts = [{"coords": it["coords"], "count": it.get("count") or 0}
                  for it in input_items]
     cap_sheets = [{"width": s.get("width"), "height": s.get("height"),
-                   "count": int(s.get("count") or 1)} for s in sheets]
+                   "count": int(s.get("count") or 1)} for s in engine_sheets]
     _cap = _capacity_report(cap_parts, cap_sheets, space)
-    if _cap:
+    if _cap and edge_shift == 0:
         # Sortie : l'espacement max suggéré se dit en espacement DEMANDÉ.
+        # (À distance au bord réglée, ce levier se calcule à bord fixe : le
+        # serveur Nuxt le donne déjà exactement avant l'envoi, on ne le
+        # recalcule pas sur la tôle moteur.)
         _cap["maxSpacingForFitMm"], _zero_fits = user_max_spacing(
             _cap["maxSpacingForFitMm"], space - requested_space)
         if _zero_fits:
@@ -1024,7 +1112,8 @@ def _nesting_process_impl(doc):
             "sheetsNeeded": _cap.get("sheetsNeeded"),
             "maxPartsAtSpacing": sum(
                 (v or 0) for v in (_cap.get("maxPartsAtSpacing") or {}).values()),
-            "maxSpacingForFitMm": _cap.get("maxSpacingForFitMm"),
+            **({"maxSpacingForFitMm": _cap.get("maxSpacingForFitMm")}
+               if edge_shift == 0 else {}),
             **({"maxSpacingZeroFits": True}
                if _cap.get("maxSpacingZeroFits") else {}),
         }
@@ -1074,6 +1163,9 @@ def _nesting_process_impl(doc):
         is_spp = False
 
     problem_type = "spp" if is_spp else "bpp"
+    # Distance au bord : le navigateur garde la graine du payload serveur et
+    # nomme l'instance 'nest2d' ; le chemin sans bord ne bouge pas d'un bit.
+    instance_name = slug if edge_shift == 0 else "nest2d"
     logger.info(
         "Problem type selected",
         extra={
@@ -1089,12 +1181,23 @@ def _nesting_process_impl(doc):
 
     if is_spp:
         instance = build_spp_instance(
-            jaguar_items, bin_dims[0][0], bin_dims[0][1], name=slug
+            jaguar_items, bin_dims[0][0], bin_dims[0][1], name=instance_name
         )
         max_strip_width = bin_dims[0][0]
     else:
-        instance = build_bpp_instance(jaguar_items, bins, name=slug)
+        instance = build_bpp_instance(jaguar_items, bins, name=instance_name)
         max_strip_width = None
+
+    # Distance au bord : repère RÉEL de chaque conteneur moteur (une seule
+    # entrée en bande ; sinon un par tôle active, dans l'ordre moteur). Rempli
+    # seulement à d != 0 ; une pose moteur (x, y) vaut (x + d, y + d) réel.
+    sheet_frames = None
+    if edge_shift != 0:
+        if is_spp:
+            sheet_frames = [sheet_frame_of(sheets[0])]
+        else:
+            sheet_frames = [sheet_frame_of(sheets[fid])
+                            for _eid, fid in sorted(container_map_back.items())]
 
     # D-MOT-16 : trous d'abord (SPP et BPP, pièces mixtes). Packer générique
     # + repli J-085 (1 hôte + 1 filler, pinwheel 4/4) si le packer lève,
@@ -1110,10 +1213,10 @@ def _nesting_process_impl(doc):
             if reduced:
                 if is_spp:
                     solve_instance = build_spp_instance(
-                        reduced, bin_dims[0][0], bin_dims[0][1], name=slug
+                        reduced, bin_dims[0][0], bin_dims[0][1], name=instance_name
                     )
                 else:
-                    solve_instance = build_bpp_instance(reduced, bins, name=slug)
+                    solve_instance = build_bpp_instance(reduced, bins, name=instance_name)
             else:
                 meta = None
 
@@ -1137,11 +1240,15 @@ def _nesting_process_impl(doc):
             if rings:
                 engine_raw_holes[new_id] = rings
 
-    seed = deterministic_seed({
+    _seed_payload = {
         "instance": solve_instance,
         "space": space,
         "budget": time_budget_sec,
-    })
+    }
+    # À distance au bord : graine à la convention du navigateur (JSON.stringify,
+    # 80 et non 80.0) pour que le même job donne les mêmes poses des deux côtés.
+    seed = (deterministic_seed(_seed_payload) if edge_shift == 0
+            else js_deterministic_seed(_seed_payload))
 
     # D-PAY-12 : la recherche BPP fait toujours QUALITY_WALKS (8) walks
     # jusqu'au plateau. vcores = concurrence rayon seulement (Free 1,
@@ -1270,6 +1377,18 @@ def _nesting_process_impl(doc):
                         # le navigateur y juge sa vérification.
                         "requestedSpace": requested_space,
                         "parts": payload_parts,
+                        # Distance au bord (d != 0 seulement, aucune clé sinon) :
+                        # bord DEMANDÉ, décalage moteur d et repère réel de
+                        # chaque conteneur moteur.
+                        **({"requestedEdge": requested_edge,
+                            "edgeShift": edge_shift,
+                            "sheetFrames": sheet_frames,
+                            # Formats vides filtrés : id moteur -> id de format
+                            # (comme le constructeur navigateur, V15).
+                            **({"containerMapBack": [[eid, fid] for eid, fid
+                                                     in sorted(container_map_back.items())]}
+                               if len(container_map_back) != len(sheets) else {})}
+                           if edge_shift != 0 else {}),
                         # D7 (audit 2026-09-03) : gate de trou identique au
                         # serveur — le navigateur remplissait les trous sur
                         # un payload préparé trous fermés (space > 2,4 :
