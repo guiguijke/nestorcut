@@ -1120,7 +1120,7 @@ export default {
     'sheetImport.confirm.defects': 'Use this sheet — {defects}',
     // Distance au bord de la tôle (lot du 26/11/2026).
     'settings.edgeDistance': 'Distance to sheet edge',
-    'settings.edgePlaceholder': 'Same as spacing: {v} {unit}',
+    'settings.edgePlaceholder': '= {v} {unit}',
     'settings.edgeRule': 'Empty = same as the part spacing. Measured between the drawn part outline and the sheet edge, no kerf added. Negative = parts may hang off the edge.',
     'settings.edgeNegative': 'Parts may hang off the sheet edge by up to {x} {unit}. Maximum: {max} {unit}. A part with almost no material on the sheet is flagged in the report.',
     'settings.edgeNegativeNoParts': 'Parts may hang off the sheet edge by up to {x} {unit}. The limit comes from the smallest part. A part with almost no material on the sheet is flagged in the report.',

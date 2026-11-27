@@ -989,7 +989,7 @@ export default {
     "sheetImport.confirm.defects": "Dieses Blech verwenden — {defects}",
     // Distance au bord de la tôle (lot du 26/11/2026).
     "settings.edgeDistance": "Abstand zum Blechrand",
-    "settings.edgePlaceholder": "Wie der Abstand: {v} {unit}",
+    "settings.edgePlaceholder": "= {v} {unit}",
     "settings.edgeRule": "Leer = wie der Abstand zwischen den Teilen. Gemessen zwischen der gezeichneten Teilkontur und dem Blechrand, ohne Schnittfuge. Negativ = Teile dürfen über den Rand hinausragen.",
     "settings.edgeNegative": "Teile dürfen höchstens {x} {unit} über den Blechrand hinausragen. Maximal: {max} {unit}. Ein Teil mit fast keinem Material auf dem Blech wird im Bericht markiert.",
     "settings.edgeNegativeNoParts": "Teile dürfen höchstens {x} {unit} über den Blechrand hinausragen. Die Grenze richtet sich nach dem kleinsten Teil. Ein Teil mit fast keinem Material auf dem Blech wird im Bericht markiert.",

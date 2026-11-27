@@ -41,6 +41,9 @@ const IDENTICAL_OK = [
     'Rectangle',
     // « 2 zones interdites, 3 défauts » : simple assemblage, même gabarit partout.
     '{zones}, {defects}',
+    // texte d'attente du champ « distance au bord » : « = 2 mm », même gabarit partout
+    // (le champ est étroit ; la ligne d'aide dessous le dit en toutes lettres).
+    '= {v} {unit}',
 ]
 const identicalAllowed = (v) => {
     const s = String(v).trim()

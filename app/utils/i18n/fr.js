@@ -1097,7 +1097,7 @@ export default {
     'sheetImport.confirm.defects': "Utiliser cette tôle — {defects}",
     // Distance au bord de la tôle (lot du 26/11/2026).
     "settings.edgeDistance": "Distance au bord de la tôle",
-    "settings.edgePlaceholder": "Comme l'espacement : {v} {unit}",
+    "settings.edgePlaceholder": "= {v} {unit}",
     "settings.edgeRule": "Vide = comme l'espacement entre pièces. Mesurée entre le contour dessiné de la pièce et le bord de la tôle, sans kerf ajouté. Négative = les pièces peuvent dépasser du bord.",
     "settings.edgeNegative": "Les pièces peuvent dépasser du bord de la tôle de {x} {unit} au plus. Maximum : {max} {unit}. Une pièce presque entièrement hors de la tôle est signalée dans le rapport.",
     "settings.edgeNegativeNoParts": "Les pièces peuvent dépasser du bord de la tôle de {x} {unit} au plus. La limite dépend de la plus petite pièce. Une pièce presque entièrement hors de la tôle est signalée dans le rapport.",

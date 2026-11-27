@@ -986,7 +986,7 @@ export default {
     "sheetImport.confirm.defects": "Usa questa lamiera — {defects}",
     // Distance au bord de la tôle (lot du 26/11/2026).
     "settings.edgeDistance": "Distanza dal bordo della lamiera",
-    "settings.edgePlaceholder": "Come la distanza tra i pezzi: {v} {unit}",
+    "settings.edgePlaceholder": "= {v} {unit}",
     "settings.edgeRule": "Vuoto = come la distanza tra i pezzi. Misurata tra il contorno disegnato del pezzo e il bordo della lamiera, senza aggiungere il kerf. Negativa = i pezzi possono sporgere dal bordo.",
     "settings.edgeNegative": "I pezzi possono sporgere dal bordo della lamiera fino a {x} {unit}. Al massimo {max} {unit}. Un pezzo quasi senza materiale sulla lamiera viene segnalato nel rapporto.",
     "settings.edgeNegativeNoParts": "I pezzi possono sporgere dal bordo della lamiera fino a {x} {unit}. Il limite dipende dal pezzo più piccolo. Un pezzo quasi senza materiale sulla lamiera viene segnalato nel rapporto.",

@@ -991,7 +991,7 @@ export default {
     "sheetImport.confirm.defects": "Usar esta chapa — {defects}",
     // Distance au bord de la tôle (lot du 26/11/2026).
     "settings.edgeDistance": "Distancia al borde de la chapa",
-    "settings.edgePlaceholder": "Igual que la separación: {v} {unit}",
+    "settings.edgePlaceholder": "= {v} {unit}",
     "settings.edgeRule": "Vacío = igual que la separación entre piezas. Se mide entre el contorno dibujado de la pieza y el borde de la chapa, sin añadir el kerf. Negativa = las piezas pueden sobresalir del borde.",
     "settings.edgeNegative": "Las piezas pueden sobresalir del borde de la chapa hasta {x} {unit}. Máximo: {max} {unit}. Una pieza casi sin material sobre la chapa se señala en el informe.",
     "settings.edgeNegativeNoParts": "Las piezas pueden sobresalir del borde de la chapa hasta {x} {unit}. El límite depende de la pieza más pequeña. Una pieza casi sin material sobre la chapa se señala en el informe.",
