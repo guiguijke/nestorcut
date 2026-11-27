@@ -48,10 +48,13 @@ describe('dictionnaires : clés de la tôle importée', () => {
         }
     })
 
-    it('la forme absente : guillemets droits hors français (comme les voisines), « » en français', () => {
+    it('la forme absente : les guillemets de chaque langue (comme les voisines)', () => {
+        // Un seul style par langue dans tout le dictionnaire (audit des langues, 27/11) :
+        // « » en français, „ “ en allemand, « » collés en espagnol et en italien,
+        // guillemets droits en anglais et en portugais du Brésil.
+        const quoted = { fr: '« {name} »', de: '„{name}“', es: '«{name}»', it: '«{name}»', en: '"{name}"', pt: '"{name}"' }
         for (const [lang, dict] of Object.entries(DICTS)) {
-            if (lang === 'fr') expect(dict['project.sheetShapeMissing']).toContain('« {name} »')
-            else expect(dict['project.sheetShapeMissing'], lang).toContain('"{name}"')
+            expect(dict['project.sheetShapeMissing'], lang).toContain(quoted[lang])
         }
     })
 

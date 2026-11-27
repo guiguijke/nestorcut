@@ -152,7 +152,7 @@
                 variant="ghost"
                 class="result__area"
                 data-testid="result-area"
-                aria-label="Open result details"
+                :aria-label="t('result.openDetails')"
                 @click="openModal"
             />
         </template>

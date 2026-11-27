@@ -23,7 +23,7 @@
                         trackingTag="result_part_prev"
                         data-testid="sheet-prev"
                         :isDisable="activePart === 0"
-                        label="prev"
+                        :label="t('result.prevSheet')"
                         class="controls__prev"
                         @click="$emit('part', activePart - 1)"
                     />
@@ -47,7 +47,7 @@
                         :isDisable="activePart === currentDxfs.length - 1"
                         trackingTag="result_part_next"
                         data-testid="sheet-next"
-                        label="next"
+                        :label="t('result.nextSheet')"
                         class="controls__next"
                         @click="$emit('part', activePart + 1)"
                     />
@@ -74,7 +74,7 @@
                 />
                 <MainButton
                     v-if="!isHaveError"
-                    label="fullscreen"
+                    :label="t('common.fullscreen')"
                     :size="sizeType.s"
                     :theme="themeType.secondary"
                     :isLabelShow="false"

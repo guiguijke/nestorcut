@@ -174,7 +174,7 @@ export function floorLengthMm(mm, unit, decimals) {
 export function fmtLength(mm, unit, locale) {
     const s = fmtLengthValue(mm, unit, undefined, locale)
     if (s === '—') return s
-    return unit === 'inch' ? `${s}"` : `${s} mm`
+    return unit === 'inch' ? `${s}"` : `${s} mm`
 }
 
 /**
@@ -205,7 +205,7 @@ export function fmtArea(mm2, unit, locale, scaleMm2) {
     if (unit === 'inch') {
         const in2 = v / SQMM_PER_SQIN
         const ft2 = in2 / SQIN_PER_SQFT
-        return `${nf(0).format(in2)} in² (${nf(2).format(ft2)} ft²)`
+        return `${nf(0).format(in2)} in² (${nf(2).format(ft2)} ft²)`
     }
     const scale = Number.isFinite(Number(scaleMm2)) && scaleMm2 != null
         ? Math.max(Math.abs(v), Math.abs(Number(scaleMm2)))
@@ -213,9 +213,9 @@ export function fmtArea(mm2, unit, locale, scaleMm2) {
     if (scale >= 1e6) {
         // Une aire minuscule à côté d'une grande ne s'écrit pas « 0 m² ».
         const small = v !== 0 && Math.abs(v) < 1e5
-        return `${nf(small ? 4 : 2).format(v / 1e6)} m²`
+        return `${nf(small ? 4 : 2).format(v / 1e6)} m²`
     }
-    return `${nf(0).format(v)} mm²`
+    return `${nf(0).format(v)} mm²`
 }
 
 /**

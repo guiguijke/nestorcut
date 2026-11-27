@@ -33,7 +33,7 @@
                     class="modal__display"
                 />
                 <MainButton
-                    label="fullscreen"
+                    :label="t('common.fullscreen')"
                     :size="sizeType.s"
                     :theme="themeType.primary"
                     :isLabelShow=false

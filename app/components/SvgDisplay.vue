@@ -5,7 +5,7 @@
     >
         <img
             :src="svgDataUri"
-            alt="SVG Image"
+            :alt="t('file.partPreview')"
             class="dispay__img"
             :class="{ 'dispay__img--preserve-colors': preserveColors }"
         />
@@ -15,6 +15,7 @@
 <script setup>
 import { defaultSizeType } from "~~/constants/size.constants";
 
+const { t } = useLocale();
 import { widenSvgDataUri, widenSvgViewBox } from '~/utils/overhangView';
 
 const { svgContent, src, size, preserveColors, margin } = defineProps({

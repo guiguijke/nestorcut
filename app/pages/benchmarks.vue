@@ -1,53 +1,49 @@
 <template>
     <div class="bench">
-        <h1 class="bench__title">{{ isFr ? 'Benchmarks publics' : 'Public benchmarks' }}</h1>
-        <p class="bench__lead">
-            {{ isFr
-                ? 'Nos densités de nesting, mesurées sur notre corpus de cas limites — méthode ouverte, chiffres reproductibles.'
-                : 'Our nesting densities, measured on our corpus of edge cases — open method, reproducible numbers.' }}
-        </p>
+        <h1 class="bench__title">{{ t('bench.title') }}</h1>
+        <p class="bench__lead">{{ t('bench.lead') }}</p>
 
         <!-- Conditions datées : machine + version exacte des chiffres. -->
         <p class="bench__meta">
-            {{ isFr ? 'Conditions du run' : 'Run conditions' }} :
-            {{ BENCHMARKS.meta.machine[isFr ? 'fr' : 'en'] }} —
-            {{ isFr ? 'images Docker du commit' : 'Docker images from commit' }}
+            {{ t('bench.conditions') }} :
+            {{ field(BENCHMARKS.meta.machine) }} —
+            {{ t('bench.dockerImages') }}
             <code>{{ BENCHMARKS.meta.version }}</code>,
             {{ BENCHMARKS.meta.runDate }}.
             <template v-if="deployedSha">
-                {{ isFr ? '— image déployée' : '— deployed image' }}
+                {{ t('bench.deployedImage') }}
                 <code>{{ deployedSha.slice(0, 7) }}</code>
             </template>
         </p>
 
         <section class="bench__section">
-            <h2>{{ isFr ? 'Méthode' : 'Method' }}</h2>
-            <p class="bench__text">{{ BENCHMARKS.meta.method[isFr ? 'fr' : 'en'] }}</p>
+            <h2>{{ t('bench.method') }}</h2>
+            <p class="bench__text">{{ field(BENCHMARKS.meta.method) }}</p>
         </section>
 
         <section class="bench__section">
-            <h2>{{ isFr ? 'Résultats par cas' : 'Results by case' }}</h2>
+            <h2>{{ t('bench.results') }}</h2>
             <div class="bench__tablewrap">
                 <table class="bench__table">
                     <thead>
                         <tr>
-                            <th>{{ isFr ? 'Cas' : 'Case' }}</th>
-                            <th>{{ isFr ? 'Géométrie' : 'Geometry' }}</th>
-                            <th>{{ isFr ? 'Tôles' : 'Sheets' }}</th>
-                            <th>{{ isFr ? 'Espacement' : 'Spacing' }}</th>
-                            <th>{{ isFr ? 'Pièces' : 'Parts' }}</th>
-                            <th>{{ isFr ? 'Densité matière' : 'Material density' }}</th>
-                            <th>{{ isFr ? 'Physique' : 'Physics' }}</th>
+                            <th>{{ t('bench.col.case') }}</th>
+                            <th>{{ t('bench.col.geometry') }}</th>
+                            <th>{{ t('bench.col.sheets') }}</th>
+                            <th>{{ t('bench.col.spacing') }}</th>
+                            <th>{{ t('bench.col.parts') }}</th>
+                            <th>{{ t('bench.col.density') }}</th>
+                            <th>{{ t('bench.col.physics') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         <tr v-for="c in BENCHMARKS.cases" :key="c.id">
                             <td class="bench__case">T-{{ c.id }}</td>
-                            <td class="bench__geom">{{ c.geometry[isFr ? 'fr' : 'en'] }}</td>
+                            <td class="bench__geom">{{ field(c.geometry) }}</td>
                             <td>{{ c.sheets }}</td>
                             <td>{{ fmtSp(c.spaceMm) }}</td>
                             <td>
-                                <template v-if="c.verdict === 'refused'">{{ isFr ? 'refusé avant calcul' : 'refused before compute' }}</template>
+                                <template v-if="c.verdict === 'refused'">{{ t('bench.refusedBeforeCompute') }}</template>
                                 <template v-else>{{ c.placed }}/{{ c.requested }}</template>
                             </td>
                             <td class="bench__density">
@@ -56,30 +52,26 @@
                             </td>
                             <td>
                                 <span v-if="c.verdict === 'ok'" class="bench__badge bench__badge--ok">
-                                    {{ isFr ? 'vérifiée' : 'verified' }}
+                                    {{ t('bench.verified') }}
                                 </span>
                                 <span v-else-if="c.verdict === 'partial'" class="bench__badge bench__badge--partial">
-                                    {{ isFr ? `partielle · ${c.requested - c.placed} non posée` : `partial · ${c.requested - c.placed} unplaced` }}
+                                    {{ tp('bench.partial', c.requested - c.placed) }}
                                 </span>
                                 <span v-else-if="c.verdict === 'refused'" class="bench__badge bench__badge--refused">
-                                    {{ isFr ? 'refus honnête < 1 s' : 'honest refusal < 1 s' }}
+                                    {{ t('bench.honestRefusal') }}
                                 </span>
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-            <p class="bench__note">
-                {{ isFr
-                    ? '« Vérifiée » = zéro recouvrement mesuré, toutes les pièces dans leur tôle, écart minimal jamais inférieur à l’espacement demandé.'
-                    : '“Verified” = zero measured overlap, every part inside its sheet, minimal gap never below the requested spacing.' }}
-            </p>
+            <p class="bench__note">{{ t('bench.note') }}</p>
         </section>
 
         <section class="bench__section">
-            <h2>{{ isFr ? 'Robustesse au-delà des chiffres' : 'Robustness beyond the numbers' }}</h2>
-            <p class="bench__text">{{ BENCHMARKS.robustness[isFr ? 'fr' : 'en'] }}</p>
-            <p class="bench__text">{{ BENCHMARKS.honesty[isFr ? 'fr' : 'en'] }}</p>
+            <h2>{{ t('bench.robustness') }}</h2>
+            <p class="bench__text">{{ field(BENCHMARKS.robustness) }}</p>
+            <p class="bench__text">{{ field(BENCHMARKS.honesty) }}</p>
         </section>
     </div>
 </template>
@@ -94,24 +86,20 @@ definePageMeta({
     middleware: 'auth-optional',
 })
 
-const { locale, fmtPercent } = useLocale()
+const { locale, t, tp, fmtPercent } = useLocale()
 // AI5 : hash du commit qui a build l'image (injecté au build par le
 // workflow). En dev local sans build-arg : repli silencieux.
 const deployedSha = useRuntimeConfig().public.gitCommitSha || ''
-const isFr = computed(() => locale.value === 'fr')
-const fmtSp = (mm) => (isFr.value ? `${String(mm).replace('.', ',')} mm` : `${mm} mm`)
+// Champ descriptif {en, fr, pt, it, de, es} : langue courante, repli anglais.
+const field = (obj) => obj[locale.value] ?? obj.en
+// Virgule décimale partout sauf en anglais.
+const fmtSp = (mm) => (locale.value === 'en' ? `${mm} mm` : `${String(mm).replace('.', ',')} mm`)
 const fmtPct = (v) => fmtPercent(v)
 
-useHead({
-    title: 'Benchmarks — NestorCut',
-    meta: [
-        {
-            name: 'description',
-            content:
-                'NestorCut nesting densities on a public corpus of edge cases — open method, verified physics, reproducible numbers.',
-        },
-    ],
-})
+useHead(() => ({
+    title: t('bench.metaTitle'),
+    meta: [{ name: 'description', content: t('bench.metaDescription') }],
+}))
 </script>
 
 <style lang="scss" scoped>

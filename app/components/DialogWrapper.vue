@@ -10,10 +10,10 @@
                 :class="['modal__body', 'modal-body', { 'modal__body--full': fullscreen }]"
                 role="dialog"
                 aria-modal="true"
-                aria-label="Dialog"
+                :aria-label="t('common.dialog')"
                 @keydown.tab="trapTab"
             >
-                <MainButton label="close modal" :isLabelShow=false :size="sizeType.s" :icon="iconType.close" trackingTag="modal_close" @click="closeModal" class="modal-body__close" />
+                <MainButton :label="t('common.close')" :isLabelShow=false :size="sizeType.s" :icon="iconType.close" trackingTag="modal_close" @click="closeModal" class="modal-body__close" />
                 <slot />
             </div>
         </div>
@@ -59,6 +59,8 @@ import { iconType } from '~~/constants/icon.constants';
 import { sizeType } from '~~/constants/size.constants';
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { trackEvent } from '~/utils/track';
+
+const { t } = useLocale();
 
 const { isModalOpen, trackingTag, fullscreen, backdrop, lockScroll } = defineProps({
     isModalOpen: {

@@ -9,10 +9,10 @@ import { fmtArea, fmtLength, fmtLengthValue } from '../utils/units'
 
 describe('fmtLength suit la locale (relecture A L2)', () => {
     it('la virgule décimale suit la langue de l\'application', () => {
-        expect(fmtLength(1040.4, 'mm', 'it')).toBe('1040,4 mm')
-        expect(fmtLength(1040.4, 'mm', 'fr')).toBe('1040,4 mm')
-        expect(fmtLength(1040.4, 'mm', 'pt')).toBe('1040,4 mm')
-        expect(fmtLength(1040.4, 'mm', 'en')).toBe('1040.4 mm')
+        expect(fmtLength(1040.4, 'mm', 'it')).toBe('1040,4 mm')
+        expect(fmtLength(1040.4, 'mm', 'fr')).toBe('1040,4 mm')
+        expect(fmtLength(1040.4, 'mm', 'pt')).toBe('1040,4 mm')
+        expect(fmtLength(1040.4, 'mm', 'en')).toBe('1040.4 mm')
     })
 
     it('l\'espacement du badge : 5,87 en FR/IT, 5.87 en EN', () => {
@@ -40,26 +40,26 @@ describe('fmtLength suit la locale (relecture A L2)', () => {
 
 describe('fmtArea : une seule unité sur une même ligne', () => {
     it('sans échelle, chaque valeur choisit son unité (comportement historique)', () => {
-        expect(fmtArea(221598, 'mm', 'en')).toBe('221,598 mm²')
-        expect(fmtArea(1780000, 'mm', 'en')).toBe('1.78 m²')
+        expect(fmtArea(221598, 'mm', 'en')).toBe('221,598 mm²')
+        expect(fmtArea(1780000, 'mm', 'en')).toBe('1.78 m²')
     })
 
     it('avec l\'échelle des tôles, pièces et libre sont dans la même unité', () => {
-        expect(fmtArea(221598, 'mm', 'en', 2000000)).toBe('0.22 m²')
-        expect(fmtArea(1778402, 'mm', 'en', 2000000)).toBe('1.78 m²')
-        expect(fmtArea(0, 'mm', 'en', 2000000)).toBe('0 m²')
+        expect(fmtArea(221598, 'mm', 'en', 2000000)).toBe('0.22 m²')
+        expect(fmtArea(1778402, 'mm', 'en', 2000000)).toBe('1.78 m²')
+        expect(fmtArea(0, 'mm', 'en', 2000000)).toBe('0 m²')
     })
 
     it('une petite aire à côté d\'une grande ne s\'écrit pas 0 m²', () => {
-        expect(fmtArea(1500, 'mm', 'en', 2000000)).toBe('0.0015 m²')
+        expect(fmtArea(1500, 'mm', 'en', 2000000)).toBe('0.0015 m²')
     })
 
     it('entre 1e4 et 1e5 mm² : quatre décimales, rien n’est arrondi à moitié', () => {
-        expect(fmtArea(14000, 'mm', 'en', 2000000)).toBe('0.014 m²')
-        expect(fmtArea(9000, 'mm', 'en', 2000000)).toBe('0.009 m²')
+        expect(fmtArea(14000, 'mm', 'en', 2000000)).toBe('0.014 m²')
+        expect(fmtArea(9000, 'mm', 'en', 2000000)).toBe('0.009 m²')
     })
 
     it('une échelle sous le seuil garde les mm²', () => {
-        expect(fmtArea(221598, 'mm', 'en', 500000)).toBe('221,598 mm²')
+        expect(fmtArea(221598, 'mm', 'en', 500000)).toBe('221,598 mm²')
     })
 })

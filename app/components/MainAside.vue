@@ -8,7 +8,7 @@
                 class="aside__title"
             />
             <MainButton
-                label="close modal"
+                :label="t('common.close')"
                 :isLabelShow=false
                 :icon="iconType.close"
                 :theme="themeType.primary"
@@ -25,6 +25,7 @@
 <script setup>
 import { iconType } from '~~/constants/icon.constants';
 import { themeType } from '~~/constants/theme.constants';
+const { t } = useLocale();
 defineProps({
     label: {
         type: String,

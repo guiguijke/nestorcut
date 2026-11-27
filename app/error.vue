@@ -3,12 +3,14 @@
         <h1 class="error-page__code">{{ statusCode }}</h1>
         <p class="error-page__message">{{ statusMessage }}</p>
         <a href="/" class="error-page__link" @click.prevent="handleError">
-            Go Home
+            {{ t('error.home') }}
         </a>
     </div>
 </template>
 
 <script setup>
+const { t } = useLocale()
+
 const props = defineProps({
     error: {
         type: Object,
@@ -18,8 +20,8 @@ const props = defineProps({
 
 const statusCode = computed(() => props.error?.statusCode || 500)
 const statusMessage = computed(() => {
-    if (statusCode.value === 404) return 'Page Not Found'
-    return props.error?.statusMessage || 'Something went wrong'
+    if (statusCode.value === 404) return t('error.notFound')
+    return props.error?.statusMessage || t('error.generic')
 })
 
 // Clear the error so navigation back to the app works.

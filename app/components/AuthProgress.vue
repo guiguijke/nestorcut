@@ -1,7 +1,7 @@
 <template>
     <div class="authenticating">
         <MainTitle 
-            label="Authenticating..."
+            :label="t('auth.progressTitle')"
             class="authenticating__title"
         />
         <MainLoader
@@ -9,12 +9,14 @@
             class="authenticating__loader"
         />
         <p class="authenticating__text">
-            Please wait a moment while we process your authentication.
+            {{ t('auth.progressText') }}
         </p>
     </div>
 </template>
 <script setup>
 import { sizeType } from "~~/constants/size.constants";
+
+const { t } = useLocale();
 </script>
 <style lang="scss" scoped>
 .authenticating {

@@ -3,9 +3,9 @@
         <div @click="supportDialog = false" class="support__background"></div>
         <div class="support__wrapper">
             <div class="support__header">
-                <MainTitle label="Support Chat" class="support__title" />
+                <MainTitle :label="t('support.title')" class="support__title" />
                 <MainButton
-                    label="close modal"
+                    :label="t('common.close')"
                     :isLabelShow="false"
                     :size="sizeType.s"
                     :icon="iconType.close"
@@ -29,7 +29,7 @@
                         class="message-list__item message"
                         :class="getMessageClasses(message.sender)"
                     >
-                        <p>{{ message.message }}</p>
+                        <p>{{ displayText(message) }}</p>
                         <span class="message__time">{{ formatTime(message.timestamp) }}</span>
                     </div>
                 </template>
@@ -37,7 +37,7 @@
             <div class="support__bottom bottom">
                 <InputField
                     tag="textarea"
-                    placeholder="Type your message..."
+                    :placeholder="t('support.placeholder')"
                     class="bottom__input"
                     v-model="message"
                     @keydown="handleKeyDown"
@@ -47,7 +47,7 @@
                     trackingTag="support_chat_send"
                     @click="sendMessage"
                     :isDisable="!message.trim() || isLoading"
-                    label="Send"
+                    :label="t('support.send')"
                     class="bottom__btn"
                 />
             </div>
@@ -66,7 +66,18 @@ import { trackEvent } from '~/utils/track'
 import { intlTag } from '~/utils/i18n'
 import { useLocale } from '~/composables/useLocale'
 
-const { locale } = useLocale()
+const { locale, t } = useLocale()
+
+// Les deux messages d'accueil sont enregistrés en anglais en base : on les
+// affiche dans la langue de l'app. Tout autre texte reste tel que stocké.
+const WELCOME_TEXTS = {
+    'Welcome to the support channel! We will do our best to help you with your questions and issues.': 'support.welcome1',
+    'If you have any questions or issues, please feel free to ask.': 'support.welcome2',
+}
+const displayText = (msg) => {
+    const key = msg.sender === 'welcome' ? WELCOME_TEXTS[msg.message] : null
+    return key ? t(key) : msg.message
+}
 
 const supportDialog = useSupportDialog()
 
@@ -319,6 +330,12 @@ const scrollToBottom = async () => {
 
     &__input {
         flex-grow: 1;
+
+        // Le champ grandit avec le texte, mais sa hauteur de départ coupait le bas des lettres.
+        :deep(textarea) {
+            min-height: calc(var(--fs-14) * 1.4);
+            line-height: 1.4;
+        }
     }
 }
 </style>

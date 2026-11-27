@@ -44,7 +44,7 @@
             <div class="file__counter counter">
                 <span class="counter__label" data-testid="file-quantity-label">{{ t('file.quantityLabel') }}</span>
                 <MainButton :size="sizeType.s" :icon="iconType.minus" :isDisable="file.count < 1" :isLabelShow="false"
-                    trackingTag="file_decrement" @click="decrement(fileIndex, $event)" label="decrement" class="counter__btn" />
+                    trackingTag="file_decrement" @click="decrement(fileIndex, $event)" :label="t('file.decrement')" class="counter__btn" />
                 <input
                     type="number"
                     v-model="count"
@@ -55,7 +55,7 @@
                     @blur="onCountBlur"
                 />
                 <MainButton :size="sizeType.s" :icon="iconType.plus" :isLabelShow="false" :isDisable="file.count >= 999"
-                    trackingTag="file_increment" @click="increment(fileIndex, $event)" label="increment" class="counter__btn" />
+                    trackingTag="file_increment" @click="increment(fileIndex, $event)" :label="t('file.increment')" class="counter__btn" />
             </div>
             <!-- Lot E4-b/E4-c : les actions d'import avancé vivent SUR LA
                  FICHE — « Échelle » (et sa réinitialisation quand un facteur
