@@ -1154,7 +1154,7 @@ export default {
     'settings.sheetUnlimited': 'Unlimited quantity',
     'settings.sheetUnlimitedAria': 'Unlimited quantity: {sheet}',
     'settings.sheetUnlimitedHint': 'Used after the fixed-quantity sheets, as many as needed ({n} sheets at most per calculation).',
-    'settings.sheetUnlimitedLocalOnly': 'For now, unlimited quantity is available for “This device” projects only.',
+    'settings.sheetUnlimitedLocalOnly': "For now, unlimited quantity is available for \"This device\" projects only.",
     'project.edgeOverhangTooLarge': 'A hang-off of {x} {unit} is too large. Use at most {max} {unit}. A part with almost no material on the sheet is flagged in the report.',
     'project.minSheetEdge': 'The part “{name}” ({w} × {h} {unit}) does not fit on any declared sheet with a distance to the edge of {e} {unit}, even rotated.',
     'project.edgeMaxHint': 'Use at most {max} {unit}.',

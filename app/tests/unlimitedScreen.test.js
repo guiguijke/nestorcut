@@ -314,11 +314,11 @@ describe('rapport', () => {
         expect(src).toContain('...(supply ? [supply.cells[i]] : []),')
     })
 
-    it('bloc et texte copié : « Tôles » avec une tôle illimitée, « Matière à prévoir » sinon', () => {
+    it('bloc et texte copié : « Tôles » avec une tôle illimitée, « Matière nécessaire » sinon', () => {
         const plain = materialKeys([{ widthMm: 600, heightMm: 800 }])
         expect(plain).toEqual({ title: 'report.material', text: 'report.text.material' })
         const mixed = materialKeys([line(600, 800, 'stock')])
-        expect([fr(plain.title), fr(mixed.title)]).toEqual(['Matière à prévoir', 'Tôles'])
+        expect([fr(plain.title), fr(mixed.title)]).toEqual(['Matière nécessaire', 'Tôles'])
         expect(fr(mixed.text, { formats: 'x' })).toBe(`Tôles${NB}: x`)
         const view = readFileSync(path.join(ROOT, 'components/ResultReport.vue'), 'utf8')
         expect(view).toContain('t(materialKeys(props.d.reportSheets).title)')
