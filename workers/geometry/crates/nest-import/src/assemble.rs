@@ -132,7 +132,378 @@ pub fn snap_edges_until(noded: &[(Pt, Pt)], dl: &Deadline) -> Result<Vec<(Pt, Pt
         }
         edges.retain(|(a, b)| a != b);
     }
-    Ok(edges)
+    split_at_free_ends_until(edges, dl)
+}
+
+/// Distance, en mm, sous laquelle un bout libre tombe SUR une arête voisine
+/// (jonction en T). Plus large que `JOIN_STEPS` : deux bouts qui se rejoignent
+/// partagent les chiffres écrits du même point, alors que le point d'une
+/// jonction en T est calculé puis écrit, et s'écarte du côté de la précision
+/// du fichier. Mesures du 27/11 : au fuzz « tee » (10 000 dessins), il faut
+/// un peu plus de 1 µm pour les dessins écrits à trois décimales (2 erreurs à
+/// 0,001, aucune à 0,002) ; sur 325 dessins réels, un panneau de 222 trous en
+/// retrouve 9 dès 0,0004 et ne bouge plus jusqu'à 0,05. 5 µm laisse de la
+/// marge des deux côtés et reste sous la tolérance d'échantillonnage (0,01).
+pub const TEE_TOL_MM: f64 = 0.005;
+
+/// Jonctions en T que le nodage exact a manquées : un bout encore LIBRE (un
+/// seul voisin) posé à moins de `TEE_TOL_MM` de l'INTÉRIEUR d'une autre arête
+/// coupe cette arête en ce point. Cas type : une bosse ronde posée au milieu du
+/// bord d'un rectangle. Le bout de l'arc est calculé (cos, sin, rotation,
+/// insertion) et tombe à quelques ulp du bord : `point_on_segment` exige une
+/// colinéarité exacte et ne coupe pas, la bosse restait pendante et la pièce
+/// sortait sans elle (un cas sur quatre au fuzz du 25/11, famille « tee »).
+/// Côté serveur, l'arrondi de GEOS (`set_precision`, pixels chauds) recoupe
+/// l'arête qui passe dans la case d'un sommet.
+///
+/// Aucun sommet ne bouge : chaque arête à portée est coupée, au bout libre
+/// lui-même (déjà sur la grille), puis le voisinage des coupes est nodé une
+/// seconde fois (`renode_near_until`). Une arête qui touche le bout ou son
+/// voisin n'est pas candidate (le tracé se replierait sur lui-même). Un dessin
+/// sans bout libre rend les mêmes arêtes, au bit près.
+fn split_at_free_ends_until(mut edges: Vec<(Pt, Pt)>, dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
+    type Key = (u64, u64);
+    let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
+    let mut only: HashMap<Key, Option<Key>> = HashMap::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
+        for (p, q) in [(a, b), (b, a)] {
+            let e = only.entry(key(p)).or_insert(Some(key(q)));
+            if *e != Some(key(q)) {
+                *e = None;
+            }
+        }
+    }
+    let mut free: Vec<(Pt, Pt)> = only
+        .iter()
+        .filter_map(|(k, n)| {
+            n.map(|n| {
+                (
+                    [f64::from_bits(k.0), f64::from_bits(k.1)],
+                    [f64::from_bits(n.0), f64::from_bits(n.1)],
+                )
+            })
+        })
+        .collect();
+    if free.is_empty() {
+        return Ok(edges);
+    }
+    free.sort_by(|p, q| p.0[0].total_cmp(&q.0[0]).then(p.0[1].total_cmp(&q.0[1])));
+    let tol = TEE_TOL_MM;
+    // Index : les arêtes, puis la case de tolérance de chaque bout (diagonale
+    // de son carré). Une arête dont la boîte ne touche pas ce carré est à
+    // plus de `tol` du bout : l'écarter ne perd rien.
+    let n = edges.len();
+    let mut items = edges.clone();
+    items.extend(free.iter().map(|&(p, _)| ([p[0] - tol, p[1] - tol], [p[0] + tol, p[1] + tol])));
+    let grid = BboxGrid::build(&items);
+    let mut cand: Vec<u32> = Vec::new();
+    let mut cuts: HashMap<usize, Vec<(f64, Pt)>> = HashMap::new();
+    for (k, &(p, own)) in free.iter().enumerate() {
+        dl.check_at(k)?;
+        grid.candidates(n + k, &mut cand);
+        // TOUTES les arêtes à portée, pas seulement la plus proche : un côté
+        // dessiné deux fois (ou redessiné à quelques décimales près) garderait
+        // une copie droite que le premier segment de l'arc traverse sans sommet
+        // commun, et la face de la pièce se perdait (relecture du 27/11).
+        for &jj in cand.iter() {
+            let j = jj as usize;
+            if j >= n {
+                continue;
+            }
+            let (a, b) = edges[j];
+            if a == p || b == p || a == own || b == own {
+                continue;
+            }
+            let ab = sub(b, a);
+            let len2 = ab[0] * ab[0] + ab[1] * ab[1];
+            if len2 == 0.0 {
+                continue;
+            }
+            let ap = sub(p, a);
+            let t = (ap[0] * ab[0] + ap[1] * ab[1]) / len2;
+            if !(t > 0.0 && t < 1.0) {
+                continue;
+            }
+            if cross(ab, ap).abs() / len2.sqrt() <= tol {
+                cuts.entry(j).or_default().push((t, p));
+            }
+        }
+    }
+    if !cuts.is_empty() {
+        let points: std::collections::HashSet<Key> =
+            cuts.values().flat_map(|v| v.iter().map(|&(_, p)| key(p))).collect();
+        edges = cut_edges_until(&edges, &mut cuts, dl)?;
+        // La coupe déplace l'arête jusqu'à `tol` : un côté redessiné à
+        // quelques décimales près, presque confondu, peut alors être croisé
+        // sans sommet commun, et la face de la pièce se perd (relecture du
+        // 27/11). Second nodage, LOCAL : les arêtes qui touchent un point de
+        // coupe et leurs voisines (boîtes qui se touchent). Un nodage complet
+        // doublait le temps d'import des fichiers concernés.
+        let touching: Vec<bool> =
+            edges.iter().map(|&(a, b)| points.contains(&key(a)) || points.contains(&key(b))).collect();
+        edges = renode_near_until(&edges, &touching, dl)?;
+    }
+    trim_stubs_until(edges, tol, dl)
+}
+
+/// Nodage des paires qui contiennent une arête du VOISINAGE : les arêtes
+/// `seed` et celles dont la boîte touche la leur. Mêmes prédicats exacts que
+/// `node_segments_until` (croisements, jonctions en T), point de croisement
+/// calculé une fois par paire, nouveaux points mis sur la grille. Les autres
+/// arêtes passent telles quelles.
+fn renode_near_until(edges: &[(Pt, Pt)], seed: &[bool], dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
+    let n = edges.len();
+    let grid = BboxGrid::build(edges);
+    let mut cand: Vec<u32> = Vec::new();
+    let mut near = seed.to_vec();
+    // Compteur propre : `check_at` ne lit l'horloge que tous les
+    // `Deadline::STRIDE` appels, et ces boucles sautent la plupart des indices.
+    let mut steps = 0usize;
+    for i in 0..n {
+        if seed[i] {
+            steps += 1;
+            dl.check_at(steps)?;
+            grid.candidates(i, &mut cand);
+            for &j in cand.iter() {
+                near[j as usize] = true;
+            }
+        }
+    }
+    let mut splits: HashMap<usize, Vec<Pt>> = HashMap::new();
+    for i in 0..n {
+        if !near[i] {
+            continue;
+        }
+        steps += 1;
+        dl.check_at(steps)?;
+        grid.candidates(i, &mut cand);
+        for &jj in cand.iter() {
+            let j = jj as usize;
+            if near[j] && j < i {
+                continue; // paire déjà vue depuis j
+            }
+            let (lo, hi) = (i.min(j), i.max(j));
+            if let Some(p) = seg_intersection(edges[lo].0, edges[lo].1, edges[hi].0, edges[hi].1) {
+                splits.entry(i).or_default().push(p);
+                splits.entry(j).or_default().push(p);
+            }
+            for (x, y) in [(i, j), (j, i)] {
+                let (s1, s2) = edges[x];
+                for &p in &[edges[y].0, edges[y].1] {
+                    if point_on_segment(p, s1, s2) {
+                        splits.entry(x).or_default().push(p);
+                    }
+                }
+            }
+        }
+    }
+    if splits.is_empty() {
+        return Ok(edges.to_vec());
+    }
+    let mut out: Vec<(Pt, Pt)> = Vec::with_capacity(n + splits.len() * 2);
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
+        let Some(ps) = splits.get(&i) else {
+            out.push((a, b));
+            continue;
+        };
+        let d = dist2(a, b);
+        let mut ts: Vec<(f64, Pt)> = ps
+            .iter()
+            .map(|&p| (((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / d, snap_pt(p)))
+            .collect();
+        ts.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1[0].total_cmp(&y.1[0])).then(x.1[1].total_cmp(&y.1[1])));
+        let mut prev = a;
+        for &(_, p) in &ts {
+            if p != prev && p != b {
+                out.push((prev, p));
+                prev = p;
+            }
+        }
+        if prev != b {
+            out.push((prev, b));
+        }
+    }
+    Ok(out)
+}
+
+/// Les arêtes coupées aux points retenus, dans l'ordre le long de chacune.
+fn cut_edges_until(
+    edges: &[(Pt, Pt)],
+    cuts: &mut HashMap<usize, Vec<(f64, Pt)>>,
+    dl: &Deadline,
+) -> Result<Vec<(Pt, Pt)>, Expired> {
+    let mut out: Vec<(Pt, Pt)> = Vec::with_capacity(edges.len() + cuts.len() * 2);
+    for (j, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(j)?;
+        let Some(ts) = cuts.get_mut(&j) else {
+            out.push((a, b));
+            continue;
+        };
+        ts.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1[0].total_cmp(&y.1[0])).then(x.1[1].total_cmp(&y.1[1])));
+        let mut prev = a;
+        for &(_, p) in ts.iter() {
+            if p != prev {
+                out.push((prev, p));
+                prev = p;
+            }
+        }
+        if prev != b {
+            out.push((prev, b));
+        }
+    }
+    Ok(out)
+}
+
+/// Moignons : l'arc qui DÉPASSE le côté d'un micron au lieu de s'arrêter juste
+/// avant le croise (le nodage exact le coupe là) et laisse au-delà un bout de
+/// trait libre plus court que `tol`, accroché à un carrefour (trois voisins ou
+/// plus). Ce bout ne borde aucune face ; gardé, il compte comme un tracé
+/// ouvert (« contours abandonnés », traits ouverts de la tôle) alors que rien
+/// n'est perdu. Il est retiré. Un tracé ouvert qui ne finit pas sur un
+/// carrefour n'est pas touché.
+fn trim_stubs_until(edges: Vec<(Pt, Pt)>, tol: f64, dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
+    type Key = (u64, u64);
+    let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
+    // Voisins DISTINCTS (un trait dessiné deux fois compte une fois).
+    let mut seen: std::collections::HashSet<(Key, Key)> = std::collections::HashSet::new();
+    let mut degree: HashMap<Key, u32> = HashMap::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
+        let (ka, kb) = (key(a), key(b));
+        if seen.insert(if ka < kb { (ka, kb) } else { (kb, ka) }) {
+            *degree.entry(ka).or_default() += 1;
+            *degree.entry(kb).or_default() += 1;
+        }
+    }
+    let stub = |a: Pt, b: Pt| -> bool {
+        let (da, db) = (degree[&key(a)], degree[&key(b)]);
+        ((da == 1 && db >= 3) || (db == 1 && da >= 3)) && dist2(a, b) <= tol * tol
+    };
+    if !edges.iter().any(|&(a, b)| stub(a, b)) {
+        return Ok(edges);
+    }
+    Ok(edges.into_iter().filter(|&(a, b)| !stub(a, b)).collect())
+}
+
+/// Ponts : arêtes dont la même face borde les deux côtés, ENTRE deux parties
+/// qui contiennent chacune un cycle (une fente tracée d'un trou jusqu'au bord,
+/// un trait qui relie deux contours). La marche des faces les traverse deux
+/// fois et soude les deux contours en un seul anneau : le trou n'est plus
+/// compté dans la profondeur pair/impair et passe pour de la matière. GEOS les
+/// rend à part (`polygonize_full`, `cuts`) et le serveur les ignore ; ici ils
+/// sont retirés avant la marche des faces. Les traits pendants (une seule
+/// attache) ne sont pas touchés : ils ne soudent rien et restent comptés par
+/// `dangling_paths`. Un dessin sans pont rend les mêmes arêtes.
+///
+/// Méthode : graphe des arêtes distinctes (un trait dessiné deux fois compte
+/// une fois), traits pendants pelés, puis ponts du reste (Tarjan, itératif :
+/// pas de récursion sur 30 000 arêtes en wasm).
+fn drop_bridges_until(edges: Vec<(Pt, Pt)>, dl: &Deadline) -> Result<Vec<(Pt, Pt)>, Expired> {
+    type Key = (u64, u64);
+    let key = |p: Pt| -> Key { (p[0].to_bits(), p[1].to_bits()) };
+    let mut index: HashMap<Key, u32> = HashMap::new();
+    let mut pair_id: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut pairs: Vec<(u32, u32)> = Vec::new();
+    for (i, &(a, b)) in edges.iter().enumerate() {
+        dl.check_at(i)?;
+        let next = index.len() as u32;
+        let ia = *index.entry(key(a)).or_insert(next);
+        let next = index.len() as u32;
+        let ib = *index.entry(key(b)).or_insert(next);
+        if ia == ib {
+            continue;
+        }
+        let pr = (ia.min(ib), ia.max(ib));
+        let next = pairs.len() as u32;
+        if *pair_id.entry(pr).or_insert(next) == next {
+            pairs.push(pr);
+        }
+    }
+    let n = index.len();
+    let mut adj: Vec<Vec<(u32, u32)>> = vec![Vec::new(); n];
+    for (e, &(u, v)) in pairs.iter().enumerate() {
+        adj[u as usize].push((v, e as u32));
+        adj[v as usize].push((u, e as u32));
+    }
+    // Pelage des traits pendants.
+    let mut alive = vec![true; pairs.len()];
+    let mut degree: Vec<u32> = adj.iter().map(|a| a.len() as u32).collect();
+    let mut queue: Vec<u32> = (0..n as u32).filter(|&v| degree[v as usize] == 1).collect();
+    let mut steps = 0usize;
+    while let Some(v) = queue.pop() {
+        steps += 1;
+        dl.check_at(steps)?;
+        for &(w, e) in &adj[v as usize] {
+            if alive[e as usize] {
+                alive[e as usize] = false;
+                degree[v as usize] -= 1;
+                degree[w as usize] -= 1;
+                if degree[w as usize] == 1 {
+                    queue.push(w);
+                }
+            }
+        }
+    }
+    // Ponts du reste (Tarjan itératif).
+    const NONE: u32 = u32::MAX;
+    let mut disc = vec![NONE; n];
+    let mut low = vec![0u32; n];
+    let mut bridge = vec![false; pairs.len()];
+    let mut any = false;
+    let mut timer = 0u32;
+    let mut stack: Vec<(u32, u32, usize)> = Vec::new();
+    for s in 0..n {
+        if disc[s] != NONE || degree[s] == 0 {
+            continue;
+        }
+        disc[s] = timer;
+        low[s] = timer;
+        timer += 1;
+        stack.push((s as u32, NONE, 0));
+        while let Some(&(v, parent_edge, i)) = stack.last() {
+            steps += 1;
+            dl.check_at(steps)?;
+            let v = v as usize;
+            if i < adj[v].len() {
+                stack.last_mut().expect("pile non vide").2 += 1;
+                let (w, e) = adj[v][i];
+                if !alive[e as usize] || e == parent_edge {
+                    continue;
+                }
+                let w = w as usize;
+                if disc[w] == NONE {
+                    disc[w] = timer;
+                    low[w] = timer;
+                    timer += 1;
+                    stack.push((w as u32, e, 0));
+                } else {
+                    low[v] = low[v].min(disc[w]);
+                }
+            } else {
+                stack.pop();
+                if let Some(&(u, _, _)) = stack.last() {
+                    let u = u as usize;
+                    low[u] = low[u].min(low[v]);
+                    if low[v] > disc[u] {
+                        bridge[parent_edge as usize] = true;
+                        any = true;
+                    }
+                }
+            }
+        }
+    }
+    if !any {
+        return Ok(edges);
+    }
+    Ok(edges
+        .into_iter()
+        .filter(|&(a, b)| {
+            let (ia, ib) = (index[&key(a)], index[&key(b)]);
+            ia == ib || !pair_id.get(&(ia.min(ib), ia.max(ib))).is_some_and(|&e| bridge[e as usize])
+        })
+        .collect())
 }
 
 pub fn sub(a: Pt, b: Pt) -> Pt {
@@ -1366,7 +1737,10 @@ pub fn build_parts_stats_until(
     asm.dangling_paths = dangling_paths_until(&edges, dl)?;
     // A second union pass in GEOS re-nodes snap-induced crossings — the
     // polygonizer below sees a clean edge set either way.
-    let _ = &mut edges;
+    // Ponts entre deux contours fermés retirés, comme `polygonize_full` côté
+    // serveur (ses `cuts`) : gardés, ils soudent un trou au bord et le trou
+    // passe pour de la matière.
+    edges = drop_bridges_until(edges, dl)?;
 
     let mut faces = polygonize_until(&[], &edges, dl)?;
     if std::env::var("NI_DEBUG").is_ok() {
