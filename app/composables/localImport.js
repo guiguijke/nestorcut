@@ -584,6 +584,9 @@ export async function importLocalFile(file, projectSlug, options = {}) {
  * Fabrique + stocke une fiche depuis un import et ses octets DXF — le seul
  * endroit qui construit un enregistrement (dépôt, échelle, éclatement).
  *
+ * Un champ ajouté à la fiche s'ajoute aussi à PIECE_FIELDS (utils/projectFile.js) :
+ * sinon il ne survit pas à l'enregistrement dans un fichier `.nestorcut`.
+ *
  * `extra` : champs additifs (provenance, drapeaux d'échelle…) ; `addedAt`
  * explicite pour remplacer une fiche EN PLACE (échelle : même rang) ou
  * étager des filles (éclatement : ordre des pièces, miroir du serveur).

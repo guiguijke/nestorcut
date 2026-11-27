@@ -8,9 +8,21 @@
                     :mode="privacyMode"
                     class="content__chip"
                 />
+                <!-- Fichier de projet `.nestorcut` : projets « Cet appareil » seulement. -->
+                <MainButton
+                    v-if="canSaveProjectFile"
+                    :theme="themeType.secondary"
+                    :size="sizeType.s"
+                    :label="savingProjectFile ? t('projectFile.saving') : t('projectFile.save')"
+                    :isDisable="savingProjectFile"
+                    class="content__save"
+                    data-testid="project-file-save"
+                    @click="saveToFile"
+                />
             </div>
             <p v-if="!isDemo && filesCount > 0" class="content__count">{{ partsFilesLine }}</p>
         </header>
+        <p v-if="projectFileError" class="content__error content__error--file" data-testid="project-file-error">{{ projectFileError }}</p>
         <p v-if="privacyStatus" class="content__privacy">{{ privacyStatus }}</p>
         <div v-if="isDemo" class="demo-banner">
             <div class="demo-banner__head">
@@ -262,6 +274,7 @@
 
 <script setup>
 import { themeType } from "~~/constants/theme.constants";
+import { sizeType } from "~~/constants/size.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
 import { safetyPatchForTargetMm, edgeDistanceNumber, edgeShiftMm } from "~/utils/spacingParams";
@@ -1189,6 +1202,36 @@ const downloadState = computed(() => sheetDownloadState(unref(downloadUser), {
     paidPlansDisabled: config.public.paidPlansDisabled,
     projectSlug: unref(pageSlug),
 }));
+
+// Fichier de projet `.nestorcut` (note du coffre « Fichier de projet nestorcut ») :
+// projets « Cet appareil » seulement (décision du 27/11), toutes les offres. Le
+// fichier n'emporte ni résultat ni fichier de coupe : il ne débloque rien.
+const canSaveProjectFile = computed(() =>
+    isLocalProject.value && !isDemo.value && unref(projectFilesCount) > 0
+);
+const savingProjectFile = ref(false);
+const projectFileError = ref('');
+watch(pageSlug, () => { projectFileError.value = ''; });
+const saveToFile = async () => {
+    if (savingProjectFile.value) return;
+    savingProjectFile.value = true;
+    projectFileError.value = '';
+    try {
+        const { saveProjectFile } = await import('~/composables/projectFileClient');
+        await saveProjectFile({
+            slug: unref(pageSlug),
+            title: unref(pageTitle),
+            unit: unref(unit),
+            appVersion: config.public.appVersion,
+            settings: actions.projectFileSettings(),
+        });
+    } catch (err) {
+        console.error('Project file save failed:', err);
+        projectFileError.value = t('projectFile.error.save');
+    } finally {
+        savingProjectFile.value = false;
+    }
+};
 const freeDownloadNoteText = computed(() =>
     t('nest.capacity.freeDownloadNote', { cap: FREE_DOWNLOAD_SHEET_CAP }));
 // Sous le bouton Nest : pré-vol (tôles nécessaires estimées avant le calcul).
@@ -1334,6 +1377,10 @@ const startsNest = () => {
         line-height: 1.45;
         color: var(--label-secondary);
         max-width: 42rem;
+    }
+
+    &__save {
+        margin-left: auto;
     }
 
     &__count {

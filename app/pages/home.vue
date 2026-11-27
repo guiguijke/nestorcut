@@ -45,6 +45,30 @@
                 @rejected="handleRejected"
                 @oversize="handleOversize"
             />
+            <!-- Fichier de projet `.nestorcut` : rouvert en NOUVEAU projet
+                 « Cet appareil » (aussi par dépôt sur la zone ci-dessus). -->
+            <div
+                v-if="localImportEnabled"
+                class="create__open"
+            >
+                <input
+                    ref="projectFileInput"
+                    type="file"
+                    accept=".nestorcut"
+                    class="create__open-input"
+                    data-testid="project-file-input"
+                    @change="onProjectFilePicked"
+                >
+                <MainButton
+                    :theme="themeType.secondary"
+                    :size="sizeType.s"
+                    :label="openingProject ? t('projectFile.opening') : t('projectFile.open')"
+                    :isDisable="openingProject"
+                    data-testid="project-file-open"
+                    @click="projectFileInput?.click()"
+                />
+                <span class="create__open-hint">{{ t('projectFile.openHint') }}</span>
+            </div>
             <div
                 v-if="error"
                 class="create__error"
@@ -156,9 +180,40 @@
     // (piège #31).
     const uploadExtensions = computed(() =>
         localImportEnabled.value
-            ? ['.dxf', '.svg', '.job', '.dwg']
+            ? ['.dxf', '.svg', '.job', '.dwg', '.nestorcut']
             : ['.dxf', '.svg', '.dwg']
     )
+
+    // Fichier de projet `.nestorcut` (note du coffre « Fichier de projet
+    // nestorcut ») : toujours un NOUVEAU projet « Cet appareil », quel que soit
+    // le lieu de calcul choisi au-dessus. Le serveur ne reçoit que `{ local: true }`.
+    const projectFileInput = ref(null)
+    const openingProject = ref(false)
+    const openSavedProject = async (file) => {
+        if (openingProject.value) return
+        openingProject.value = true
+        error.value = ''
+        const client = await import('~/composables/projectFileClient')
+        try {
+            const { slug } = await client.openProjectFile(file, {
+                seedProjectSnapshot: filesActions.seedProjectSnapshot,
+            })
+            // Projet créé et complet : une liste qui ne se rafraîchit pas n'est
+            // pas un échec (un nouvel essai créerait un doublon).
+            try { await getProjects() } catch { /* liste rafraîchie plus tard */ }
+            router.push({ path: `/project/${slug}` })
+        } catch (err) {
+            console.error('Project file open failed:', err)
+            error.value = t(client.projectFileErrorKey(err))
+        } finally {
+            openingProject.value = false
+        }
+    }
+    const onProjectFilePicked = async (event) => {
+        const file = event?.target?.files?.[0]
+        if (event?.target) event.target.value = ''
+        if (file) await openSavedProject(file)
+    }
 
     // Lot J8-bis (§9.75) : tout fichier écarté est NOMMÉ — le silence de
     // setFiles dès qu'un autre fichier passait était la même famille de
@@ -184,6 +239,17 @@
     const handleSubmit = async (files) => {
         error.value = ''
         if (!files?.length) return
+
+        // Un fichier de projet s'ouvre seul : jamais mêlé à des dessins.
+        const saved = files.filter((f) => /\.nestorcut$/i.test(String(f.name || '')))
+        if (saved.length) {
+            if (saved.length > 1 || saved.length !== files.length) {
+                error.value = t('projectFile.error.one')
+                return
+            }
+            await openSavedProject(saved[0])
+            return
+        }
 
         // Lot J8-bis — les points 22 et 23 du §8.3-ter : la dépose est lue
         // par SIGNATURE (piège #31), pas par extension. Un `.job` déposé en
@@ -395,6 +461,24 @@
             background-color: var(--error-background);
             border: solid 1px var(--error-border);
             border-radius: var(--radius-l);
+        }
+
+        &__open {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 8px 12px;
+            margin-top: 16px;
+        }
+
+        &__open-input {
+            display: none;
+        }
+
+        &__open-hint {
+            font-size: var(--fs-13);
+            color: var(--label-tertiary);
         }
     }
 

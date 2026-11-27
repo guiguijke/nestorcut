@@ -1525,6 +1525,39 @@ function resetLastParams() {
     if (state.nestBusy) state.nestRearmed = true
 }
 
+/**
+ * Fichier de projet `.nestorcut` (note du coffre « Fichier de projet
+ * nestorcut ») : ce que le fichier emporte du projet ouvert. Réglages dans
+ * leur unité, et quantité et rotation de chaque fiche, dans l'ordre affiché.
+ */
+function projectFileSettings() {
+    const state = filesState()
+    return {
+        params: JSON.parse(JSON.stringify(state.params)),
+        paramsUnit: state.paramsUnit,
+        files: (state.projectFiles || []).map((file) => ({
+            slug: file.slug,
+            count: Number(file.count) || 0,
+            rotation: file.rotation ?? null,
+        })),
+    }
+}
+
+/**
+ * Réglages d'onglet d'un projet rouvert depuis un fichier, posés AVANT d'y
+ * naviguer : son chargement les reprend comme ceux d'un projet déjà visité
+ * (setProjectFiles), conversion d'unité comprise.
+ */
+function seedProjectSnapshot(path, snap) {
+    if (!import.meta.client || path == null || !snap) return
+    projectSnapshots.delete(path)
+    projectSnapshots.set(path, snap)
+    if (projectSnapshots.size > PROJECT_SNAPSHOT_MAX) {
+        projectSnapshots.delete(projectSnapshots.keys().next().value)
+    }
+    persistSnapshotsToStorage()
+}
+
 // Client: plain computeds over the tab's singleton, as before. Server: a ref
 // resolved on every read — a module-level computed would cache the first
 // request's state for every later one.
@@ -1610,5 +1643,7 @@ export const filesStore = readonly({
         nest,
         dismissNestUnfit,
         resetLastParams,
+        projectFileSettings,
+        seedProjectSnapshot,
     }
 })

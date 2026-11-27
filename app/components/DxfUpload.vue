@@ -83,17 +83,20 @@ const limitLabel = computed(() => {
 const updateDragStatus = (newValue = true) => {
     isDragOver.value = newValue;
 };
+// Fichier de projet `.nestorcut` (accueil) : il porte plusieurs dessins, la
+// borne d'un dessin ne le vise pas ; sa lecture a ses propres bornes.
+const withinSize = (file) => fileExt(file.name) === '.nestorcut' || file.size <= MAX_UPLOAD_FILE_BYTES
 const setFiles = (newFiles) => {
     const allowed = unref(extensions)
     const typed = newFiles.filter((file) => allowed.includes(fileExt(file.name)))
-    const sized = typed.filter((file) => file.size <= MAX_UPLOAD_FILE_BYTES)
+    const sized = typed.filter(withinSize)
     if (sized.length) emit("files", sized)
     // Lot J8-bis (§9.75) : tout fichier ÉCARTÉ est NOMMÉ, quel que soit le
     // sort des autres. L'ancien code ne disait rien dès qu'UN fichier
     // passait — un .dwg mêlé à un .job disparaissait en silence : la même
     // famille de défaut que le mutisme d'uploadToServer que J8-e a corrigé.
     const wrongType = newFiles.filter((file) => !allowed.includes(fileExt(file.name)))
-    const oversize = typed.filter((file) => file.size > MAX_UPLOAD_FILE_BYTES)
+    const oversize = typed.filter((file) => !withinSize(file))
     if (wrongType.length) emit("rejected", wrongType)
     if (oversize.length) emit("oversize", oversize)
 };
