@@ -4,6 +4,38 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.22
+
+*FR*
+
+- Distance au bord réglable, séparée de l'espacement entre pièces (projets « Cet appareil ») : laissez le champ vide pour garder l'espacement, mettez une valeur positive pour éloigner les pièces du bord, ou négative pour qu'elles puissent en dépasser (au plus la moitié de la plus petite pièce). Elle vaut pour les tôles rectangulaires comme pour les tôles importées ; les zones interdites gardent l'espacement. Les fichiers de coupe gardent le vrai contour de la tôle et le même zéro.
+- Fichier SheetCam .job : sur un calcul de plusieurs tôles, le .job d'une option pouvait reprendre les positions d'une autre option. Chaque option a maintenant le sien.
+
+*EN*
+
+- Adjustable distance to the sheet edge, separate from the spacing between parts ("This device" projects): leave the field empty to keep the spacing, enter a positive value to keep parts further from the edge, or a negative one to let them hang off it (at most half of the smallest part). It works for rectangular and imported sheets; forbidden zones keep the spacing. Cut files keep the real sheet outline and the same zero.
+- SheetCam .job file: in a nesting over several sheets, the .job of one option could carry the positions of another option. Each option now has its own.
+
+*PT*
+
+- Distância à borda ajustável, separada do espaçamento entre peças (projetos "Este dispositivo"): deixe o campo vazio para manter o espaçamento, use um valor positivo para afastar as peças da borda, ou negativo para que possam ultrapassá-la (no máximo metade da menor peça). Vale para chapas retangulares e importadas; as zonas proibidas mantêm o espaçamento. Os arquivos de corte mantêm o contorno real da chapa e o mesmo zero.
+- Arquivo SheetCam .job: num cálculo com várias chapas, o .job de uma opção podia trazer as posições de outra opção. Cada opção agora tem o seu.
+
+*IT*
+
+- Distanza dal bordo regolabile, separata dalla distanza tra i pezzi (progetti "Questo dispositivo"): lascia il campo vuoto per mantenere la distanza tra i pezzi, inserisci un valore positivo per allontanare i pezzi dal bordo, o negativo per lasciarli sporgere (al massimo metà del pezzo più piccolo). Vale per le lamiere rettangolari e importate; le zone vietate mantengono la distanza tra i pezzi. I file di taglio mantengono il contorno reale della lamiera e lo stesso zero.
+- File SheetCam .job: in un calcolo su più lamiere, il .job di un'opzione poteva riprendere le posizioni di un'altra opzione. Ora ogni opzione ha il suo.
+
+*DE*
+
+- Einstellbarer Randabstand, getrennt vom Abstand zwischen den Teilen (Projekte "Dieses Gerät"): Feld leer lassen, um den Teileabstand zu behalten, einen positiven Wert eingeben, um die Teile weiter vom Rand fernzuhalten, oder einen negativen, damit sie überstehen dürfen (höchstens die Hälfte des kleinsten Teils). Gilt für rechteckige und importierte Bleche; Sperrzonen behalten den Teileabstand. Die Schnittdateien behalten die echte Blechkontur und denselben Nullpunkt.
+- SheetCam-.job-Datei: Bei einer Berechnung über mehrere Bleche konnte die .job-Datei einer Option die Positionen einer anderen Option enthalten. Jede Option hat jetzt ihre eigene.
+
+*ES*
+
+- Distancia al borde ajustable, separada de la separación entre piezas (proyectos "Este dispositivo"): deja el campo vacío para mantener la separación, pon un valor positivo para alejar las piezas del borde, o negativo para que puedan sobresalir (como máximo la mitad de la pieza más pequeña). Vale para chapas rectangulares e importadas; las zonas prohibidas mantienen la separación. Los archivos de corte mantienen el contorno real de la chapa y el mismo cero.
+- Archivo SheetCam .job: en un cálculo con varias chapas, el .job de una opción podía llevar las posiciones de otra opción. Ahora cada opción tiene el suyo.
+
 ## V0.9.21
 
 *FR*
