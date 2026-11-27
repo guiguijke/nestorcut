@@ -35,6 +35,8 @@ import {
     reportSheetShapes,
     binShapeForDxf,
     sheetDims,
+    finishToReal,
+    toServerShapeAlternatives,
 } from '../composables/localBridge'
 import { frameFitsSheet, liveUsedLength } from '../utils/liveJob'
 import { liveShapeTable } from '../utils/sheetDraw'
@@ -393,6 +395,55 @@ describe('applySpacingMargin : l’écart au bord perd la marge, sans plancher',
         const r = { verify: { smallestGapMm: 2.1, spacingOk: true, edgeGapMm: 1, edgeOk: true } }
         applySpacingMargin(r, 0.08, 2)
         expect(r.verify.edgeGapMm).toBe(1)
+    })
+})
+
+describe('trace « dernière tôle » (finish) : fronts dans le repère réel', () => {
+    const fin = () => ({
+        sheet: 1, bias: 'left', kept: 'spp', reason: '',
+        before: { xMin: 0, yMin: 0, xMax: 1502, yMax: 900 },
+        after: { xMin: 0, yMin: 0, xMax: 1282, yMax: 900 },
+    })
+    const altWith = (finish) => ({ problem: 'bpp', alternatives: [{ rank: 0, bias: 'left', finish, solution: { layouts: [{ container_id: 0, placed_items: [place(0, 2, 2)] }] } }] })
+    const art = { sheets: [], containers: [], report: null }
+
+    it('bord 20 (d = 18) : avant/après décalés de d, COPIE (le moteur garde les siens)', () => {
+        const raw = fin()
+        const shown = toServerShapeAlternatives(altWith(raw), rectPayload(20), [art])[0].finish
+        expect(shown.before.xMax).toBe(1520)
+        expect(shown.after.xMax).toBe(1300)
+        expect(shown.before.yMax).toBe(918)
+        expect(shown.before.xMin).toBe(18)
+        expect(shown.kept).toBe('spp')
+        // Copie : l'objet du moteur n'a pas bougé, un second passage ne décale pas deux fois.
+        expect(raw.before.xMax).toBe(1502)
+        expect(toServerShapeAlternatives(altWith(raw), rectPayload(20), [art])[0].finish.before.xMax).toBe(1520)
+        // Bord négatif : les fronts réels sont plus courts.
+        expect(finishToReal(fin(), -7).after.xMax).toBe(1275)
+    })
+
+    it('sans distance au bord : le même objet, rien de décalé', () => {
+        const raw = fin()
+        const payload = rectPayload(2)
+        for (const k of ['requestedEdge', 'edgeShift', 'sheetFrames']) delete payload[k]
+        expect(toServerShapeAlternatives(altWith(raw), payload, [art])[0].finish).toBe(raw)
+        expect(finishToReal(raw, 0)).toBe(raw)
+        expect(finishToReal(null, 18)).toBe(null)
+        expect(toServerShapeAlternatives(altWith(undefined), rectPayload(20), [art])[0].finish).toBe(null)
+    })
+
+    it('alternative sautée (sans layout) : l’index source suit, jamais le rang', () => {
+        const result = {
+            problem: 'bpp',
+            alternatives: [
+                { rank: 0, bias: 'left', solution: { layouts: [] } },
+                { rank: 1, bias: 'bottom', solution: { layouts: [{ container_id: 0, placed_items: [place(0, 2, 2)] }] } },
+            ],
+        }
+        const sourceIndex = []
+        const out = toServerShapeAlternatives(result, rectPayload(10), [art, art], sourceIndex)
+        expect(out.map((a) => a.strategy)).toEqual(['bottom'])
+        expect(sourceIndex).toEqual([1])
     })
 })
 

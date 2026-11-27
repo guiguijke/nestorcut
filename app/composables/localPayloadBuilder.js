@@ -719,11 +719,17 @@ function metaSlots(inputItems, hostId, fillId, capacity) {
 // les pièces à e du bord, on lui donne une tôle décalée de d = e − s (`edgeShiftMm`,
 // la marge de courbes s'ajoute aux deux et s'annule dans d) :
 //   - rectangle : (W − 2d) × (H − 2d) à l'origine ; bande : hauteur H − 2d,
-//     largeur maximale W − 2d ;
+//     largeur maximale W − 2d. Ces longueurs sont arrondies PAR DÉFAUT au
+//     flottant 32 bits (le moteur les lit en f32) : jamais plus de place que la
+//     vraie limite ;
 //   - tôle importée : contour EXTÉRIEUR décalé de −d (vers l'extérieur si
 //     d < 0, vers l'intérieur si d > 0, `deps.offsetRing`), zones et défauts NON
 //     décalés (ils gardent l'espacement), puis tous les anneaux translatés de
-//     (−d, −d).
+//     (−d, −d). Vers l'extérieur, les creux que le décalage referme en laissant
+//     un vide (cavité à bouche étroite) partent au moteur comme zones
+//     interdites : ceux du décalage moteur (−d) et, bord négatif, ceux du
+//     décalage du bord demandé |e| (de quoi aucune pièce ne couvre un point à
+//     plus de |e| de la matière).
 // Une seule translation pour toutes les tôles : une pose moteur (x, y) vaut
 // (x + d, y + d) sur la vraie tôle (rotation inchangée : la translation vient
 // après la rotation autour de l'origine). d = 0 : rien de ce bloc ne tourne,
@@ -747,6 +753,20 @@ function edgeRefusal(code, detail) {
 
 /** Arrondi PAR DÉFAUT au centième : la valeur annoncée doit passer. */
 const floorCenti = (x) => Math.floor(x * 100 + 1e-9) / 100
+
+const F32_BOX = new Float32Array(1)
+const F32_BITS = new Int32Array(F32_BOX.buffer)
+/** Plus grand flottant 32 bits ≤ x : le moteur lit ses longueurs en f32, et
+ * `Math.fround` arrondit au plus proche (W − 2d = 3002,6 deviendrait 3002,6001). */
+export function f32AtOrBelow(x) {
+    const f = Math.fround(x)
+    if (!(f > x)) return f
+    F32_BOX[0] = f
+    // f > x : f ne peut pas être le plus petit flottant ; un cran vers −∞.
+    F32_BITS[0] += f > 0 ? -1 : (f < 0 ? 1 : 0)
+    if (f === 0) F32_BITS[0] = -2147483647 // −0 > x : le plus petit négatif dénormal
+    return F32_BOX[0]
+}
 
 function ringBounds(ring) {
     let minX = Infinity
@@ -822,10 +842,55 @@ function closedFiniteRing(ring) {
     return pts
 }
 
-/** Plus grande distance au bord DEMANDÉE (mm) qui laisse chaque pièce tenir
- * dans au moins une tôle active (boîte tournée, w + 2e ≤ W et h + 2e ≤ H), et
- * chaque tôle active non dégénérée. Convention demandée : marge de courbes ôtée. */
-function maxEdgeForFit(inputItems, sheets, margin) {
+/** Contour CONVEXE (aucun sommet rentrant, au bruit numérique près) : son
+ * décalage vers l'extérieur n'enferme jamais de vide (la somme d'un convexe et
+ * d'un disque est convexe). Anneau fermé ou non, sens quelconque ; illisible :
+ * faux (le calcul complet tranche). */
+function ringIsConvex(ring) {
+    if (!Array.isArray(ring)) return false
+    const pts = []
+    for (const p of ring) {
+        const x = Number(p?.[0])
+        const y = Number(p?.[1])
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false
+        const last = pts[pts.length - 1]
+        if (!last || last[0] !== x || last[1] !== y) pts.push([x, y])
+    }
+    if (pts.length > 1 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) pts.pop()
+    const n = pts.length
+    if (n < 3) return false
+    let area2 = 0
+    for (let i = 0; i < n; i++) {
+        const a = pts[i]
+        const b = pts[(i + 1) % n]
+        area2 += a[0] * b[1] - b[0] * a[1]
+    }
+    const sign = Math.sign(area2)
+    if (!sign) return false
+    for (let i = 0; i < n; i++) {
+        const a = pts[(i + n - 1) % n]
+        const b = pts[i]
+        const c = pts[(i + 1) % n]
+        const ux = b[0] - a[0]
+        const uy = b[1] - a[1]
+        const vx = c[0] - b[0]
+        const vy = c[1] - b[1]
+        if ((ux * vy - uy * vx) * sign < -1e-9 * Math.hypot(ux, uy) * Math.hypot(vx, vy)) return false
+    }
+    return true
+}
+
+/** Vides rendus par `offsetRing` (`keepVoids`) : anneaux fermés et finis. */
+function offsetVoidsOf(res) {
+    return (Array.isArray(res?.voids) ? res.voids : []).map(closedFiniteRing).filter(Boolean)
+}
+
+/** Plus grande distance au bord DEMANDÉE (mm, non arrondie) que les BOÎTES
+ * permettent : chaque pièce tient dans au moins une tôle active (boîte tournée,
+ * w + 2e ≤ W et h + 2e ≤ H) et chaque tôle active reste non dégénérée.
+ * Convention demandée : marge de courbes ôtée. Exacte pour des rectangles ;
+ * pour une tôle importée, la boîte du contour n'en est qu'une borne HAUTE. */
+function edgeBoxBound(inputItems, sheets, margin) {
     const active = sheets.filter((s) => (Number(s.count) || 0) > 0)
     const pool = active.length ? active : sheets
     let bound = Infinity
@@ -842,36 +907,142 @@ function maxEdgeForFit(inputItems, sheets, margin) {
         }
         bound = Math.min(bound, best)
     }
-    return Math.max(0, floorCenti(bound - margin))
+    return bound - margin
+}
+
+/** Tôles rectangulaires : la plus grande distance au bord DEMANDÉE (mm) qui
+ * passe, arrondie PAR DÉFAUT au centième (`edgeBoxBound` y est exacte). */
+function maxEdgeForFit(inputItems, sheets, margin) {
+    return Math.max(0, floorCenti(edgeBoxBound(inputItems, sheets, margin)))
+}
+
+/** Le job se construit-il avec la distance au bord DEMANDÉE `e` ? Mêmes tôles
+ * moteur (vrai décalage du contour) et même garde « chaque pièce tient » que le
+ * constructeur. Ne lève jamais : un refus quelconque vaut « non ». */
+async function edgeBuilds(ctx, e) {
+    const d = edgeShiftMm(ctx.requestedSpace, e)
+    let engine = ctx.sheets
+    if (d !== 0) {
+        try {
+            engine = await edgeEngineSheets({ ...ctx, requestedEdge: e, d, probe: true })
+        } catch {
+            return false
+        }
+    }
+    return ctx.inputItems.every((item) => itemFitsSheets(item.coords, item.rotations, engine, ctx.space).fits)
+}
+
+/** Recherche du bord maximal d'une tôle importée : pas au plus, et largeur
+ * d'intervalle où l'on s'arrête (mm). */
+const EDGE_SEARCH_MAX_STEPS = 14
+const EDGE_SEARCH_TOL_MM = 0.005
+
+/**
+ * Plus grande distance au bord DEMANDÉE (mm, arrondie par défaut au centième)
+ * avec laquelle le job se construit quand une tôle importée est en jeu : la
+ * boîte du contour n'en donne qu'une borne haute, parfois très loin du vrai
+ * maximum (tôle ronde, en L). Bissection entre l'espacement (d = 0 : les vraies
+ * tôles) et min(bord demandé, borne des boîtes), avec le VRAI décalage, puis
+ * contrôle que la valeur annoncée se construit. null quand rien ne se trouve :
+ * le refus part sans chiffre, jamais avec un maximum refusé à nouveau.
+ * Chemin d'erreur seulement (une douzaine de décalages par tôle importée).
+ */
+async function maxEdgeBySearch(ctx, requestedEdge) {
+    let lo = Number(ctx.requestedSpace) || 0
+    if (!(await edgeBuilds(ctx, lo))) return null
+    const hi0 = Math.min(Number(requestedEdge), edgeBoxBound(ctx.inputItems, ctx.sheets, ctx.margin))
+    if (Number.isFinite(hi0) && hi0 > lo) {
+        let hi = hi0
+        if (await edgeBuilds(ctx, hi)) {
+            lo = hi
+        } else {
+            for (let k = 0; k < EDGE_SEARCH_MAX_STEPS && hi - lo > EDGE_SEARCH_TOL_MM; k++) {
+                const mid = (lo + hi) / 2
+                if (await edgeBuilds(ctx, mid)) lo = mid
+                else hi = mid
+            }
+        }
+    }
+    const announced = Math.max(0, floorCenti(lo))
+    return (await edgeBuilds(ctx, announced)) ? announced : null
+}
+
+/** Détail du refus `edge_too_large` : { maxEdgeMm } (valeur qui passe, au
+ * centième par défaut), ou {} quand aucune valeur sûre n'est connue (jamais un
+ * maximum que l'utilisateur ne pourrait pas retaper). */
+async function edgeTooLargeDetail(ctx, requestedEdge) {
+    const active = ctx.sheets.filter((s) => (Number(s.count) || 0) > 0)
+    if ((active.length ? active : ctx.sheets).some((s) => s.shaped)) {
+        const v = await maxEdgeBySearch(ctx, requestedEdge)
+        return v === null ? {} : { maxEdgeMm: v }
+    }
+    // Rectangles : la borne des boîtes est exacte ; le contrôle couvre l'arrondi
+    // f32 des longueurs moteur (un centième de moins quand il mord).
+    const v = maxEdgeForFit(ctx.inputItems, ctx.sheets, ctx.margin)
+    for (const c of [v, Math.round((v - 0.01) * 100) / 100]) {
+        if (c >= 0 && await edgeBuilds(ctx, c)) return { maxEdgeMm: c }
+    }
+    return {}
+}
+
+/**
+ * Surplomb maximal (mm) d'une distance au bord négative, et la pièce qui le
+ * limite : la moitié du plus petit côté de la boîte de chaque PIÈCE PHYSIQUE
+ * (chaque pièce d'un bloc, pas l'enveloppe du bloc), au plus petit sur ses
+ * rotations permises (les deux sens : celui du moteur n'est pas garanti pour
+ * une liste libre). Une pièce au-delà serait posable entièrement hors de la
+ * tôle ; même en deçà, une pièce creuse (équerre, L) peut n'y avoir presque
+ * plus de matière : le rapport la signale (moins de 1 % de sa matière sur la
+ * tôle = hors de la tôle).
+ */
+function overhangCapOf(inputItems) {
+    let cap = Infinity
+    let limiting = null
+    for (const item of inputItems) {
+        if (!((Number(item.count) || 0) > 0)) continue
+        const rots = item.rotations?.length ? item.rotations : [0]
+        const bodies = item.blockParts?.length ? item.blockParts.map((bp) => bp.coords) : [item.coords]
+        for (const ring of bodies) {
+            if (!Array.isArray(ring) || ring.length < 3) continue
+            let side = Infinity
+            for (const angle of rots) {
+                const a = Number(angle) || 0
+                for (const sgn of a === 0 ? [1] : [1, -1]) {
+                    const [w, h] = rotatedBBoxSize(ring, sgn * a)
+                    side = Math.min(side, w, h)
+                }
+            }
+            if (side / 2 < cap) {
+                cap = side / 2
+                limiting = item.file_slug
+            }
+        }
+    }
+    return { cap, limiting }
 }
 
 /**
  * Tôles MOTEUR d'un job à distance au bord (d ≠ 0), alignées index par index
  * sur `sheets` (les vraies tôles). Refuse AVANT tout calcul lourd :
- * surplomb plus grand que la moitié de la plus petite pièce
- * (`edge_overhang_too_large`), tôle moteur vide (`edge_too_large`), décalage
- * du contour impossible (`edge_offset_failed` — jamais de repli sur le contour
- * non décalé).
+ * surplomb plus grand que permis (`edge_overhang_too_large`, `overhangCapOf`),
+ * tôle moteur vide (`edge_too_large`), décalage du contour impossible
+ * (`edge_offset_failed` — jamais de repli sur le contour non décalé).
+ * `probe` (recherche du bord maximal) : les refus partent sans chiffre.
+ * Une tôle importée dont le décalage vers l'extérieur a été raccourci porte
+ * `shaped.edgeAppliedMm` : le bord effectivement tenu (mm, demandé).
  */
-async function edgeEngineSheets({ sheets, inputItems, files, requestedEdge, margin, d, deps }) {
+async function edgeEngineSheets(ctx) {
+    const { sheets, inputItems, files, requestedEdge, d, deps, probe = false } = ctx
+    const requestedSpace = Number(ctx.requestedSpace) || 0
     const nameOf = (slug) => (files || []).find((f) => f.slug === slug)?.name || slug
-    // Surplomb : |e| ≤ min sur les pièces de min(largeur, hauteur) / 2 (boîte de
-    // l'item : un bloc compte pour sa boîte, comme la garde de la page).
+    const tooLarge = async () => (probe
+        ? new Error('edge_too_large')
+        : edgeRefusal('edge_too_large', await edgeTooLargeDetail(ctx, requestedEdge)))
     if (requestedEdge < 0) {
-        let maxOverhang = Infinity
-        let limiting = null
-        for (const item of inputItems) {
-            if (!((Number(item.count) || 0) > 0)) continue
-            const [w, h] = ringBBoxSize(item.coords)
-            const m = Math.min(w, h) / 2
-            if (m < maxOverhang) {
-                maxOverhang = m
-                limiting = item.file_slug
-            }
-        }
-        if (Number.isFinite(maxOverhang) && -requestedEdge > maxOverhang + 1e-9) {
+        const { cap, limiting } = overhangCapOf(inputItems)
+        if (Number.isFinite(cap) && -requestedEdge > cap + 1e-9) {
             throw edgeRefusal('edge_overhang_too_large', {
-                maxOverhangMm: Math.floor(maxOverhang * 100 + 1e-9) / 100,
+                maxOverhangMm: floorCenti(cap),
                 part: nameOf(limiting),
             })
         }
@@ -881,13 +1052,13 @@ async function edgeEngineSheets({ sheets, inputItems, files, requestedEdge, marg
     const active = sheets.filter((s) => (Number(s.count) || 0) > 0)
     if (d > 0 && (active.length ? active : sheets).some((s) =>
         !(Number(s.width) - 2 * d > 0) || !(Number(s.height) - 2 * d > 0))) {
-        throw edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, margin) })
+        throw await tooLarge()
     }
     const offsets = new Map()
     const out = []
     for (const s of sheets) {
         if (!s.shaped) {
-            out.push({ width: s.width - 2 * d, height: s.height - 2 * d, count: s.count })
+            out.push({ width: f32AtOrBelow(s.width - 2 * d), height: f32AtOrBelow(s.height - 2 * d), count: s.count })
             continue
         }
         let engine = offsets.get(s.shaped)
@@ -895,52 +1066,86 @@ async function edgeEngineSheets({ sheets, inputItems, files, requestedEdge, marg
             if (typeof deps.offsetRing !== 'function') {
                 throw edgeRefusal('edge_offset_failed', { reason: 'offset_unavailable' })
             }
-            // Contour rentré qui disparaît (bord plus grand que la tôle ne le
-            // permet) : c'est un bord trop grand, dit comme pour un rectangle.
-            const tooLarge = () => edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, margin) })
+            const reasonOf = (e) => String(e?.code || e?.message || e || 'offset_failed').slice(0, 120)
+            // Vers l'extérieur, les vides enfermés sont DEMANDÉS (zones interdites
+            // du moteur), jamais un refus ; vers l'intérieur il n'y en a pas.
             let res
             try {
-                res = await deps.offsetRing(s.shaped.outer, -d)
+                res = d < 0
+                    ? await deps.offsetRing(s.shaped.outer, -d, { keepVoids: true })
+                    : await deps.offsetRing(s.shaped.outer, -d)
             } catch (e) {
-                const reason = String(e?.code || e?.message || e || 'offset_failed').slice(0, 120)
-                if (d > 0 && reason === 'offset_empty') throw tooLarge()
+                const reason = reasonOf(e)
+                // Contour rentré qui disparaît (bord plus grand que la tôle ne le
+                // permet) : c'est un bord trop grand, dit comme pour un rectangle.
+                if (d > 0 && reason === 'offset_empty') throw await tooLarge()
                 throw edgeRefusal('edge_offset_failed', { reason })
             }
             const ring = closedFiniteRing(res?.ring)
             if (!ring) {
-                if (d > 0) throw tooLarge()
+                if (d > 0) throw await tooLarge()
                 throw edgeRefusal('edge_offset_failed', { reason: 'offset_empty' })
             }
             // Repli du décalage (distance appliquée plus petite que demandée) :
-            // vers l'extérieur il ne fait que réduire le dépassement (prudent) ;
-            // vers l'intérieur il rapprocherait les pièces du bord — refus.
+            // vers l'intérieur il rapprocherait les pièces du bord — refus ; vers
+            // l'extérieur il ne fait que réduire le dépassement (prudent), et le
+            // bord effectivement tenu (espacement − distance appliquée) est dit.
             const applied = Number(res?.appliedDistanceMm ?? res?.applied_distance_mm)
             if (d > 0 && Number.isFinite(applied) && applied > -d + 1e-6) {
                 throw edgeRefusal('edge_offset_failed', { reason: 'offset_short' })
             }
+            const edgeApplied = d < 0 && Number.isFinite(applied) && applied < -d - 1e-6
+                ? requestedSpace - Math.max(0, applied)
+                : null
+            // Vides du décalage moteur ; bord négatif : aussi ceux du décalage
+            // du bord DEMANDÉ |e| (sans marge de courbes : du côté sûr). Un point
+            // d'un tel vide est à plus de |e| de la matière et enfermé : sans
+            // zone, une pièce pourrait le couvrir sans qu'aucune de ses arêtes
+            // n'y entre. Contour convexe : aucun vide possible, pas d'appel.
+            const engineVoids = d < 0 ? offsetVoidsOf(res) : []
+            let edgeVoids = []
+            if (requestedEdge < 0 && !ringIsConvex(s.shaped.outer)) {
+                let near
+                try {
+                    near = await deps.offsetRing(s.shaped.outer, -requestedEdge, { keepVoids: true })
+                } catch (e) {
+                    throw edgeRefusal('edge_offset_failed', { reason: reasonOf(e) })
+                }
+                edgeVoids = offsetVoidsOf(near)
+            }
+            // Un vide du décalage moteur contenu dans un vide du bord demandé
+            // n'apporte rien (il est plus petit) : une seule zone.
+            const voids = [
+                ...edgeVoids,
+                ...engineVoids.filter((v) => !edgeVoids.some((ev) => v.every((p) => pointInRing(p, ev)))),
+            ].map((r) => r.map(([x, y]) => [x - d, y - d]))
             const outer = ring.map(([x, y]) => [x - d, y - d])
             const innerAll = (s.shaped.inner || []).map((r) => r.map(([x, y]) => [x - d, y - d]))
             const kept = []
             const dropped = []
             for (const r of innerAll) (ringEntirelyOutside(r, outer) ? dropped : kept).push(r)
+            const inner = voids.length ? [...kept, ...voids] : kept
             const [x0, y0, x1, y1] = ringBounds(outer)
             // Aire utile moteur : l'aire utile réelle, plus ce que le décalage
             // ajoute (ou retire) au contour, plus les zones abandonnées (déjà
-            // ôtées de l'aire réelle, et hors de la bande que le décalage retire).
+            // ôtées de l'aire réelle, et hors de la bande que le décalage retire),
+            // moins les vides devenus zones (hors de la vraie tôle, dans l'anneau).
             const usable = Math.min(
                 ringAreaAbs(outer),
                 Math.max(0, Number(s.shaped.usableAreaMm2)
                     + ringAreaAbs(outer) - ringAreaAbs(s.shaped.outer)
-                    + dropped.reduce((a, r) => a + ringAreaAbs(r), 0)),
+                    + dropped.reduce((a, r) => a + ringAreaAbs(r), 0)
+                    - voids.reduce((a, r) => a + ringAreaAbs(r), 0)),
             )
             engine = {
                 outer,
-                inner: kept,
+                inner,
                 widthMm: x1 - x0,
                 heightMm: y1 - y0,
                 usableAreaMm2: usable,
-                perimeterMm: ringLength(outer) + kept.reduce((a, r) => a + ringLength(r), 0),
+                perimeterMm: ringLength(outer) + inner.reduce((a, r) => a + ringLength(r), 0),
                 ...(Number(res?.pieces) > 1 ? { lostAreaMm2: Number(res.lostAreaMm2 ?? res.lost_area_mm2) || 0 } : {}),
+                ...(edgeApplied !== null ? { edgeAppliedMm: edgeApplied } : {}),
             }
             offsets.set(s.shaped, engine)
         }
@@ -978,9 +1183,11 @@ function sheetFrameOf(sheet) {
  *                              demandée) ; null / absente = comme l'espacement.
  * @param {object} deps         { openHoles, pinwheelCapacity } — async, voir
  *                              l'en-tête (geoClient en prod, stubs en test).
- *                              `offsetRing(ring, distanceMm)` → { ring, pieces,
- *                              lostAreaMm2 } (distance positive = vers
- *                              l'extérieur) : seulement pour une tôle importée
+ *                              `offsetRing(ring, distanceMm, opts?)` → { ring,
+ *                              pieces, lostAreaMm2, appliedDistanceMm, voids }
+ *                              (distance positive = vers l'extérieur ; `opts`
+ *                              { keepVoids: true } vers l'extérieur, à
+ *                              transmettre) : seulement pour une tôle importée
  *                              à distance au bord réglée.
  * @returns {Promise<{ payload: { problem, instance, meta, engineConfig,
  *   parts, outputUnit, addOutShape }, seed: string, itemMap: Array }>}
@@ -1259,11 +1466,19 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     const requestedEdge = edgeRequestOf(params)
     const edgeShift = edgeShiftMm(requestedSpace, requestedEdge)
     const curveMargin0 = space - requestedSpace
+    // Contexte des tôles moteur et des refus chiffrés (le bord maximal d'une tôle
+    // importée se cherche avec les mêmes tôles et la même garde).
+    const edgeCtx = { sheets, inputItems, files, margin: curveMargin0, deps, requestedSpace, space }
     const engineSheets = edgeShift === 0
         ? sheets
-        : await edgeEngineSheets({
-            sheets, inputItems, files, requestedEdge, margin: curveMargin0, d: edgeShift, deps,
-        })
+        : await edgeEngineSheets({ ...edgeCtx, requestedEdge, d: edgeShift })
+    // Décalage vers l'extérieur raccourci sur une tôle importée utilisée : le
+    // bord effectivement tenu (le plus éloigné du demandé), sinon null.
+    const edgeAppliedMm = edgeShift < 0
+        ? engineSheets.reduce((m, s) => ((Number(s.count) || 0) > 0 && Number.isFinite(s.shaped?.edgeAppliedMm)
+            ? Math.max(m ?? -Infinity, s.shaped.edgeAppliedMm)
+            : m), null)
+        : null
 
     // c) Feasibility pre-check : une pièce dont la bbox (+ l'espacement,
     //    appliqué par le moteur de chaque côté) ne rentre dans AUCUNE tôle
@@ -1286,7 +1501,7 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
     if (unplaceable.length && edgeShift > 0) {
         const failing = inputItems.filter((item) => !itemFitsSheets(item.coords, item.rotations, engineSheets, space).fits)
         if (failing.every((item) => itemFitsSheets(item.coords, item.rotations, sheets, space).fits)) {
-            throw edgeRefusal('edge_too_large', { maxEdgeMm: maxEdgeForFit(inputItems, sheets, curveMargin0) })
+            throw edgeRefusal('edge_too_large', await edgeTooLargeDetail(edgeCtx, requestedEdge))
         }
     }
     if (unplaceable.length) {
@@ -1720,9 +1935,11 @@ export async function buildLocalPayload({ files, params = {}, profile = {} }, de
         // Distance au bord (d ≠ 0 seulement — aucune clé sinon) : bord DEMANDÉ
         // (mm), décalage moteur d, et le repère RÉEL de chaque conteneur moteur
         // (vraies dimensions ; vrais anneaux d'une tôle importée). Une pose
-        // moteur (x, y) vaut (x + d, y + d) sur la vraie tôle.
+        // moteur (x, y) vaut (x + d, y + d) sur la vraie tôle. `edgeAppliedMm` :
+        // seulement quand le décalage vers l'extérieur d'une tôle importée a été
+        // raccourci (bord effectivement tenu, mm), pour le dire à l'écran.
         ...(edgeShift !== 0
-            ? { requestedEdge, edgeShift, sheetFrames }
+            ? { requestedEdge, edgeShift, sheetFrames, ...(edgeAppliedMm !== null ? { edgeAppliedMm } : {}) }
             : {}),
     }
     // Enveloppe de l'anneau ORIGINAL de chaque pièce simple (id -> anneau) : à part

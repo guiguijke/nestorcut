@@ -137,13 +137,30 @@ describe('firstPartFittingNoSheet(…, edgeMm) — C10', () => {
 })
 
 describe('maxOverhangMm — moitié de la plus petite dimension', () => {
-    it('fichiers du projet : min sur les pièces de min(w, h) / 2, bloc = sa boîte, quantité 0 ignorée', () => {
+    it('fichiers du projet : min sur les pièces de min(w, h) / 2, quantité 0 ignorée', () => {
         const files = [
             { name: 'a', count: 2, parts: [{ width: 100, height: 60 }, { width: 30, height: 80 }] },
             { name: 'b', count: 0, parts: [{ width: 2, height: 2 }] },
-            { name: 'c', count: 1, block: { width: 50, height: 24 }, parts: [{ width: 4, height: 4 }] },
+            { name: 'c', count: 1, block: { width: 50, height: 24 }, parts: [{ width: 50, height: 24 }, { width: 40, height: 30 }] },
         ]
         expect(maxOverhangMm(files)).toBe(12)
+    })
+    it('bloc : chaque PIÈCE compte, pas la boîte du bloc (relecture 27/11, R2)', () => {
+        const files = [{ name: 'c', count: 1, block: { width: 50, height: 24 }, parts: [{ width: 50, height: 4 }, { width: 40, height: 20 }] }]
+        expect(maxOverhangMm(files)).toBe(2)
+        // Bloc sans pièces mesurables : sa boîte, à défaut.
+        expect(maxOverhangMm([{ name: 'd', count: 1, block: { width: 50, height: 24 }, parts: [] }])).toBe(12)
+    })
+    it('rotations permises hors quart de tour : borne haute du côté tourné, jamais plus stricte que le constructeur', () => {
+        // Barre 100 × 4 : aux quarts de tour, 2 ; à 45° seulement, la boîte tournée
+        // d'un rectangle 100 × 4 fait (100 + 4) / √2 de côté : le constructeur, qui
+        // tourne le vrai contour, ne peut pas trouver plus.
+        const bar = (rotation) => [{ name: 'barre', count: 1, rotation, parts: [{ width: 100, height: 4 }] }]
+        expect(maxOverhangMm(bar('[0,90]'))).toBe(2)
+        expect(maxOverhangMm(bar('[45]'))).toBeCloseTo(104 / Math.SQRT2 / 2, 9)
+        expect(maxOverhangMm(bar('[0,45]'))).toBe(2)
+        // Réglage global : 8 rotations (0° comprise).
+        expect(maxOverhangMm([{ name: 'barre', count: 1, parts: [{ width: 100, height: 4 }] }], { rotationCount: 8 })).toBe(2)
     })
     it('liste de pièces { width, height }', () => {
         expect(maxOverhangMm([{ width: 10, height: 7 }, { width: 9, height: 20 }])).toBe(3.5)

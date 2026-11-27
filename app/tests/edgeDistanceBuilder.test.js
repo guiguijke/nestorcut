@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildLocalPayload, computeSpacingMargin } from '../composables/localPayloadBuilder'
+import { buildLocalPayload, computeSpacingMargin, f32AtOrBelow } from '../composables/localPayloadBuilder'
+import { edgeAppliedFields } from '../composables/localJobPrivate'
 import { capacityReport } from '../composables/capacityClient'
 import { makeSheetRecord, ringArea, ringBbox } from '../utils/sheetShape'
 
@@ -314,5 +315,227 @@ describe('tôle importée : contour EXTÉRIEUR décalé de −d, zones gardées 
         const err = await build({ sheets: shapedSheets, space: 2, edgeDistance: 10 }, { files, deps }).catch((e) => e)
         expect(err.message).toBe('edge_too_large')
         expect(err.__edge).toEqual({ maxEdgeMm: 5 })
+    })
+})
+
+// ---------------------------------------------------------------------------
+// Relecture du 27/11/2026
+// ---------------------------------------------------------------------------
+
+describe('rectangle et bande : longueurs moteur arrondies PAR DÉFAUT au flottant 32 bits', () => {
+    const below = (v, limit) => {
+        expect(Math.fround(v)).toBe(v)
+        expect(v).toBeLessThanOrEqual(limit)
+        // Le flottant 32 bits suivant dépasserait la limite.
+        const next = new Float32Array([v])
+        new Int32Array(next.buffer)[0] += v >= 0 ? 1 : -1
+        expect(next[0]).toBeGreaterThan(limit)
+    }
+
+    it('f32AtOrBelow : exact si représentable, sinon le flottant juste en dessous', () => {
+        expect(f32AtOrBelow(984)).toBe(984)
+        below(f32AtOrBelow(3002.6), 3002.6)
+        below(f32AtOrBelow(984.1), 984.1)
+        expect(f32AtOrBelow(-7.3)).toBeLessThanOrEqual(-7.3)
+        expect(Math.fround(f32AtOrBelow(-7.3))).toBe(f32AtOrBelow(-7.3))
+        expect(Math.fround(3002.6)).toBeGreaterThan(3002.6) // le piège : fround arrondit au plus proche
+    })
+
+    it('multi-tôles 1000,1 × 500,3, bord 10 : conteneur ≤ W − 2d et H − 2d, jamais au-dessus', async () => {
+        const { payload } = await build({ sheets: [{ width: 1000.1, height: 500.3, count: 2 }], space: 2, directions: null, edgeDistance: 10 })
+        const [w, h] = payload.instance.bins[0].shape.data.outer[2]
+        below(w, 1000.1 - 16)
+        below(h, 500.3 - 16)
+        expect(payload.sheetFrames).toEqual([{ width: 1000.1, height: 500.3 }])
+    })
+
+    it('maximum annoncé : un centième de moins quand l’arrondi f32 refuserait la borne exacte', async () => {
+        // 1000,3 − 900,3 = 100 : borne exacte 50, mais à d = 48 la largeur moteur
+        // 904,3 devient 904,29998 en f32 et la pièce (900,3 + 2 × 2) ne tient plus.
+        const files = [fileOf(1, 900.3, 1900)]
+        const sheets = [{ width: 1000.3, height: 2000, count: 3 }]
+        const err = await build({ sheets, space: 2, directions: null, edgeDistance: 60 }, { files }).catch((e) => e)
+        expect(err.message).toBe('edge_too_large')
+        expect(err.__edge).toEqual({ maxEdgeMm: 49.99 })
+        const ok = await build({ sheets, space: 2, directions: null, edgeDistance: 49.99 }, { files })
+        expect(ok.payload.edgeShift).toBeCloseTo(47.99, 9)
+        const at50 = await build({ sheets, space: 2, directions: null, edgeDistance: 50 }, { files }).catch((e) => e)
+        expect(at50.message).toBe('edge_too_large')
+    })
+
+    it('bande 1000,1 × 2000,3, bord −5,15 : strip_height et max_strip_width arrondis par défaut', async () => {
+        const { payload } = await build({ sheets: [{ width: 1000.1, height: 2000.3, count: 1 }], space: 2, edgeDistance: -5.15 })
+        expect(payload.problem).toBe('spp')
+        below(payload.instance.strip_height, 2000.3 + 2 * 7.15)
+        below(payload.engineConfig.max_strip_width, 1000.1 + 2 * 7.15)
+    })
+})
+
+describe('surplomb maximal : par PIÈCE physique, au plus petit sur les rotations permises (R2)', () => {
+    it('bloc : la pièce fine du bloc limite, pas la boîte du bloc', async () => {
+        const block = {
+            slug: 'bloc.dxf', name: 'Bloc.dxf', count: 1, rotations: [0, 90],
+            parts: [
+                { coordinates: rect(0, 0, 100, 60), holes: [], handles: ['A'], color: null },
+                { coordinates: rect(0, 80, 100, 86), holes: [], handles: ['B'], color: null },
+            ],
+        }
+        const err = await build({ ...bpp, edgeDistance: -4 }, { files: [block] }).catch((e) => e)
+        expect(err.message).toBe('edge_overhang_too_large')
+        expect(err.__edge).toEqual({ maxOverhangMm: 3, part: 'Bloc.dxf' })
+        const ok = await build({ ...bpp, edgeDistance: -3 }, { files: [block] })
+        expect(ok.payload.edgeShift).toBe(-5)
+    })
+
+    it('barre dessinée à 45° avec 8 rotations : la boîte tournée (fine) limite, pas la boîte d’origine', async () => {
+        const c = Math.SQRT1_2
+        const L = 100
+        const t = 4
+        const bar = [[0, 0], [L * c, L * c], [L * c - t * c, L * c + t * c], [-t * c, t * c], [0, 0]]
+        const file = {
+            slug: 'barre.dxf', name: 'Barre.dxf', count: 1, rotations: [0, 45, 90, 135, 180, 225, 270, 315],
+            parts: [{ coordinates: bar, holes: [], handles: ['A'], color: null }],
+        }
+        // Boîte d'origine ≈ 73,5 × 73,5 : l'ancien plafond (≈ 36,7) laissait passer −10.
+        const err = await build({ ...bpp, edgeDistance: -10 }, { files: [file] }).catch((e) => e)
+        expect(err.message).toBe('edge_overhang_too_large')
+        expect(err.__edge.part).toBe('Barre.dxf')
+        expect(err.__edge.maxOverhangMm).toBeGreaterThanOrEqual(1.9)
+        expect(err.__edge.maxOverhangMm).toBeLessThanOrEqual(2)
+        // La valeur annoncée passe.
+        const ok = await build({ ...bpp, edgeDistance: -err.__edge.maxOverhangMm }, { files: [file] })
+        expect(ok.payload.edgeShift).toBeLessThan(0)
+    })
+})
+
+// Tôle à cavité à bouche étroite sur le bord bas : contour concave.
+const KEY = [[0, 0], [59.5, 0], [59.5, 5], [56, 5], [56, 13], [64, 13], [64, 5], [60.5, 5], [60.5, 0], [110, 0], [110, 400], [0, 400], [0, 0]]
+const KEY_ID = 'sheet-lx2k9f0a-key001'
+const keyRecord = () => makeSheetRecord({
+    id: KEY_ID, projectSlug: 'p', name: 'Chute', sourceFileName: 'c.dxf', sourceUnits: 'mm',
+    contours: [contour(KEY, 1, null)], outlineIndex: 0, forbidden: [], addedAt: 1,
+})
+const keySheets = [{ width: 110, height: 400, count: 1, shapeId: KEY_ID }]
+const VOID_E = rect(58, 7, 62, 11) // vide du décalage du bord demandé |e|
+const VOID_D_IN = rect(59, 8, 61, 10) // vide du décalage moteur, contenu dans VOID_E
+const VOID_D_OUT = rect(80, 200, 84, 204) // vide du décalage moteur, ailleurs
+
+/** offsetRing de test : boîte agrandie, vides choisis par distance. */
+function voidOffset(calls, voidsByDistance, applied = null) {
+    return async (ring, distanceMm, opts) => {
+        calls.push({ distanceMm, opts })
+        const xs = ring.map((p) => p[0])
+        const ys = ring.map((p) => p[1])
+        const t = distanceMm
+        return {
+            ring: rect(Math.min(...xs) - t, Math.min(...ys) - t, Math.max(...xs) + t, Math.max(...ys) + t),
+            pieces: 1,
+            lostAreaMm2: 0,
+            appliedDistanceMm: applied ?? distanceMm,
+            voids: opts?.keepVoids ? (voidsByDistance[distanceMm] || []) : [],
+        }
+    }
+}
+
+describe('tôle importée, décalage vers l’extérieur : les vides enfermés deviennent des zones (R3)', () => {
+    it('bord −3, espacement 2 : vides du décalage moteur (+5) ET du bord demandé (+3), translatés de (5, 5)', async () => {
+        const calls = []
+        const deps = { getSheetRecord: async () => keyRecord(), offsetRing: voidOffset(calls, { 5: [VOID_D_IN, VOID_D_OUT], 3: [VOID_E] }) }
+        const { payload } = await build({ sheets: keySheets, space: 2, edgeDistance: -3 }, { files: [fileOf(2, 10, 10)], deps })
+        expect(calls).toEqual([
+            { distanceMm: 5, opts: { keepVoids: true } },
+            { distanceMm: 3, opts: { keepVoids: true } },
+        ])
+        const move = (r) => r.map(([x, y]) => [x + 5, y + 5])
+        // Le vide moteur contenu dans le vide du bord demandé n'est pas repris.
+        expect(payload.instance.bins[0].shape.data.inner).toEqual([move(VOID_E), move(VOID_D_OUT)])
+        // Repère réel : le vrai contour, sans zone ajoutée.
+        expect(payload.sheetFrames[0].inner).toEqual([])
+        expect('edgeAppliedMm' in payload).toBe(false)
+    })
+
+    it('bord 1 < espacement 2 (d = −1) : un seul décalage, avec les vides ; plus de refus offset_enclosed_void', async () => {
+        const calls = []
+        const deps = { getSheetRecord: async () => keyRecord(), offsetRing: voidOffset(calls, { 1: [VOID_D_OUT] }) }
+        const { payload } = await build({ sheets: keySheets, space: 2, edgeDistance: 1 }, { files: [fileOf(2, 10, 10)], deps })
+        expect(calls).toEqual([{ distanceMm: 1, opts: { keepVoids: true } }])
+        expect(payload.instance.bins[0].shape.data.inner).toEqual([VOID_D_OUT.map(([x, y]) => [x + 1, y + 1])])
+    })
+
+    it('contour convexe, bord −5 : aucun vide possible, pas de second décalage', async () => {
+        const calls = []
+        const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: voidOffset(calls, {}) }
+        await build({ sheets: shapedSheets, space: 2, edgeDistance: -5 }, { files: [fileOf(3, 10, 10)], deps })
+        expect(calls).toEqual([{ distanceMm: 7, opts: { keepVoids: true } }])
+    })
+
+    it('vers l’intérieur (bord 3, d = 1) : appel inchangé, sans option', async () => {
+        const calls = []
+        const deps = { getSheetRecord: async () => keyRecord(), offsetRing: voidOffset(calls, {}) }
+        await build({ sheets: keySheets, space: 2, edgeDistance: 3 }, { files: [fileOf(2, 10, 10)], deps })
+        expect(calls).toEqual([{ distanceMm: -1, opts: undefined }])
+    })
+
+    it('échec du décalage du bord demandé : edge_offset_failed, jamais de repli', async () => {
+        const deps = {
+            getSheetRecord: async () => keyRecord(),
+            offsetRing: async (ring, distanceMm, opts) => {
+                if (distanceMm === 3) throw Object.assign(new Error('offset_too_complex'), { code: 'offset_too_complex' })
+                return voidOffset([], {})(ring, distanceMm, opts)
+            },
+        }
+        const err = await build({ sheets: keySheets, space: 2, edgeDistance: -3 }, { files: [fileOf(2, 10, 10)], deps }).catch((e) => e)
+        expect(err.message).toBe('edge_offset_failed')
+        expect(err.__edge).toEqual({ reason: 'offset_too_complex' })
+    })
+})
+
+describe('décalage vers l’extérieur raccourci : le bord effectivement tenu est dit (R5)', () => {
+    it('bord 1,95 à espacement 2 (d = −0,05), distance appliquée 0 : edgeAppliedMm = 2, record', async () => {
+        const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: voidOffset([], {}, 0) }
+        const { payload } = await build({ sheets: shapedSheets, space: 2, edgeDistance: 1.95 }, { files: [fileOf(3, 10, 10)], deps })
+        expect(payload.edgeShift).toBeCloseTo(-0.05, 12)
+        expect(payload.edgeAppliedMm).toBe(2)
+        expect(edgeAppliedFields(payload)).toEqual({ edgeAppliedMm: 2 })
+    })
+
+    it('distance appliquée partielle : espacement − appliquée', async () => {
+        const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: voidOffset([], {}, 4) }
+        const { payload } = await build({ sheets: shapedSheets, space: 2, edgeDistance: -3 }, { files: [fileOf(3, 10, 10)], deps })
+        expect(payload.edgeAppliedMm).toBe(-2)
+    })
+
+    it('décalage complet, ou écart sous 1e-6 mm : aucune clé ; payload sans bord : rien au record', async () => {
+        const exact = { getSheetRecord: async () => shapedRecord(), offsetRing: voidOffset([], {}) }
+        const a = await build({ sheets: shapedSheets, space: 2, edgeDistance: -3 }, { files: [fileOf(3, 10, 10)], deps: exact })
+        expect('edgeAppliedMm' in a.payload).toBe(false)
+        expect(edgeAppliedFields(a.payload)).toEqual({})
+        const tiny = { getSheetRecord: async () => shapedRecord(), offsetRing: voidOffset([], {}, 5 - 5e-7) }
+        const b = await build({ sheets: shapedSheets, space: 2, edgeDistance: -3 }, { files: [fileOf(3, 10, 10)], deps: tiny })
+        expect('edgeAppliedMm' in b.payload).toBe(false)
+        const plain = await build(bpp)
+        expect(edgeAppliedFields(plain.payload)).toEqual({})
+        expect(edgeAppliedFields({ edgeAppliedMm: 2 })).toEqual({})
+    })
+})
+
+describe('bord maximal annoncé d’une tôle importée (R4)', () => {
+    it('aucune valeur sûre (la pièce ne tient même pas à l’espacement) : refus sans chiffre', async () => {
+        const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: rectOffset([]) }
+        const err = await build({ sheets: shapedSheets, space: 2, edgeDistance: 60 }, { files: [fileOf(1, 150, 150)], deps }).catch((e) => e)
+        expect(err.message).toBe('edge_too_large')
+        expect(err.__edge).toEqual({})
+    })
+
+    it('contour rentré qui disparaît : la valeur annoncée se construit', async () => {
+        const deps = { getSheetRecord: async () => shapedRecord(), offsetRing: rectOffset([]) }
+        const files = [fileOf(1, 60, 60)]
+        // d = 58 : la tôle 100 × 200 n'existe plus.
+        const err = await build({ sheets: shapedSheets, space: 2, edgeDistance: 60 }, { files, deps }).catch((e) => e)
+        expect(err.message).toBe('edge_too_large')
+        // (100 − 60) / 2 = 20.
+        expect(err.__edge).toEqual({ maxEdgeMm: 20 })
+        const ok = await build({ sheets: shapedSheets, space: 2, edgeDistance: err.__edge.maxEdgeMm }, { files, deps })
+        expect(ok.payload.edgeShift).toBe(18)
     })
 })

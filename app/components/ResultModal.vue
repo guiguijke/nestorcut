@@ -267,6 +267,12 @@ const isHaveError = computed(() => {
 // Distance au bord demandée (mm) par le calcul qui a produit ce résultat
 // (« Cet appareil » : le record la garde seulement quand elle diffère de l'espacement).
 const requestedEdgeMm = computed(() => unref(resultModalData)?.localRecord?.requestedEdgeMm)
+// Bord réellement garanti (mm) quand le décalage d'une tôle importée a dû être
+// raccourci : présent dans le record seulement si l'écart dépasse 1e-6 mm.
+const edgeAppliedMm = computed(() => {
+    const v = unref(resultModalData)?.localRecord?.edgeAppliedMm
+    return v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null
+})
 const activeVerdict = computed(() => {
     const r = unref(activeReport)
     if (!r) return 'valid'
@@ -653,10 +659,18 @@ const reportBadges = computed(() => {
         }
         if (edgeModel.edge) {
             const { ok, kind, valueMm } = edgeModel.edge
+            const appliedMm = unref(edgeAppliedMm)
+            // Une seule ligne simple à côté du badge du bord : le bord garanti
+            // quand le décalage de la tôle a été raccourci.
+            const base = t(kind === 'overhang' ? 'report.edgeOverhang' : 'report.edgeAtLeast', { v: fmtLengthValue(valueMm, dec), unit: unitLabel.value })
             badges.push({
                 ok,
-                label: t(kind === 'overhang' ? 'report.edgeOverhang' : 'report.edgeAtLeast', { v: fmtLengthValue(valueMm, dec), unit: unitLabel.value }),
+                label: appliedMm === null
+                    ? base
+                    : `${base} — ${t('report.edgeApplied', { v: fmtLengthValue(appliedMm, dec), unit: unitLabel.value })}`,
             })
+        } else if (unref(edgeAppliedMm) !== null) {
+            badges.push({ ok: true, label: t('report.edgeApplied', { v: fmtLengthValue(unref(edgeAppliedMm), dec), unit: unitLabel.value }) })
         }
     } else if (r.smallestGapMm != null && r.smallestGapMm < 0) {
         // §1.2c : un gap NÉGATIF est un dépassement hors tôle, pas un

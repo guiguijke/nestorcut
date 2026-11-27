@@ -144,7 +144,6 @@
                     :is-disable="edgeDisabled"
                     :is-error="edgeInvalid"
                     :disabled="edgeDisabled"
-                    inputmode="decimal"
                     :aria-invalid="edgeInvalid ? 'true' : undefined"
                     class="size__input"
                     data-testid="settings-edge"
@@ -288,7 +287,7 @@
     } from '~/utils/rotationChoice'
 
     const { t } = useLocale()
-    const { unit, unitLabel, enabled: unitsEnabled, fmtLength, fmtLengthValue, displayToMm } = useUnit()
+    const { unit, unitLabel, enabled: unitsEnabled, fmtLength, fmtLengthValue, fmtLengthMax, displayToMm } = useUnit()
     const { getters, actions } = filesStore
     const { updateParams, updateKerfSafety, updateEdgeDistance, updateSheet, addSheet, removeSheet } = actions
     const params = computed(() => getters.params)
@@ -397,10 +396,11 @@
         if (edgeDisabled.value) return ''
         const n = edgeDistanceNumber(unref(params).edgeDistance)
         if (n === null || !(n < 0)) return ''
-        const x = String(Math.abs(n))
+        // Valeur tapée, au séparateur de la langue et sans arrondi (6 décimales).
+        const x = fmtLengthValue(displayToMm(Math.abs(n)), 6)
         const maxMm = Number(maxOverhangMm(unref(getters.projectFiles) || []))
         if (!Number.isFinite(maxMm)) return t('settings.edgeNegativeNoParts', { x, unit: unitLabel.value })
-        return t('settings.edgeNegative', { x, max: fmtLengthValue(maxMm), unit: unitLabel.value })
+        return t('settings.edgeNegative', { x, max: fmtLengthMax(maxMm), unit: unitLabel.value })
     })
 
     const effectiveSpace = computed(() => Number(String(unref(params).space ?? '0').replace(',', '.')) || 0)

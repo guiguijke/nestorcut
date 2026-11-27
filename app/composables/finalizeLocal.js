@@ -70,6 +70,19 @@ export function dropPositionsUnlessBrowserBuilt(alternatives, mode) {
     return alternatives
 }
 
+/** Tôles d'une alternative pour le `.job` SheetCam (forme de
+ * `sheetsFromLayouts` : { fileSlug, pose { x, y, angle (rad) }, nestedIn }),
+ * tirées de SES containers : repère réel, mêmes poses que SVG, DXF et CSV.
+ * `containers[].transforms` et `.nestedIn` sont exactement ce que
+ * `sheetsFromLayouts` recalculerait des layouts livrés. */
+export function jobSheetsOfContainers(containers) {
+    return (containers || []).map((c) => (c?.transforms || []).map((tr, k) => ({
+        fileSlug: tr.file_slug,
+        pose: { x: tr.x, y: tr.y, angle: tr.angle },
+        nestedIn: c.nestedIn?.[k] ?? null,
+    })))
+}
+
 /** Frame finale synthétique pour la vue live (même forme que le reveal
  * serveur : [item_id, bin, rot_deg, x, y]). */
 export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null) {
@@ -140,8 +153,9 @@ export function buildLiveLayout(result, payload, bestAlt, measuredDensity = null
 }
 
 /**
- * Post-pass + garde + tri d'affichage + DXF. MUTE `result.alternatives`.
- * @returns {{ alternatives, liveLayout, placed, allAlternativesInvalid, localDiscarded, result }}
+ * Post-pass + garde + tri d'affichage + DXF. MUTE `result.alternatives` (filtrées,
+ * puis remises dans l'ordre affiché).
+ * @returns {{ alternatives, liveLayout, placed, allAlternativesInvalid, localDiscarded, result, jobSheets }}
  */
 async function appendBppGrid(result, payload) {
     if ((result?.problem || payload?.problem) === 'spp') return null
@@ -242,6 +256,8 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
     let liveLayout = null
     let placed = 0
     let allAlternativesInvalid = false
+    // Tôles du `.job` de chaque alternative AFFICHÉE (même rang qu'`alternatives`).
+    let jobSheets = []
     const rawAlts = result?.alternatives || []
     try {
         const { perClassCountsMatch, enginePlacedById } = await import('./localBridge')
@@ -254,7 +270,12 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
         rawAlts.forEach((alt, i) => {
             const art = arts?.[i]
             const strategy = alt.bias || alt.strategy || 'engine'
-            if (alt.structural && art?.report?.verify?.insideSheet === false) {
+            // Distance au bord négative (règle R1 du 27/11) : une pièce posée
+            // (presque) entièrement hors de la tôle rend l'option inutilisable.
+            // Sur une tôle importée le contrôle du contour l'écarte déjà ; sur
+            // un rectangle on l'écarte aussi, au lieu de la livrer en rouge.
+            const edgeOverhang = Number.isFinite(payload?.requestedEdge) && payload.requestedEdge < 0
+            if ((alt.structural || edgeOverhang) && art?.report?.verify?.insideSheet === false) {
                 localDiscarded.push({ reason: 'outside_sheet', strategy })
                 return
             }
@@ -354,7 +375,10 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
         const bestRaw = result.alternatives[0]
         placed = normalizeLayouts(bestRaw?.solution)
             .reduce((n, l) => n + (l.placed_items?.length || 0), 0)
-        alternatives = toServerShapeAlternatives(result, payload, arts) || []
+        // Index de chaque alternative rendue dans `result.alternatives` (une
+        // alternative sans layout est sautée : jamais d'appariement par rang).
+        const sourceIndex = []
+        alternatives = toServerShapeAlternatives(result, payload, arts, sourceIndex) || []
         const DIRECTION_ORDER = { grid: -1, left: 0, bottom: 1, balanced: 2 }
         const known = alternatives.some((a) => a.strategy in DIRECTION_ORDER)
         const cmp = (x, y) => {
@@ -369,8 +393,20 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
             return (x.usedSheetShare ?? 1.0) - (y.usedSheetShare ?? 1.0)
         }
         const idx = alternatives.map((_, i) => i).sort((a, b) => cmp(alternatives[a], alternatives[b]))
-        const containersOrdered = idx.map((i) => arts?.[i]?.containers || [])
+        // Index SOURCE (résultat moteur, artefacts) de l'alternative affichée à
+        // chaque rang.
+        const order = idx.map((i) => sourceIndex[i] ?? i)
+        const containersOrdered = order.map((i) => arts?.[i]?.containers || [])
         alternatives = idx.map((i) => alternatives[i])
+        // Le résultat brut suit l'ORDRE AFFICHÉ : `result.alternatives[k]` est
+        // l'alternative montrée au rang k (frame finale, `.job`, relectures).
+        // Avant, la grille BPP ajoutée en dernier et triée en tête portait le
+        // `.job` de l'option moteur, et inversement.
+        if (order.length) result.alternatives = order.map((i) => result.alternatives[i])
+        // `.job` SheetCam : les tôles de chaque rang tirées de SES containers
+        // (repère réel, poses de SVG, DXF, CSV), indépendantes de la mutation
+        // des layouts et du retour du worker. Restent dans le navigateur.
+        jobSheets = containersOrdered.map(jobSheetsOfContainers)
         for (let rank = 0; rank < alternatives.length; rank++) {
             const containers = containersOrdered[rank]
             const dxfs = []
@@ -397,7 +433,7 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
             if (positions) alternatives[rank].positions = positions
         }
         liveLayout = buildLiveLayout(result, payload,
-            result.alternatives[idx[0]] ?? bestRaw, alternatives[0]?.density ?? null)
+            (order.length ? result.alternatives[0] : null) ?? bestRaw, alternatives[0]?.density ?? null)
     } catch (e) {
         if (e?.message === 'all_alternatives_invalid') {
             allAlternativesInvalid = true
@@ -409,7 +445,9 @@ export async function assembleBrowserArtifacts({ result, payload, sources, jobSl
         placed,
         allAlternativesInvalid,
         localDiscarded,
+        // `result.alternatives` dans l'ordre d'`alternatives` (alternatives rendues).
         result,
+        jobSheets,
         structMultiDiag,
         // Vide hors drapeau QA.
         qaDiscarded,

@@ -119,3 +119,19 @@ export function edgeReportModel(report, requestedEdgeMm) {
         outsideMm: beyond > EDGE_BADGE_EPS_MM ? beyond : null,
     }
 }
+
+/**
+ * Quel message « pièce trop grande » et quelle pièce nommer. `withEdge` : la
+ * première pièce qui ne tient pas AVEC le bord demandé ; `plain` : la même
+ * recherche sans bord. Le message « bord » ne vaut que si le bord est la cause
+ * (bord positif ET toute pièce tient sans lui) ; sinon c'est la pièce trop
+ * grande de toute façon qu'il faut changer d'abord, comme le constructeur.
+ * Bord non réglé : un seul appel, mêmes valeurs.
+ */
+export function minSheetCase(edgeMm, withEdge, plain) {
+    const hasEdge = edgeMm !== null && edgeMm !== undefined && edgeMm !== ''
+    const edgeIsCause = hasEdge && Number(edgeMm) > 0 && !plain
+    return edgeIsCause
+        ? { edge: true, part: withEdge }
+        : { edge: false, part: plain ?? withEdge }
+}

@@ -143,6 +143,32 @@ export function fmtLengthValue(mm, unit, decimals, locale) {
 }
 
 /**
+ * Longueur MAXIMALE annoncée : arrondie vers le BAS à la précision affichée
+ * (mm : 0,1 ; pouce : 0,001), jamais au plus proche, pour que la valeur lue
+ * soit acceptée telle quelle quand l'utilisateur la retape. Formatée sans
+ * aller-retour par le mm (qui pourrait remonter l'arrondi).
+ */
+export function fmtLengthMax(mm, unit, decimals, locale) {
+    const v = mmToDisplay(mm, unit)
+    if (!Number.isFinite(v)) return '—'
+    const d = decimals ?? (unit === 'inch' ? 3 : 1)
+    const f = Math.floor(v * 10 ** d + 1e-9) / 10 ** d
+    return new Intl.NumberFormat(intlTag(locale || 'en'), {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: d,
+        useGrouping: false,
+    }).format(f)
+}
+
+/** Plafond (mm) arrondi vers le bas à la précision affichée, pour comparer à ce que l'on annonce. */
+export function floorLengthMm(mm, unit, decimals) {
+    const v = mmToDisplay(mm, unit)
+    if (!Number.isFinite(v)) return v
+    const d = decimals ?? (unit === 'inch' ? 3 : 1)
+    return displayToMm(Math.floor(v * 10 ** d + 1e-9) / 10 ** d, unit)
+}
+
+/**
  * Length for display (includes the unit suffix).
  */
 export function fmtLength(mm, unit, locale) {

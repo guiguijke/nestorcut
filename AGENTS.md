@@ -1396,13 +1396,16 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
     moteur ne connaît que l'espacement `s` (entre pièces ET au bord). Pour tenir
     les pièces à `e` du bord, le constructeur lui donne une tôle décalée de
     `d = e − s` (`edgeShiftMm`, valeurs DEMANDÉES : la marge de courbes s'ajoute
-    aux deux et s'annule) : rectangle (W − 2d) × (H − 2d), bande H − 2d / W − 2d,
-    contour importé décalé de −d (`offset_ring`, zones et défauts NON décalés :
-    ils gardent `s`) puis tout translaté de (−d, −d). Une pose moteur (x, y) vaut
+    aux deux et s'annule) : rectangle (W − 2d) × (H − 2d), bande H − 2d / W − 2d
+    (longueurs arrondies PAR DÉFAUT au f32, `f32AtOrBelow` : le moteur les lit en
+    f32 et ne doit jamais avoir plus de place que la vraie limite), contour
+    importé décalé de −d (`offset_ring`, zones et défauts NON décalés : ils
+    gardent `s`) puis tout translaté de (−d, −d). Une pose moteur (x, y) vaut
     (x + d, y + d) sur la vraie tôle. Règles :
     - **d = 0 ⇒ rien** : aucune clé de payload, `engineSheets === sheets`, même
       chemin au bit près. Verrou : `edgeDistanceEndToEnd` (empreinte du chemin par
-      défaut mesurée au commit d'avant le lot, vrai moteur et vrai bundle).
+      défaut mesurée au commit d'avant le lot, vrai moteur et vrai bundle). La
+      page traite un bord égal à l'espacement comme un champ vide.
     - **Les passes d'après calcul restent dans le repère MOTEUR** (`sheetDims`,
       grille, bandes, hole-fill, finition, fusion, frames décorées) ; le retour au
       repère réel se fait en UN point, `layoutsToRealFrame` dans
@@ -1410,17 +1413,61 @@ DÉPLOIEMENT (schéma : ARCHITECTURE.md §1, coffre privé) :
       `.job` et record (`realSheetDims`, `sheetFrames`). Les frames live passent
       par `liveFrameToReal` ; une frame ou un layout déjà passé porte `edgeReal` :
       ne jamais décaler deux fois. Le champion du pool (`preferChampion`) lit les
-      frames BRUTES du moteur, jamais celles de l'écran.
+      frames BRUTES du moteur, jamais celles de l'écran. La trace « dernière
+      tôle » (`finish.before/after`) passe au repère réel par `finishToReal`
+      (copie, rectangles seulement : la finition est coupée sur tôle importée).
+    - **`.job` SheetCam** (vrai à tout bord, défaut d'avant corrigé ici) : la
+      finalisation remet `result.alternatives` dans l'ORDRE AFFICHÉ et rend
+      `jobSheets`, les tôles de chaque rang tirées des containers de CETTE
+      alternative (`jobSheetsOfContainers`, repère réel) ; `attachSheetcamJobs`
+      les lit. Avant, la grille BPP ajoutée en dernier et triée en tête portait
+      le `.job` de l'option moteur. Verrou : `edgeDistanceJobOrder` (aller-retour
+      du worker cloné, vrai relais, repli thread principal).
     - Bande : longueur réelle = largeur moteur + d ; `stripMaxWidth` (moteur + d)
       remplace la largeur de tôle dans `frameFitsSheet`.
     - Rapport : `edge` (convention interne, comme `space`) seulement si d ≠ 0 ;
       `applySpacingMargin` ôte la marge de `edgeGapMm` SANS plancher (négatif =
-      dépassement permis jusqu'à |e|).
+      dépassement permis jusqu'à |e|). Bord réglé (même e ≥ 0) : `insideSheet`
+      tolère `OUTLINE_TOL_MM + max(0, −e)` sur un rectangle comme sur un contour
+      importé (même tolérance qu'`edgeOk`) ; bord non réglé : `INSIDE_EPS`, au
+      bit près.
+    - **Pièce presque hors tôle (bord négatif)** : une pièce dont moins de 1 % de
+      la matière est SUR la tôle compte dehors même si sa boîte respecte le
+      dépassement (`ON_SHEET_MIN_FRACTION`, zones ignorées) : `insideSheet` faux
+      sur un rectangle (alternative livrée mais signalée : verdict `unfit`,
+      téléchargements bloqués), `partsOutsideOutline` sur une tôle importée
+      (alternative écartée). Une équerre fine se pose sinon entière dans la
+      bande de dépassement.
+    - **Plafond du dépassement** : moitié du plus petit côté de la boîte de
+      chaque PIÈCE PHYSIQUE (chaque pièce d'un bloc, jamais la boîte du bloc), au
+      plus petit sur ses rotations permises (les deux sens) — `overhangCapOf`
+      au constructeur, `maxOverhangMm` à la page (boîtes seulement : borne haute
+      hors quart de tour, jamais plus stricte que le constructeur).
+    - **Maximum annoncé = maximum retapable** : le constructeur arrondit par
+      défaut au centième (`floorCenti`), l'écran par défaut à sa précision
+      (`fmtLengthMax`, plafond de la page par `floorLengthMm`), jamais au plus
+      proche. Tôle importée : `maxEdgeMm` cherché par bissection avec le VRAI
+      décalage (`maxEdgeBySearch`, ≤ 14 pas, chemin d'erreur seulement), vérifié
+      constructible ; introuvable : refus sans chiffre (`edgeTooLargePlain`).
     - Phase 1 : projets « Cet appareil » seulement ; le serveur refuse le réglage
       ailleurs (`edge_distance_local_only`), le worker Python ne le lit pas.
-    - Avec d < 0, une encoche plus étroite que 2|d| est comblée par le décalage
-      vers l'extérieur : le moteur peut y poser une pièce trop près ou trop
-      dehors ; le rapport le voit (`edgeOk` faux, ou alternative écartée).
+    - **d < 0 sur tôle importée, vides** : le décalage vers l'extérieur comble
+      les encoches. Les vides qu'il enferme partent au moteur comme zones
+      interdites (translatées de (−d, −d), tenues à `s` : prudent) : ceux du
+      décalage moteur (−d) ET, bord négatif, ceux du décalage du bord demandé
+      |e| (`keepVoids` ; appel sauté pour un contour convexe). Plus de refus
+      `offset_enclosed_void`, une tôle en C se calcule baie interdite. Le
+      rapport ne suit que les BORDS des pièces : une pièce qui avale une cavité
+      à bouche étroite y resterait verte, ces zones sont la seule défense
+      (verrou `edgeDistanceShapedVoids`, `edgeDistanceEndToEnd`). Sous
+      |e| ≈ 0,1 mm, `offset_ring` rend le contour tel quel, sans vide. Une
+      encoche OUVERTE comblée (sans vide) peut recevoir une pièce : son bord y
+      entre et le rapport le voit (`edgeOk` faux, ou alternative écartée).
+    - **Décalage vers l'extérieur raccourci** (≤ 0,1 mm jamais appliqué, jusqu'à
+      1 mm sur un contour fin) : le job tourne (prudent), payload et record
+      portent `edgeAppliedMm` = s − distance appliquée (bord vraiment tenu, mm)
+      seulement si l'écart dépasse 1e-6 mm ; la fenêtre de résultat le dit en
+      une ligne à côté du badge du bord.
     - Toute op ajoutée au worker géométrie : rebuild `build-wasm.sh` DANS LA MÊME
       PR (piège 33b), avec `wasm-opt` (binaryen) sur le PATH : sans lui le script
       installe un binaire non optimisé.
@@ -1463,7 +1510,7 @@ Compte de test : `guillaume@local.dev` / `nestorcut-local-2026`
 ## 5. Avant de pousser
 
 ```bash
-npx vitest run                                             # app+server (2 349 au 25/11)
+npx vitest run                                             # app+server (2 783 au 27/11)
 cd workers/nesting/engine && cargo test --release -p nest-engine   # 75 + 1 ignore (dont le verrou bpp_live_frame)
 cd workers/nesting && python -m pytest tests/ -q --ignore=tests/test_integration_holes.py   # 241 + 1 skip (mesure du 13/09 en conteneur ; l'image RUNTIME `nest2d-nesting-worker:dev` n'embarque ni pytest ni `tests/` — lancer dans un conteneur de build ou une image dev, pas sur le poste : deps absentes)
 cd workers/common && python -m pytest tests/ -q            # 101 au 18/11 (aussi dans la CI ; lit workers/geometry)

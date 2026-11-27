@@ -36,6 +36,91 @@ import { liveShapeFields, withLiveShapes } from '~~/app/utils/sheetDraw.js'
 import { liveFormatFields } from '~~/app/utils/liveSheetFormats.js'
 import { perimeterSplitOf } from '~~/app/utils/sheetShape.js'
 
+/**
+ * Lot J4 : un `.job` SheetCam par tôle pour chaque alternative AFFICHÉE ; MUTE
+ * `alternatives` (champ `jobs`). Les tôles du rang k sont `jobSheets[k]`, tirées
+ * par la finalisation des containers de CETTE alternative (repère réel, poses du
+ * SVG, du DXF et du CSV : ni la mutation des layouts, ni le retour du worker, ni
+ * un appariement par rang n'en décident). À défaut (record d'avant), les layouts
+ * de `result.alternatives[k]`, que la finalisation remet dans l'ordre affiché.
+ * Lève l'erreur du rédacteur (`SheetCamJobError`, code i18n).
+ * `lib` : { buildNestedJobs, sheetsFromLayouts, parseSheetCamJob,
+ * layoutTransforms, nestedInForLayout, normalizeLayouts }.
+ */
+export function attachSheetcamJobs(alternatives, { jobSheets, result, payload, sheetcamContext }, lib) {
+    const job = lib.parseSheetCamJob(sheetcamContext.jobBytes)
+    const partsById = new Map((payload?.parts || []).map((p) => [String(p.id), p]))
+    const base = (sheetcamContext.baseName || 'nestorcut').replace(/\.job$/i, '')
+    for (let k = 0; k < alternatives.length; k++) {
+        let sheets = Array.isArray(jobSheets?.[k]) ? jobSheets[k] : null
+        if (!sheets) {
+            // `normalizeLayouts` prend la SOLUTION, pas l'alternative :
+            // c'est la convention de tout le fichier (localBridge 1303 et
+            // 1576, finalizeLocal 17 et 197). Lui passer l'alternative
+            // rendait une liste VIDE, donc aucun `.job` — sans erreur,
+            // ce qui est le pire des cas. Trouvé par le harnais.
+            const alt = result?.alternatives?.[k]
+            const layouts = lib.normalizeLayouts(alt?.solution || alt || result?.solution || result)
+            sheets = layouts.length
+                ? lib.sheetsFromLayouts(layouts, partsById, {
+                    layoutTransforms: lib.layoutTransforms, nestedInForLayout: lib.nestedInForLayout,
+                })
+                : []
+        }
+        if (!sheets.length) continue
+        const built = lib.buildNestedJobs(job, {
+            sheets,
+            ringsByFileSlug: sheetcamContext.ringsByFileSlug,
+            fileNamesBySlug: sheetcamContext.fileNamesBySlug,
+            startsByFileSlug: sheetcamContext.startsByFileSlug,
+            baseName: base,
+            // Lot J9 : le rang `[Part N]` PROPRE à chaque fiche (sa
+            // section originale) — quatre originales du même dessin
+            // rendent quatre sections, pas une + trois copies.
+            partIndexByFileSlug: sheetcamContext.partIndexByFileSlug || null,
+        })
+        alternatives[k] = {
+            ...alternatives[k],
+            jobs: built.map((f, s) => ({
+                fileName: f.fileName,
+                bytes: f.bytes,
+                // Le nichage, en RANGS `[Part N]` du fichier écrit :
+                // `[rang de la nichée, rang de son hôte]`. C'est ce
+                // dont le verrou d'ordre de coupe a besoin — mesurer
+                // sur `[OpOrder]` seul ne mesurerait que lui-même.
+                // Champ ADDITIF, quelques entiers.
+                nestedPairs: (sheets[s] || []).flatMap((item, i) => {
+                    const host = item.nestedIn
+                    if (host == null) return []
+                    // `f.ranks` = le rang ECRIT de chaque exemplaire.
+                    // `placements[i].part` est le rang du DESSIN, pas
+                    // celui de la section : les confondre produit des
+                    // paires fausses (mesure du lot J4-bis).
+                    return [[f.ranks[i], f.ranks[host]]]
+                }),
+                // L'ordre de coupe ECRIT dans CE fichier, en rangs.
+                // Persiste a cote des paires pour que le verrou
+                // compare les deux d'un MEME fichier : un resultat
+                // porte plusieurs alternatives, et comparer les paires
+                // de l'une a l'ordre de l'autre ne mesure rien.
+                order: f.order.map(([rank]) => rank),
+            })),
+        }
+    }
+    return alternatives
+}
+
+/** Champ du record pour un décalage de tôle importée raccourci : { edgeAppliedMm }
+ * (bord effectivement tenu, mm) quand le constructeur l'a posé sur un payload à
+ * distance au bord, {} sinon (record d'avant, au bit près). */
+export function edgeAppliedFields(payload) {
+    if (!edgeShiftOf(payload)) return {}
+    const v = Number(payload?.edgeAppliedMm)
+    return payload?.edgeAppliedMm !== undefined && payload?.edgeAppliedMm !== null && Number.isFinite(v)
+        ? { edgeAppliedMm: v }
+        : {}
+}
+
 /** Refus « distance au bord » du builder : ils gardent leur PROPRE code jusqu'à
  * la page (comme `strip_height`), avec leur détail chiffré (`edgeDetail`). */
 const EDGE_REFUSALS = new Set(['edge_overhang_too_large', 'edge_too_large', 'edge_offset_failed'])
@@ -411,10 +496,11 @@ async function buildClientPayload(meta) {
             pinwheelCapacity: (ring, coords, spaceMm, allowed) => geoPinwheelCapacity(ring, coords, spaceMm, allowed),
             // Distance au bord sur une tôle importée : contour décalé par le wasm
             // géométrie (distance positive = vers l'extérieur). Appelé seulement
-            // à bord réglé ; un échec est un refus (edge_offset_failed).
-            offsetRing: (ring, distanceMm) => {
+            // à bord réglé ; un échec est un refus (edge_offset_failed). `opts`
+            // ({ keepVoids }) passe tel quel : les vides deviennent des zones.
+            offsetRing: (ring, distanceMm, opts) => {
                 if (typeof geoOffsetRing !== 'function') throw new Error('offset_unavailable')
-                return geoOffsetRing(ring, distanceMm)
+                return geoOffsetRing(ring, distanceMm, opts)
             },
             // Tôle importée : la forme se relit dans le navigateur (jamais du
             // serveur). Importé seulement si un shapeId est présent.
@@ -756,6 +842,8 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
     let liveLayout = null
     let placed = 0
     let allAlternativesInvalid = false
+    // Tôles du `.job` SheetCam de chaque alternative affichée (même rang).
+    let jobSheets = null
     {
         const assembled = await assembleBrowserArtifactsOffThread({
             result, payload, sources, jobSlug,
@@ -783,6 +871,7 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
         if (assembled.result?.alternatives) {
             result.alternatives = assembled.result.alternatives
         }
+        jobSheets = Array.isArray(assembled.jobSheets) ? assembled.jobSheets : null
         if (typeof window !== 'undefined' && assembled.structMultiDiag) {
             window.__structMultiDiag = assembled.structMultiDiag
         }
@@ -881,61 +970,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             const {
                 buildNestedJobs, sheetsFromLayouts, parseSheetCamJob,
             } = await import('./sheetcamJobResult')
-            const { layoutTransforms, nestedInForLayout, normalizeLayouts } = await import('./localBridge')
-            const job = parseSheetCamJob(sheetcamContext.jobBytes)
-            const partsById = new Map((payload?.parts || []).map((p) => [String(p.id), p]))
-            const base = (sheetcamContext.baseName || 'nestorcut').replace(/\.job$/i, '')
-            for (let k = 0; k < alternatives.length; k++) {
-                // `normalizeLayouts` prend la SOLUTION, pas l'alternative :
-                // c'est la convention de tout le fichier (localBridge 1303 et
-                // 1576, finalizeLocal 17 et 197). Lui passer l'alternative
-                // rendait une liste VIDE, donc aucun `.job` — sans erreur,
-                // ce qui est le pire des cas. Trouvé par le harnais.
-                const alt = result?.alternatives?.[k]
-                const layouts = normalizeLayouts(alt?.solution || alt || result?.solution || result)
-                if (!layouts.length) continue
-                const sheets = sheetsFromLayouts(layouts, partsById, {
-                    layoutTransforms, nestedInForLayout,
-                })
-                const built = buildNestedJobs(job, {
-                    sheets,
-                    ringsByFileSlug: sheetcamContext.ringsByFileSlug,
-                    fileNamesBySlug: sheetcamContext.fileNamesBySlug,
-                    startsByFileSlug: sheetcamContext.startsByFileSlug,
-                    baseName: base,
-                    // Lot J9 : le rang `[Part N]` PROPRE à chaque fiche (sa
-                    // section originale) — quatre originales du même dessin
-                    // rendent quatre sections, pas une + trois copies.
-                    partIndexByFileSlug: sheetcamContext.partIndexByFileSlug || null,
-                })
-                alternatives[k] = {
-                    ...alternatives[k],
-                    jobs: built.map((f, s) => ({
-                        fileName: f.fileName,
-                        bytes: f.bytes,
-                        // Le nichage, en RANGS `[Part N]` du fichier écrit :
-                        // `[rang de la nichée, rang de son hôte]`. C'est ce
-                        // dont le verrou d'ordre de coupe a besoin — mesurer
-                        // sur `[OpOrder]` seul ne mesurerait que lui-même.
-                        // Champ ADDITIF, quelques entiers.
-                        nestedPairs: (sheets[s] || []).flatMap((item, i) => {
-                            const host = item.nestedIn
-                            if (host == null) return []
-                            // `f.ranks` = le rang ECRIT de chaque exemplaire.
-                            // `placements[i].part` est le rang du DESSIN, pas
-                            // celui de la section : les confondre produit des
-                            // paires fausses (mesure du lot J4-bis).
-                            return [[f.ranks[i], f.ranks[host]]]
-                        }),
-                        // L'ordre de coupe ECRIT dans CE fichier, en rangs.
-                        // Persiste a cote des paires pour que le verrou
-                        // compare les deux d'un MEME fichier : un resultat
-                        // porte plusieurs alternatives, et comparer les paires
-                        // de l'une a l'ordre de l'autre ne mesure rien.
-                        order: f.order.map(([rank]) => rank),
-                    })),
-                }
-            }
+            const { layoutTransforms, nestedInForLayout } = await import('./localBridge')
+            attachSheetcamJobs(alternatives, { jobSheets, result, payload, sheetcamContext }, {
+                buildNestedJobs, sheetsFromLayouts, parseSheetCamJob, layoutTransforms, nestedInForLayout, normalizeLayouts,
+            })
         } catch (e) {
             // `SheetCamJobError.code` est DÉJÀ une clé i18n : elle voyage
             // telle quelle jusqu'à la fiche, jamais un message technique
@@ -980,6 +1018,10 @@ export async function runLocalJobPrivate(jobSlug, { projectSlug, onLive, itemMap
             ...(edgeD && Number.isFinite(Number(payload?.requestedEdge))
                 ? { requestedEdgeMm: Number(payload.requestedEdge) }
                 : {}),
+            // Tôle importée dont le décalage vers l'extérieur a été raccourci
+            // (contour trop fin pour décaler si peu) : le bord effectivement tenu
+            // (mm), plus prudent que le demandé ; la fenêtre de résultat le dit.
+            ...edgeAppliedFields(payload),
             requested,
             placed,
             alternatives,

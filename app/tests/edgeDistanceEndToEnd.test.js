@@ -19,6 +19,17 @@
  * (d) bord non réglé : payload, graine et rapports identiques au bord égal à
  *     l'espacement, sans aucune clé nouvelle ; empreinte égale à celle du commit
  *     de base de la fonctionnalité (même scénario, mesurée avant le lot).
+ * (e) tôle importée à cavité à bouche étroite (bouche 1 mm, chambre 8 × 8 sur le
+ *     bord gauche), carrés de 100, bord −3 : les vides des décalages (+5 moteur,
+ *     +3 bord demandé) sont des zones du moteur, aucune pièce ne couvre la
+ *     chambre ; témoin sans les vides : le moteur la couvre ;
+ * (f) équerres 100 × 100 (bras de 12) sur rectangle 400 × 300, bord −45 : une
+ *     équerre posée avec moins de 1 % de sa matière sur la tôle rend
+ *     `insideSheet` faux (alternative signalée) ; les autres restent vraies ;
+ * (g) mêmes équerres sur le même rectangle IMPORTÉ : l'alternative qui en pose
+ *     une hors de la tôle est écartée (`outside_outline`), aucune livrée n'en a.
+ * Le `.job` de chaque alternative affichée est verrouillé à part
+ * (`edgeDistanceJobOrder`).
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -87,11 +98,12 @@ const fileOf = (slug, count, coords, rotations = [0, 90]) => {
     return { slug, name: `${slug}.dxf`, count, rotations, parts: [{ coords, holes: [], width: x1, height: y1 }] }
 }
 
-/** Dépendances du constructeur, câblées comme `buildClientPayload`. */
+/** Dépendances du constructeur, câblées comme `buildClientPayload` (options
+ * de `offsetRing` comprises : `keepVoids` passe tel quel). */
 const depsOf = (record = null) => ({
     openHoles: (coords, holes, spaceMm) => geoOpenHoles(coords, holes, spaceMm),
     pinwheelCapacity: (ring, coords, spaceMm, allowed) => geoPinwheelCapacity(ring, coords, spaceMm, allowed),
-    offsetRing: (ring, distanceMm) => geoOffsetRing(ring, distanceMm),
+    offsetRing: (ring, distanceMm, opts) => geoOffsetRing(ring, distanceMm, opts),
     ...(record ? { getSheetRecord: async () => record } : {}),
 })
 
@@ -337,7 +349,202 @@ describe('bout en bout, tôle importée : disque Ø153 (360 sommets), bord −3'
     })
 })
 
+describe('bout en bout, tôle importée à cavité à bouche étroite, bord −3', () => {
+    // Bord gauche : bouche 1 mm (y 59,5..60,5, x 0..5) ouvrant sur une chambre
+    // 8 × 8 (x 5..13, y 56..64). Le centre de la chambre est à 4 mm de la
+    // matière (> |e|) ; le décalage moteur (+5) referme tout, celui du bord
+    // demandé (+3) y laisse un vide.
+    const KEY = [[0, 0], [110, 0], [110, 400], [0, 400], [0, 60.5], [5, 60.5], [5, 64], [13, 64], [13, 56], [5, 56], [5, 59.5], [0, 59.5], [0, 0]]
+    const CHAMBER_CENTRE = [9, 60]
+    const files = [fileOf('carre', 3, rect(100, 100), [0])]
+    const params = {
+        sheets: [{ width: 110, height: 400, count: 1, shapeId: 'sheet-e2e00001-bord02' }],
+        space: 2, alternativesCount: 1, edgeDistance: -3,
+    }
+    const record = sheetRecordOf('sheet-e2e00001-bord02', KEY)
+
+    it('(e) vides des décalages = zones du moteur : aucune pièce sur la chambre, rapport vert', async () => {
+        const { payload, out } = await runJob(files, params, depsOf(record))
+        expect(payload.edgeShift).toBe(-5)
+        // Deux décalages, tous deux avec les vides : le moteur (+5), le bord demandé (+3).
+        const offs = glue.ops.filter((o) => o.op === 'offset_ring').map((o) => JSON.parse(o.json))
+        expect(offs.map((s) => [Number(s.distance_mm), s.keep_voids])).toEqual([[5, true], [3, true]])
+        // Une zone moteur : la chambre moins 3 mm (≈ 2 × 2 autour de (9, 60)),
+        // translatée de (5, 5) ; le repère réel, lui, n'a aucune zone.
+        const inner = payload.instance.bins[0].shape.data.inner || []
+        expect(inner).toHaveLength(1)
+        const [zx0, zy0, zx1, zy1] = ringBbox(inner[0])
+        expect(zx0).toBeCloseTo(8 + 5, 1)
+        expect(zy0).toBeCloseTo(59 + 5, 1)
+        expect(zx1).toBeCloseTo(10 + 5, 1)
+        expect(zy1).toBeCloseTo(61 + 5, 1)
+        expect(payload.sheetFrames[0].inner).toEqual([])
+
+        expect(out.allAlternativesInvalid).toBe(false)
+        expect(out.localDiscarded).toEqual([])
+        const rings = placedRings(out, payload).flatMap((s) => s.rings)
+        expect(rings.length).toBe(3 * out.result.alternatives.length)
+        for (const r of rings) expect(inRing(CHAMBER_CENTRE, r)).toBe(false)
+        // Aucun point de la cavité sous une pièce n'est à plus de |e| de la matière.
+        let deepest = 0
+        for (let x = -0.5; x <= 13.5; x += 0.05) {
+            for (let y = 55.5; y <= 64.5; y += 0.05) {
+                const p = [x, y]
+                if (rings.some((r) => inRing(p, r))) deepest = Math.max(deepest, outsideDepth(p, KEY))
+            }
+        }
+        expect(deepest).toBeLessThanOrEqual(3 + 0.05)
+        for (const alt of out.alternatives) {
+            const v = verifyOf(alt)
+            expect(v.insideSheet).toBe(true)
+            expect(v.overlapFree).toBe(true)
+            expect(v.partsOutsideOutline ?? 0).toBe(0)
+            expect(v.edgeOk).toBe(true)
+            expect(v.edgeGapMm).toBeGreaterThanOrEqual(-3 - 0.05)
+        }
+    })
+
+    it('(e) témoin : sans les vides, le moteur pose un carré sur la chambre (les zones sont la seule défense)', async () => {
+        const base = depsOf(record)
+        const noVoids = { ...base, offsetRing: async (ring, d, opts) => ({ ...(await base.offsetRing(ring, d, opts)), voids: [] }) }
+        const { payload, out } = await runJob(files, params, noVoids)
+        expect(payload.instance.bins[0].shape.data.inner || []).toEqual([])
+        const rings = placedRings(out, payload).flatMap((s) => s.rings)
+        expect(rings.some((r) => inRing(CHAMBER_CENTRE, r))).toBe(true)
+    })
+})
+
+describe('bout en bout, équerres au bord −45 : pièce presque hors de la tôle', () => {
+    // Équerre 100 × 100, bras de 12 : le plafond (moitié du plus petit côté,
+    // 50) laisse passer −45, et toute la matière d'une équerre posée dans un
+    // coin de la bande de dépassement peut être hors de la tôle.
+    const W = 400
+    const H = 300
+    const L = [[0, 0], [100, 0], [100, 12], [12, 12], [12, 100], [0, 100], [0, 0]]
+    const files = [fileOf('equerre', 14, L, [0, 90, 180, 270])]
+    const params = (sheet) => ({ sheets: [{ width: W, height: H, count: 3, ...sheet }], space: 2, alternativesCount: 1, edgeDistance: -45 })
+    /** Plus petite part de matière SUR la tôle W × H, sur les pièces données. */
+    const minOnSheet = (rings) => Math.min(...rings.map((r) => ringAreaInRect(r, W, H) / ringArea(r)))
+    /** Anneaux RÉELS d'une alternative brute du moteur (pose moteur + (d, d)). */
+    const rawRings = (alt, payload) => {
+        const byId = new Map(payload.parts.map((p) => [String(p.id), p]))
+        const d = payload.edgeShift
+        return alt.solution.layouts.flatMap((l) => l.placed_items.map((pi) => {
+            const t = pi.transformation
+            const a = (t.rotation * Math.PI) / 180
+            return byId.get(String(pi.item_id)).coords.map(([px, py]) => [
+                Math.cos(a) * px - Math.sin(a) * py + t.translation[0] + d,
+                Math.sin(a) * px + Math.cos(a) * py + t.translation[1] + d,
+            ])
+        }))
+    }
+
+    it('(f) rectangle : l’alternative qui pose une équerre hors de la tôle est écartée (règle R1)', async () => {
+        const { payload } = await buildLocalPayload({ files, params: params({}), profile: { timeBudgetSec: 2 } }, depsOf())
+        expect(payload.edgeShift).toBe(-47)
+        expect(payload.instance.bins[0].shape.data.outer).toEqual(rect(494, 394))
+        const raw = solve(payload)
+        const before = structuredClone(raw.alternatives)
+        const out = await assembleBrowserArtifacts({ result: raw, payload, sources: {}, jobSlug: 'e2e', withPositions: false })
+        // Le moteur le fait vraiment : au moins une alternative pose une équerre
+        // sans matière sur la tôle…
+        expect(before.some((alt) => minOnSheet(rawRings(alt, payload)) < 0.01)).toBe(true)
+        // … elle est écartée (sur un rectangle aussi, au lieu d'être livrée en
+        // rouge), et toute alternative livrée a chaque pièce au moins à 1 %.
+        expect(out.localDiscarded.map((x) => x.reason)).toContain('outside_sheet')
+        expect(out.allAlternativesInvalid).toBe(false)
+        expect(out.alternatives.length).toBe(out.result.alternatives.length)
+        const sheets = placedRings(out, payload)
+        expect(minOnSheet(sheets.flatMap((s) => s.rings))).toBeGreaterThanOrEqual(0.01)
+        for (const alt of out.alternatives) {
+            const v = verifyOf(alt)
+            expect(v.insideSheet).toBe(true)
+            expect(v.edgeOk).toBe(true)
+            expect(v.edgeGapMm).toBeGreaterThanOrEqual(-45 - 0.05)
+        }
+    })
+
+    it('(g) tôle importée (même rectangle) : l’alternative fautive est écartée, aucune livrée n’a de pièce hors tôle', async () => {
+        const record = sheetRecordOf('sheet-e2e00001-bord03', rect(W, H))
+        const { payload } = await buildLocalPayload({ files, params: params({ shapeId: 'sheet-e2e00001-bord03' }), profile: { timeBudgetSec: 2 } }, depsOf(record))
+        expect(payload.edgeShift).toBe(-47)
+        // Contour convexe : un seul décalage (moteur), avec les vides (aucun ici).
+        const offs = glue.ops.filter((o) => o.op === 'offset_ring').map((o) => JSON.parse(o.json))
+        expect(offs.map((s) => [Number(s.distance_mm), s.keep_voids])).toEqual([[47, true]])
+        const raw = solve(payload)
+        const before = structuredClone(raw.alternatives)
+        const out = await assembleBrowserArtifacts({ result: raw, payload, sources: {}, jobSlug: 'e2e', withPositions: false })
+        // Le moteur pose au moins une équerre sans matière sur la tôle…
+        expect(before.some((alt) => minOnSheet(rawRings(alt, payload)) < 0.01)).toBe(true)
+        // … cette alternative est écartée, et toute alternative livrée a chaque
+        // pièce au moins à 1 % sur la tôle.
+        // Écartée par la règle R1 (insideSheet faux) ou par le contrôle du contour.
+        expect(out.localDiscarded.map((x) => x.reason).some((r) => r === 'outside_sheet' || r === 'outside_outline')).toBe(true)
+        expect(out.allAlternativesInvalid).toBe(false)
+        const sheets = placedRings(out, payload)
+        expect(minOnSheet(sheets.flatMap((s) => s.rings))).toBeGreaterThanOrEqual(0.01)
+        for (const alt of out.alternatives) {
+            const v = verifyOf(alt)
+            expect(v.insideSheet).toBe(true)
+            expect(v.partsOutsideOutline ?? 0).toBe(0)
+            expect(v.edgeOk).toBe(true)
+        }
+    })
+})
+
 // ---------------------------------------------------------------------------
+
+/** Fiche de tôle importée à un seul contour (le contour extérieur `ring`). */
+function sheetRecordOf(id, ring) {
+    return makeSheetRecord({
+        id, projectSlug: 'p', name: 'Chute', sourceFileName: 'chute.dxf', sourceUnits: 'mm',
+        contours: [{ ring, depth: 1, parent: null, areaMm2: ringArea(ring), bbox: ringBbox(ring) }],
+        outlineIndex: 0, forbidden: [], addedAt: 1,
+    })
+}
+
+/** Point dans un anneau fermé (pair-impair). */
+function inRing(p, ring) {
+    let inside = false
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i]
+        const [xj, yj] = ring[j]
+        if ((yi > p[1]) !== (yj > p[1]) && p[0] < ((xj - xi) * (p[1] - yi)) / (yj - yi) + xi) inside = !inside
+    }
+    return inside
+}
+
+/** Aire d'un anneau fermé coupé par le rectangle [0 ; W] × [0 ; H]
+ * (Sutherland-Hodgman : sur un anneau concave, les allers-retours le long de la
+ * droite de coupe s'annulent dans l'aire). */
+function ringAreaInRect(ring, W, H) {
+    let poly = ring.slice(0, -1)
+    for (const [axis, bound, keepGe] of [[0, 0, true], [0, W, false], [1, 0, true], [1, H, false]]) {
+        const next = []
+        for (let i = 0; i < poly.length; i++) {
+            const a = poly[i]
+            const b = poly[(i + 1) % poly.length]
+            const ia = keepGe ? a[axis] >= bound : a[axis] <= bound
+            const ib = keepGe ? b[axis] >= bound : b[axis] <= bound
+            if (ia) next.push(a)
+            if (ia !== ib) {
+                const t = (bound - a[axis]) / (b[axis] - a[axis])
+                const q = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]
+                q[axis] = bound
+                next.push(q)
+            }
+        }
+        poly = next
+        if (poly.length < 3) return 0
+    }
+    let s = 0
+    for (let i = 0; i < poly.length; i++) {
+        const a = poly[i]
+        const b = poly[(i + 1) % poly.length]
+        s += a[0] * b[1] - b[0] * a[1]
+    }
+    return Math.abs(s) / 2
+}
 
 /** Profondeur d'un point hors d'un anneau fermé (0 dedans). */
 function outsideDepth(p, ring) {

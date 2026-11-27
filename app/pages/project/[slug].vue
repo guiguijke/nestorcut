@@ -231,12 +231,12 @@
             <!-- Pièce trop grande : le refus est dit ICI, à côté du bouton
                  grisé, avant tout clic (en bas de page il sortait de l'écran). -->
             <p v-if="edgeOverhangMax !== null && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="edge-overhang-error" role="alert">
-                {{ t('project.edgeOverhangTooLarge', { x: fmtLengthValue(-edgeRequestedMm), max: fmtLengthValue(edgeOverhangMax), unit: unitLabel }) }}
+                {{ t('project.edgeOverhangTooLarge', { x: fmtLengthValue(-edgeRequestedMm), max: fmtLengthMax(edgeOverhangMax), unit: unitLabel }) }}
             </p>
             <p v-else-if="!sizesIsAvailable && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="min-sheet-error" role="alert">
-                {{ edgeRequestedMm !== null
-                    ? t('project.minSheetEdge', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), e: fmtLengthValue(edgeRequestedMm), unit: unitLabel })
-                    : t('project.minSheet', { name: partFitsNoSheet?.name, w: fmtLengthValue(partFitsNoSheet?.width), h: fmtLengthValue(partFitsNoSheet?.height), unit: unitLabel }) }}
+                {{ minSheetInfo.edge
+                    ? t('project.minSheetEdge', { name: minSheetInfo.part?.name, w: fmtLengthValue(minSheetInfo.part?.width), h: fmtLengthValue(minSheetInfo.part?.height), e: fmtLengthValue(edgeRequestedMm), unit: unitLabel })
+                    : t('project.minSheet', { name: minSheetInfo.part?.name, w: fmtLengthValue(minSheetInfo.part?.width), h: fmtLengthValue(minSheetInfo.part?.height), unit: unitLabel }) }}
             </p>
             <p v-if="missingSheetNames.length && !nestRequestError" class="atelier__cta-hint atelier__cta-hint--refusal" data-testid="sheet-shape-missing" role="alert">
                 {{ t('project.sheetShapeMissing', { name: missingSheetNames[0] }) }}
@@ -263,8 +263,8 @@
 import { themeType } from "~~/constants/theme.constants";
 
 import { mmToDisplay, equivalentSheetPreset } from "~/utils/units";
-import { safetyPatchForTargetMm, edgeDistanceNumber } from "~/utils/spacingParams";
-import { overhangMarginMm } from "~/utils/overhangView";
+import { safetyPatchForTargetMm, edgeDistanceNumber, edgeShiftMm } from "~/utils/spacingParams";
+import { overhangMarginMm, minSheetCase } from "~/utils/overhangView";
 import { capacityPanelModel } from "~/utils/capacityPanel";
 import { firstPartFittingNoSheet, maxOverhangMm } from "~/utils/partSheetFit";
 import { hasPaidAccess } from "~/utils/entitlementUi";
@@ -307,7 +307,7 @@ definePageMeta({
 const { t, tp, fmtPercent, fmtNumber } = useLocale()
 // Part dims arrive in canonical mm; sheet params are display-unit strings —
 // displayToMm normalizes them for the fit check.
-const { unit, unitLabel, fmtLength, fmtLengthValue, displayToMm } = useUnit()
+const { unit, unitLabel, fmtLength, fmtLengthValue, fmtLengthMax, floorLengthMm, displayToMm } = useUnit()
 // P5 / F5 : capturé en setup (contexte Nuxt). Passé au fetch du projet
 // pendant le SSR — sans ça getProject 401 → /home.
 const projectReqHeaders = useRequestHeaders(['cookie'])
@@ -475,7 +475,7 @@ const localEdgeDetail = ref(null);
 const edgeRefusalParams = (detail) => {
     const mm = detail.maxOverhangMm ?? detail.maxEdgeMm
     return Number.isFinite(Number(mm))
-        ? { max: fmtLengthValue(Number(mm)), unit: unitLabel.value }
+        ? { max: fmtLengthMax(Number(mm)), unit: unitLabel.value }
         : null
 };
 const localErrorText = computed(() => localModeCtl.mapError(localComputeError.value, {
@@ -629,7 +629,12 @@ const preflightSheets = computed(() => preflightSheetsOf(unref(currentSheets), u
 const edgeRequestedMm = computed(() => {
     if (!unref(filesGetters.projectLocal)) return null
     const n = edgeDistanceNumber(unref(params)?.edgeDistance)
-    return n === null ? null : displayToMm(n)
+    if (n === null) return null
+    const edgeMm = displayToMm(n)
+    // Un bord égal à l'espacement n'est pas un réglage : comme un champ vide
+    // (ni option edge, ni contrôle propre au bord).
+    const spaceMm = displayToMm(Number(String(unref(params)?.space ?? '0').replace(',', '.')) || 0)
+    return edgeShiftMm(spaceMm, edgeMm) === 0 ? null : edgeMm
 })
 // Marge d'affichage (mm) d'une pièce qui dépasse du bord : vue live d'après les
 // réglages en cours, aperçu d'un résultat d'après le record qui l'a produit.
@@ -1057,14 +1062,29 @@ const partFitsNoSheet = computed(() => firstPartFittingNoSheet({
     rotationCount: unref(params)?.rotationCount,
     ...(unref(edgeRequestedMm) !== null ? { edgeMm: unref(edgeRequestedMm) } : {}),
 }));
-// Bord négatif : une pièce ne doit jamais dépasser de plus de la moitié de sa
-// plus petite dimension (sinon elle pourrait être entièrement hors tôle).
+// Même contrôle SANS le bord : la pièce trop grande de toute façon est celle qu'il
+// faut changer d'abord (comme le constructeur) ; le message « bord » ne vaut que
+// si le bord est la cause. Sans bord réglé, c'est le même appel (même résultat).
+const partFitsNoSheetPlain = computed(() => unref(edgeRequestedMm) === null
+    ? partFitsNoSheet.value
+    : firstPartFittingNoSheet({
+        files: projectFiles.value,
+        sheets: unref(currentSheets),
+        toMm: displayToMm,
+        rotationCount: unref(params)?.rotationCount,
+    }));
+const minSheetInfo = computed(() => minSheetCase(unref(edgeRequestedMm), partFitsNoSheet.value, partFitsNoSheetPlain.value));
+// Bord négatif : plafond de dépassement (voir partSheetFit.maxOverhangMm). Une
+// pièce qui a moins de 1 % de matière sur la tôle est signalée au rapport.
 const edgeOverhangMax = computed(() => {
     const e = unref(edgeRequestedMm)
     if (e === null || !(e < 0)) return null
     const max = Number(maxOverhangMm(projectFiles.value || []))
     if (!Number.isFinite(max)) return null
-    return -e > max + 1e-9 ? max : null
+    // Plafond arrondi vers le bas à la précision affichée : jamais une valeur
+    // annoncée que l'utilisateur ne pourrait pas retaper.
+    const cap = floorLengthMm(max)
+    return -e > cap + 1e-9 ? cap : null
 })
 const sizesIsAvailable = computed(() => partFitsNoSheet.value === null && unref(edgeOverhangMax) === null);
 // [slug].vue is reused across projects: load THIS slug on every change

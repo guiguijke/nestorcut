@@ -4,6 +4,8 @@ import {
     unitLabel,
     fmtLength,
     fmtLengthValue,
+    fmtLengthMax,
+    floorLengthMm,
     fmtArea,
     mmToDisplay,
     displayToMm,
@@ -160,6 +162,8 @@ export function useUnit() {
         unitLabel: computed(() => unitLabel(unit.value)),
         fmtLength: (mm) => fmtLength(mm, unit.value, localeState().value),
         fmtLengthValue: (mm, decimals) => fmtLengthValue(mm, unit.value, decimals, localeState().value),
+        fmtLengthMax: (mm, decimals) => fmtLengthMax(mm, unit.value, decimals, localeState().value),
+        floorLengthMm: (mm, decimals) => floorLengthMm(mm, unit.value, decimals),
         // Jalon A (réserve) : la balise de la langue de l'APP traverse —
         // fmtArea formate selon la locale choisie, pas celle du système.
         fmtArea: (mm2, scaleMm2) => fmtArea(mm2, unit.value, localeState().value, scaleMm2),

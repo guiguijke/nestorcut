@@ -77,30 +77,53 @@ export function firstPartFittingNoSheet({ files, sheets, toMm, rotationCount, ed
     return null
 }
 
+/** Plus petit côté possible de la boîte d'une pièce de boîte w × h tournée de
+ * `deg` : une borne HAUTE (la boîte tournée de la pièce tient dans celle du
+ * rectangle w × h tourné), égale à min(w, h) aux quarts de tour. */
+function rotatedShortSideBound(w, h, deg) {
+    const a = ((Number(deg) || 0) * Math.PI) / 180
+    const c = Math.abs(Math.cos(a))
+    const s = Math.abs(Math.sin(a))
+    if (s < 1e-12 || c < 1e-12) return Math.min(w, h)
+    return Math.min(w * c + h * s, w * s + h * c)
+}
+
 /**
  * Surplomb maximal (mm) qu'une distance au bord NÉGATIVE peut demander : la
- * moitié de la plus petite dimension de la plus petite pièce, min(w, h) / 2 —
- * au-delà, une pièce pourrait être posée entièrement hors de la tôle.
- * Accepte les fichiers du projet ({ count, block?, parts: [{ width, height }] } :
- * un bloc compte pour UNE pièce, sa boîte ; quantité 0 ignorée) ou une liste de
- * pièces { width, height }. Mesures en mm. Infinity sans aucune pièce mesurable
- * (rien ne limite alors le surplomb).
+ * moitié du plus petit côté de la boîte de chaque PIÈCE PHYSIQUE (chaque pièce
+ * d'un bloc, pas la boîte du bloc), au plus petit sur ses rotations permises —
+ * au-delà, une pièce pourrait être posée entièrement hors de la tôle. Même en
+ * deçà, une pièce creuse (équerre, L) peut n'avoir presque plus de matière sur
+ * la tôle : le rapport la compte alors hors de la tôle (moins de 1 % de sa
+ * matière dessus).
+ * Accepte les fichiers du projet ({ count, rotation?/rotations?, block?, parts:
+ * [{ width, height }] } : quantité 0 ignorée) ou une liste de pièces
+ * { width, height } (sans rotation). La page n'a que les boîtes : hors quart de
+ * tour, le côté tourné est une borne haute, donc jamais plus stricte que le
+ * constructeur (qui tourne les vrais contours). Mesures en mm. Infinity sans
+ * aucune pièce mesurable (rien ne limite alors le surplomb).
+ * @param {object} [opts] { rotationCount } : réglage global des rotations.
  */
-export function maxOverhangMm(parts) {
+export function maxOverhangMm(parts, { rotationCount } = {}) {
     let best = Infinity
-    const visit = (it) => {
+    const visit = (it, angles) => {
         const w = Number(it?.width)
         const h = Number(it?.height)
         if (!Number.isFinite(w) || !Number.isFinite(h)) return
-        const m = Math.min(w, h) / 2
+        let side = Infinity
+        for (const a of angles) side = Math.min(side, rotatedShortSideBound(w, h, a))
+        const m = side / 2
         if (m < best) best = m
     }
     for (const entry of parts || []) {
         if (entry && (Array.isArray(entry.parts) || entry.block)) {
             if (entry.count === 0) continue
-            for (const it of (entry.block ? [entry.block] : entry.parts)) visit(it)
+            const angles = anglesOf(entry, rotationCount).map((r) => Number(r) || 0)
+            // Un bloc : chacune de ses pièces (la boîte du bloc seulement à défaut).
+            const items = Array.isArray(entry.parts) && entry.parts.length ? entry.parts : [entry.block]
+            for (const it of items) visit(it, angles)
         } else {
-            visit(entry)
+            visit(entry, [0])
         }
     }
     return best

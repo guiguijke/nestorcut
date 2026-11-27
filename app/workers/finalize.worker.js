@@ -2,7 +2,8 @@
  * P4 : worker de finalisation (post-pass, SVG, DXF, rapport).
  * Protocol : in { id, result, payload, sources, jobSlug, qa, withPositions }
  *            out { id, ok, alternatives, liveLayout, placed,
- *                  allAlternativesInvalid, localDiscarded, result }
+ *                  allAlternativesInvalid, localDiscarded, result, jobSheets }
+ *            (`result.alternatives` et `jobSheets` dans l'ordre affiché)
  */
 import { assembleBrowserArtifacts } from '../composables/finalizeLocal.js'
 

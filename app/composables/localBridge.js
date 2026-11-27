@@ -2227,16 +2227,43 @@ function usedSheetShareOf(art, partsById) {
     return sheetArea > 0 ? Math.min(1, bboxArea / sheetArea) : null
 }
 
-export function toServerShapeAlternatives(result, payload, artifacts) {
+/**
+ * Trace « dernière tôle » du moteur (`alt.finish`) dans le repère RÉEL : le
+ * moteur mesure ses fronts depuis le coin de SON conteneur, décalé de d à
+ * distance au bord. Rend une COPIE (un second passage ne décale jamais deux
+ * fois) ; d = 0 ou pas de trace : l'objet tel quel. Exact pour les rectangles,
+ * seul cas où la finition tourne à d ≠ 0 (coupée pour une tôle importée).
+ */
+export function finishToReal(fin, d) {
+    if (!d || !fin || typeof fin !== 'object') return fin ?? null
+    const shift = (e) => {
+        if (!e || typeof e !== 'object') return e
+        const out = { ...e }
+        for (const k of ['xMin', 'yMin', 'xMax', 'yMax']) {
+            if (Number.isFinite(Number(e[k]))) out[k] = Number(e[k]) + d
+        }
+        return out
+    }
+    return { ...fin, before: shift(fin.before), after: shift(fin.after) }
+}
+
+/**
+ * `sourceIndex` (facultatif, tableau rempli ici) : pour chaque alternative
+ * rendue, son index dans `result.alternatives` (une alternative sans layout ou
+ * sans artefact est sautée : les deux listes ne sont pas alignées d'office).
+ */
+export function toServerShapeAlternatives(result, payload, artifacts, sourceIndex = null) {
     const alternatives = result?.alternatives || []
     const parts = payload?.parts || []
     const partsById = new Map(parts.map((p) => [String(p.id), p]))
+    const edgeD = edgeShiftOf(payload)
     const out = []
     for (let i = 0; i < alternatives.length; i++) {
         const alt = alternatives[i]
         const art = artifacts?.[i]
         const layouts = normalizeLayouts(alt.solution)
         if (!layouts.length || !art) continue
+        if (Array.isArray(sourceIndex)) sourceIndex.push(i)
         const reportBundle = art.report || {}
         const perSheet = reportBundle.per_sheet || []
         const totals = reportBundle.totals || null
@@ -2268,8 +2295,9 @@ export function toServerShapeAlternatives(result, payload, artifacts) {
             cost: alt.cost ?? alt.solution?.cost ?? null,
             layoutCount: layouts.length,
             // Plan « dernière tôle » : trace de la finition de la tôle
-            // partielle (champ ADDITIF, miroir main.py).
-            finish: alt.finish ?? null,
+            // partielle (champ ADDITIF, miroir main.py) ; fronts dans le repère
+            // RÉEL à distance au bord (copie), l'objet du moteur sinon.
+            finish: edgeD ? finishToReal(alt.finish, edgeD) : (alt.finish ?? null),
             // §17.2 : présent UNIQUEMENT sous le drapeau QA du harnais.
             qaPrePostPass: art.qaPrePostPass ?? null,
             svgs: art.sheets || [],
