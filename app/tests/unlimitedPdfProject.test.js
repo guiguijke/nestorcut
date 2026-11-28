@@ -32,9 +32,9 @@ const model = (sheets) => buildReportPdfModel({
 })
 
 describe('rapport PDF et tôle illimitée', () => {
-    it('titre « Tôles » et origine de chaque tôle', () => {
+    it('titre « Matière nécessaire » et origine de chaque tôle', () => {
         const m = model([row(0, { supply: 'stock' }), row(1, { supply: 'new' })])
-        expect(m.headline.label).toBe('report.supply.title')
+        expect(m.headline.label).toBe('report.material')
         expect(m.sheets[0].subtitle).toContain(' · report.supply.stock · ')
         expect(m.sheets[1].subtitle).toContain(' · report.supply.new · ')
     })

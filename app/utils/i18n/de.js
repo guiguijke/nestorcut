@@ -565,8 +565,6 @@ export default {
     "report.supply.column": "Herkunft",
     "report.supply.stock": "Bestand",
     "report.supply.new": "Einzuplanen",
-    "report.supply.title": "Bleche",
-    "report.supply.text": "Bleche: {formats}",
     "settings.requiredHeight": "Erforderliche Länge: mindestens {h} (5 % über dem höchsten ausgewählten Teil).",
     "project.projects": "Projekte",
     "project.new": "Neues Projekt",

@@ -567,8 +567,6 @@ export default {
     "report.supply.column": "Origen",
     "report.supply.stock": "En stock",
     "report.supply.new": "Por planificar",
-    "report.supply.title": "Chapas",
-    "report.supply.text": "Chapas: {formats}",
     "settings.requiredHeight": "Largo necesario: al menos {h} (5 % por encima de la pieza más alta seleccionada).",
     "project.projects": "Proyectos",
     "project.new": "Nuevo proyecto",

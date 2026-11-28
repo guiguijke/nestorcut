@@ -114,9 +114,9 @@
                 <section
                     class="report__order order"
                     data-testid="report-order"
-                    :aria-label="materialTitle"
+                    :aria-label="t('report.material')"
                 >
-                    <h3 class="order__title">{{ materialTitle }}</h3>
+                    <h3 class="order__title">{{ t('report.material') }}</h3>
                     <p
                         v-if="reportTotals && materialFormats"
                         class="order__formats"
@@ -169,7 +169,7 @@
                     class="report__table-wrap"
                     tabindex="0"
                     role="region"
-                    :aria-label="materialTitle"
+                    :aria-label="t('report.material')"
                 >
                     <!-- Rôles explicites : sur téléphone le tableau devient une
                          pile de mini-cartes (display: block) et garde ainsi
@@ -497,7 +497,6 @@ import { iconType } from '~~/constants/icon.constants'
 import { sizeType } from '~~/constants/size.constants'
 import { themeType } from '~~/constants/theme.constants'
 import { nbspDims, showSheetOffcutColumn } from '~/utils/reportLayout'
-import { materialKeys } from '~/utils/reportSupply'
 
 const props = defineProps({ d: { type: Object, required: true } })
 const emit = defineEmits([
@@ -539,7 +538,6 @@ const reportSheets = computed(() => props.d.reportSheets)
 const reportBadges = computed(() => props.d.reportBadges)
 const thinPartsLine = computed(() => props.d.thinPartsLine)
 const materialFormats = computed(() => props.d.materialFormats)
-const materialTitle = computed(() => t(materialKeys(props.d.reportSheets).title))
 const postPassLines = computed(() => props.d.postPassLines)
 const hasTechDetails = computed(() => props.d.hasTechDetails)
 const discardedCount = computed(() => props.d.discardedCount)

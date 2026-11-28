@@ -23,7 +23,8 @@ import { preflightSheetsOf, preflightParts, sheetFigure } from '../utils/preflig
 import { freeDownloadNoteVisible } from '../utils/sheetDownloadState'
 import { capacityReport, stockFirstEstimate } from '../composables/capacityClient'
 import { addSheetsPlan, capacityPanelModel, declaredSheetCount, exceedsMaxSheets } from '../utils/capacityPanel'
-import { formatsOfSupply, hasSupply, materialBySupply, materialKeys, supplyColumn } from '../utils/reportSupply'
+import * as reportSupply from '../utils/reportSupply'
+import { formatsOfSupply, hasSupply, materialBySupply, supplyColumn } from '../utils/reportSupply'
 import { liveFormatFields } from '../utils/liveSheetFormats'
 import { DICTS, translate } from '../utils/i18n'
 
@@ -314,24 +315,28 @@ describe('rapport', () => {
         expect(src).toContain('...(supply ? [supply.cells[i]] : []),')
     })
 
-    it('bloc et texte copié : « Tôles » avec une tôle illimitée, « Matière nécessaire » sinon', () => {
-        const plain = materialKeys([{ widthMm: 600, heightMm: 800 }])
-        expect(plain).toEqual({ title: 'report.material', text: 'report.text.material' })
-        const mixed = materialKeys([line(600, 800, 'stock')])
-        expect([fr(plain.title), fr(mixed.title)]).toEqual(['Matière nécessaire', 'Tôles'])
-        expect(fr(mixed.text, { formats: 'x' })).toBe(`Tôles${NB}: x`)
+    // Décision du 28/11 : le bloc garde « Matière nécessaire » même avec une tôle
+    // illimitée ; seules ses lignes disent « Du stock » et « À prévoir ».
+    it('bloc et texte copié : « Matière nécessaire », avec ou sans tôle illimitée', () => {
+        expect(fr('report.material')).toBe('Matière nécessaire')
+        expect(fr('report.text.material', { formats: 'x' })).toBe(`Matière nécessaire${NB}: x`)
+        expect(reportSupply.materialKeys).toBeUndefined()
         const view = readFileSync(path.join(ROOT, 'components/ResultReport.vue'), 'utf8')
-        expect(view).toContain('t(materialKeys(props.d.reportSheets).title)')
-        expect(view).not.toContain('t(\'report.material\')')
-        expect(readFileSync(path.join(ROOT, 'components/ResultModal.vue'), 'utf8'))
-            .toContain('t(materialKeys(unref(reportSheets)).text, { formats: unref(materialFormats) })')
+        expect(view).toContain('<h3 class="order__title">{{ t(\'report.material\') }}</h3>')
+        expect(view).not.toContain('materialKeys')
+        const modal = readFileSync(path.join(ROOT, 'components/ResultModal.vue'), 'utf8')
+        expect(modal).toContain('t(\'report.text.material\', { formats: unref(materialFormats) }),')
+        expect(modal).not.toContain('materialKeys')
+        for (const [lang, dict] of Object.entries(DICTS)) {
+            expect(dict['report.supply.title'], lang).toBeUndefined()
+            expect(dict['report.supply.text'], lang).toBeUndefined()
+        }
     })
 
     it('les textes existent dans les six langues, et le libellé parle de quantité', () => {
         const keys = [
             'settings.sheetUnlimited', 'settings.sheetUnlimitedAria', 'settings.sheetUnlimitedHint', 'settings.sheetUnlimitedLocalOnly',
             'report.supply.fromStock', 'report.supply.toBuy', 'report.supply.column', 'report.supply.stock', 'report.supply.new',
-            'report.supply.title', 'report.supply.text',
         ]
         for (const [lang, dict] of Object.entries(DICTS)) {
             for (const key of keys) expect(dict[key], `${lang} ${key}`).toBeTruthy()

@@ -562,8 +562,6 @@ export default {
     "report.supply.column": "Origine",
     "report.supply.stock": "Stock",
     "report.supply.new": "Da pianificare",
-    "report.supply.title": "Lamiere",
-    "report.supply.text": "Lamiere: {formats}",
     "settings.requiredHeight": "Lunghezza richiesta: almeno {h} (5% oltre il pezzo più alto selezionato).",
     "project.projects": "Progetti",
     "project.new": "Nuovo progetto",

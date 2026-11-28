@@ -76,7 +76,7 @@ import { reportExportState, reportPdfState } from '~/utils/reportExport'
 import { reportPdfClick } from '~/utils/reportPdfClick'
 import { capacityPanelModel } from '~/utils/capacityPanel'
 import { sheetsForProject } from '~/utils/sheetStock'
-import { hasSupply, materialBySupply, materialKeys, supplyColumn } from '~/utils/reportSupply'
+import { hasSupply, materialBySupply, supplyColumn } from '~/utils/reportSupply'
 import { flagOn } from '~/utils/runtimeFlag'
 import { maxDownloadableSheet, relaunchFreeNoteKind, sheetDownloadState } from '~/utils/sheetDownloadState'
 import {
@@ -532,7 +532,7 @@ const buildReportText = () => {
     const name = `${projectLabel || unref(resultModalData).slug} · ${t('result.option', { n: unref(activeAlt) + 1 })} · ${unref(resultModalData).slug}`
     const lines = [
         t('report.text.title', { name }),
-        t(materialKeys(unref(reportSheets)).text, { formats: unref(materialFormats) }),
+        t('report.text.material', { formats: unref(materialFormats) }),
         t('report.text.totals', {
             sheets: totals.sheetCount,
             parts: fmtArea(totals.partsAreaMm2),

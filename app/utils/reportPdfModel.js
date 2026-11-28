@@ -55,7 +55,7 @@
  */
 import { buildPartRefs, labelPoint, ringsBox, cutStats } from './sheetSvgReport.js'
 import { showSheetOffcutColumn } from './reportLayout.js'
-import { materialKeys, supplyColumn } from './reportSupply.js'
+import { supplyColumn } from './reportSupply.js'
 
 const arr = (v) => (Array.isArray(v) ? v : [])
 const clean = (v) => (v == null ? '' : String(v).trim())
@@ -112,8 +112,7 @@ export function buildReportPdfModel(input) {
             { label: t('reportPdf.meta.unit'), value: inch ? t('reportPdf.unit.inch') : t('reportPdf.unit.mm') },
         ],
         fields: [],
-        // Tôle illimitée : même titre qu'à l'écran (une partie peut venir du stock).
-        headline: { label: t(materialKeys(rows).title), value: clean(inp.materialFormats) || '—' },
+        headline: { label: t('report.material'), value: clean(inp.materialFormats) || '—' },
         figures: [],
         checks: [],
         notes: [],

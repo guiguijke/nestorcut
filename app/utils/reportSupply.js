@@ -12,15 +12,6 @@ export function hasSupply(rows) {
     return Array.isArray(rows) && rows.some((r) => ORDER.includes(r?.supply))
 }
 
-/** Titre du bloc matière et ligne du texte copié. Avec une tôle illimitée, une
- * partie peut venir du stock : ni l'un ni l'autre ne dit plus « à prévoir » pour
- * l'ensemble. */
-export function materialKeys(rows) {
-    return hasSupply(rows)
-        ? { title: 'report.supply.title', text: 'report.supply.text' }
-        : { title: 'report.material', text: 'report.text.material' }
-}
-
 /**
  * Formats distincts des tôles d'UNE origine, regroupés comme `totals.formats`
  * du rapport (même boîte ; une tôle importée ne se confond ni avec un rectangle
@@ -53,7 +44,7 @@ export function formatsOfSupply(rows, supply) {
  * « Du stock : 1 × 600 × 800 mm — À prévoir : 3 × 1000 × 2000 mm » (les parties
  * vides ne sont pas dites).
  * @param {(f: object) => string} formatText un format → son texte, celui du
- *   bloc « Matière à prévoir » (unité, mention « tôle importée »).
+ *   bloc « Matière nécessaire » (unité, mention « tôle importée »).
  */
 export function materialBySupply(rows, formatText, t) {
     return ORDER.map((supply) => {
