@@ -1,7 +1,8 @@
 /**
  * Tôle à quantité illimitée avec le rapport PDF et le fichier de projet :
- * le PDF dit « Tôles » et l'origine de chaque tôle (rien de nouveau sans tôle
- * illimitée) ; un projet enregistré puis rouvert garde la case cochée.
+ * le PDF garde « Matière nécessaire » et donne l'origine de chaque tôle (rien
+ * de nouveau sans tôle illimitée) ; un projet enregistré puis rouvert garde la
+ * case cochée.
  */
 import { describe, expect, it } from 'vitest'
 import { buildReportPdfModel } from '~~/app/utils/reportPdfModel'
