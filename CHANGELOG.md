@@ -4,6 +4,32 @@ Une entrée par version mise en production. En langage d'atelier — jamais de
 noms de lots internes. La version affichée dans l'en-tête est le
 `MAJEUR.MINEUR` ; ici et dans le pied de page, le numéro complet.
 
+## V0.9.27
+
+*FR*
+
+- Rapport d'imbrication, texte copié et PDF : avec une tôle à quantité illimitée, le bloc garde son titre « Matière nécessaire » (il disait « Tôles »). Les lignes « Du stock » et « À prévoir » ne changent pas.
+
+*EN*
+
+- Nesting report, copied text and PDF: with an unlimited-quantity sheet, the block keeps its "Material needed" title (it used to say "Sheets"). The "From stock" and "To plan" lines are unchanged.
+
+*PT*
+
+- Relatório de nesting, texto copiado e PDF: com uma chapa de quantidade ilimitada, o bloco mantém o título "Material necessário" (antes dizia "Chapas"). As linhas "Do estoque" e "A prever" não mudam.
+
+*IT*
+
+- Rapporto di nesting, testo copiato e PDF: con una lamiera in quantità illimitata, il blocco mantiene il titolo «Materiale necessario» (prima diceva «Lamiere»). Le righe «Dallo stock» e «Da pianificare» non cambiano.
+
+*DE*
+
+- Nesting-Bericht, kopierter Text und PDF: Mit einem Blech in unbegrenzter Menge behält der Block seinen Titel „Benötigtes Material“ (bisher stand dort „Bleche“). Die Zeilen „Aus dem Bestand“ und „Einzuplanen“ bleiben unverändert.
+
+*ES*
+
+- Informe de nesting, texto copiado y PDF: con una chapa de cantidad ilimitada, el bloque conserva su título «Material necesario» (antes decía «Chapas»). Las líneas «Del stock» y «Por planificar» no cambian.
+
 ## V0.9.26
 
 *FR*
